@@ -30,10 +30,6 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
 
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.setAutoFillBackground(True)
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
-
         self.setMinimumSize(1100, 700)
         self.setWindowIcon(QIcon("assets/icon.png"))
 
@@ -295,11 +291,15 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         if obj is self:
-            # 🔥 В maximized полностью выключаем hit-test и дергание курсора
-            if self.isMaximized():
-                if event.type() in (event.Type.MouseMove, event.Type.Leave):
+            if self.isMaximized() and event.type() in (
+                event.Type.MouseMove,
+                event.Type.MouseButtonPress,
+                event.Type.Leave,
+            ):
+                if not self._resizing:
+                    self._resize_edge = ResizeEdge.NONE
                     self.unsetCursor()
-                return super().eventFilter(obj, event)
+                return False
 
             if event.type() == event.Type.MouseMove:
                 pos = event.position().toPoint()
@@ -310,9 +310,8 @@ class MainWindow(QMainWindow):
                     return True
 
                 edge = self._hit_test_edges(pos)
-                if edge != self._resize_edge:
-                    self._resize_edge = edge
-                    self.setCursor(self._cursor_for_edge(edge))
+                self._resize_edge = edge
+                self.setCursor(self._cursor_for_edge(edge))
                 return False
 
             if event.type() == event.Type.MouseButtonPress:
@@ -331,9 +330,8 @@ class MainWindow(QMainWindow):
                 return False
 
             if event.type() == event.Type.Leave:
-                if not self._resizing:
+                if not self._resizing and not self.isMaximized():
                     self.unsetCursor()
                 return False
 
         return super().eventFilter(obj, event)
-

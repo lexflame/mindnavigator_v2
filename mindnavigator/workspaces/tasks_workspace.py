@@ -1,19 +1,36 @@
+# mindnavigator/workspaces/tasks_workspace.py
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from typing import List, Union, Optional
+from datetime import date, datetime
+from typing import List, Optional, Union, Callable
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
-    QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFrame,
+    QToolButton,
+    QButtonGroup,
+    QComboBox,
+    QLineEdit,
+    QListView,
+    QMenu,
+    QStyledItemDelegate,
+    QStyle,
+    QAbstractItemView,
 )
 
-WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+from ..seed import seed_if_empty
+from ..repositories.tasks_repo import TasksRepo
 
+
+# =========================
+# Rows (UI model items)
+# =========================
 
 @dataclass(frozen=True)
 class TaskRow:
@@ -21,7 +38,7 @@ class TaskRow:
     day: date
     time_text: str
     title: str
-    priority: str   # Low | Medium | High
+    priority: str          # Low | Medium | High
     done: bool
 
 
@@ -34,21 +51,32 @@ Row = Union[TaskRow, HeaderRow]
 
 
 class TaskRoles:
-    RowType = Qt.UserRole + 1  # header | task
-    Day = Qt.UserRole + 2
-    TimeText = Qt.UserRole + 3
-    Title = Qt.UserRole + 4
-    Priority = Qt.UserRole + 5
-    Done = Qt.UserRole + 6
-    TaskId = Qt.UserRole + 7
+    RowType = Qt.UserRole + 1     # "header" | "task"
+    TaskId = Qt.UserRole + 2
+    Day = Qt.UserRole + 3
+    TimeText = Qt.UserRole + 4
+    Title = Qt.UserRole + 5
+    Priority = Qt.UserRole + 6
+    Done = Qt.UserRole + 7
 
+
+# =========================
+# Model
+# =========================
 
 class TasksModel(QAbstractListModel):
-    def __init__(self, rows: List[Row], parent=None):
+    def __init__(
+        self,
+        rows: List[Row],
+        parent=None,
+        on_toggle_done: Optional[Callable[[int], None]] = None,
+    ):
         super().__init__(parent)
-        self._all_rows: List[Row] = rows[:]
-        self._rows: List[Row] = rows[:]
-        self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
+        self._all_rows: List[Row] = rows[:]     # base dataset (headers+tasks)
+        self._rows: List[Row] = rows[:]         # filtered view
+        self._on_toggle_done = on_toggle_done
+
+        self._filter_mode = "Все"   # Все | Сегодня | Выполнено
         self._search = ""
         self._focus_day: Optional[date] = None
 
@@ -72,6 +100,7 @@ class TasksModel(QAbstractListModel):
                 return r.day.isoformat()
             return None
 
+        # TaskRow
         if role == TaskRoles.TaskId:
             return r.id
         if role == TaskRoles.Day:
@@ -86,6 +115,7 @@ class TasksModel(QAbstractListModel):
             return r.done
         if role == Qt.DisplayRole:
             return r.title
+
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
@@ -96,6 +126,7 @@ class TasksModel(QAbstractListModel):
             return Qt.ItemIsEnabled
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
+    # ---- filtering ----
     def set_filter_mode(self, mode: str):
         self._filter_mode = mode
         self._rebuild()
@@ -108,6 +139,7 @@ class TasksModel(QAbstractListModel):
         self._focus_day = d
         self._rebuild()
 
+    # ---- actions ----
     def toggle_done_by_row(self, row_idx: int):
         if row_idx < 0 or row_idx >= len(self._rows):
             return
@@ -115,65 +147,44 @@ class TasksModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             return
 
-        new_all: List[Row] = []
-        for it in self._all_rows:
-            if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, not it.done)
-            new_all.append(it)
+        if callable(self._on_toggle_done):
+            self._on_toggle_done(int(r.id))
 
-        self._all_rows = new_all
+        # NOTE: we don't mutate rows here; workspace reloads _all_rows then we rebuild
         self._rebuild()
 
+    # ---- rebuild view ----
     def _rebuild(self):
+        search = self._search
         today = date.today()
 
-        def is_today(d: date) -> bool:
-            return d == today
+        # Extract tasks from _all_rows, apply filters, then regroup with headers
+        tasks: List[TaskRow] = [x for x in self._all_rows if isinstance(x, TaskRow)]
 
-        search = self._search
-
-        tasks: List[TaskRow] = []
-        for it in self._all_rows:
-            if not isinstance(it, TaskRow):
+        filtered: List[TaskRow] = []
+        for t in tasks:
+            if self._focus_day is not None and t.day != self._focus_day:
                 continue
 
-            if self._focus_day is not None and it.day != self._focus_day:
+            if self._filter_mode == "Сегодня" and t.day != today:
                 continue
 
-            if self._filter_mode == "Сегодня":
-                if not is_today(it.day):
-                    continue
-                if it.done:
-                    continue
-            elif self._filter_mode == "Выполнено":
-                if not it.done:
-                    continue
-            elif self._filter_mode == "План":
-                if it.done:
-                    continue
-                if is_today(it.day):
-                    continue
+            if self._filter_mode == "Выполнено" and not t.done:
+                continue
 
-            if search:
-                if search not in it.title.lower():
-                    continue
+            if search and search not in t.title.lower():
+                continue
 
-            tasks.append(it)
+            filtered.append(t)
 
-        def time_key(t: str):
-            try:
-                return datetime.strptime(t, "%H:%M").time()
-            except Exception:
-                return datetime.min.time()
-
-        tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
+        filtered.sort(key=lambda x: (x.day, x.time_text, x.id))
 
         new_rows: List[Row] = []
-        current_day: Optional[date] = None
-        for t in tasks:
-            if current_day != t.day:
-                current_day = t.day
-                new_rows.append(HeaderRow(current_day))
+        cur_day: Optional[date] = None
+        for t in filtered:
+            if cur_day != t.day:
+                cur_day = t.day
+                new_rows.append(HeaderRow(cur_day))
             new_rows.append(t)
 
         self.beginResetModel()
@@ -181,8 +192,12 @@ class TasksModel(QAbstractListModel):
         self.endResetModel()
 
 
+# =========================
+# Delegate (fast paint)
+# =========================
+
 class TasksItemDelegate(QStyledItemDelegate):
-    ROW_H = 42
+    ROW_H = 44
     HEADER_H = 32
 
     C_BG = QColor("#16171a")
@@ -192,17 +207,17 @@ class TasksItemDelegate(QStyledItemDelegate):
     C_TEXT = QColor("#cfcfcf")
     C_DIM = QColor("#8a8a8a")
 
-    C_OVERDUE = QColor("#c84b4b")
     C_HIGH = QColor("#d94f4f")
     C_MED = QColor("#d0a93e")
     C_LOW = QColor("#4caf50")
+    C_OVERDUE = QColor("#d94f4f")
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._icon_doc = qta.icon("fa5s.file-alt", color="#cfcfcf")
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
         self._icon_fire = qta.icon("fa5s.fire", color="#d0a93e")
+        self._icon_check = qta.icon("fa5s.check", color="#cfcfcf")
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -215,8 +230,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header.setBold(True)
 
     def sizeHint(self, option, index):
-        row_type = index.data(TaskRoles.RowType)
-        if row_type == "header":
+        t = index.data(TaskRoles.RowType)
+        if t == "header":
             return QSize(option.rect.width(), self.HEADER_H)
         return QSize(option.rect.width(), self.ROW_H)
 
@@ -229,131 +244,106 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         if row_type == "header":
             d: date = index.data(TaskRoles.Day)
-            txt = self._format_header(d)
+            text = self._format_day_ru(d) if isinstance(d, date) else ""
             painter.fillRect(r, self.C_BG)
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            painter.drawText(r.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, txt)
+            painter.drawText(r.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
 
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
+
             painter.restore()
             return
 
-        day: date = index.data(TaskRoles.Day)
-        time_text: str = index.data(TaskRoles.TimeText) or ""
+        # task row
         title: str = index.data(TaskRoles.Title) or ""
+        time_text: str = index.data(TaskRoles.TimeText) or ""
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
+        day_val: date = index.data(TaskRoles.Day)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
             bg = QColor("#343844")
-
         painter.fillRect(r, bg)
+
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
 
         x = r.left() + 10
         cy = r.center().y()
 
-        grip_rect = QRect(x, cy - 8, 16, 16)
-        self._icon_grip.paint(painter, grip_rect)
+        # grip
+        self._icon_grip.paint(painter, QRect(x, cy - 8, 16, 16))
         x += 22
 
-        cb_rect = QRect(x, cy - 7, 14, 14)
+        # done box
+        box_rect = QRect(x, cy - 7, 14, 14)
         painter.setPen(self.C_BORDER)
         painter.setBrush(QColor("#16171a"))
-        painter.drawRect(cb_rect)
-
+        painter.drawRect(box_rect)
         if done:
-            painter.setPen(QColor("#cfcfcf"))
-            painter.drawLine(cb_rect.left() + 3, cb_rect.center().y(),
-                             cb_rect.center().x() - 1, cb_rect.bottom() - 3)
-            painter.drawLine(cb_rect.center().x() - 1, cb_rect.bottom() - 3,
-                             cb_rect.right() - 2, cb_rect.top() + 3)
-
+            self._icon_check.paint(painter, QRect(box_rect.left() - 1, box_rect.top() - 1, 16, 16))
         x += 22
 
+        # time
         painter.setFont(self._font_small)
         painter.setPen(self.C_DIM)
-        time_rect = QRect(x, r.top(), 64, r.height())
-        painter.drawText(time_rect, Qt.AlignVCenter | Qt.AlignLeft, time_text)
-        x += 70
+        painter.drawText(QRect(x, r.top(), 64, r.height()), Qt.AlignVCenter | Qt.AlignLeft, time_text)
+        x += 64
 
-        icon_rect = QRect(x, cy - 8, 16, 16)
-        self._icon_doc.paint(painter, icon_rect)
-        x += 22
-
-        painter.setFont(self._font)
-        painter.setPen(self.C_TEXT if not done else self.C_DIM)
-
+        # right block rects
         right_pad = 10
         menu_w = 30
-        pr_w = 140
-        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+        pr_w = 170
+        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 7, menu_w, r.height() - 14)
         pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
 
+        # title
+        painter.setFont(self._font)
+        painter.setPen(self.C_DIM if done else self.C_TEXT)
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
-        elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
+        elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, max(10, title_rect.width()))
         painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
-        # --- PRIORITY BLOCK (fixed layout) ---
-        overdue = self._is_overdue(day, done)
+        # priority block (label + value + gap + fire)
+        overdue = self._is_overdue(day_val, done)
+
+        label = "приоритет"
         value_text = "OVERDUE" if overdue else priority
         value_color = self.C_OVERDUE if overdue else self._prio_color(priority)
 
-        # Жёсткая сетка справа
         icon_w = 18
-        value_w = 72
-        gap = 10
-        label_w = pr_rect.width() - value_w - icon_w - gap
+        gap = 12       # <-- distance between value and fire icon
+        value_w = 76
 
-        label_rect = QRect(
-            pr_rect.left(),
-            pr_rect.top(),
-            label_w,
-            pr_rect.height()
-        )
+        label_w = max(10, pr_rect.width() - value_w - icon_w - gap)
 
-        value_rect = QRect(
-            pr_rect.left() + label_w,
-            pr_rect.top(),
-            value_w,
-            pr_rect.height()
-        )
-
-        icon_rect = QRect(
-            pr_rect.right() - icon_w,
-            cy - 8,
-            16,
-            16
-        )
+        label_rect = QRect(pr_rect.left(), pr_rect.top(), label_w, pr_rect.height())
+        value_rect = QRect(pr_rect.left() + label_w, pr_rect.top(), value_w, pr_rect.height())
+        icon_rect = QRect(pr_rect.left() + label_w + value_w + gap, cy - 8, 16, 16)
 
         painter.setFont(self._font_small)
-
-        # label
         painter.setPen(self.C_DIM)
-        # painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "приоритет")
+        painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, label)
 
-        # value
         painter.setPen(value_color)
         painter.drawText(value_rect, Qt.AlignVCenter | Qt.AlignRight, value_text)
 
-        # icon
         self._icon_fire.paint(painter, icon_rect)
 
+        # menu button
         painter.setPen(self.C_BORDER)
         painter.setBrush(QColor("#1f2227"))
         painter.drawRect(menu_rect)
-        self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
+        self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 7, menu_rect.center().y() - 7, 14, 14))
 
         painter.restore()
 
     def editorEvent(self, event, model, option, index):
-        row_type = index.data(TaskRoles.RowType)
-        if row_type != "task":
+        if index.data(TaskRoles.RowType) != "task":
             return False
 
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
@@ -361,15 +351,17 @@ class TasksItemDelegate(QStyledItemDelegate):
             r = option.rect
             cy = r.center().y()
 
+            # checkbox rect (must match paint)
             x = r.left() + 10
             x += 22
-            cb_rect = QRect(x, cy - 7, 14, 14)
+            box_rect = QRect(x, cy - 7, 14, 14)
 
+            # menu rect
             right_pad = 10
             menu_w = 30
-            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 7, menu_w, r.height() - 14)
 
-            if cb_rect.contains(pos):
+            if box_rect.contains(pos):
                 model.toggle_done_by_row(index.row())
                 return True
 
@@ -396,24 +388,37 @@ class TasksItemDelegate(QStyledItemDelegate):
         return self.C_MED
 
     def _is_overdue(self, d: date, done: bool) -> bool:
-        return (d < date.today()) and (not done)
+        if done:
+            return False
+        if not isinstance(d, date):
+            return False
+        return d < date.today()
 
-    def _format_header(self, d: date) -> str:
-        wd = WEEKDAY_RU[d.weekday()]
-        return f"{d.isoformat()} — {wd}"
+    def _format_day_ru(self, d: date) -> str:
+        # lightweight, no locale dependency
+        # dd.mm.yyyy
+        return d.strftime("%d.%m.%Y")
 
+
+# =========================
+# Workspace
+# =========================
 
 class TasksWorkspace(QWidget):
-    """UI-only tasks workspace: topbar + grouped list view (fast)."""
+    """DB-backed TasksWorkspace (UI-only, fast list + delegate)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
 
+        seed_if_empty()
+        self._repo = TasksRepo()
+
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
+        # ---- topbar ----
         top = QFrame()
         top.setObjectName("TasksTopbar")
         top_layout = QHBoxLayout(top)
@@ -433,46 +438,24 @@ class TasksWorkspace(QWidget):
             return b
 
         self.tab_all = tab_btn("Все")
-        self.tab_plan = tab_btn("План")
         self.tab_today = tab_btn("Сегодня")
         self.tab_done = tab_btn("Выполнено")
         self.tab_all.setChecked(True)
 
         top_layout.addWidget(self.tab_all)
-        top_layout.addWidget(self.tab_plan)
         top_layout.addWidget(self.tab_today)
         top_layout.addWidget(self.tab_done)
 
         top_layout.addSpacing(12)
 
-        self.btn_prev_day = QToolButton()
-        self.btn_prev_day.setIcon(qta.icon("fa5s.chevron-left", color="#cfcfcf"))
-        self.btn_prev_day.setCursor(Qt.PointingHandCursor)
-        self.btn_prev_day.setAutoRaise(True)
-
-        self.btn_next_day = QToolButton()
-        self.btn_next_day.setIcon(qta.icon("fa5s.chevron-right", color="#cfcfcf"))
-        self.btn_next_day.setCursor(Qt.PointingHandCursor)
-        self.btn_next_day.setAutoRaise(True)
-
-        self.lbl_day = QLabel()
-        self.lbl_day.setObjectName("TasksDayLabel")
-
-        top_layout.addWidget(self.btn_prev_day)
-        top_layout.addWidget(self.lbl_day)
-        top_layout.addWidget(self.btn_next_day)
-
-        top_layout.addSpacing(12)
-
-        self.cmb_priority = QComboBox()
-        self.cmb_priority.addItems(["Любой", "Low", "Medium", "High"])
-        self.cmb_priority.setFixedWidth(110)
+        self.cmb_focus = QComboBox()
+        self.cmb_focus.setFixedWidth(180)
+        self.cmb_focus.addItem("Все дни")
+        top_layout.addWidget(self.cmb_focus)
 
         self.btn_create = QToolButton()
         self.btn_create.setText("Создать")
         self.btn_create.setCursor(Qt.PointingHandCursor)
-
-        top_layout.addWidget(self.cmb_priority)
         top_layout.addWidget(self.btn_create)
 
         top_layout.addStretch(1)
@@ -484,31 +467,31 @@ class TasksWorkspace(QWidget):
 
         root.addWidget(top)
 
+        # ---- list ----
         self.list = QListView()
         self.list.setObjectName("TasksList")
         self.list.setUniformItemSizes(True)
-        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         root.addWidget(self.list, 1)
 
-        self._focus_day = date.today()
-        self.model = TasksModel(self._make_fake_rows(), self)
+        self.model = TasksModel(self._load_rows_from_db(), self, on_toggle_done=self._toggle_done_db)
         self.list.setModel(self.model)
 
         self.delegate = TasksItemDelegate(self.list)
         self.list.setItemDelegate(self.delegate)
 
+        # wire
         for b in self.tabs_group.buttons():
             b.clicked.connect(self._on_tab_changed)
 
         self.search.textChanged.connect(self.model.set_search)
-        self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
-        self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
+        self.cmb_focus.currentIndexChanged.connect(self._on_focus_changed)
 
-        self._update_day_label()
-        self.model.set_focus_day(None)
+        self._reload_focus_combo()
 
+        # styles (minimal, fast)
         self.setStyleSheet("""
             QWidget#TasksWorkspace { background: #16171a; }
 
@@ -522,14 +505,7 @@ class TasksWorkspace(QWidget):
                 border: none;
                 padding: 6px 8px;
             }
-            QToolButton:checked {
-                background: #2a2b2f;
-            }
-
-            QLabel#TasksDayLabel {
-                color: #cfcfcf;
-                padding: 0px 6px;
-            }
+            QToolButton:checked { background: #2a2b2f; }
 
             QComboBox, QLineEdit {
                 background: #202127;
@@ -544,58 +520,70 @@ class TasksWorkspace(QWidget):
             }
         """)
 
+    # -------- DB glue --------
+    def _toggle_done_db(self, task_id: int):
+        self._repo.toggle_done(task_id)
+        self.model._all_rows = self._load_rows_from_db()
+        self.model._rebuild()
+        self._reload_focus_combo()
+
+    def _load_rows_from_db(self) -> List[Row]:
+        rows: List[Row] = []
+        tasks = self._repo.list_tasks()
+
+        def parse_day(s: str) -> date:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+
+        cur: Optional[date] = None
+        for t in tasks:
+            d = parse_day(t.day)
+            if cur != d:
+                cur = d
+                rows.append(HeaderRow(cur))
+            rows.append(TaskRow(t.id, d, t.time_text, t.title, t.priority, t.done))
+        return rows
+
+    def _reload_focus_combo(self):
+        # rebuild focus day list from current dataset
+        days: List[date] = []
+        for r in self.model._all_rows:
+            if isinstance(r, HeaderRow):
+                days.append(r.day)
+
+        cur_text = self.cmb_focus.currentText()
+
+        self.cmb_focus.blockSignals(True)
+        self.cmb_focus.clear()
+        self.cmb_focus.addItem("Все дни")
+        for d in days:
+            self.cmb_focus.addItem(d.strftime("%d.%m.%Y"))
+        self.cmb_focus.blockSignals(False)
+
+        # try restore previous selection
+        idx = self.cmb_focus.findText(cur_text)
+        if idx >= 0:
+            self.cmb_focus.setCurrentIndex(idx)
+        else:
+            self.cmb_focus.setCurrentIndex(0)
+
+    # -------- UI handlers --------
     def _on_tab_changed(self):
         if self.tab_today.isChecked():
             self.model.set_filter_mode("Сегодня")
-            self.model.set_focus_day(date.today())
         elif self.tab_done.isChecked():
             self.model.set_filter_mode("Выполнено")
-            self.model.set_focus_day(None)
-        elif self.tab_plan.isChecked():
-            self.model.set_filter_mode("План")
-            self.model.set_focus_day(None)
         else:
             self.model.set_filter_mode("Все")
+
+    def _on_focus_changed(self, idx: int):
+        if idx <= 0:
             self.model.set_focus_day(None)
+            return
 
-    def _shift_day(self, delta: int):
-        self._focus_day = self._focus_day + timedelta(days=delta)
-        self._update_day_label()
-
-        self.tab_today.setChecked(False)
-        self.tab_all.setChecked(True)
-        self.model.set_filter_mode("Все")
-        self.model.set_focus_day(self._focus_day)
-
-    def _update_day_label(self):
-        wd = WEEKDAY_RU[self._focus_day.weekday()]
-        self.lbl_day.setText(f"{self._focus_day.isoformat()} ({wd})")
-
-    def _make_fake_rows(self) -> List[Row]:
-        t0 = date.today()
-        days = [t0 - timedelta(days=1), t0, t0 + timedelta(days=1), t0 + timedelta(days=2)]
-
-        tasks = [
-            TaskRow(1, days[0], "13:00", "BorderDev", "High", False),
-            TaskRow(2, days[0], "14:00", "Wiki → Picture", "High", False),
-
-            TaskRow(3, days[1], "15:00", "Подумать над DragAndDrop для списка задач в режиме план", "Medium", False),
-            TaskRow(4, days[1], "16:00", "Билеты ПДД", "Low", False),
-            TaskRow(5, days[1], "17:00", "Просмотреть FAV", "Medium", False),
-            TaskRow(6, days[1], "19:00", "Просмотреть записи во всех каналах Избранного", "Medium", False),
-
-            TaskRow(7, days[2], "20:00", "SimCity Societies → KitBash → Здания усадьбы. Здание школы. Многоэтажка…", "High", False),
-
-            TaskRow(8, days[3], "22:00", "Stygian · Reign of the Old Ones", "High", False),
-            TaskRow(9, days[3], "23:00", "The Council", "High", True),
-        ]
-
-        tasks.sort(key=lambda x: (x.day, x.time_text, x.id))
-        rows: List[Row] = []
-        cur: Optional[date] = None
-        for t in tasks:
-            if cur != t.day:
-                cur = t.day
-                rows.append(HeaderRow(cur))
-            rows.append(t)
-        return rows
+        text = self.cmb_focus.currentText().strip()
+        # dd.mm.yyyy
+        try:
+            d = datetime.strptime(text, "%d.%m.%Y").date()
+        except Exception:
+            d = None
+        self.model.set_focus_day(d)
