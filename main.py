@@ -33,9 +33,10 @@ def main():
 
     def finish_start():
         window.show()
+        QTimer.singleShot(0, lambda: (window.showMaximized(), window.title_bar.sync_max_button()))
         splash.close()
 
-    QTimer.singleShot(750, finish_start)
+    finish_start()
     sys.exit(app.exec())
 
 
