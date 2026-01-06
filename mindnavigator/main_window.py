@@ -10,6 +10,9 @@ from .ui.leftrail import LeftRail
 from .ui.projects_nav import ProjectsNav
 from .workspaces.tasks_workspace import TasksWorkspace
 from .workspaces.projects_workspace import ProjectsWorkspace
+from .workspaces.maps_workspace import MapsWorkspace
+from .workspaces.notes_workspace import NotesWorkspace
+from .workspaces.files_workspace import FilesWorkspace
 from .constants import APP_NAME
 
 
@@ -90,9 +93,9 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_projects = ProjectsWorkspace()
-        self.page_maps = self._placeholder("Карты", "Рабочая область режима «Карты».")
-        self.page_notes = self._placeholder("Заметки", "Рабочая область режима «Заметки».")
-        self.page_files = self._placeholder("Файлы", "Рабочая область режима «Файлы».")
+        self.page_maps = MapsWorkspace()
+        self.page_notes = NotesWorkspace()
+        self.page_files = FilesWorkspace()
         self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
         self.page_settings = self._placeholder("Настройки", "Рабочая область режима «Настройки».")
 
