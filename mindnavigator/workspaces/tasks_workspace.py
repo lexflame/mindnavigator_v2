@@ -299,24 +299,55 @@ class TasksItemDelegate(QStyledItemDelegate):
         elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
         painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
+        # --- PRIORITY BLOCK (fixed layout) ---
         overdue = self._is_overdue(day, done)
-        pr_text = "OVERDUE" if overdue else priority
-        pr_color = self.C_OVERDUE if overdue else self._prio_color(priority)
+        value_text = "OVERDUE" if overdue else priority
+        value_color = self.C_OVERDUE if overdue else self._prio_color(priority)
+
+        # Жёсткая сетка справа
+        icon_w = 18
+        value_w = 72
+        gap = 10
+        label_w = pr_rect.width() - value_w - icon_w - gap
+
+        label_rect = QRect(
+            pr_rect.left(),
+            pr_rect.top(),
+            label_w,
+            pr_rect.height()
+        )
+
+        value_rect = QRect(
+            pr_rect.left() + label_w,
+            pr_rect.top(),
+            value_w,
+            pr_rect.height()
+        )
+
+        icon_rect = QRect(
+            pr_rect.right() - icon_w,
+            cy - 8,
+            16,
+            16
+        )
 
         painter.setFont(self._font_small)
-        painter.setPen(pr_color)
-        painter.drawText(pr_rect.adjusted(0, 0, -30, 0), Qt.AlignVCenter | Qt.AlignRight, pr_text)
 
+        # label
         painter.setPen(self.C_DIM)
-        painter.drawText(pr_rect.adjusted(0, 0, -4, 0), Qt.AlignVCenter | Qt.AlignRight, "  приоритет")
+        # painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "приоритет")
 
-        fire_rect = QRect(pr_rect.right() - 18, cy - 8, 16, 16)
-        self._icon_fire.paint(painter, fire_rect)
+        # value
+        painter.setPen(value_color)
+        painter.drawText(value_rect, Qt.AlignVCenter | Qt.AlignRight, value_text)
+
+        # icon
+        self._icon_fire.paint(painter, icon_rect)
 
         painter.setPen(self.C_BORDER)
         painter.setBrush(QColor("#1f2227"))
         painter.drawRect(menu_rect)
-        self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 7, menu_rect.center().y() - 7, 14, 14))
+        self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
 
         painter.restore()
 

@@ -11,7 +11,7 @@ from mindnavigator.main_window import MainWindow
 
 def main():
     # Hardcore: can help on weak GPU / old drivers
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
+    # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
