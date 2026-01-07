@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database, normalize_priority, validate_time_text
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
@@ -286,6 +287,10 @@ class TaskEditDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(14)
 
+        title_label = QLabel("Редактирование задачи")
+        title_label.setObjectName("DialogTitle")
+        layout.addWidget(title_label)
+
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.setFormAlignment(Qt.AlignTop)
@@ -357,6 +362,12 @@ class TaskEditDialog(QDialog):
 
             QDialog#TaskEditDialog QLabel {
                 color: #cfcfcf;
+            }
+
+            QDialog#TaskEditDialog QLabel#DialogTitle {
+                color: #f2f2f2;
+                font-size: 18px;
+                font-weight: 600;
             }
 
             QDialog#TaskEditDialog QLineEdit,
@@ -643,14 +654,15 @@ class TasksItemDelegate(QStyledItemDelegate):
                 # confirm только если ставим done=True
                 currently_done = bool(index.data(TaskRoles.Done))
                 if not currently_done:
-                    res = QMessageBox.question(
-                        option.widget,
+                    parent = option.widget if isinstance(option.widget, QWidget) else None
+                    dialog = ConfirmDialog(
                         "Подтверждение",
                         "Пометить задачу выполненной?",
-                        QMessageBox.Yes | QMessageBox.Cancel,
-                        QMessageBox.Cancel
+                        parent=parent,
+                        confirm_text="Да",
+                        cancel_text="Отмена",
                     )
-                    if res != QMessageBox.Yes:
+                    if exec_with_overlay(dialog, parent) != QDialog.Accepted:
                         return True  # событие обработали, но действие отменили
 
                 model.toggle_done_by_row(index.row())
@@ -700,14 +712,15 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         # confirm delete
         title = index.data(TaskRoles.Title) or "задачу"
-        res = QMessageBox.question(
-            menu.parentWidget() or None,
+        parent = menu.parentWidget() or None
+        dialog = ConfirmDialog(
             "Удалить задачу",
             f"Удалить задачу:\n«{title}» ?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel
+            parent=parent,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
         )
-        if res != QMessageBox.Yes:
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
             return
 
         m = index.model()
@@ -726,7 +739,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = TaskEditDialog(task, parent=parent)
-        if dialog.exec() != QDialog.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
             return
 
         values = dialog.values()
