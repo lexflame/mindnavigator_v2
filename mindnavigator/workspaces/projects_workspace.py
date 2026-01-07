@@ -20,6 +20,7 @@ from mindnavigator.storage import (
     validate_area,
     validate_title,
 )
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
 # - та же структура верхней панели
@@ -471,14 +472,15 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             return
 
         title = index.data(ProjectRoles.Title) or "проект"
-        res = QMessageBox.question(
-            menu.parentWidget() or None,
+        parent = menu.parentWidget() or None
+        dialog = ConfirmDialog(
             "Удалить проект",
             f"Удалить проект:\n«{title}» ?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel
+            parent=parent,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
         )
-        if res != QMessageBox.Yes:
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
             return
 
         model = index.model()
@@ -498,7 +500,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = ProjectEditDialog(project, parent=parent)
-        if dialog.exec() != QDialog.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
             return
 
         values = dialog.values()
@@ -549,6 +551,10 @@ class ProjectEditDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(14)
 
+        title_label = QLabel("Создание проекта" if is_new else "Редактирование проекта")
+        title_label.setObjectName("DialogTitle")
+        layout.addWidget(title_label)
+
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.setFormAlignment(Qt.AlignTop)
@@ -596,6 +602,12 @@ class ProjectEditDialog(QDialog):
 
             QDialog#ProjectEditDialog QLabel {
                 color: #cfcfcf;
+            }
+
+            QDialog#ProjectEditDialog QLabel#DialogTitle {
+                color: #f2f2f2;
+                font-size: 18px;
+                font-weight: 600;
             }
 
             QDialog#ProjectEditDialog QLineEdit,
