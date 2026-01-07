@@ -1,2 +1,3 @@
 *.pyc
 *.pyc
+/mindnavigator/workspaces/__pycache__
