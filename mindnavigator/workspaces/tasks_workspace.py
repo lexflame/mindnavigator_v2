@@ -5,11 +5,12 @@ from datetime import date, datetime, timedelta
 from typing import List, Union, Optional
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent
+from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
-    QComboBox, QDateEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle
+    QComboBox, QDateEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
+    QCheckBox, QMessageBox
 )
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
@@ -125,20 +126,30 @@ class TasksModel(QAbstractListModel):
         self._rebuild()
 
     def toggle_done_by_row(self, row_idx: int):
-            if row_idx < 0 or row_idx >= len(self._rows):
-                return
-            r = self._rows[row_idx]
-            if isinstance(r, HeaderRow):
-                return
+        if row_idx < 0 or row_idx >= len(self._rows):
+            return
+        r = self._rows[row_idx]
+        if isinstance(r, HeaderRow):
+            return
 
-            new_all: List[Row] = []
-            for it in self._all_rows:
-                if isinstance(it, TaskRow) and it.id == r.id:
-                    it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, not it.done)
-                new_all.append(it)
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, TaskRow) and it.id == r.id:
+                it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, not it.done)
+            new_all.append(it)
 
-            self._all_rows = new_all
-            self._rebuild()
+        self._all_rows = new_all
+        self._rebuild()
+
+    def delete_task_by_row(self, row_idx: int):
+        if row_idx < 0 or row_idx >= len(self._rows):
+            return
+        r = self._rows[row_idx]
+        if isinstance(r, HeaderRow):
+            return
+
+        self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
+        self._rebuild()
 
     def _rebuild(self):
         today = date.today()
@@ -176,25 +187,25 @@ class TasksModel(QAbstractListModel):
 
             tasks.append(it)
 
-            def time_key(t: str):
-                try:
-                    return datetime.strptime(t, "%H:%M").time()
-                except Exception:
-                    return datetime.min.time()
+        def time_key(t: str):
+            try:
+                return datetime.strptime(t, "%H:%M").time()
+            except Exception:
+                return datetime.min.time()
 
-            tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
+        tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
 
-            new_rows: List[Row] = []
-            current_day: Optional[date] = None
-            for t in tasks:
-                if current_day != t.day:
-                    current_day = t.day
-                    new_rows.append(HeaderRow(current_day))
-                new_rows.append(t)
+        new_rows: List[Row] = []
+        current_day: Optional[date] = None
+        for t in tasks:
+            if current_day != t.day:
+                current_day = t.day
+                new_rows.append(HeaderRow(current_day))
+            new_rows.append(t)
 
-            self.beginResetModel()
-            self._rows = new_rows
-            self.endResetModel()
+        self.beginResetModel()
+        self._rows = new_rows
+        self.endResetModel()
 
 
 class TasksItemDelegate(QStyledItemDelegate):
@@ -386,6 +397,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
 
             if cb_rect.contains(pos):
+                # confirm только если ставим done=True
+                currently_done = bool(index.data(TaskRoles.Done))
+                if not currently_done:
+                    res = QMessageBox.question(
+                        option.widget,
+                        "Подтверждение",
+                        "Пометить задачу выполненной?",
+                        QMessageBox.Yes | QMessageBox.Cancel,
+                        QMessageBox.Cancel
+                    )
+                    if res != QMessageBox.Yes:
+                        return True  # событие обработали, но действие отменили
+
                 model.toggle_done_by_row(index.row())
                 return True
 
@@ -397,11 +421,30 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     def _show_row_menu(self, index: QModelIndex):
         menu = QMenu()
-        menu.addAction("Открыть")
-        menu.addAction("Редактировать")
+        act_open = menu.addAction("Открыть")
+        act_edit = menu.addAction("Редактировать")
         menu.addSeparator()
-        menu.addAction("Удалить")
-        menu.exec(QCursor.pos())
+        act_del = menu.addAction("Удалить")
+
+        chosen = menu.exec(QCursor.pos())
+        if chosen != act_del:
+            return
+
+        # confirm delete
+        title = index.data(TaskRoles.Title) or "задачу"
+        res = QMessageBox.question(
+            menu.parentWidget() or None,
+            "Удалить задачу",
+            f"Удалить задачу:\n«{title}» ?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel
+        )
+        if res != QMessageBox.Yes:
+            return
+
+        m = index.model()
+        if hasattr(m, "delete_task_by_row"):
+            m.delete_task_by_row(index.row())
 
     def _prio_color(self, p: str) -> QColor:
         p = (p or "").lower()
@@ -439,9 +482,13 @@ class TasksWorkspace(QWidget):
         self.new_title = QLineEdit()
         self.new_title.setPlaceholderText("Название задачи…")
 
-        self.new_day = QComboBox()
-        self.new_day.setFixedWidth(120)
-        self.new_day.addItems(["Сегодня", "Завтра"])
+        self.new_day = QDateEdit()
+        self.new_day.setCalendarPopup(True)
+        self.new_day.setDisplayFormat("yyyy-MM-dd")
+        self.new_day.setFixedWidth(140)
+        self.new_day.setDate(datetime.now().date())
+        self.new_day.setToolTip("Дата выполнения (можно выбрать в календаре или ввести вручную)")
+        self.new_day.setKeyboardTracking(False)
 
         self.new_priority = QComboBox()
         self.new_priority.setFixedWidth(110)
@@ -646,20 +693,15 @@ class TasksWorkspace(QWidget):
         if not title:
             return
 
-        base = date.today()
-        if self.new_day.currentText() == "Завтра":
-            d = base + timedelta(days=1)
-        else:
-            d = base
+        qd = self.new_day.date()
+        d = date(qd.year(), qd.month(), qd.day())
 
         pr = self.new_priority.currentText().strip() or "Medium"
 
         self.model.add_task(title=title, day=d, priority=pr)
+
         self.new_title.clear()
         self.new_title.setFocus()
-
-        # keep current filter mode logic
-        self.list.scrollToTop()
 
     def _make_fake_rows(self) -> List[Row]:
         t0 = date.today()
