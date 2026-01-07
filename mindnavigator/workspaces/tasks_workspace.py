@@ -27,6 +27,8 @@ class TaskRow:
     title: str
     priority: str   # Low | Medium | High
     done: bool
+    project_id: Optional[int] = None
+    project_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class TaskRoles:
     SortKey = Qt.UserRole + 8
     SortDirection = Qt.UserRole + 9
     DisplayTime = Qt.UserRole + 10
+    ProjectTitle = Qt.UserRole + 11
 
 
 class TasksModel(QAbstractListModel):
@@ -74,7 +77,7 @@ class TasksModel(QAbstractListModel):
         """Обновляет список задач из базы данных."""
         tasks = self._db.fetch_tasks()
         self._all_rows = [
-            TaskRow(t.id, t.day, t.time_text, t.title, t.priority, t.done)
+            TaskRow(t.id, t.day, t.time_text, t.title, t.priority, t.done, t.project_id, t.project_title)
             for t in tasks
         ]
         self._rebuild()
@@ -128,6 +131,8 @@ class TasksModel(QAbstractListModel):
             return r.priority
         if role == TaskRoles.Done:
             return r.done
+        if role == TaskRoles.ProjectTitle:
+            return r.project_title
         if role == Qt.DisplayRole:
             return r.title
         return None
@@ -168,7 +173,18 @@ class TasksModel(QAbstractListModel):
     def add_task(self, title: str, day: date, time_text: str, priority: str):
         """Добавляет новую задачу и пересобирает текущий список."""
         task = self._db.create_task(title=title, day=day, time_text=time_text, priority=priority)
-        self._all_rows.append(TaskRow(task.id, task.day, task.time_text, task.title, task.priority, task.done))
+        self._all_rows.append(
+            TaskRow(
+                task.id,
+                task.day,
+                task.time_text,
+                task.title,
+                task.priority,
+                task.done,
+                task.project_id,
+                task.project_title,
+            )
+        )
         self._rebuild()
 
     def set_sort(self, key: str):
@@ -197,6 +213,7 @@ class TasksModel(QAbstractListModel):
         time_text: str,
         priority: str,
         done: bool,
+        project_id: Optional[int],
     ):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
@@ -209,6 +226,7 @@ class TasksModel(QAbstractListModel):
             time_text=time_text,
             priority=priority,
             done=done,
+            project_id=project_id,
         )
 
         new_all: List[Row] = []
@@ -221,6 +239,8 @@ class TasksModel(QAbstractListModel):
                     updated.title,
                     updated.priority,
                     updated.done,
+                    updated.project_id,
+                    updated.project_title,
                 )
             new_all.append(it)
 
@@ -240,7 +260,16 @@ class TasksModel(QAbstractListModel):
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, new_done)
+                it = TaskRow(
+                    it.id,
+                    it.day,
+                    it.time_text,
+                    it.title,
+                    it.priority,
+                    new_done,
+                    it.project_id,
+                    it.project_title,
+                )
             new_all.append(it)
 
         self._all_rows = new_all
@@ -273,6 +302,7 @@ class TasksModel(QAbstractListModel):
             time_text=task.time_text,
             priority=task.priority,
             done=task.done,
+            project_id=task.project_id,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -284,11 +314,37 @@ class TasksModel(QAbstractListModel):
                     updated.title,
                     updated.priority,
                     updated.done,
+                    updated.project_id,
+                    updated.project_title,
                 )
             new_all.append(it)
         self._all_rows = new_all
         self._rebuild()
         return True
+
+    def next_day_for_task(self, task: TaskRow) -> date:
+        """Возвращает дату для переноса задачи на следующий рабочий день."""
+        target = task.day + timedelta(days=1)
+        if target.weekday() == 5:
+            target += timedelta(days=2)
+        elif target.weekday() == 6:
+            target += timedelta(days=6)
+
+        if self._tasks_count_on_day(target, exclude_task_id=task.id) > 4:
+            target += timedelta(days=1)
+        return target
+
+    def _tasks_count_on_day(self, day_value: date, exclude_task_id: Optional[int] = None) -> int:
+        """Считает количество невыполненных задач на конкретный день."""
+        count = 0
+        for it in self._all_rows:
+            if not isinstance(it, TaskRow):
+                continue
+            if exclude_task_id is not None and it.id == exclude_task_id:
+                continue
+            if it.day == day_value and not it.done:
+                count += 1
+        return count
 
     def _rebuild(self):
         """Пересобирает список задач с учетом фильтров и поиска."""
@@ -465,6 +521,16 @@ class TaskEditDialog(QDialog):
         self.title_edit = QLineEdit(task.title)
         self.title_edit.setPlaceholderText("Название задачи")
 
+        self.project_edit = QComboBox()
+        self.project_edit.addItem("Без проекта", None)
+        projects = get_database().fetch_projects()
+        for project in projects:
+            self.project_edit.addItem(f"{project.area} · {project.title}", project.id)
+        if task.project_id is not None:
+            idx = self.project_edit.findData(task.project_id)
+            if idx >= 0:
+                self.project_edit.setCurrentIndex(idx)
+
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
         self.day_edit.setDisplayFormat("yyyy-MM-dd")
@@ -509,6 +575,7 @@ class TaskEditDialog(QDialog):
         self.done_edit.setChecked(task.done)
 
         form.addRow("Название", self.title_edit)
+        form.addRow("Проект", self.project_edit)
         form.addRow("Дата и время", time_block)
         form.addRow("Приоритет", self.priority_edit)
         form.addRow("", self.done_edit)
@@ -620,6 +687,7 @@ class TaskEditDialog(QDialog):
             "time_text": time_text,
             "priority": self.priority_edit.currentText().strip() or "Medium",
             "done": self.done_edit.isChecked(),
+            "project_id": self.project_edit.currentData(),
         }
 
 
@@ -627,6 +695,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
     TIME_W = 140
+    PROJECT_W = 130
 
     C_BG = QColor("#16171a")
     C_ROW = QColor("#2a2d33")
@@ -647,6 +716,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
         self._icon_fire = qta.icon("fa5s.fire", color="#d0a93e")
+        self._icon_tomorrow = qta.icon("fa5s.calendar-plus", color="#cfcfcf")
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -710,6 +780,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         day: date = index.data(TaskRoles.Day)
         time_text: str = index.data(TaskRoles.DisplayTime) or ""
         title: str = index.data(TaskRoles.Title) or ""
+        project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
         overdue = self._is_overdue(day, done)
@@ -744,6 +815,23 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)
         time_rect = layout["date"]
         painter.drawText(time_rect, Qt.AlignVCenter | Qt.AlignLeft, time_text)
+
+        tomorrow_rect = layout["tomorrow"]
+        painter.setPen(self.C_BORDER)
+        painter.setBrush(QColor("#1f2227"))
+        painter.drawRect(tomorrow_rect)
+        self._icon_tomorrow.paint(painter, QRect(tomorrow_rect.left() + 3, tomorrow_rect.top() + 3, 14, 14))
+
+        project_rect = layout["project"]
+        if project_title:
+            painter.setFont(self._font_small)
+            painter.setPen(self.C_DIM)
+            elided_project = QFontMetrics(self._font_small).elidedText(
+                project_title,
+                Qt.ElideRight,
+                project_rect.width(),
+            )
+            painter.drawText(project_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_project)
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
@@ -844,7 +932,15 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             layout = self._row_layout(r)
             cb_rect = layout["checkbox"]
+            tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
+
+            if tomorrow_rect.contains(pos):
+                task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
+                if task is not None and hasattr(model, "next_day_for_task"):
+                    new_day = model.next_day_for_task(task)
+                    model.move_task_to_day(task.id, new_day)
+                return True
 
             if cb_rect.contains(pos):
                 # confirm только если ставим done=True
@@ -948,6 +1044,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                     time_text=values["time_text"],
                     priority=values["priority"],
                     done=values["done"],
+                    project_id=values["project_id"],
                 )
             except ValueError as exc:
                 QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
@@ -981,8 +1078,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         cb_rect = QRect(x, cy - 7, 14, 14)
         x += 22
 
+        tomorrow_rect = QRect(x, cy - 8, 20, 20)
+        x += 28
+
         time_rect = QRect(x, r.top(), self.TIME_W, r.height())
         x += self.TIME_W + 6
+
+        project_rect = QRect(x, r.top(), self.PROJECT_W, r.height())
+        x += self.PROJECT_W + 6
 
         doc_rect = QRect(x, cy - 8, 16, 16)
         x += 22
@@ -997,7 +1100,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         return {
             "grip": grip_rect,
             "checkbox": cb_rect,
+            "tomorrow": tomorrow_rect,
             "date": time_rect,
+            "project": project_rect,
             "doc": doc_rect,
             "title": title_rect,
             "priority": pr_rect,
@@ -1093,7 +1198,7 @@ class TasksWorkspace(QWidget):
         self.tab_plan = tab_btn("План")
         self.tab_today = tab_btn("Сегодня")
         self.tab_done = tab_btn("Выполнено")
-        self.tab_all.setChecked(True)
+        self.tab_plan.setChecked(True)
 
         top_layout.addWidget(self.tab_all)
         top_layout.addWidget(self.tab_plan)
@@ -1160,8 +1265,7 @@ class TasksWorkspace(QWidget):
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
 
         self._update_day_label()
-        self.model.set_focus_day(None)
-        self._set_drag_drop_state(False)
+        self._on_tab_changed()
 
         self.setStyleSheet("""
             QWidget#TasksWorkspace { background: #16171a; }
