@@ -2,9 +2,10 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
 
 class ProjectsNav(QWidget):
-    """Right of left rail: projects navigation panel."""
+    """Панель навигации по проектам справа от левого меню."""
 
     def __init__(self, parent=None):
+        """Создает и настраивает блок навигации проектов."""
         super().__init__(parent)
         self.setObjectName("ProjectsNav")
         self._ratio = 0.10
@@ -43,9 +44,11 @@ class ProjectsNav(QWidget):
         """)
 
     def update_width_for_window(self, window_width: int):
+        """Пересчитывает ширину панели в зависимости от ширины окна."""
         w = int(window_width * self._ratio)
         w = max(self._min_w, min(self._max_w, w))
         self.setFixedWidth(w)
 
     def set_mode_title(self, mode_name: str):
+        """Обновляет заголовок панели для активного режима."""
         self.header.setText(f"Проекты · {mode_name}")
