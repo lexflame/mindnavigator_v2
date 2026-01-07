@@ -1,3 +1,4 @@
 *.pyc
 *.pyc
 /mindnavigator/workspaces/__pycache__
+/mindnavigator/workspaces/__pycache__
