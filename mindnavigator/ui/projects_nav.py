@@ -16,6 +16,7 @@ class ProjectsNav(QWidget):
         self._ratio = 0.12
         self._min_w = 220
         self._max_w = 420
+        self._fixed_h = 420
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -38,9 +39,11 @@ class ProjectsNav(QWidget):
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
         layout.addWidget(self.list, 1)
-        layout.addStretch(1)
+        layout.addStretch(0)
 
         self._populate_projects()
+
+        self.setFixedHeight(self._fixed_h)
 
         self.setStyleSheet("""
             QWidget#ProjectsNav {
