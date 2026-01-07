@@ -29,9 +29,27 @@ class SearchNav(QWidget):
         self.input.setPlaceholderText("Проекты, задачи, заметки, файлы…")
         self.input.setClearButtonEnabled(True)
 
+        self.results = QWidget()
+        self.results.setObjectName("SearchResults")
+        self.results_layout = QVBoxLayout(self.results)
+        self.results_layout.setContentsMargins(8, 8, 8, 8)
+        self.results_layout.setSpacing(6)
+
+        self.results_title = QLabel("Результаты поиска")
+        self.results_title.setObjectName("SearchResultsTitle")
+
+        self.results_placeholder = QLabel("Начните ввод, чтобы увидеть совпадения")
+        self.results_placeholder.setObjectName("SearchResultsPlaceholder")
+        self.results_placeholder.setWordWrap(True)
+
+        self.results_layout.addWidget(self.results_title)
+        self.results_layout.addWidget(self.results_placeholder)
+        self.results_layout.addStretch(1)
+
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
         layout.addWidget(self.input)
+        layout.addWidget(self.results)
         layout.addStretch(1)
 
         self.setStyleSheet("""
@@ -58,6 +76,20 @@ class SearchNav(QWidget):
             }
             QLineEdit#SearchInput:focus {
                 border: 1px solid #3a3c42;
+            }
+            QWidget#SearchResults {
+                background: #151618;
+                border: 1px solid #242529;
+                border-radius: 6px;
+            }
+            QLabel#SearchResultsTitle {
+                color: #b9bcc4;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QLabel#SearchResultsPlaceholder {
+                color: #6e7178;
+                font-size: 11px;
             }
         """)
 
