@@ -11,6 +11,7 @@ from .ui.projects_nav import ProjectsNav
 from .ui.search_nav import SearchNav
 from .workspaces.tasks_workspace import TasksWorkspace
 from .workspaces.projects_workspace import ProjectsWorkspace
+from .workspaces.maps_workspace import MapsListWorkspace
 from .constants import APP_NAME
 
 
@@ -108,7 +109,7 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_projects = ProjectsWorkspace()
-        self.page_maps = self._placeholder("Карты", "Рабочая область режима «Карты».")
+        self.page_maps = MapsListWorkspace()
         self.page_notes = self._placeholder("Заметки", "Рабочая область режима «Заметки».")
         self.page_files = self._placeholder("Файлы", "Рабочая область режима «Файлы».")
         self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
