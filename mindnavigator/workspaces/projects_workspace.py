@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 
-# ProjectsWorkspace is a UI-only twin of TasksWorkspace:
-# - same topbar structure
-# - same grouped list approach (headers + rows)
-# - QListView + delegate for speed
+# ProjectsWorkspace — UI-близнец TasksWorkspace:
+# - та же структура верхней панели
+# - тот же подход к группировке (заголовки + строки)
+# - QListView + делегат ради скорости
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,7 @@ class ProjectRoles:
 
 class ProjectsModel(QAbstractListModel):
     def __init__(self, rows: List[Row], parent=None):
+        """Создает модель данных проектов."""
         super().__init__(parent)
         self._all_rows: List[Row] = rows[:]
         self._rows: List[Row] = rows[:]
@@ -56,11 +57,13 @@ class ProjectsModel(QAbstractListModel):
         self._area_focus: Optional[str] = None
 
     def rowCount(self, parent=QModelIndex()) -> int:
+        """Возвращает количество строк в модели."""
         if parent.isValid():
             return 0
         return len(self._rows)
 
     def data(self, index: QModelIndex, role: int):
+        """Отдает данные для делегата по ролям."""
         if not index.isValid():
             return None
         r = self._rows[index.row()]
@@ -92,6 +95,7 @@ class ProjectsModel(QAbstractListModel):
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        """Устанавливает флаги взаимодействия для строки."""
         if not index.isValid():
             return Qt.NoItemFlags
         r = self._rows[index.row()]
@@ -100,18 +104,22 @@ class ProjectsModel(QAbstractListModel):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def set_filter_mode(self, mode: str):
+        """Обновляет режим фильтрации."""
         self._filter_mode = mode
         self._rebuild()
 
     def set_search(self, text: str):
+        """Устанавливает строку поиска."""
         self._search = (text or "").strip().lower()
         self._rebuild()
 
     def set_area_focus(self, area: Optional[str]):
+        """Фиксирует активную область проектов."""
         self._area_focus = area
         self._rebuild()
 
     def toggle_archive_by_row(self, row_idx: int):
+        """Переключает архивный статус проекта по строке."""
         if row_idx < 0 or row_idx >= len(self._rows):
             return
         r = self._rows[row_idx]
@@ -128,6 +136,7 @@ class ProjectsModel(QAbstractListModel):
         self._rebuild()
 
     def _rebuild(self):
+        """Пересобирает список проектов с учетом фильтров."""
         search = self._search
 
         projects: List[ProjectRow] = []
@@ -180,6 +189,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
     C_LOW = QColor("#4caf50")
 
     def __init__(self, parent=None):
+        """Инициализирует делегат отрисовки проектов."""
         super().__init__(parent)
         self._icon_folder = qta.icon("fa5s.folder-open", color="#cfcfcf")
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
@@ -197,12 +207,14 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         self._font_header.setBold(True)
 
     def sizeHint(self, option, index):
+        """Возвращает размер строки списка."""
         row_type = index.data(ProjectRoles.RowType)
         if row_type == "header":
             return QSize(option.rect.width(), self.HEADER_H)
         return QSize(option.rect.width(), self.ROW_H)
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
+        """Рисует строку проекта или заголовок области."""
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, False)
 
@@ -293,6 +305,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def editorEvent(self, event, model, option, index):
+        """Обрабатывает клики по индикатору архивации и меню."""
         row_type = index.data(ProjectRoles.RowType)
         if row_type != "project":
             return False
@@ -321,6 +334,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         return False
 
     def _show_row_menu(self, index: QModelIndex):
+        """Показывает контекстное меню проекта."""
         menu = QMenu()
         menu.addAction("Открыть")
         menu.addAction("Переименовать")
@@ -330,6 +344,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         menu.exec(QCursor.pos())
 
     def _prio_color(self, p: str) -> QColor:
+        """Возвращает цвет для приоритета проекта."""
         p = (p or "").lower()
         if p == "high":
             return self.C_HIGH
@@ -340,6 +355,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
 class ProjectsWorkspace(QWidget):
     def __init__(self, parent=None):
+        """Создает рабочую область проектов."""
         super().__init__(parent)
         self.setObjectName("ProjectsWorkspace")
 
@@ -357,6 +373,7 @@ class ProjectsWorkspace(QWidget):
         self.tabs_group.setExclusive(True)
 
         def tab_btn(text: str) -> QToolButton:
+            """Создает кнопку вкладки фильтра."""
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
@@ -452,6 +469,7 @@ class ProjectsWorkspace(QWidget):
         """)
 
     def _on_tab_changed(self):
+        """Обрабатывает переключение фильтров по статусу."""
         if self.tab_arch.isChecked():
             self.model.set_filter_mode("Архив")
         elif self.tab_active.isChecked():
@@ -460,12 +478,14 @@ class ProjectsWorkspace(QWidget):
             self.model.set_filter_mode("Все")
 
     def _on_area_changed(self, text: str):
+        """Обновляет фильтрацию по области проекта."""
         if text == "Все области":
             self.model.set_area_focus(None)
         else:
             self.model.set_area_focus(text)
 
     def _make_fake_rows(self) -> List[Row]:
+        """Генерирует демонстрационный список проектов."""
         projects = [
             ProjectRow(1, "SPACE", "MindNavigator v2", "06.01.2026", "High", False),
             ProjectRow(2, "SPACE", "Синхронизация FastAPI + S3", "05.01.2026", "Medium", False),
