@@ -250,10 +250,19 @@ class TaskEditDialog(QDialog):
     def __init__(self, task: TaskRow, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Редактирование задачи")
-        self.setMinimumWidth(360)
+        self.setObjectName("TaskEditDialog")
+        self.setMinimumWidth(460)
+        self.setMinimumHeight(320)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
 
         self.title_edit = QLineEdit(task.title)
         self.title_edit.setPlaceholderText("Название задачи")
@@ -286,6 +295,50 @@ class TaskEditDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+        self.setStyleSheet("""
+            QDialog#TaskEditDialog {
+                background: #16171a;
+            }
+
+            QDialog#TaskEditDialog QLabel {
+                color: #cfcfcf;
+            }
+
+            QDialog#TaskEditDialog QLineEdit,
+            QDialog#TaskEditDialog QComboBox,
+            QDialog#TaskEditDialog QDateEdit {
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 8px 10px;
+                border-radius: 6px;
+                min-height: 28px;
+            }
+
+            QDialog#TaskEditDialog QComboBox::drop-down {
+                border: none;
+                width: 18px;
+            }
+
+            QDialog#TaskEditDialog QCheckBox {
+                color: #cfcfcf;
+                padding: 4px 0;
+            }
+
+            QDialog#TaskEditDialog QDialogButtonBox QPushButton {
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 8px 14px;
+                border-radius: 6px;
+                min-width: 90px;
+            }
+
+            QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {
+                background: #34363b;
+            }
+        """)
 
     def _on_accept(self):
         title = self.title_edit.text().strip()
