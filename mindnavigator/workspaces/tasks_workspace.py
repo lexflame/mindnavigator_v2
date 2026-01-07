@@ -1202,7 +1202,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         doc_rect = QRect(x, cy - 8, 16, 16)
         x += 22
 
-        right_pad = 10
+        right_pad = 20
         menu_w = 30
         pr_w = 140
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
