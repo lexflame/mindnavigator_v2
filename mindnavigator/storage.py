@@ -18,6 +18,7 @@ class TaskData:
     day: date
     time_text: str
     title: str
+    description: str
     priority: str
     done: bool
     project_id: Optional[int] = None
@@ -115,6 +116,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS tasks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
@@ -144,6 +146,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
 
         self._ensure_task_project_column()
+        self._ensure_task_description_column()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -153,6 +156,14 @@ class Database:
         if "project_id" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);")
+
+    def _ensure_task_description_column(self) -> None:
+        """Добавляет колонку description, если она отсутствует."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "description" not in names:
+            with self._conn:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT '';")
 
     def _seed_defaults(self) -> None:
         """Добавляет демонстрационные данные, если база пустая."""
@@ -218,6 +229,7 @@ class Database:
                 t.day,
                 t.time_text,
                 t.title,
+                t.description,
                 t.priority,
                 t.done,
                 t.project_id,
@@ -234,6 +246,7 @@ class Database:
                     day=date.fromisoformat(row["day"]),
                     time_text=row["time_text"],
                     title=row["title"],
+                    description=row["description"] or "",
                     priority=row["priority"],
                     done=bool(row["done"]),
                     project_id=row["project_id"],
@@ -245,6 +258,7 @@ class Database:
     def create_task(
         self,
         title: str,
+        description: str,
         day: date,
         time_text: str,
         priority: str,
@@ -252,6 +266,7 @@ class Database:
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
+        description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
         if not isinstance(day, date):
@@ -261,10 +276,10 @@ class Database:
         with self._conn:
             cur = self._conn.execute(
                 """
-                INSERT INTO tasks (title, day, time_text, priority, done, project_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 0, ?, ?, ?);
+                INSERT INTO tasks (title, description, day, time_text, priority, done, project_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?);
                 """,
-                (title, day.isoformat(), time_text, priority, project_id, now, now),
+                (title, description, day.isoformat(), time_text, priority, project_id, now, now),
             )
         project_title = ""
         if project_id is not None:
@@ -274,12 +289,13 @@ class Database:
             ).fetchone()
             if row:
                 project_title = row["title"]
-        return TaskData(cur.lastrowid, day, time_text, title, priority, False, project_id, project_title)
+        return TaskData(cur.lastrowid, day, time_text, title, description, priority, False, project_id, project_title)
 
     def update_task(
         self,
         task_id: int,
         title: str,
+        description: str,
         day: date,
         time_text: str,
         priority: str,
@@ -288,6 +304,7 @@ class Database:
     ) -> TaskData:
         """Обновляет задачу."""
         title = validate_title(title)
+        description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
         if not isinstance(day, date):
@@ -298,10 +315,10 @@ class Database:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, updated_at = ?
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (title, day.isoformat(), time_text, priority, int(done), project_id, now, task_id),
+                (title, description, day.isoformat(), time_text, priority, int(done), project_id, now, task_id),
             )
         project_title = ""
         if project_id is not None:
@@ -311,7 +328,7 @@ class Database:
             ).fetchone()
             if row:
                 project_title = row["title"]
-        return TaskData(task_id, day, time_text, title, priority, bool(done), project_id, project_title)
+        return TaskData(task_id, day, time_text, title, description, priority, bool(done), project_id, project_title)
 
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
