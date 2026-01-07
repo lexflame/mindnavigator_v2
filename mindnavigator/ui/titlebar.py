@@ -107,21 +107,28 @@ class TitleBar(QWidget):
             e.accept()
 
     def mouseMoveEvent(self, e):
-        if not self._press_initiated:
+        if not self._dragging:
             return
 
-        global_pos = e.globalPosition().toPoint()
+        if self._window.isMaximized():
+            # 1) вычисляем позицию курсора внутри titlebar (доля)
+            ratio = e.position().x() / max(1, self.width())
 
-        if self._window.isMaximized() and hasattr(self._window, "_begin_restore_on_drag"):
-            if (abs(global_pos.y() - self._press_global.y()) >= 6 or
-                    abs(global_pos.x() - self._press_global.x()) >= 6):
-                self._window._begin_restore_on_drag(global_pos)
-                self._dragging = True
-                self._drag_pos = global_pos - self._window.frameGeometry().topLeft()
+            # 2) восстанавливаем нормальное окно
+            self._window.showNormal()
 
-        if self._dragging and not self._window.isMaximized():
-            self._window.move(global_pos - self._drag_pos)
-            e.accept()
+            # 3) ставим так, чтобы курсор остался над тем же местом окна
+            geo = self._window.geometry()
+            new_x = e.globalPosition().toPoint().x() - int(geo.width() * ratio)
+            new_y = e.globalPosition().toPoint().y() - int(self.height() / 2)
+            self._window.move(new_x, new_y)
+
+            # 4) обновляем drag offset и продолжаем
+            self._drag_pos = e.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
+            self._window.title_bar.sync_max_button()
+
+        self._window.move(e.globalPosition().toPoint() - self._drag_pos)
+        e.accept()
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
