@@ -1,9 +1,8 @@
 
 from __future__ import annotations
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QWheelEvent, QMouseEvent
-from PySide6.QtWidgets import QGraphicsView
 from PySide6.QtGui import QWheelEvent, QMouseEvent, QPainter
+from PySide6.QtWidgets import QGraphicsView
 
 
 class MapGraphicsView(QGraphicsView):
@@ -15,6 +14,7 @@ class MapGraphicsView(QGraphicsView):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
+        # QGraphicsView.setRenderHints expects QPainter.RenderHints.
         self.setRenderHints(self.renderHints() | QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
 
     def mouseMoveEvent(self, e: QMouseEvent):

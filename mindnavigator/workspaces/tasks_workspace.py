@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional, Union, Callable
 
 import qtawesome as qta
@@ -438,15 +438,38 @@ class TasksWorkspace(QWidget):
             return b
 
         self.tab_all = tab_btn("Все")
-        self.tab_today = tab_btn("Сегодня")
+        self.tab_plan = tab_btn("План")
         self.tab_done = tab_btn("Выполнено")
         self.tab_all.setChecked(True)
 
         top_layout.addWidget(self.tab_all)
-        top_layout.addWidget(self.tab_today)
+        top_layout.addWidget(self.tab_plan)
         top_layout.addWidget(self.tab_done)
 
         top_layout.addSpacing(12)
+
+        # ---- plan day switcher (visible only in "План") ----
+        self._plan_day = date.today()
+        self._plan_span_days = 7  # window size for plan
+
+        self.btn_prev_day = QToolButton()
+        self.btn_prev_day.setCursor(Qt.PointingHandCursor)
+        self.btn_prev_day.setAutoRaise(True)
+        self.btn_prev_day.setText("◀")
+
+        self.lbl_plan_day = QToolButton()
+        self.lbl_plan_day.setAutoRaise(True)
+        self.lbl_plan_day.setEnabled(False)
+        self.lbl_plan_day.setText(self._plan_day.strftime("%d.%m.%Y"))
+
+        self.btn_next_day = QToolButton()
+        self.btn_next_day.setCursor(Qt.PointingHandCursor)
+        self.btn_next_day.setAutoRaise(True)
+        self.btn_next_day.setText("▶")
+
+        top_layout.addWidget(self.btn_prev_day)
+        top_layout.addWidget(self.lbl_plan_day)
+        top_layout.addWidget(self.btn_next_day)
 
         self.cmb_focus = QComboBox()
         self.cmb_focus.setFixedWidth(180)
@@ -489,7 +512,12 @@ class TasksWorkspace(QWidget):
         self.search.textChanged.connect(self.model.set_search)
         self.cmb_focus.currentIndexChanged.connect(self._on_focus_changed)
 
+        self.btn_prev_day.clicked.connect(self._plan_prev_day)
+        self.btn_next_day.clicked.connect(self._plan_next_day)
+
         self._reload_focus_combo()
+
+        self._update_plan_controls()
 
         # styles (minimal, fast)
         self.setStyleSheet("""
@@ -523,13 +551,34 @@ class TasksWorkspace(QWidget):
     # -------- DB glue --------
     def _toggle_done_db(self, task_id: int):
         self._repo.toggle_done(task_id)
-        self.model._all_rows = self._load_rows_from_db()
-        self.model._rebuild()
-        self._reload_focus_combo()
+        # Preserve current mode (All/Plan/Done)
+        if self.tab_plan.isChecked():
+            self._reload_plan_rows()
+        else:
+            self.model._all_rows = self._load_rows_from_db()
+            self.model._rebuild()
+            self._reload_focus_combo()
 
     def _load_rows_from_db(self) -> List[Row]:
         rows: List[Row] = []
         tasks = self._repo.list_tasks()
+
+        def parse_day(s: str) -> date:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+
+        cur: Optional[date] = None
+        for t in tasks:
+            d = parse_day(t.day)
+            if cur != d:
+                cur = d
+                rows.append(HeaderRow(cur))
+            rows.append(TaskRow(t.id, d, t.time_text, t.title, t.priority, t.done))
+        return rows
+
+    def _load_rows_from_db_range(self, day_from: date, day_to: date) -> List[Row]:
+        """Build rows (with headers) from DB range."""
+        rows: List[Row] = []
+        tasks = self._repo.list_tasks_range(day_from, day_to, include_done=False)
 
         def parse_day(s: str) -> date:
             return datetime.strptime(s, "%Y-%m-%d").date()
@@ -568,12 +617,57 @@ class TasksWorkspace(QWidget):
 
     # -------- UI handlers --------
     def _on_tab_changed(self):
-        if self.tab_today.isChecked():
-            self.model.set_filter_mode("Сегодня")
+        if self.tab_plan.isChecked():
+            self._enter_plan_mode()
         elif self.tab_done.isChecked():
             self.model.set_filter_mode("Выполнено")
         else:
+            # back to All mode dataset
+            self.model._all_rows = self._load_rows_from_db()
+            self.model._rebuild()
+            self._reload_focus_combo()
             self.model.set_filter_mode("Все")
+
+        self._update_plan_controls()
+
+    # -------- Plan mode --------
+    def _enter_plan_mode(self):
+        # In plan mode we show a moving window starting at _plan_day
+        self.model.set_filter_mode("Все")
+        self.model.set_focus_day(None)
+        self._reload_plan_rows()
+
+    def _reload_plan_rows(self):
+        day_from = self._plan_day
+        day_to = self._plan_day + timedelta(days=self._plan_span_days - 1)
+        self.model._all_rows = self._load_rows_from_db_range(day_from, day_to)
+        self.model._rebuild()
+        self._reload_focus_combo()  # keeps combo consistent (days shown)
+        self._update_plan_controls()
+
+    def _plan_prev_day(self):
+        if not self.tab_plan.isChecked():
+            return
+        self._plan_day = self._plan_day - timedelta(days=1)
+        self._reload_plan_rows()
+
+    def _plan_next_day(self):
+        if not self.tab_plan.isChecked():
+            return
+        self._plan_day = self._plan_day + timedelta(days=1)
+        self._reload_plan_rows()
+
+    def _update_plan_controls(self):
+        is_plan = self.tab_plan.isChecked()
+        self.btn_prev_day.setVisible(is_plan)
+        self.lbl_plan_day.setVisible(is_plan)
+        self.btn_next_day.setVisible(is_plan)
+        if is_plan:
+            # show "Сегодня" label when matching today
+            if self._plan_day == date.today():
+                self.lbl_plan_day.setText("Сегодня")
+            else:
+                self.lbl_plan_day.setText(self._plan_day.strftime("%d.%m.%Y"))
 
     def _on_focus_changed(self, idx: int):
         if idx <= 0:
