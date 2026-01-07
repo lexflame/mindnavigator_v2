@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import List, Union, Optional
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent
+from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
-    QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle
+    QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle, QDialog,
+    QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox
 )
 
-from mindnavigator.storage import format_project_date, get_database
+from mindnavigator.storage import (
+    format_project_date,
+    get_database,
+    normalize_priority,
+    validate_area,
+    validate_title,
+)
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
 # - та же структура верхней панели
@@ -24,7 +32,7 @@ class ProjectRow:
     id: int
     area: str               # group header key
     title: str
-    updated: str            # "dd.mm.yyyy"
+    updated: date
     priority: str           # Low | Medium | High
     archived: bool
 
@@ -45,6 +53,7 @@ class ProjectRoles:
     Priority = Qt.UserRole + 5
     Archived = Qt.UserRole + 6
     ProjectId = Qt.UserRole + 7
+    UpdatedDate = Qt.UserRole + 8
 
 
 class ProjectsModel(QAbstractListModel):
@@ -67,7 +76,7 @@ class ProjectsModel(QAbstractListModel):
                 p.id,
                 p.area,
                 p.title,
-                format_project_date(p.updated),
+                p.updated,
                 p.priority,
                 p.archived,
             )
@@ -104,6 +113,8 @@ class ProjectsModel(QAbstractListModel):
         if role == ProjectRoles.Title:
             return r.title
         if role == ProjectRoles.Updated:
+            return format_project_date(r.updated)
+        if role == ProjectRoles.UpdatedDate:
             return r.updated
         if role == ProjectRoles.Priority:
             return r.priority
@@ -137,6 +148,61 @@ class ProjectsModel(QAbstractListModel):
         self._area_focus = area
         self._rebuild()
 
+    def add_project(self, area: str, title: str, updated: date, priority: str, archived: bool):
+        """Добавляет новый проект и пересобирает список."""
+        project = self._db.create_project(area=area, title=title, updated=updated, priority=priority, archived=archived)
+        self._all_rows.append(
+            ProjectRow(project.id, project.area, project.title, project.updated, project.priority, project.archived)
+        )
+        self._rebuild()
+
+    def project_at_row(self, row_idx: int) -> Optional[ProjectRow]:
+        """Возвращает проект по индексу строки или None."""
+        if row_idx < 0 or row_idx >= len(self._rows):
+            return None
+        r = self._rows[row_idx]
+        if isinstance(r, HeaderRow):
+            return None
+        return r
+
+    def update_project_by_row(
+        self,
+        row_idx: int,
+        area: str,
+        title: str,
+        updated: date,
+        priority: str,
+        archived: bool,
+    ):
+        """Обновляет проект по индексу строки."""
+        r = self.project_at_row(row_idx)
+        if r is None:
+            return
+        updated_project = self._db.update_project(
+            project_id=r.id,
+            area=area,
+            title=title,
+            updated=updated,
+            priority=priority,
+            archived=archived,
+        )
+
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, ProjectRow) and it.id == r.id:
+                it = ProjectRow(
+                    updated_project.id,
+                    updated_project.area,
+                    updated_project.title,
+                    updated_project.updated,
+                    updated_project.priority,
+                    updated_project.archived,
+                )
+            new_all.append(it)
+
+        self._all_rows = new_all
+        self._rebuild()
+
     def toggle_archive_by_row(self, row_idx: int):
         """Переключает архивный статус проекта по строке."""
         if row_idx < 0 or row_idx >= len(self._rows):
@@ -154,6 +220,15 @@ class ProjectsModel(QAbstractListModel):
             new_all.append(it)
 
         self._all_rows = new_all
+        self._rebuild()
+
+    def delete_project_by_row(self, row_idx: int):
+        """Удаляет проект по индексу строки."""
+        r = self.project_at_row(row_idx)
+        if r is None:
+            return
+        self._db.delete_project(r.id)
+        self._all_rows = [it for it in self._all_rows if not (isinstance(it, ProjectRow) and it.id == r.id)]
         self._rebuild()
 
     def _rebuild(self):
@@ -377,12 +452,78 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 margin: 4px 8px;
             }
         """)
-        menu.addAction("Открыть")
-        menu.addAction("Переименовать")
+        act_open = menu.addAction("Открыть")
+        act_edit = menu.addAction("Переименовать")
         menu.addSeparator()
-        menu.addAction("Архивировать / Восстановить")
-        menu.addAction("Удалить")
-        menu.exec(QCursor.pos())
+        act_archive = menu.addAction("Архивировать / Восстановить")
+        act_delete = menu.addAction("Удалить")
+
+        chosen = menu.exec(QCursor.pos())
+        if chosen == act_edit:
+            self._edit_project(index)
+            return
+        if chosen == act_archive:
+            model = index.model()
+            if hasattr(model, "toggle_archive_by_row"):
+                model.toggle_archive_by_row(index.row())
+            return
+        if chosen != act_delete:
+            return
+
+        title = index.data(ProjectRoles.Title) or "проект"
+        res = QMessageBox.question(
+            menu.parentWidget() or None,
+            "Удалить проект",
+            f"Удалить проект:\n«{title}» ?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel
+        )
+        if res != QMessageBox.Yes:
+            return
+
+        model = index.model()
+        if hasattr(model, "delete_project_by_row"):
+            model.delete_project_by_row(index.row())
+            self._refresh_area_combo()
+
+    def _edit_project(self, index: QModelIndex):
+        """Открывает диалог редактирования проекта."""
+        model = index.model()
+        if not hasattr(model, "project_at_row"):
+            return
+
+        project = model.project_at_row(index.row())
+        if project is None:
+            return
+
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        dialog = ProjectEditDialog(project, parent=parent)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        values = dialog.values()
+        if hasattr(model, "update_project_by_row"):
+            try:
+                model.update_project_by_row(
+                    index.row(),
+                    area=values["area"],
+                    title=values["title"],
+                    updated=values["updated"],
+                    priority=values["priority"],
+                    archived=values["archived"],
+                )
+                self._refresh_area_combo(values["area"])
+            except ValueError as exc:
+                QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
+
+    def _refresh_area_combo(self, selected: Optional[str] = None):
+        """Просит рабочую область обновить список областей."""
+        widget = self.parent()
+        while widget is not None:
+            if hasattr(widget, "_refresh_area_combo"):
+                widget._refresh_area_combo(selected)
+                break
+            widget = widget.parent()
 
     def _prio_color(self, p: str) -> QColor:
         """Возвращает цвет для приоритета проекта."""
@@ -392,6 +533,128 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if p == "low":
             return self.C_LOW
         return self.C_MED
+
+
+class ProjectEditDialog(QDialog):
+    def __init__(self, project: Optional[ProjectRow] = None, parent=None):
+        """Создает диалог создания или редактирования проекта."""
+        super().__init__(parent)
+        is_new = project is None
+        self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
+        self.setObjectName("ProjectEditDialog")
+        self.setMinimumWidth(460)
+        self.setMinimumHeight(300)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
+
+        self.area_edit = QLineEdit(project.area if project else "")
+        self.area_edit.setPlaceholderText("Область проекта")
+
+        self.title_edit = QLineEdit(project.title if project else "")
+        self.title_edit.setPlaceholderText("Название проекта")
+
+        self.updated_edit = QDateEdit()
+        self.updated_edit.setCalendarPopup(True)
+        self.updated_edit.setDisplayFormat("dd.MM.yyyy")
+        self.updated_edit.setKeyboardTracking(False)
+        self.updated_edit.setDate(QDate.currentDate())
+        if project:
+            self.updated_edit.setDate(QDate(project.updated.year, project.updated.month, project.updated.day))
+
+        self.priority_edit = QComboBox()
+        self.priority_edit.addItems(["Low", "Medium", "High"])
+        self.priority_edit.setCurrentText(project.priority if project else "Medium")
+
+        self.archived_edit = QCheckBox("Архивировать")
+        self.archived_edit.setChecked(project.archived if project else False)
+
+        form.addRow("Область", self.area_edit)
+        form.addRow("Название", self.title_edit)
+        form.addRow("Дата обновления", self.updated_edit)
+        form.addRow("Приоритет", self.priority_edit)
+        form.addRow("", self.archived_edit)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setStyleSheet("""
+            QDialog#ProjectEditDialog {
+                background: #16171a;
+            }
+
+            QDialog#ProjectEditDialog QLabel {
+                color: #cfcfcf;
+            }
+
+            QDialog#ProjectEditDialog QLineEdit,
+            QDialog#ProjectEditDialog QComboBox,
+            QDialog#ProjectEditDialog QDateEdit {
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 8px 10px;
+                border-radius: 6px;
+                min-height: 28px;
+            }
+
+            QDialog#ProjectEditDialog QCheckBox {
+                color: #cfcfcf;
+                padding: 4px 0;
+            }
+
+            QDialog#ProjectEditDialog QComboBox::drop-down {
+                border: none;
+                width: 18px;
+            }
+
+            QDialog#ProjectEditDialog QDialogButtonBox QPushButton {
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 8px 14px;
+                border-radius: 6px;
+                min-width: 90px;
+            }
+
+            QDialog#ProjectEditDialog QDialogButtonBox QPushButton:hover {
+                background: #34363b;
+            }
+        """)
+
+    def _on_accept(self):
+        """Проверяет ввод перед сохранением изменений."""
+        try:
+            validate_area(self.area_edit.text())
+            validate_title(self.title_edit.text(), field_name="Название проекта")
+            normalize_priority(self.priority_edit.currentText())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+
+        self.accept()
+
+    def values(self) -> dict:
+        """Возвращает значения формы проекта."""
+        qd = self.updated_edit.date()
+        return {
+            "area": self.area_edit.text().strip(),
+            "title": self.title_edit.text().strip(),
+            "updated": date(qd.year(), qd.month(), qd.day()),
+            "priority": self.priority_edit.currentText().strip() or "Medium",
+            "archived": self.archived_edit.isChecked(),
+        }
 
 
 class ProjectsWorkspace(QWidget):
@@ -480,6 +743,7 @@ class ProjectsWorkspace(QWidget):
 
         self.search.textChanged.connect(self.model.set_search)
         self.cmb_area.currentTextChanged.connect(self._on_area_changed)
+        self.btn_create.clicked.connect(self._on_create_project)
 
         self.setStyleSheet("""
             QWidget#ProjectsWorkspace { background: #16171a; }
@@ -524,3 +788,34 @@ class ProjectsWorkspace(QWidget):
             self.model.set_area_focus(None)
         else:
             self.model.set_area_focus(text)
+
+    def _refresh_area_combo(self, selected: Optional[str] = None):
+        """Обновляет список областей проектов."""
+        current = selected or self.cmb_area.currentText()
+        self.cmb_area.blockSignals(True)
+        self.cmb_area.clear()
+        self.cmb_area.addItems(["Все области", *get_database().project_areas()])
+        if current:
+            self.cmb_area.setCurrentText(current)
+        if self.cmb_area.currentText() != current and current != "Все области":
+            self.cmb_area.setCurrentText("Все области")
+        self.cmb_area.blockSignals(False)
+
+    def _on_create_project(self):
+        """Открывает диалог создания проекта."""
+        dialog = ProjectEditDialog(parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        values = dialog.values()
+        try:
+            self.model.add_project(
+                area=values["area"],
+                title=values["title"],
+                updated=values["updated"],
+                priority=values["priority"],
+                archived=values["archived"],
+            )
+            self._refresh_area_combo(values["area"])
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
