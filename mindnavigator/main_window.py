@@ -8,6 +8,7 @@ from .windowing import ResizeEdge
 from .ui.titlebar import TitleBar
 from .ui.leftrail import LeftRail
 from .ui.projects_nav import ProjectsNav
+from .ui.search_nav import SearchNav
 from .workspaces.tasks_workspace import TasksWorkspace
 from .workspaces.projects_workspace import ProjectsWorkspace
 from .constants import APP_NAME
@@ -87,8 +88,18 @@ class MainWindow(QMainWindow):
         self.left_rail = LeftRail()
         body_layout.addWidget(self.left_rail)
 
+        self.nav_column = QWidget()
+        self.nav_column.setObjectName("NavColumn")
+        nav_layout = QVBoxLayout(self.nav_column)
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(0)
+
         self.projects_nav = ProjectsNav()
-        body_layout.addWidget(self.projects_nav)
+        self.search_nav = SearchNav()
+        nav_layout.addWidget(self.projects_nav, 1)
+        nav_layout.addWidget(self.search_nav, 0)
+
+        body_layout.addWidget(self.nav_column)
 
         self.workspace_stack = QStackedWidget()
         self.workspace_stack.setObjectName("WorkspaceStack")
@@ -121,6 +132,7 @@ class MainWindow(QMainWindow):
         """)
 
         self.projects_nav.update_width_for_window(self.width())
+        self.search_nav.update_width_for_window(self.width())
 
     def _placeholder(self, title: str, subtitle: str) -> QWidget:
         """Возвращает временный экран-заглушку для неготовых режимов."""
@@ -169,6 +181,7 @@ class MainWindow(QMainWindow):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
         super().resizeEvent(event)
         self.projects_nav.update_width_for_window(self.width())
+        self.search_nav.update_width_for_window(self.width())
 
     # ----- Snap / detach -----
     def _snap_to_screen_edges(self, global_pos: QPoint):
