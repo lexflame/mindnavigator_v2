@@ -9,8 +9,10 @@ from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QE
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
-    QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle
+    QComboBox, QDateEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
+    QCheckBox, QMessageBox
 )
+
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
@@ -122,6 +124,16 @@ class TasksModel(QAbstractListModel):
             new_all.append(it)
 
         self._all_rows = new_all
+        self._rebuild()
+
+    def delete_task_by_row(self, row_idx: int):
+        if row_idx < 0 or row_idx >= len(self._rows):
+            return
+        r = self._rows[row_idx]
+        if isinstance(r, HeaderRow):
+            return
+
+        self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
         self._rebuild()
 
     def _rebuild(self):
@@ -381,11 +393,30 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     def _show_row_menu(self, index: QModelIndex):
         menu = QMenu()
-        menu.addAction("Открыть")
-        menu.addAction("Редактировать")
+        act_open = menu.addAction("Открыть")
+        act_edit = menu.addAction("Редактировать")
         menu.addSeparator()
-        menu.addAction("Удалить")
-        menu.exec(QCursor.pos())
+        act_del = menu.addAction("Удалить")
+
+        chosen = menu.exec(QCursor.pos())
+        if chosen != act_del:
+            return
+
+        # confirm delete
+        title = index.data(TaskRoles.Title) or "задачу"
+        res = QMessageBox.question(
+            menu.parentWidget() or None,
+            "Удалить задачу",
+            f"Удалить задачу:\n«{title}» ?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel
+        )
+        if res != QMessageBox.Yes:
+            return
+
+        m = index.model()
+        if hasattr(m, "delete_task_by_row"):
+            m.delete_task_by_row(index.row())
 
     def _prio_color(self, p: str) -> QColor:
         p = (p or "").lower()
