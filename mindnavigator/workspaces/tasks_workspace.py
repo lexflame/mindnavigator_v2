@@ -47,6 +47,7 @@ class TaskRoles:
 
 class TasksModel(QAbstractListModel):
     def __init__(self, rows: List[Row], parent=None):
+        """Создает модель данных задач для списка."""
         super().__init__(parent)
         self._all_rows: List[Row] = rows[:]
         self._rows: List[Row] = rows[:]
@@ -55,11 +56,13 @@ class TasksModel(QAbstractListModel):
         self._focus_day: Optional[date] = None
 
     def rowCount(self, parent=QModelIndex()) -> int:
+        """Возвращает количество строк с учетом фильтрации."""
         if parent.isValid():
             return 0
         return len(self._rows)
 
     def data(self, index: QModelIndex, role: int):
+        """Отдает данные для делегата в зависимости от роли."""
         if not index.isValid():
             return None
         r = self._rows[index.row()]
@@ -91,6 +94,7 @@ class TasksModel(QAbstractListModel):
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        """Задает флаги взаимодействия для строки."""
         if not index.isValid():
             return Qt.NoItemFlags
         r = self._rows[index.row()]
@@ -99,34 +103,34 @@ class TasksModel(QAbstractListModel):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def set_filter_mode(self, mode: str):
+        """Устанавливает фильтр по режиму и пересобирает список."""
         self._filter_mode = mode
         self._rebuild()
 
     def set_search(self, text: str):
+        """Обновляет строку поиска и пересобирает список."""
         self._search = (text or "").strip().lower()
         self._rebuild()
 
     def set_focus_day(self, d: Optional[date]):
+        """Фиксирует конкретный день для отображения задач."""
         self._focus_day = d
         self._rebuild()
 
     def add_task(self, title: str, day: date, priority: str):
-        """Append a new task and rebuild current view."""
+        """Добавляет новую задачу и пересобирает текущий список."""
         title = (title or "").strip()
         if not title:
             return
 
-        # next id
-        max_id = 0
-        for r in self._all_rows:
-            if isinstance(r, TaskRow):
-                max_id = max(max_id, r.id)
+        max_id = max((r.id for r in self._all_rows if isinstance(r, TaskRow)), default=0)
         new_id = max_id + 1
 
         self._all_rows.append(TaskRow(new_id, day, "", title, priority or "Medium", False))
         self._rebuild()
 
     def task_at_row(self, row_idx: int) -> Optional[TaskRow]:
+        """Возвращает задачу по индексу строки или None."""
         if row_idx < 0 or row_idx >= len(self._rows):
             return None
         r = self._rows[row_idx]
@@ -143,6 +147,7 @@ class TasksModel(QAbstractListModel):
         priority: str,
         done: bool,
     ):
+        """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
         if r is None:
             return
@@ -164,6 +169,7 @@ class TasksModel(QAbstractListModel):
         self._rebuild()
 
     def toggle_done_by_row(self, row_idx: int):
+        """Переключает статус выполнения задачи по индексу строки."""
         if row_idx < 0 or row_idx >= len(self._rows):
             return
         r = self._rows[row_idx]
@@ -180,6 +186,7 @@ class TasksModel(QAbstractListModel):
         self._rebuild()
 
     def delete_task_by_row(self, row_idx: int):
+        """Удаляет задачу по индексу строки."""
         if row_idx < 0 or row_idx >= len(self._rows):
             return
         r = self._rows[row_idx]
@@ -190,9 +197,11 @@ class TasksModel(QAbstractListModel):
         self._rebuild()
 
     def _rebuild(self):
+        """Пересобирает список задач с учетом фильтров и поиска."""
         today = date.today()
 
         def is_today(d: date) -> bool:
+            """Проверяет, соответствует ли дата сегодняшнему дню."""
             return d == today
 
         search = self._search
@@ -226,6 +235,7 @@ class TasksModel(QAbstractListModel):
             tasks.append(it)
 
         def time_key(t: str):
+            """Преобразует строку времени в ключ сортировки."""
             try:
                 return datetime.strptime(t, "%H:%M").time()
             except Exception:
@@ -248,6 +258,7 @@ class TasksModel(QAbstractListModel):
 
 class TaskEditDialog(QDialog):
     def __init__(self, task: TaskRow, parent=None):
+        """Создает диалог редактирования задачи."""
         super().__init__(parent)
         self.setWindowTitle("Редактирование задачи")
         self.setObjectName("TaskEditDialog")
@@ -341,6 +352,7 @@ class TaskEditDialog(QDialog):
         """)
 
     def _on_accept(self):
+        """Проверяет ввод перед сохранением изменений."""
         title = self.title_edit.text().strip()
         if not title:
             QMessageBox.warning(self, "Проверка", "Введите название задачи.")
@@ -348,6 +360,7 @@ class TaskEditDialog(QDialog):
         self.accept()
 
     def values(self):
+        """Возвращает текущие значения формы в виде словаря."""
         qd = self.day_edit.date()
         day = date(qd.year(), qd.month(), qd.day())
         time_text = self.time_edit.text().strip()
@@ -379,6 +392,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     C_LOW = QColor("#4caf50")
 
     def __init__(self, parent=None):
+        """Инициализирует делегат отрисовки строк задач."""
         super().__init__(parent)
         self._icon_doc = qta.icon("fa5s.file-alt", color="#cfcfcf")
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
@@ -396,12 +410,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header.setBold(True)
 
     def sizeHint(self, option, index):
+        """Возвращает размер строки списка."""
         row_type = index.data(TaskRoles.RowType)
         if row_type == "header":
             return QSize(option.rect.width(), self.HEADER_H)
         return QSize(option.rect.width(), self.ROW_H)
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
+        """Рисует строку задачи или заголовок дня."""
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, False)
 
@@ -533,6 +549,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def editorEvent(self, event, model, option, index):
+        """Обрабатывает клики по чекбоксу и меню строки."""
         row_type = index.data(TaskRoles.RowType)
         if row_type != "task":
             return False
@@ -574,6 +591,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return False
 
     def _show_row_menu(self, index: QModelIndex):
+        """Отображает контекстное меню строки."""
         menu = QMenu()
         act_open = menu.addAction("Открыть")
         act_edit = menu.addAction("Редактировать")
@@ -604,6 +622,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             m.delete_task_by_row(index.row())
 
     def _edit_task(self, index: QModelIndex):
+        """Открывает диалог редактирования задачи."""
         model = index.model()
         if not hasattr(model, "task_at_row"):
             return
@@ -629,6 +648,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             )
 
     def _prio_color(self, p: str) -> QColor:
+        """Возвращает цвет для приоритета."""
         p = (p or "").lower()
         if p == "high":
             return self.C_HIGH
@@ -637,17 +657,20 @@ class TasksItemDelegate(QStyledItemDelegate):
         return self.C_MED
 
     def _is_overdue(self, d: date, done: bool) -> bool:
+        """Проверяет, просрочена ли задача."""
         return (d < date.today()) and (not done)
 
     def _format_header(self, d: date) -> str:
+        """Формирует подпись для заголовка дня."""
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
 
 
 class TasksWorkspace(QWidget):
-    """UI-only tasks workspace: topbar + grouped list view (fast)."""
+    """Рабочая область задач: панель управления и список с группировкой."""
 
     def __init__(self, parent=None):
+        """Создает интерфейс рабочей области задач."""
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
 
@@ -741,7 +764,6 @@ class TasksWorkspace(QWidget):
         self.cmb_priority = QComboBox()
         self.cmb_priority.addItems(["Любой", "Low", "Medium", "High"])
         self.cmb_priority.setFixedWidth(110)
-
 
         top_layout.addStretch(1)
 
@@ -843,6 +865,7 @@ class TasksWorkspace(QWidget):
         """)
 
     def _on_tab_changed(self):
+        """Обрабатывает переключение вкладок фильтра."""
         if self.tab_today.isChecked():
             self.model.set_filter_mode("Сегодня")
             self.model.set_focus_day(date.today())
@@ -857,6 +880,7 @@ class TasksWorkspace(QWidget):
             self.model.set_focus_day(None)
 
     def _shift_day(self, delta: int):
+        """Сдвигает фокусную дату на указанное число дней."""
         self._focus_day = self._focus_day + timedelta(days=delta)
         self._update_day_label()
 
@@ -866,11 +890,12 @@ class TasksWorkspace(QWidget):
         self.model.set_focus_day(self._focus_day)
 
     def _update_day_label(self):
+        """Обновляет подпись текущего дня."""
         wd = WEEKDAY_RU[self._focus_day.weekday()]
         self.lbl_day.setText(f"{self._focus_day.isoformat()} ({wd})")
 
-
     def _on_create_task(self):
+        """Создает задачу из формы и очищает ввод."""
         title = self.new_title.text().strip()
         if not title:
             return
@@ -886,6 +911,7 @@ class TasksWorkspace(QWidget):
         self.new_title.setFocus()
 
     def _make_fake_rows(self) -> List[Row]:
+        """Генерирует демонстрационный набор задач."""
         t0 = date.today()
         days = [t0 - timedelta(days=1), t0, t0 + timedelta(days=1), t0 + timedelta(days=2)]
 
