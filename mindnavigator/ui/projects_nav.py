@@ -1,8 +1,13 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
+
+from mindnavigator.storage import get_database, ProjectData
 
 
 class ProjectsNav(QWidget):
     """Панель навигации по проектам справа от левого меню."""
+
+    project_filter_changed = Signal(object)
 
     def __init__(self, parent=None):
         """Создает и настраивает блок навигации проектов."""
@@ -19,13 +24,22 @@ class ProjectsNav(QWidget):
         self.header = QLabel("Проекты")
         self.header.setObjectName("ProjectsHeader")
 
-        self.hint = QLabel("Навигация (пока пусто)")
+        self.hint = QLabel("Фильтрация задач по проектам")
         self.hint.setObjectName("ProjectsHint")
         self.hint.setWordWrap(True)
 
+        self.list = QListWidget()
+        self.list.setObjectName("ProjectsFilterList")
+        self.list.setSelectionMode(QListWidget.SingleSelection)
+        self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        self.list.currentItemChanged.connect(self._on_project_selected)
+
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
+        layout.addWidget(self.list, 1)
         layout.addStretch(1)
+
+        self._populate_projects()
 
         self.setStyleSheet("""
             QWidget#ProjectsNav {
@@ -41,7 +55,47 @@ class ProjectsNav(QWidget):
                 color: #7a7a7a;
                 font-size: 12px;
             }
+            QListWidget#ProjectsFilterList {
+                background: #16171a;
+                border: 1px solid #2a2b2f;
+                color: #cfcfcf;
+            }
+            QListWidget#ProjectsFilterList::item {
+                padding: 6px 8px;
+            }
+            QListWidget#ProjectsFilterList::item:selected {
+                background: #2a2b2f;
+            }
         """)
+
+    def _populate_projects(self):
+        """Заполняет список доступными проектами."""
+        self.list.clear()
+        all_item = QListWidgetItem("Все проекты")
+        all_item.setData(Qt.UserRole, None)
+        self.list.addItem(all_item)
+
+        projects = sorted(get_database().fetch_projects(), key=lambda p: (p.area.lower(), p.title.lower()))
+        for project in projects:
+            self.list.addItem(self._project_item(project))
+
+        self.list.setCurrentRow(0)
+
+    def _project_item(self, project: ProjectData) -> QListWidgetItem:
+        """Создает элемент списка проекта."""
+        suffix = " · архив" if project.archived else ""
+        text = f"{project.area} · {project.title}{suffix}"
+        item = QListWidgetItem(text)
+        item.setData(Qt.UserRole, project.id)
+        return item
+
+    def _on_project_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
+        """Обрабатывает выбор проекта для фильтрации."""
+        if current is None:
+            self.project_filter_changed.emit(None)
+            return
+        project_id = current.data(Qt.UserRole)
+        self.project_filter_changed.emit(project_id)
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""
@@ -52,3 +106,10 @@ class ProjectsNav(QWidget):
     def set_mode_title(self, mode_name: str):
         """Обновляет заголовок панели для активного режима."""
         self.header.setText(f"Проекты · {mode_name}")
+        is_tasks = mode_name == "Задачи"
+        self.hint.setVisible(is_tasks)
+        self.list.setVisible(is_tasks)
+        if is_tasks:
+            self.hint.setText("Фильтрация задач по проектам")
+        else:
+            self.hint.setText("Навигация (пока пусто)")
