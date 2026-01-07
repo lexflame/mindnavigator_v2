@@ -4,11 +4,12 @@ from PySide6.QtCore import Qt, QSize
 
 
 class LeftRail(QWidget):
-    """Narrow left toolbar with QtAwesome icons + tooltips."""
+    """Узкая левая панель с иконками QtAwesome и подсказками."""
 
     WIDTH = 56
 
     def __init__(self, parent=None):
+        """Инициализирует кнопки и стиль панели навигации."""
         super().__init__(parent)
         self.setFixedWidth(self.WIDTH)
         self.setObjectName("LeftRail")
@@ -34,6 +35,7 @@ class LeftRail(QWidget):
         }
 
         def btn(icon_name: str, tooltip: str) -> QToolButton:
+            """Создает кнопку панели с иконкой и подсказкой."""
             b = QToolButton()
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
@@ -84,6 +86,7 @@ class LeftRail(QWidget):
         """)
 
     def _refresh_icons(self):
+        """Обновляет цвет иконок в зависимости от выбранной кнопки."""
         for b in self.group.buttons():
             name = b.property("qta_name")
             if not name:
