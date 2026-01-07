@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Union, Optional
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent
+from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
@@ -108,6 +108,22 @@ class TasksModel(QAbstractListModel):
 
     def set_focus_day(self, d: Optional[date]):
         self._focus_day = d
+        self._rebuild()
+
+    def add_task(self, title: str, day: date, priority: str):
+        """Append a new task and rebuild current view."""
+        title = (title or "").strip()
+        if not title:
+            return
+
+        # next id
+        max_id = 0
+        for r in self._all_rows:
+            if isinstance(r, TaskRow):
+                max_id = max(max_id, r.id)
+        new_id = max_id + 1
+
+        self._all_rows.append(TaskRow(new_id, day, "", title, priority or "Medium", False))
         self._rebuild()
 
     def toggle_done_by_row(self, row_idx: int):
@@ -382,6 +398,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
 
             if cb_rect.contains(pos):
+                # confirm только если ставим done=True
+                currently_done = bool(index.data(TaskRoles.Done))
+                if not currently_done:
+                    res = QMessageBox.question(
+                        option.widget,
+                        "Подтверждение",
+                        "Пометить задачу выполненной?",
+                        QMessageBox.Yes | QMessageBox.Cancel,
+                        QMessageBox.Cancel
+                    )
+                    if res != QMessageBox.Yes:
+                        return True  # событие обработали, но действие отменили
+
                 model.toggle_done_by_row(index.row())
                 return True
 
@@ -445,6 +474,39 @@ class TasksWorkspace(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
+        create = QFrame()
+        create.setObjectName("TasksCreateBar")
+        create_layout = QHBoxLayout(create)
+        create_layout.setContentsMargins(10, 8, 10, 8)
+        create_layout.setSpacing(8)
+
+        self.new_title = QLineEdit()
+        self.new_title.setPlaceholderText("Название задачи…")
+
+        self.new_day = QDateEdit()
+        self.new_day.setCalendarPopup(True)
+        self.new_day.setDisplayFormat("yyyy-MM-dd")
+        self.new_day.setFixedWidth(140)
+        self.new_day.setDate(datetime.now().date())
+        self.new_day.setToolTip("Дата выполнения (можно выбрать в календаре или ввести вручную)")
+        self.new_day.setKeyboardTracking(False)
+
+        self.new_priority = QComboBox()
+        self.new_priority.setFixedWidth(110)
+        self.new_priority.addItems(["Low", "Medium", "High"])
+        self.new_priority.setCurrentText("Medium")
+
+        self.btn_add = QToolButton()
+        self.btn_add.setText("Создать")
+        self.btn_add.setCursor(Qt.PointingHandCursor)
+
+        create_layout.addWidget(self.new_title, 1)
+        create_layout.addWidget(self.new_day)
+        create_layout.addWidget(self.new_priority)
+        create_layout.addWidget(self.btn_add)
+
+        root.addWidget(create)
+
         top = QFrame()
         top.setObjectName("TasksTopbar")
         top_layout = QHBoxLayout(top)
@@ -499,12 +561,6 @@ class TasksWorkspace(QWidget):
         self.cmb_priority.addItems(["Любой", "Low", "Medium", "High"])
         self.cmb_priority.setFixedWidth(110)
 
-        self.btn_create = QToolButton()
-        self.btn_create.setText("Создать")
-        self.btn_create.setCursor(Qt.PointingHandCursor)
-
-        top_layout.addWidget(self.cmb_priority)
-        top_layout.addWidget(self.btn_create)
 
         top_layout.addStretch(1)
 
@@ -534,6 +590,8 @@ class TasksWorkspace(QWidget):
             b.clicked.connect(self._on_tab_changed)
 
         self.search.textChanged.connect(self.model.set_search)
+        self.btn_add.clicked.connect(self._on_create_task)
+        self.new_title.returnPressed.connect(self._on_create_task)
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
 
@@ -542,6 +600,34 @@ class TasksWorkspace(QWidget):
 
         self.setStyleSheet("""
             QWidget#TasksWorkspace { background: #16171a; }
+
+
+            QFrame#TasksCreateBar {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+            }
+
+            QFrame#TasksCreateBar QLineEdit {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QComboBox, QFrame#TasksCreateBar QDateEdit {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                padding: 4px 6px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QToolButton {
+                background: #2a2b2f;
+                border: 1px solid #3a3b40;
+                padding: 6px 10px;
+                border-radius: 6px;
+            }
+            QFrame#TasksCreateBar QToolButton:hover { background: #34363b; }
 
             QFrame#TasksTopbar {
                 background: #1b1c1f;
@@ -601,6 +687,22 @@ class TasksWorkspace(QWidget):
     def _update_day_label(self):
         wd = WEEKDAY_RU[self._focus_day.weekday()]
         self.lbl_day.setText(f"{self._focus_day.isoformat()} ({wd})")
+
+
+    def _on_create_task(self):
+        title = self.new_title.text().strip()
+        if not title:
+            return
+
+        qd = self.new_day.date()
+        d = date(qd.year(), qd.month(), qd.day())
+
+        pr = self.new_priority.currentText().strip() or "Medium"
+
+        self.model.add_task(title=title, day=d, priority=pr)
+
+        self.new_title.clear()
+        self.new_title.setFocus()
 
     def _make_fake_rows(self) -> List[Row]:
         t0 = date.today()
