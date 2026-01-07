@@ -68,6 +68,7 @@ class TasksModel(QAbstractListModel):
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
         self._search = ""
         self._focus_day: Optional[date] = None
+        self._project_filter_id: Optional[int] = None
         self._sort_key = "date"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
@@ -168,6 +169,11 @@ class TasksModel(QAbstractListModel):
     def set_focus_day(self, d: Optional[date]):
         """Фиксирует конкретный день для отображения задач."""
         self._focus_day = d
+        self._rebuild()
+
+    def set_project_filter(self, project_id: Optional[int]):
+        """Устанавливает фильтр по проекту."""
+        self._project_filter_id = project_id
         self._rebuild()
 
     def add_task(self, title: str, day: date, time_text: str, priority: str):
@@ -362,6 +368,9 @@ class TasksModel(QAbstractListModel):
                 continue
 
             if self._focus_day is not None and it.day != self._focus_day:
+                continue
+
+            if self._project_filter_id is not None and it.project_id != self._project_filter_id:
                 continue
 
             if self._filter_mode == "Сегодня":
@@ -1406,6 +1415,10 @@ class TasksWorkspace(QWidget):
 
         self.new_title.clear()
         self.new_title.setFocus()
+
+    def set_project_filter(self, project_id: Optional[int]):
+        """Обновляет фильтр по проекту."""
+        self.model.set_project_filter(project_id)
 
     def _set_drag_drop_state(self, enabled: bool):
         """Включает или выключает drag and drop списка."""
