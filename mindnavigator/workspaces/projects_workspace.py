@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle
 )
 
+from mindnavigator.storage import format_project_date, get_database
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
 # - та же структура верхней панели
@@ -47,14 +48,32 @@ class ProjectRoles:
 
 
 class ProjectsModel(QAbstractListModel):
-    def __init__(self, rows: List[Row], parent=None):
+    def __init__(self, parent=None):
         """Создает модель данных проектов."""
         super().__init__(parent)
-        self._all_rows: List[Row] = rows[:]
-        self._rows: List[Row] = rows[:]
+        self._db = get_database()
+        self._all_rows: List[Row] = []
+        self._rows: List[Row] = []
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
+        self._reload_from_db()
+
+    def _reload_from_db(self):
+        """Обновляет список проектов из базы данных."""
+        projects = self._db.fetch_projects()
+        self._all_rows = [
+            ProjectRow(
+                p.id,
+                p.area,
+                p.title,
+                format_project_date(p.updated),
+                p.priority,
+                p.archived,
+            )
+            for p in projects
+        ]
+        self._rebuild()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         """Возвращает количество строк в модели."""
@@ -126,10 +145,12 @@ class ProjectsModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             return
 
+        new_archived = not r.archived
+        self._db.set_project_archived(r.id, new_archived)
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, ProjectRow) and it.id == r.id:
-                it = ProjectRow(it.id, it.area, it.title, it.updated, it.priority, not it.archived)
+                it = ProjectRow(it.id, it.area, it.title, it.updated, it.priority, new_archived)
             new_all.append(it)
 
         self._all_rows = new_all
@@ -414,7 +435,7 @@ class ProjectsWorkspace(QWidget):
         top_layout.addSpacing(12)
 
         self.cmb_area = QComboBox()
-        self.cmb_area.addItems(["Все области", "SPACE", "TACMap", "MakerTask", "Wiki", "Misc"])
+        self.cmb_area.addItems(["Все области", *get_database().project_areas()])
         self.cmb_area.setFixedWidth(180)
         top_layout.addWidget(self.cmb_area)
 
@@ -448,7 +469,7 @@ class ProjectsWorkspace(QWidget):
         self.list.setSelectionMode(QListView.SingleSelection)
         root.addWidget(self.list, 1)
 
-        self.model = ProjectsModel(self._make_fake_rows(), self)
+        self.model = ProjectsModel(self)
         self.list.setModel(self.model)
 
         self.delegate = ProjectsItemDelegate(self.list)
@@ -503,27 +524,3 @@ class ProjectsWorkspace(QWidget):
             self.model.set_area_focus(None)
         else:
             self.model.set_area_focus(text)
-
-    def _make_fake_rows(self) -> List[Row]:
-        """Генерирует демонстрационный список проектов."""
-        projects = [
-            ProjectRow(1, "SPACE", "MindNavigator v2", "06.01.2026", "High", False),
-            ProjectRow(2, "SPACE", "Синхронизация FastAPI + S3", "05.01.2026", "Medium", False),
-            ProjectRow(3, "TACMap", "Редактор слоёв / маркеров", "03.01.2026", "High", False),
-
-            ProjectRow(4, "MakerTask", "ProjectsWorkspace UI (прототип)", "02.10.2025", "Medium", False),
-            ProjectRow(5, "MakerTask", "Drag&Drop планировщика", "01.10.2025", "High", True),
-
-            ProjectRow(6, "Wiki", "Cities: Skylines → DokuWiki", "22.07.2025", "Low", False),
-            ProjectRow(7, "Misc", "Сбор референсов / moodboard", "01.01.2026", "Low", False),
-        ]
-
-        projects.sort(key=lambda x: (x.area.lower(), x.title.lower(), x.id))
-        rows: List[Row] = []
-        cur: Optional[str] = None
-        for p in projects:
-            if cur != p.area:
-                cur = p.area
-                rows.append(HeaderRow(cur))
-            rows.append(p)
-        return rows
