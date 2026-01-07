@@ -6,11 +6,12 @@ from ..constants import APP_NAME
 
 
 class TitleBar(QWidget):
-    """Custom title bar for frameless window: drag, double-click maximize, buttons."""
+    """Кастомный заголовок окна: перетаскивание, двойной клик и кнопки."""
 
     HEIGHT = 40
 
     def __init__(self, parent_window: QMainWindow):
+        """Создает заголовок и связывает кнопки управления окном."""
         super().__init__(parent_window)
         self._window = parent_window
 
@@ -83,9 +84,11 @@ class TitleBar(QWidget):
         """)
 
     def sync_max_button(self):
+        """Синхронизирует иконку кнопки maximize с состоянием окна."""
         self.btn_max.setText("❐" if self._window.isMaximized() else "□")
 
     def _toggle_max_restore(self):
+        """Переключает окно между нормальным и развернутым состояниями."""
         if not self._window.isMaximized() and hasattr(self._window, "_restore_geom"):
             self._window._restore_geom = self._window.geometry()
 
@@ -97,6 +100,7 @@ class TitleBar(QWidget):
         self.sync_max_button()
 
     def mousePressEvent(self, e):
+        """Запоминает старт перетаскивания заголовка."""
         if e.button() == Qt.LeftButton:
             self._press_initiated = True
             self._press_global = e.globalPosition().toPoint()
@@ -107,6 +111,7 @@ class TitleBar(QWidget):
             e.accept()
 
     def mouseMoveEvent(self, e):
+        """Перемещает окно или выводит из maximize при перетаскивании."""
         if not self._dragging:
             return
 
@@ -131,6 +136,7 @@ class TitleBar(QWidget):
         e.accept()
 
     def mouseReleaseEvent(self, e):
+        """Завершает перетаскивание и применяет прилипания к краям."""
         if e.button() == Qt.LeftButton:
             global_pos = e.globalPosition().toPoint()
             self._press_initiated = False
@@ -144,6 +150,7 @@ class TitleBar(QWidget):
         super().mouseReleaseEvent(e)
 
     def mouseDoubleClickEvent(self, e):
+        """Обрабатывает двойной клик для разворота окна."""
         if e.button() == Qt.LeftButton:
             self._toggle_max_restore()
             e.accept()

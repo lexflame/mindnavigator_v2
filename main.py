@@ -1,4 +1,5 @@
 import sys
+from functools import partial
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
@@ -10,7 +11,8 @@ from mindnavigator.main_window import MainWindow
 
 
 def main():
-    # Hardcore: can help on weak GPU / old drivers
+    """Запускает приложение и управляет стартовой инициализацией."""
+    # Hardcore: может помочь на слабых GPU / старых драйверах
     # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
 
     app = QApplication(sys.argv)
@@ -22,18 +24,20 @@ def main():
 
     window = MainWindow()
 
-    steps = [
+    steps = (
         (150, "Подготовка модулей…"),
         (300, "Загрузка проекта…"),
         (450, "Проверка хранилища…"),
         (600, "Готово."),
-    ]
+    )
     for ms, text in steps:
-        QTimer.singleShot(ms, lambda t=text: splash.set_status(t))
+        QTimer.singleShot(ms, partial(splash.set_status, text))
 
     def finish_start():
+        """Показывает главное окно и закрывает заставку."""
         window.show()
-        QTimer.singleShot(0, lambda: (window.showMaximized(), window.title_bar.sync_max_button()))
+        QTimer.singleShot(0, window.showMaximized)
+        QTimer.singleShot(0, window.title_bar.sync_max_button)
         splash.close()
 
     finish_start()
