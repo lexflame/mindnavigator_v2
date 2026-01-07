@@ -999,8 +999,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             }
         """)
         act_open = menu.addAction("Открыть")
+        menu.addSeparator()
         act_edit = menu.addAction("Редактировать")
-        menu.addAction("Проект")
+        # menu.addAction("Проект")
         menu.addSeparator()
         act_del = menu.addAction("Удалить")
 
