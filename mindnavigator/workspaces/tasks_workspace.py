@@ -5,12 +5,12 @@ from datetime import date, datetime, timedelta
 from typing import List, Union, Optional
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate, QTime
+from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView
 )
 
 from mindnavigator.storage import get_database, normalize_priority, validate_time_text
@@ -34,7 +34,12 @@ class HeaderRow:
     day: date
 
 
-Row = Union[TaskRow, HeaderRow]
+@dataclass(frozen=True)
+class SortHeaderRow:
+    pass
+
+
+Row = Union[TaskRow, HeaderRow, SortHeaderRow]
 
 
 class TaskRoles:
@@ -45,6 +50,9 @@ class TaskRoles:
     Priority = Qt.UserRole + 5
     Done = Qt.UserRole + 6
     TaskId = Qt.UserRole + 7
+    SortKey = Qt.UserRole + 8
+    SortDirection = Qt.UserRole + 9
+    DisplayTime = Qt.UserRole + 10
 
 
 class TasksModel(QAbstractListModel):
@@ -57,6 +65,9 @@ class TasksModel(QAbstractListModel):
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
         self._search = ""
         self._focus_day: Optional[date] = None
+        self._sort_key = "date"  # date | title | priority
+        self._sort_asc = True
+        self._drag_enabled = False
         self._reload_from_db()
 
     def _reload_from_db(self):
@@ -81,7 +92,11 @@ class TasksModel(QAbstractListModel):
         r = self._rows[index.row()]
 
         if role == TaskRoles.RowType:
-            return "header" if isinstance(r, HeaderRow) else "task"
+            if isinstance(r, HeaderRow):
+                return "header"
+            if isinstance(r, SortHeaderRow):
+                return "sort_header"
+            return "task"
 
         if isinstance(r, HeaderRow):
             if role == TaskRoles.Day:
@@ -90,12 +105,23 @@ class TasksModel(QAbstractListModel):
                 return r.day.isoformat()
             return None
 
+        if isinstance(r, SortHeaderRow):
+            if role == TaskRoles.SortKey:
+                return self._sort_key
+            if role == TaskRoles.SortDirection:
+                return "asc" if self._sort_asc else "desc"
+            if role == Qt.DisplayRole:
+                return "sort_header"
+            return None
+
         if role == TaskRoles.TaskId:
             return r.id
         if role == TaskRoles.Day:
             return r.day
         if role == TaskRoles.TimeText:
             return r.time_text
+        if role == TaskRoles.DisplayTime:
+            return self._display_time_text(r)
         if role == TaskRoles.Title:
             return r.title
         if role == TaskRoles.Priority:
@@ -112,12 +138,21 @@ class TasksModel(QAbstractListModel):
             return Qt.NoItemFlags
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
+            flags = Qt.ItemIsEnabled
+            if self._drag_enabled:
+                flags |= Qt.ItemIsDropEnabled
+            return flags
+        if isinstance(r, SortHeaderRow):
             return Qt.ItemIsEnabled
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        if self._drag_enabled:
+            flags |= Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
+        return flags
 
     def set_filter_mode(self, mode: str):
         """Устанавливает фильтр по режиму и пересобирает список."""
         self._filter_mode = mode
+        self._drag_enabled = (mode == "План")
         self._rebuild()
 
     def set_search(self, text: str):
@@ -134,6 +169,15 @@ class TasksModel(QAbstractListModel):
         """Добавляет новую задачу и пересобирает текущий список."""
         task = self._db.create_task(title=title, day=day, time_text=time_text, priority=priority)
         self._all_rows.append(TaskRow(task.id, task.day, task.time_text, task.title, task.priority, task.done))
+        self._rebuild()
+
+    def set_sort(self, key: str):
+        """Устанавливает сортировку для режима «Все»."""
+        if key == self._sort_key:
+            self._sort_asc = not self._sort_asc
+        else:
+            self._sort_key = key
+            self._sort_asc = True
         self._rebuild()
 
     def task_at_row(self, row_idx: int) -> Optional[TaskRow]:
@@ -214,6 +258,38 @@ class TasksModel(QAbstractListModel):
         self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
         self._rebuild()
 
+    def move_task_to_day(self, task_id: int, new_day: date) -> bool:
+        """Переносит задачу на новую дату."""
+        task = next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
+        if task is None:
+            return False
+        if task.day == new_day:
+            return False
+
+        updated = self._db.update_task(
+            task_id=task.id,
+            title=task.title,
+            day=new_day,
+            time_text=task.time_text,
+            priority=task.priority,
+            done=task.done,
+        )
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, TaskRow) and it.id == task.id:
+                it = TaskRow(
+                    updated.id,
+                    updated.day,
+                    updated.time_text,
+                    updated.title,
+                    updated.priority,
+                    updated.done,
+                )
+            new_all.append(it)
+        self._all_rows = new_all
+        self._rebuild()
+        return True
+
     def _rebuild(self):
         """Пересобирает список задач с учетом фильтров и поиска."""
         today = date.today()
@@ -235,6 +311,9 @@ class TasksModel(QAbstractListModel):
             if self._filter_mode == "Сегодня":
                 if not is_today(it.day):
                     continue
+                if it.done:
+                    continue
+            elif self._filter_mode == "Все":
                 if it.done:
                     continue
             elif self._filter_mode == "Выполнено":
@@ -259,19 +338,105 @@ class TasksModel(QAbstractListModel):
             except Exception:
                 return datetime.min.time()
 
-        tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
+        if self._filter_mode == "Все":
+            priority_order = {"high": 0, "medium": 1, "low": 2}
+
+            def sort_key(task: TaskRow):
+                if self._sort_key == "title":
+                    return (task.title.lower(), task.day, time_key(task.time_text), task.id)
+                if self._sort_key == "priority":
+                    return (priority_order.get(task.priority.lower(), 3), task.day, time_key(task.time_text), task.id)
+                return (task.day, time_key(task.time_text), task.id)
+
+            tasks.sort(key=sort_key, reverse=not self._sort_asc)
+        else:
+            tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
 
         new_rows: List[Row] = []
-        current_day: Optional[date] = None
-        for t in tasks:
-            if current_day != t.day:
-                current_day = t.day
-                new_rows.append(HeaderRow(current_day))
-            new_rows.append(t)
+        if self._filter_mode == "Все":
+            new_rows.append(SortHeaderRow())
+            new_rows.extend(tasks)
+        else:
+            current_day: Optional[date] = None
+            for t in tasks:
+                if current_day != t.day:
+                    current_day = t.day
+                    new_rows.append(HeaderRow(current_day))
+                new_rows.append(t)
 
         self.beginResetModel()
         self._rows = new_rows
         self.endResetModel()
+
+    def _display_time_text(self, task: TaskRow) -> str:
+        """Формирует отображаемое время с учетом режима."""
+        if self._filter_mode == "Все":
+            if task.time_text:
+                return f"{task.time_text} · {task.day.isoformat()}"
+            return task.day.isoformat()
+        return task.time_text
+
+    def mimeTypes(self) -> List[str]:
+        """Возвращает поддерживаемые типы данных для drag and drop."""
+        return ["application/x-mindnavigator-task-id"]
+
+    def mimeData(self, indexes) -> QMimeData:
+        """Создает mime-данные для перетаскивания задачи."""
+        mime_data = QMimeData()
+        if not indexes:
+            return mime_data
+        idx = indexes[0]
+        task = self.task_at_row(idx.row())
+        if task is None:
+            return mime_data
+        mime_data.setData("application/x-mindnavigator-task-id", str(task.id).encode("utf-8"))
+        return mime_data
+
+    def supportedDropActions(self) -> Qt.DropActions:
+        """Разрешает перенос с изменением позиции."""
+        return Qt.MoveAction
+
+    def dropMimeData(self, data, action, row, column, parent) -> bool:
+        """Обрабатывает перенос задачи между днями."""
+        if action == Qt.IgnoreAction:
+            return True
+        if not self._drag_enabled:
+            return False
+        if not data.hasFormat("application/x-mindnavigator-task-id"):
+            return False
+
+        task_id_bytes = data.data("application/x-mindnavigator-task-id")
+        try:
+            task_id = int(bytes(task_id_bytes).decode("utf-8"))
+        except ValueError:
+            return False
+
+        target_row = row
+        if target_row < 0 and parent.isValid():
+            target_row = parent.row()
+        if target_row < 0:
+            target_row = len(self._rows) - 1
+
+        target_day = self._drop_target_day(target_row)
+        if target_day is None:
+            return False
+
+        return self.move_task_to_day(task_id, target_day)
+
+    def _drop_target_day(self, row_idx: int) -> Optional[date]:
+        """Определяет дату для переноса по позиции drop."""
+        if not self._rows:
+            return None
+        if row_idx >= len(self._rows):
+            row_idx = len(self._rows) - 1
+
+        for idx in range(row_idx, -1, -1):
+            r = self._rows[idx]
+            if isinstance(r, HeaderRow):
+                return r.day
+            if isinstance(r, TaskRow):
+                return r.day
+        return None
 
 
 class TaskEditDialog(QDialog):
@@ -461,6 +626,7 @@ class TaskEditDialog(QDialog):
 class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
+    TIME_W = 140
 
     C_BG = QColor("#16171a")
     C_ROW = QColor("#2a2d33")
@@ -495,7 +661,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         """Возвращает размер строки списка."""
         row_type = index.data(TaskRoles.RowType)
-        if row_type == "header":
+        if row_type in ("header", "sort_header"):
             return QSize(option.rect.width(), self.HEADER_H)
         return QSize(option.rect.width(), self.ROW_H)
 
@@ -520,12 +686,33 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
             painter.restore()
             return
+        if row_type == "sort_header":
+            sort_key = index.data(TaskRoles.SortKey) or "date"
+            sort_dir = index.data(TaskRoles.SortDirection) or "asc"
+            arrow = "▲" if sort_dir == "asc" else "▼"
+            painter.fillRect(r, self.C_BG)
+
+            layout = self._row_layout(r)
+            painter.setFont(self._font_header)
+            painter.setPen(self.C_DIM)
+            painter.drawText(layout["date"], Qt.AlignVCenter | Qt.AlignLeft,
+                             f"Дата {arrow}" if sort_key == "date" else "Дата")
+            painter.drawText(layout["title"], Qt.AlignVCenter | Qt.AlignLeft,
+                             f"Название {arrow}" if sort_key == "title" else "Название")
+            painter.drawText(layout["priority"], Qt.AlignVCenter | Qt.AlignRight,
+                             f"Приоритет {arrow}" if sort_key == "priority" else "Приоритет")
+
+            painter.setPen(self.C_BORDER)
+            painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
+            painter.restore()
+            return
 
         day: date = index.data(TaskRoles.Day)
-        time_text: str = index.data(TaskRoles.TimeText) or ""
+        time_text: str = index.data(TaskRoles.DisplayTime) or ""
         title: str = index.data(TaskRoles.Title) or ""
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
+        overdue = self._is_overdue(day, done)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -535,14 +722,13 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
 
-        x = r.left() + 10
+        layout = self._row_layout(r)
         cy = r.center().y()
 
-        grip_rect = QRect(x, cy - 8, 16, 16)
+        grip_rect = layout["grip"]
         self._icon_grip.paint(painter, grip_rect)
-        x += 22
 
-        cb_rect = QRect(x, cy - 7, 14, 14)
+        cb_rect = layout["checkbox"]
         painter.setPen(self.C_BORDER)
         painter.setBrush(QColor("#16171a"))
         painter.drawRect(cb_rect)
@@ -554,33 +740,30 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawLine(cb_rect.center().x() - 1, cb_rect.bottom() - 3,
                              cb_rect.right() - 2, cb_rect.top() + 3)
 
-        x += 22
-
         painter.setFont(self._font_small)
-        painter.setPen(self.C_DIM)
-        time_rect = QRect(x, r.top(), 64, r.height())
+        painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)
+        time_rect = layout["date"]
         painter.drawText(time_rect, Qt.AlignVCenter | Qt.AlignLeft, time_text)
-        x += 70
 
-        icon_rect = QRect(x, cy - 8, 16, 16)
+        icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
-        x += 22
 
         painter.setFont(self._font)
-        painter.setPen(self.C_TEXT if not done else self.C_DIM)
+        if done:
+            title_color = self.C_DIM
+        elif overdue:
+            title_color = self.C_OVERDUE
+        else:
+            title_color = self.C_TEXT
+        painter.setPen(title_color)
 
-        right_pad = 10
-        menu_w = 30
-        pr_w = 140
-        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-        pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
-
-        title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
+        menu_rect = layout["menu"]
+        pr_rect = layout["priority"]
+        title_rect = layout["title"]
         elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
         painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
         # --- PRIORITY BLOCK (fixed layout) ---
-        overdue = self._is_overdue(day, done)
         value_text = "OVERDUE" if overdue else priority
         value_color = self.C_OVERDUE if overdue else self._prio_color(priority)
 
@@ -634,6 +817,23 @@ class TasksItemDelegate(QStyledItemDelegate):
     def editorEvent(self, event, model, option, index):
         """Обрабатывает клики по чекбоксу и меню строки."""
         row_type = index.data(TaskRoles.RowType)
+        if row_type == "sort_header":
+            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+                pos = event.position().toPoint()
+                layout = self._row_layout(option.rect)
+                if layout["title"].contains(pos):
+                    if hasattr(model, "set_sort"):
+                        model.set_sort("title")
+                    return True
+                if layout["date"].contains(pos):
+                    if hasattr(model, "set_sort"):
+                        model.set_sort("date")
+                    return True
+                if layout["priority"].contains(pos):
+                    if hasattr(model, "set_sort"):
+                        model.set_sort("priority")
+                    return True
+            return False
         if row_type != "task":
             return False
 
@@ -642,13 +842,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             r = option.rect
             cy = r.center().y()
 
-            x = r.left() + 10
-            x += 22
-            cb_rect = QRect(x, cy - 7, 14, 14)
-
-            right_pad = 10
-            menu_w = 30
-            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+            layout = self._row_layout(r)
+            cb_rect = layout["checkbox"]
+            menu_rect = layout["menu"]
 
             if cb_rect.contains(pos):
                 # confirm только если ставим done=True
@@ -773,6 +969,40 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Формирует подпись для заголовка дня."""
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
+
+    def _row_layout(self, r: QRect) -> dict:
+        """Возвращает прямоугольники основных колонок строки."""
+        x = r.left() + 10
+        cy = r.center().y()
+
+        grip_rect = QRect(x, cy - 8, 16, 16)
+        x += 22
+
+        cb_rect = QRect(x, cy - 7, 14, 14)
+        x += 22
+
+        time_rect = QRect(x, r.top(), self.TIME_W, r.height())
+        x += self.TIME_W + 6
+
+        doc_rect = QRect(x, cy - 8, 16, 16)
+        x += 22
+
+        right_pad = 10
+        menu_w = 30
+        pr_w = 140
+        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+        pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+        title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
+
+        return {
+            "grip": grip_rect,
+            "checkbox": cb_rect,
+            "date": time_rect,
+            "doc": doc_rect,
+            "title": title_rect,
+            "priority": pr_rect,
+            "menu": menu_rect,
+        }
 
 
 class TasksWorkspace(QWidget):
@@ -910,6 +1140,7 @@ class TasksWorkspace(QWidget):
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
         root.addWidget(self.list, 1)
 
         self._focus_day = date.today()
@@ -930,6 +1161,7 @@ class TasksWorkspace(QWidget):
 
         self._update_day_label()
         self.model.set_focus_day(None)
+        self._set_drag_drop_state(False)
 
         self.setStyleSheet("""
             QWidget#TasksWorkspace { background: #16171a; }
@@ -1018,15 +1250,19 @@ class TasksWorkspace(QWidget):
         if self.tab_today.isChecked():
             self.model.set_filter_mode("Сегодня")
             self.model.set_focus_day(date.today())
+            self._set_drag_drop_state(False)
         elif self.tab_done.isChecked():
             self.model.set_filter_mode("Выполнено")
             self.model.set_focus_day(None)
+            self._set_drag_drop_state(False)
         elif self.tab_plan.isChecked():
             self.model.set_filter_mode("План")
             self.model.set_focus_day(None)
+            self._set_drag_drop_state(True)
         else:
             self.model.set_filter_mode("Все")
             self.model.set_focus_day(None)
+            self._set_drag_drop_state(False)
 
     def _shift_day(self, delta: int):
         """Сдвигает фокусную дату на указанное число дней."""
@@ -1037,6 +1273,7 @@ class TasksWorkspace(QWidget):
         self.tab_all.setChecked(True)
         self.model.set_filter_mode("Все")
         self.model.set_focus_day(self._focus_day)
+        self._set_drag_drop_state(False)
 
     def _update_day_label(self):
         """Обновляет подпись текущего дня."""
@@ -1065,3 +1302,17 @@ class TasksWorkspace(QWidget):
 
         self.new_title.clear()
         self.new_title.setFocus()
+
+    def _set_drag_drop_state(self, enabled: bool):
+        """Включает или выключает drag and drop списка."""
+        if enabled:
+            self.list.setDragEnabled(True)
+            self.list.setAcceptDrops(True)
+            self.list.setDropIndicatorShown(True)
+            self.list.setDefaultDropAction(Qt.MoveAction)
+            self.list.setDragDropMode(QAbstractItemView.DragDrop)
+        else:
+            self.list.setDragEnabled(False)
+            self.list.setAcceptDrops(False)
+            self.list.setDropIndicatorShown(False)
+            self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
