@@ -10,7 +10,7 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout
 )
 
 
@@ -126,6 +126,43 @@ class TasksModel(QAbstractListModel):
         self._all_rows.append(TaskRow(new_id, day, "", title, priority or "Medium", False))
         self._rebuild()
 
+    def task_at_row(self, row_idx: int) -> Optional[TaskRow]:
+        if row_idx < 0 or row_idx >= len(self._rows):
+            return None
+        r = self._rows[row_idx]
+        if isinstance(r, HeaderRow):
+            return None
+        return r
+
+    def update_task_by_row(
+        self,
+        row_idx: int,
+        title: str,
+        day: date,
+        time_text: str,
+        priority: str,
+        done: bool,
+    ):
+        r = self.task_at_row(row_idx)
+        if r is None:
+            return
+
+        title = (title or "").strip()
+        if not title:
+            return
+
+        time_text = (time_text or "").strip()
+        priority = (priority or "Medium").strip() or "Medium"
+
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, TaskRow) and it.id == r.id:
+                it = TaskRow(it.id, day, time_text, title, priority, bool(done))
+            new_all.append(it)
+
+        self._all_rows = new_all
+        self._rebuild()
+
     def toggle_done_by_row(self, row_idx: int):
         if row_idx < 0 or row_idx >= len(self._rows):
             return
@@ -207,6 +244,69 @@ class TasksModel(QAbstractListModel):
         self.beginResetModel()
         self._rows = new_rows
         self.endResetModel()
+
+
+class TaskEditDialog(QDialog):
+    def __init__(self, task: TaskRow, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Редактирование задачи")
+        self.setMinimumWidth(360)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.title_edit = QLineEdit(task.title)
+        self.title_edit.setPlaceholderText("Название задачи")
+
+        self.day_edit = QDateEdit()
+        self.day_edit.setCalendarPopup(True)
+        self.day_edit.setDisplayFormat("yyyy-MM-dd")
+        self.day_edit.setDate(task.day)
+        self.day_edit.setKeyboardTracking(False)
+
+        self.time_edit = QLineEdit(task.time_text or "")
+        self.time_edit.setPlaceholderText("HH:MM")
+
+        self.priority_edit = QComboBox()
+        self.priority_edit.addItems(["Low", "Medium", "High"])
+        self.priority_edit.setCurrentText(task.priority or "Medium")
+
+        self.done_edit = QCheckBox("Выполнено")
+        self.done_edit.setChecked(task.done)
+
+        form.addRow("Название", self.title_edit)
+        form.addRow("Дата", self.day_edit)
+        form.addRow("Время", self.time_edit)
+        form.addRow("Приоритет", self.priority_edit)
+        form.addRow("", self.done_edit)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_accept(self):
+        title = self.title_edit.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Проверка", "Введите название задачи.")
+            return
+        self.accept()
+
+    def values(self):
+        qd = self.day_edit.date()
+        day = date(qd.year(), qd.month(), qd.day())
+        time_text = self.time_edit.text().strip()
+        if time_text == "__:__":
+            time_text = ""
+        return {
+            "title": self.title_edit.text().strip(),
+            "day": day,
+            "time_text": time_text,
+            "priority": self.priority_edit.currentText().strip() or "Medium",
+            "done": self.done_edit.isChecked(),
+        }
 
 
 class TasksItemDelegate(QStyledItemDelegate):
@@ -428,6 +528,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         act_del = menu.addAction("Удалить")
 
         chosen = menu.exec(QCursor.pos())
+        if chosen == act_edit:
+            self._edit_task(index)
+            return
         if chosen != act_del:
             return
 
@@ -446,6 +549,31 @@ class TasksItemDelegate(QStyledItemDelegate):
         m = index.model()
         if hasattr(m, "delete_task_by_row"):
             m.delete_task_by_row(index.row())
+
+    def _edit_task(self, index: QModelIndex):
+        model = index.model()
+        if not hasattr(model, "task_at_row"):
+            return
+
+        task = model.task_at_row(index.row())
+        if task is None:
+            return
+
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        dialog = TaskEditDialog(task, parent=parent)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        values = dialog.values()
+        if hasattr(model, "update_task_by_row"):
+            model.update_task_by_row(
+                index.row(),
+                title=values["title"],
+                day=values["day"],
+                time_text=values["time_text"],
+                priority=values["priority"],
+                done=values["done"],
+            )
 
     def _prio_color(self, p: str) -> QColor:
         p = (p or "").lower()
