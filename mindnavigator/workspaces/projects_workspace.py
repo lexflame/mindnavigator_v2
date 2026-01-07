@@ -336,6 +336,26 @@ class ProjectsItemDelegate(QStyledItemDelegate):
     def _show_row_menu(self, index: QModelIndex):
         """Показывает контекстное меню проекта."""
         menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu {
+                background: #1f2227;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 14px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background: #2b2f36;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #2a2b2f;
+                margin: 4px 8px;
+            }
+        """)
         menu.addAction("Открыть")
         menu.addAction("Переименовать")
         menu.addSeparator()
