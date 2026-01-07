@@ -10,7 +10,7 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit
 )
 
 from mindnavigator.storage import get_database, normalize_priority, validate_time_text
@@ -25,6 +25,7 @@ class TaskRow:
     day: date
     time_text: str
     title: str
+    description: str
     priority: str   # Low | Medium | High
     done: bool
     project_id: Optional[int] = None
@@ -49,13 +50,15 @@ class TaskRoles:
     Day = Qt.UserRole + 2
     TimeText = Qt.UserRole + 3
     Title = Qt.UserRole + 4
-    Priority = Qt.UserRole + 5
-    Done = Qt.UserRole + 6
-    TaskId = Qt.UserRole + 7
-    SortKey = Qt.UserRole + 8
-    SortDirection = Qt.UserRole + 9
-    DisplayTime = Qt.UserRole + 10
-    ProjectTitle = Qt.UserRole + 11
+    Description = Qt.UserRole + 5
+    Priority = Qt.UserRole + 6
+    Done = Qt.UserRole + 7
+    TaskId = Qt.UserRole + 8
+    SortKey = Qt.UserRole + 9
+    SortDirection = Qt.UserRole + 10
+    DisplayTime = Qt.UserRole + 11
+    ProjectTitle = Qt.UserRole + 12
+    Expanded = Qt.UserRole + 13
 
 
 class TasksModel(QAbstractListModel):
@@ -72,13 +75,24 @@ class TasksModel(QAbstractListModel):
         self._sort_key = "date"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
+        self._expanded_task_ids: set[int] = set()
         self._reload_from_db()
 
     def _reload_from_db(self):
         """Обновляет список задач из базы данных."""
         tasks = self._db.fetch_tasks()
         self._all_rows = [
-            TaskRow(t.id, t.day, t.time_text, t.title, t.priority, t.done, t.project_id, t.project_title)
+            TaskRow(
+                t.id,
+                t.day,
+                t.time_text,
+                t.title,
+                t.description,
+                t.priority,
+                t.done,
+                t.project_id,
+                t.project_title,
+            )
             for t in tasks
         ]
         self._rebuild()
@@ -128,10 +142,14 @@ class TasksModel(QAbstractListModel):
             return self._display_time_text(r)
         if role == TaskRoles.Title:
             return r.title
+        if role == TaskRoles.Description:
+            return r.description
         if role == TaskRoles.Priority:
             return r.priority
         if role == TaskRoles.Done:
             return r.done
+        if role == TaskRoles.Expanded:
+            return r.id in self._expanded_task_ids
         if role == TaskRoles.ProjectTitle:
             return r.project_title
         if role == Qt.DisplayRole:
@@ -178,13 +196,14 @@ class TasksModel(QAbstractListModel):
 
     def add_task(self, title: str, day: date, time_text: str, priority: str):
         """Добавляет новую задачу и пересобирает текущий список."""
-        task = self._db.create_task(title=title, day=day, time_text=time_text, priority=priority)
+        task = self._db.create_task(title=title, description="", day=day, time_text=time_text, priority=priority)
         self._all_rows.append(
             TaskRow(
                 task.id,
                 task.day,
                 task.time_text,
                 task.title,
+                task.description,
                 task.priority,
                 task.done,
                 task.project_id,
@@ -215,6 +234,7 @@ class TasksModel(QAbstractListModel):
         self,
         row_idx: int,
         title: str,
+        description: str,
         day: date,
         time_text: str,
         priority: str,
@@ -228,6 +248,7 @@ class TasksModel(QAbstractListModel):
         updated = self._db.update_task(
             task_id=r.id,
             title=title,
+            description=description,
             day=day,
             time_text=time_text,
             priority=priority,
@@ -243,6 +264,7 @@ class TasksModel(QAbstractListModel):
                     updated.day,
                     updated.time_text,
                     updated.title,
+                    updated.description,
                     updated.priority,
                     updated.done,
                     updated.project_id,
@@ -271,6 +293,7 @@ class TasksModel(QAbstractListModel):
                     it.day,
                     it.time_text,
                     it.title,
+                    it.description,
                     it.priority,
                     new_done,
                     it.project_id,
@@ -291,6 +314,7 @@ class TasksModel(QAbstractListModel):
 
         self._db.delete_task(r.id)
         self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
+        self._expanded_task_ids.discard(r.id)
         self._rebuild()
 
     def move_task_to_day(self, task_id: int, new_day: date) -> bool:
@@ -304,6 +328,7 @@ class TasksModel(QAbstractListModel):
         updated = self._db.update_task(
             task_id=task.id,
             title=task.title,
+            description=task.description,
             day=new_day,
             time_text=task.time_text,
             priority=task.priority,
@@ -318,6 +343,7 @@ class TasksModel(QAbstractListModel):
                     updated.day,
                     updated.time_text,
                     updated.title,
+                    updated.description,
                     updated.priority,
                     updated.done,
                     updated.project_id,
@@ -441,6 +467,19 @@ class TasksModel(QAbstractListModel):
             return task.day.isoformat()
         return task.time_text
 
+    def toggle_expanded_by_row(self, row_idx: int) -> None:
+        """Переключает раскрытие задачи по индексу строки."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        if task.id in self._expanded_task_ids:
+            self._expanded_task_ids.remove(task.id)
+        else:
+            self._expanded_task_ids.add(task.id)
+        idx = self.index(row_idx)
+        if idx.isValid():
+            self.dataChanged.emit(idx, idx, [TaskRoles.Expanded, Qt.SizeHintRole])
+
     def mimeTypes(self) -> List[str]:
         """Возвращает поддерживаемые типы данных для drag and drop."""
         return ["application/x-mindnavigator-task-id"]
@@ -511,7 +550,7 @@ class TaskEditDialog(QDialog):
         self.setWindowTitle("Редактирование задачи")
         self.setObjectName("TaskEditDialog")
         self.setMinimumWidth(460)
-        self.setMinimumHeight(320)
+        self.setMinimumHeight(420)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -529,6 +568,10 @@ class TaskEditDialog(QDialog):
 
         self.title_edit = QLineEdit(task.title)
         self.title_edit.setPlaceholderText("Название задачи")
+
+        self.description_edit = QPlainTextEdit(task.description)
+        self.description_edit.setPlaceholderText("Описание задачи")
+        self.description_edit.setMinimumHeight(90)
 
         self.project_edit = QComboBox()
         self.project_edit.addItem("Без проекта", None)
@@ -584,6 +627,7 @@ class TaskEditDialog(QDialog):
         self.done_edit.setChecked(task.done)
 
         form.addRow("Название", self.title_edit)
+        form.addRow("Описание", self.description_edit)
         form.addRow("Проект", self.project_edit)
         form.addRow("Дата и время", time_block)
         form.addRow("Приоритет", self.priority_edit)
@@ -612,6 +656,7 @@ class TaskEditDialog(QDialog):
             }
 
             QDialog#TaskEditDialog QLineEdit,
+            QDialog#TaskEditDialog QPlainTextEdit,
             QDialog#TaskEditDialog QComboBox,
             QDialog#TaskEditDialog QDateEdit,
             QDialog#TaskEditDialog QTimeEdit {
@@ -621,6 +666,10 @@ class TaskEditDialog(QDialog):
                 padding: 8px 10px;
                 border-radius: 6px;
                 min-height: 28px;
+            }
+
+            QDialog#TaskEditDialog QPlainTextEdit {
+                padding: 8px 10px;
             }
 
             QDialog#TaskEditDialog QFrame#TaskDateTimeBlock {
@@ -692,6 +741,7 @@ class TaskEditDialog(QDialog):
         time_text = self._current_time_text()
         return {
             "title": self.title_edit.text().strip(),
+            "description": self.description_edit.toPlainText().strip(),
             "day": day,
             "time_text": time_text,
             "priority": self.priority_edit.currentText().strip() or "Medium",
@@ -705,6 +755,9 @@ class TasksItemDelegate(QStyledItemDelegate):
     HEADER_H = 32
     TIME_W = 140
     PROJECT_W = 130
+    TEXT_VPAD = 8
+    TEXT_GAP = 6
+    ROW_H_EXPANDED_MIN = 82
 
     C_BG = QColor("#16171a")
     C_ROW = QColor("#2a2d33")
@@ -742,7 +795,28 @@ class TasksItemDelegate(QStyledItemDelegate):
         row_type = index.data(TaskRoles.RowType)
         if row_type in ("header", "sort_header"):
             return QSize(option.rect.width(), self.HEADER_H)
-        return QSize(option.rect.width(), self.ROW_H)
+        expanded = bool(index.data(TaskRoles.Expanded))
+        if not expanded:
+            return QSize(option.rect.width(), self.ROW_H)
+
+        title = index.data(TaskRoles.Title) or ""
+        description = index.data(TaskRoles.Description) or ""
+        layout = self._row_layout(option.rect)
+        text_width = max(10, layout["title"].width())
+
+        title_metrics = QFontMetrics(self._font)
+        desc_metrics = QFontMetrics(self._font_small)
+        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, title).height()
+        desc_height = 0
+        if description:
+            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, description).height()
+
+        total_height = title_height + desc_height
+        if description:
+            total_height += self.TEXT_GAP
+        total_height += self.TEXT_VPAD * 2
+        total_height = max(total_height, self.ROW_H_EXPANDED_MIN)
+        return QSize(option.rect.width(), total_height)
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
@@ -789,10 +863,12 @@ class TasksItemDelegate(QStyledItemDelegate):
         day: date = index.data(TaskRoles.Day)
         time_text: str = index.data(TaskRoles.DisplayTime) or ""
         title: str = index.data(TaskRoles.Title) or ""
+        description: str = index.data(TaskRoles.Description) or ""
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
         overdue = self._is_overdue(day, done)
+        expanded = bool(index.data(TaskRoles.Expanded))
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -857,8 +933,33 @@ class TasksItemDelegate(QStyledItemDelegate):
         menu_rect = layout["menu"]
         pr_rect = layout["priority"]
         title_rect = layout["title"]
-        elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
-        painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+        if expanded:
+            title_box = QRect(
+                title_rect.left(),
+                r.top() + self.TEXT_VPAD,
+                title_rect.width(),
+                r.height() - self.TEXT_VPAD * 2,
+            )
+            painter.drawText(title_box, Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap, title)
+
+            if description:
+                title_metrics = QFontMetrics(self._font)
+                title_height = title_metrics.boundingRect(
+                    0, 0, title_rect.width(), 1000, Qt.TextWordWrap, title
+                ).height()
+                desc_box = QRect(
+                    title_rect.left(),
+                    r.top() + self.TEXT_VPAD + title_height + self.TEXT_GAP,
+                    title_rect.width(),
+                    r.height() - self.TEXT_VPAD * 2 - title_height - self.TEXT_GAP,
+                )
+                painter.setFont(self._font_small)
+                painter.setPen(self.C_DIM if not overdue else self.C_OVERDUE)
+                painter.drawText(desc_box, Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap, description)
+                painter.setFont(self._font)
+        else:
+            elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
+            painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
         # --- PRIORITY BLOCK (fixed layout) ---
         value_text = "OVERDUE" if overdue else priority
@@ -1050,6 +1151,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 model.update_task_by_row(
                     index.row(),
                     title=values["title"],
+                    description=values["description"],
                     day=values["day"],
                     time_text=values["time_text"],
                     priority=values["priority"],
@@ -1251,7 +1353,7 @@ class TasksWorkspace(QWidget):
 
         self.list = QListView()
         self.list.setObjectName("TasksList")
-        self.list.setUniformItemSizes(True)
+        self.list.setUniformItemSizes(False)
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
@@ -1273,6 +1375,7 @@ class TasksWorkspace(QWidget):
         self.new_title.returnPressed.connect(self._on_create_task)
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
+        self.list.doubleClicked.connect(self._on_task_double_clicked)
 
         self._update_day_label()
         self._on_tab_changed()
@@ -1416,6 +1519,14 @@ class TasksWorkspace(QWidget):
 
         self.new_title.clear()
         self.new_title.setFocus()
+
+    def _on_task_double_clicked(self, index: QModelIndex):
+        """Раскрывает или сворачивает задачу по двойному клику."""
+        if not index.isValid():
+            return
+        if index.data(TaskRoles.RowType) != "task":
+            return
+        self.model.toggle_expanded_by_row(index.row())
 
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
