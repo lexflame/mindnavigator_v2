@@ -14,7 +14,10 @@ from .constants import APP_NAME
 
 
 class MainWindow(QMainWindow):
+    """Главное окно приложения с кастомным заголовком и рабочими областями."""
+
     RESIZE_MARGIN = 7
+    SNAP_THRESHOLD = 14
 
     MODE_PROJECTS = "Проекты"
     MODE_TASKS = "Задачи"
@@ -25,12 +28,12 @@ class MainWindow(QMainWindow):
     MODE_SETTINGS = "Настройки"
 
     def __init__(self):
+        """Инициализирует окно, компоненты интерфейса и обработчики."""
         super().__init__()
 
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
 
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setAutoFillBackground(True)
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
@@ -43,7 +46,6 @@ class MainWindow(QMainWindow):
         self._start_geom = QRect()
 
         self._restore_geom = QRect()
-        self.SNAP_THRESHOLD = 14
 
         self._build_ui()
         self._wire_modes()
@@ -54,6 +56,7 @@ class MainWindow(QMainWindow):
         self.set_mode(self.MODE_TASKS)
 
     def _build_ui(self):
+        """Создает и компонует основные виджеты окна."""
         outer = QWidget(self)
         outer.setObjectName("OuterRoot")
         self.setCentralWidget(outer)
@@ -118,6 +121,7 @@ class MainWindow(QMainWindow):
         self.projects_nav.update_width_for_window(self.width())
 
     def _placeholder(self, title: str, subtitle: str) -> QWidget:
+        """Возвращает временный экран-заглушку для неготовых режимов."""
         w = QWidget()
         w.setObjectName("Placeholder")
         l = QVBoxLayout(w)
@@ -135,6 +139,7 @@ class MainWindow(QMainWindow):
         return w
 
     def _wire_modes(self):
+        """Связывает кнопки левого меню с режимами рабочих областей."""
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
@@ -148,6 +153,7 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda checked=False, m=mode: self.set_mode(m))
 
     def set_mode(self, mode_name: str):
+        """Переключает активную рабочую область и обновляет заголовки."""
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_name}")
         self.projects_nav.set_mode_title(mode_name)
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
@@ -158,11 +164,13 @@ class MainWindow(QMainWindow):
                 break
 
     def resizeEvent(self, event):
+        """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
         super().resizeEvent(event)
         self.projects_nav.update_width_for_window(self.width())
 
     # ----- Snap / detach -----
     def _snap_to_screen_edges(self, global_pos: QPoint):
+        """Прилипает окно к краям экрана и разворачивает при касании верхней границы."""
         if self.isMaximized():
             return
 
@@ -189,6 +197,7 @@ class MainWindow(QMainWindow):
             return
 
     def _begin_restore_on_drag(self, global_pos: QPoint):
+        """Восстанавливает нормальный размер при перетаскивании из maximize."""
         if not self.isMaximized():
             return
 
@@ -214,6 +223,7 @@ class MainWindow(QMainWindow):
 
     # ----- Resize -----
     def _hit_test_edges(self, pos: QPoint) -> ResizeEdge:
+        """Определяет, за какой край окна отвечает текущая позиция мыши."""
         if self.isMaximized():
             return ResizeEdge.NONE
 
@@ -235,6 +245,7 @@ class MainWindow(QMainWindow):
         return edge
 
     def _cursor_for_edge(self, edge: ResizeEdge):
+        """Возвращает подходящий курсор для выбранного края."""
         if edge in (ResizeEdge.LEFT, ResizeEdge.RIGHT):
             return Qt.SizeHorCursor
         if edge in (ResizeEdge.TOP, ResizeEdge.BOTTOM):
@@ -246,12 +257,14 @@ class MainWindow(QMainWindow):
         return Qt.ArrowCursor
 
     def _start_resize(self, edge: ResizeEdge, global_pos: QPoint):
+        """Стартует операцию изменения размеров окна."""
         self._resizing = True
         self._resize_edge = edge
         self._press_global = global_pos
         self._start_geom = self.geometry()
 
     def _do_resize(self, global_pos: QPoint):
+        """Выполняет изменение геометрии окна во время ресайза."""
         if not self._resizing or self._resize_edge == ResizeEdge.NONE:
             return
 
@@ -290,10 +303,12 @@ class MainWindow(QMainWindow):
         self._restore_geom = self.geometry()
 
     def _stop_resize(self):
+        """Сбрасывает состояние изменения размеров."""
         self._resizing = False
         self._resize_edge = ResizeEdge.NONE
 
     def eventFilter(self, obj, event):
+        """Перехватывает события мыши для кастомного ресайза."""
         if obj is self:
             # 🔥 В maximized полностью выключаем hit-test и дергание курсора
             if self.isMaximized():
@@ -336,4 +351,3 @@ class MainWindow(QMainWindow):
                 return False
 
         return super().eventFilter(obj, event)
-
