@@ -10,9 +10,6 @@ from .ui.leftrail import LeftRail
 from .ui.projects_nav import ProjectsNav
 from .workspaces.tasks_workspace import TasksWorkspace
 from .workspaces.projects_workspace import ProjectsWorkspace
-from .workspaces.maps_workspace import MapsWorkspace
-from .workspaces.notes_workspace import NotesWorkspace
-from .workspaces.files_workspace import FilesWorkspace
 from .constants import APP_NAME
 
 
@@ -32,6 +29,10 @@ class MainWindow(QMainWindow):
 
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
+
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAutoFillBackground(True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
         self.setMinimumSize(1100, 700)
         self.setWindowIcon(QIcon("assets/icon.png"))
@@ -93,9 +94,9 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_projects = ProjectsWorkspace()
-        self.page_maps = MapsWorkspace()
-        self.page_notes = NotesWorkspace()
-        self.page_files = FilesWorkspace()
+        self.page_maps = self._placeholder("Карты", "Рабочая область режима «Карты».")
+        self.page_notes = self._placeholder("Заметки", "Рабочая область режима «Заметки».")
+        self.page_files = self._placeholder("Файлы", "Рабочая область режима «Файлы».")
         self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
         self.page_settings = self._placeholder("Настройки", "Рабочая область режима «Настройки».")
 
@@ -294,15 +295,11 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         if obj is self:
-            if self.isMaximized() and event.type() in (
-                event.Type.MouseMove,
-                event.Type.MouseButtonPress,
-                event.Type.Leave,
-            ):
-                if not self._resizing:
-                    self._resize_edge = ResizeEdge.NONE
+            # 🔥 В maximized полностью выключаем hit-test и дергание курсора
+            if self.isMaximized():
+                if event.type() in (event.Type.MouseMove, event.Type.Leave):
                     self.unsetCursor()
-                return False
+                return super().eventFilter(obj, event)
 
             if event.type() == event.Type.MouseMove:
                 pos = event.position().toPoint()
@@ -313,8 +310,9 @@ class MainWindow(QMainWindow):
                     return True
 
                 edge = self._hit_test_edges(pos)
-                self._resize_edge = edge
-                self.setCursor(self._cursor_for_edge(edge))
+                if edge != self._resize_edge:
+                    self._resize_edge = edge
+                    self.setCursor(self._cursor_for_edge(edge))
                 return False
 
             if event.type() == event.Type.MouseButtonPress:
@@ -333,8 +331,9 @@ class MainWindow(QMainWindow):
                 return False
 
             if event.type() == event.Type.Leave:
-                if not self._resizing and not self.isMaximized():
+                if not self._resizing:
                     self.unsetCursor()
                 return False
 
         return super().eventFilter(obj, event)
+
