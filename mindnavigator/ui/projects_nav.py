@@ -13,9 +13,9 @@ class ProjectsNav(QWidget):
         """Создает и настраивает блок навигации проектов."""
         super().__init__(parent)
         self.setObjectName("ProjectsNav")
-        self._ratio = 0.10
-        self._min_w = 180
-        self._max_w = 360
+        self._ratio = 0.12
+        self._min_w = 220
+        self._max_w = 420
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -32,6 +32,7 @@ class ProjectsNav(QWidget):
         self.list.setObjectName("ProjectsFilterList")
         self.list.setSelectionMode(QListWidget.SingleSelection)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.currentItemChanged.connect(self._on_project_selected)
 
         layout.addWidget(self.header)
