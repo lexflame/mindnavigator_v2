@@ -18,6 +18,25 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon("assets/icon.png"))
+    app.setStyleSheet("""
+        QMessageBox {
+            background: #16171a;
+        }
+        QMessageBox QLabel {
+            color: #cfcfcf;
+        }
+        QMessageBox QPushButton {
+            background: #2a2b2f;
+            color: #e6e6e6;
+            border: 1px solid #3a3b40;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 90px;
+        }
+        QMessageBox QPushButton:hover {
+            background: #34363b;
+        }
+    """)
 
     splash = show_splash(app, "assets/splash.png")
     splash.set_status("Инициализация интерфейса…")

@@ -5,11 +5,11 @@ from datetime import date, datetime, timedelta
 from typing import List, Union, Optional
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
+from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate, QTime
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
-    QComboBox, QDateEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
+    QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout
 )
 
@@ -129,9 +129,9 @@ class TasksModel(QAbstractListModel):
         self._focus_day = d
         self._rebuild()
 
-    def add_task(self, title: str, day: date, priority: str):
+    def add_task(self, title: str, day: date, time_text: str, priority: str):
         """Добавляет новую задачу и пересобирает текущий список."""
-        task = self._db.create_task(title=title, day=day, time_text="", priority=priority)
+        task = self._db.create_task(title=title, day=day, time_text=time_text, priority=priority)
         self._all_rows.append(TaskRow(task.id, task.day, task.time_text, task.title, task.priority, task.done))
         self._rebuild()
 
@@ -301,8 +301,35 @@ class TaskEditDialog(QDialog):
         self.day_edit.setDate(task.day)
         self.day_edit.setKeyboardTracking(False)
 
-        self.time_edit = QLineEdit(task.time_text or "")
-        self.time_edit.setPlaceholderText("HH:MM")
+        self.time_edit = QTimeEdit()
+        self.time_edit.setDisplayFormat("HH:mm")
+        self.time_edit.setTime(QTime(9, 0))
+        self.time_edit.setKeyboardTracking(False)
+
+        self.time_toggle = QCheckBox("Указать")
+        self.time_toggle.setCursor(Qt.PointingHandCursor)
+
+        if task.time_text:
+            try:
+                parsed = datetime.strptime(task.time_text, "%H:%M").time()
+                self.time_edit.setTime(QTime(parsed.hour, parsed.minute))
+                self.time_toggle.setChecked(True)
+            except Exception:
+                self.time_toggle.setChecked(False)
+        else:
+            self.time_toggle.setChecked(False)
+
+        self.time_edit.setEnabled(self.time_toggle.isChecked())
+        self.time_toggle.toggled.connect(self.time_edit.setEnabled)
+
+        time_block = QFrame()
+        time_block.setObjectName("TaskDateTimeBlock")
+        time_block_layout = QHBoxLayout(time_block)
+        time_block_layout.setContentsMargins(8, 4, 8, 4)
+        time_block_layout.setSpacing(6)
+        time_block_layout.addWidget(self.day_edit)
+        time_block_layout.addWidget(self.time_toggle)
+        time_block_layout.addWidget(self.time_edit)
 
         self.priority_edit = QComboBox()
         self.priority_edit.addItems(["Low", "Medium", "High"])
@@ -312,8 +339,7 @@ class TaskEditDialog(QDialog):
         self.done_edit.setChecked(task.done)
 
         form.addRow("Название", self.title_edit)
-        form.addRow("Дата", self.day_edit)
-        form.addRow("Время", self.time_edit)
+        form.addRow("Дата и время", time_block)
         form.addRow("Приоритет", self.priority_edit)
         form.addRow("", self.done_edit)
 
@@ -335,13 +361,32 @@ class TaskEditDialog(QDialog):
 
             QDialog#TaskEditDialog QLineEdit,
             QDialog#TaskEditDialog QComboBox,
-            QDialog#TaskEditDialog QDateEdit {
+            QDialog#TaskEditDialog QDateEdit,
+            QDialog#TaskEditDialog QTimeEdit {
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 padding: 8px 10px;
                 border-radius: 6px;
                 min-height: 28px;
+            }
+
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock {
+                background: #202127;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }
+
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QDateEdit,
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QTimeEdit {
+                background: transparent;
+                border: none;
+                padding: 6px 6px;
+            }
+
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QCheckBox {
+                color: #cfcfcf;
+                padding: 0 6px;
             }
 
             QDialog#TaskEditDialog QComboBox::drop-down {
@@ -374,21 +419,25 @@ class TaskEditDialog(QDialog):
         if not title:
             QMessageBox.warning(self, "Проверка", "Введите название задачи.")
             return
+        time_text = self._current_time_text()
         try:
-            validate_time_text(self.time_edit.text())
+            validate_time_text(time_text)
             normalize_priority(self.priority_edit.currentText())
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
         self.accept()
 
+    def _current_time_text(self) -> str:
+        if not self.time_toggle.isChecked():
+            return ""
+        return self.time_edit.time().toString("HH:mm")
+
     def values(self):
         """Возвращает текущие значения формы в виде словаря."""
         qd = self.day_edit.date()
         day = date(qd.year(), qd.month(), qd.day())
-        time_text = self.time_edit.text().strip()
-        if time_text == "__:__":
-            time_text = ""
+        time_text = self._current_time_text()
         return {
             "title": self.title_edit.text().strip(),
             "day": day,
@@ -742,6 +791,27 @@ class TasksWorkspace(QWidget):
         self.new_day.setToolTip("Дата выполнения (можно выбрать в календаре или ввести вручную)")
         self.new_day.setKeyboardTracking(False)
 
+        self.new_time = QTimeEdit()
+        self.new_time.setDisplayFormat("HH:mm")
+        self.new_time.setFixedWidth(90)
+        self.new_time.setTime(QTime.currentTime())
+        self.new_time.setKeyboardTracking(False)
+
+        self.new_time_toggle = QCheckBox("Время")
+        self.new_time_toggle.setCursor(Qt.PointingHandCursor)
+        self.new_time_toggle.setChecked(False)
+        self.new_time.setEnabled(False)
+        self.new_time_toggle.toggled.connect(self.new_time.setEnabled)
+
+        datetime_block = QFrame()
+        datetime_block.setObjectName("TasksDateTimeBlock")
+        datetime_layout = QHBoxLayout(datetime_block)
+        datetime_layout.setContentsMargins(6, 2, 6, 2)
+        datetime_layout.setSpacing(6)
+        datetime_layout.addWidget(self.new_day)
+        datetime_layout.addWidget(self.new_time_toggle)
+        datetime_layout.addWidget(self.new_time)
+
         self.new_priority = QComboBox()
         self.new_priority.setFixedWidth(110)
         self.new_priority.addItems(["Low", "Medium", "High"])
@@ -752,7 +822,7 @@ class TasksWorkspace(QWidget):
         self.btn_add.setCursor(Qt.PointingHandCursor)
 
         create_layout.addWidget(self.new_title, 1)
-        create_layout.addWidget(self.new_day)
+        create_layout.addWidget(datetime_block)
         create_layout.addWidget(self.new_priority)
         create_layout.addWidget(self.btn_add)
 
@@ -864,11 +934,30 @@ class TasksWorkspace(QWidget):
                 color: #e6e6e6;
             }
 
-            QFrame#TasksCreateBar QComboBox, QFrame#TasksCreateBar QDateEdit {
+            QFrame#TasksCreateBar QComboBox {
                 background: #131417;
                 border: 1px solid #2a2b2f;
                 padding: 4px 6px;
                 color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                border-radius: 8px;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QDateEdit,
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {
+                background: transparent;
+                border: none;
+                padding: 4px 6px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {
+                color: #cfcfcf;
+                padding: 0 6px;
             }
 
             QFrame#TasksCreateBar QToolButton {
@@ -951,9 +1040,12 @@ class TasksWorkspace(QWidget):
         d = date(qd.year(), qd.month(), qd.day())
 
         pr = self.new_priority.currentText().strip() or "Medium"
+        time_text = ""
+        if self.new_time_toggle.isChecked():
+            time_text = self.new_time.time().toString("HH:mm")
 
         try:
-            self.model.add_task(title=title, day=d, priority=pr)
+            self.model.add_task(title=title, day=d, time_text=time_text, priority=pr)
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
