@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout
 )
 
+from mindnavigator.storage import get_database, normalize_priority, validate_time_text
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
@@ -46,14 +47,25 @@ class TaskRoles:
 
 
 class TasksModel(QAbstractListModel):
-    def __init__(self, rows: List[Row], parent=None):
+    def __init__(self, parent=None):
         """Создает модель данных задач для списка."""
         super().__init__(parent)
-        self._all_rows: List[Row] = rows[:]
-        self._rows: List[Row] = rows[:]
+        self._db = get_database()
+        self._all_rows: List[Row] = []
+        self._rows: List[Row] = []
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
         self._search = ""
         self._focus_day: Optional[date] = None
+        self._reload_from_db()
+
+    def _reload_from_db(self):
+        """Обновляет список задач из базы данных."""
+        tasks = self._db.fetch_tasks()
+        self._all_rows = [
+            TaskRow(t.id, t.day, t.time_text, t.title, t.priority, t.done)
+            for t in tasks
+        ]
+        self._rebuild()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         """Возвращает количество строк с учетом фильтрации."""
@@ -119,14 +131,8 @@ class TasksModel(QAbstractListModel):
 
     def add_task(self, title: str, day: date, priority: str):
         """Добавляет новую задачу и пересобирает текущий список."""
-        title = (title or "").strip()
-        if not title:
-            return
-
-        max_id = max((r.id for r in self._all_rows if isinstance(r, TaskRow)), default=0)
-        new_id = max_id + 1
-
-        self._all_rows.append(TaskRow(new_id, day, "", title, priority or "Medium", False))
+        task = self._db.create_task(title=title, day=day, time_text="", priority=priority)
+        self._all_rows.append(TaskRow(task.id, task.day, task.time_text, task.title, task.priority, task.done))
         self._rebuild()
 
     def task_at_row(self, row_idx: int) -> Optional[TaskRow]:
@@ -151,18 +157,26 @@ class TasksModel(QAbstractListModel):
         r = self.task_at_row(row_idx)
         if r is None:
             return
-
-        title = (title or "").strip()
-        if not title:
-            return
-
-        time_text = (time_text or "").strip()
-        priority = (priority or "Medium").strip() or "Medium"
+        updated = self._db.update_task(
+            task_id=r.id,
+            title=title,
+            day=day,
+            time_text=time_text,
+            priority=priority,
+            done=done,
+        )
 
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(it.id, day, time_text, title, priority, bool(done))
+                it = TaskRow(
+                    updated.id,
+                    updated.day,
+                    updated.time_text,
+                    updated.title,
+                    updated.priority,
+                    updated.done,
+                )
             new_all.append(it)
 
         self._all_rows = new_all
@@ -176,10 +190,12 @@ class TasksModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             return
 
+        new_done = not r.done
+        self._db.set_task_done(r.id, new_done)
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, not it.done)
+                it = TaskRow(it.id, it.day, it.time_text, it.title, it.priority, new_done)
             new_all.append(it)
 
         self._all_rows = new_all
@@ -193,6 +209,7 @@ class TasksModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             return
 
+        self._db.delete_task(r.id)
         self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
         self._rebuild()
 
@@ -356,6 +373,12 @@ class TaskEditDialog(QDialog):
         title = self.title_edit.text().strip()
         if not title:
             QMessageBox.warning(self, "Проверка", "Введите название задачи.")
+            return
+        try:
+            validate_time_text(self.time_edit.text())
+            normalize_priority(self.priority_edit.currentText())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
             return
         self.accept()
 
@@ -659,14 +682,17 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         values = dialog.values()
         if hasattr(model, "update_task_by_row"):
-            model.update_task_by_row(
-                index.row(),
-                title=values["title"],
-                day=values["day"],
-                time_text=values["time_text"],
-                priority=values["priority"],
-                done=values["done"],
-            )
+            try:
+                model.update_task_by_row(
+                    index.row(),
+                    title=values["title"],
+                    day=values["day"],
+                    time_text=values["time_text"],
+                    priority=values["priority"],
+                    done=values["done"],
+                )
+            except ValueError as exc:
+                QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def _prio_color(self, p: str) -> QColor:
         """Возвращает цвет для приоритета."""
@@ -804,7 +830,7 @@ class TasksWorkspace(QWidget):
         root.addWidget(self.list, 1)
 
         self._focus_day = date.today()
-        self.model = TasksModel(self._make_fake_rows(), self)
+        self.model = TasksModel(self)
         self.list.setModel(self.model)
 
         self.delegate = TasksItemDelegate(self.list)
@@ -926,37 +952,11 @@ class TasksWorkspace(QWidget):
 
         pr = self.new_priority.currentText().strip() or "Medium"
 
-        self.model.add_task(title=title, day=d, priority=pr)
+        try:
+            self.model.add_task(title=title, day=d, priority=pr)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
 
         self.new_title.clear()
         self.new_title.setFocus()
-
-    def _make_fake_rows(self) -> List[Row]:
-        """Генерирует демонстрационный набор задач."""
-        t0 = date.today()
-        days = [t0 - timedelta(days=1), t0, t0 + timedelta(days=1), t0 + timedelta(days=2)]
-
-        tasks = [
-            TaskRow(1, days[0], "13:00", "BorderDev", "High", False),
-            TaskRow(2, days[0], "14:00", "Wiki → Picture", "High", False),
-
-            TaskRow(3, days[1], "15:00", "Подумать над DragAndDrop для списка задач в режиме план", "Medium", False),
-            TaskRow(4, days[1], "16:00", "Билеты ПДД", "Low", False),
-            TaskRow(5, days[1], "17:00", "Просмотреть FAV", "Medium", False),
-            TaskRow(6, days[1], "19:00", "Просмотреть записи во всех каналах Избранного", "Medium", False),
-
-            TaskRow(7, days[2], "20:00", "SimCity Societies → KitBash → Здания усадьбы. Здание школы. Многоэтажка…", "High", False),
-
-            TaskRow(8, days[3], "22:00", "Stygian · Reign of the Old Ones", "High", False),
-            TaskRow(9, days[3], "23:00", "The Council", "High", True),
-        ]
-
-        tasks.sort(key=lambda x: (x.day, x.time_text, x.id))
-        rows: List[Row] = []
-        cur: Optional[date] = None
-        for t in tasks:
-            if cur != t.day:
-                cur = t.day
-                rows.append(HeaderRow(cur))
-            rows.append(t)
-        return rows
