@@ -113,6 +113,8 @@ class MainWindow(QMainWindow):
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
+        self.projects_nav.project_filter_changed.connect(self.page_tasks.set_project_filter)
+
         self.centralWidget().setStyleSheet("""
             QWidget#OuterRoot { background: #16171a; }
             QWidget#Container { background: #16171a; border: 1px solid #2a2b2f; }
