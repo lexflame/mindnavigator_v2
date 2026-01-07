@@ -287,6 +287,56 @@ class Database:
             )
         return projects
 
+    def create_project(self, area: str, title: str, updated: date, priority: str, archived: bool = False) -> ProjectData:
+        """Создает проект в базе данных."""
+        area = validate_area(area)
+        title = validate_title(title, field_name="Название проекта")
+        priority = normalize_priority(priority)
+        if not isinstance(updated, date):
+            raise ValueError("Дата проекта некорректна.")
+
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO projects (area, title, updated, priority, archived)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (area, title, updated.isoformat(), priority, int(archived)),
+            )
+        return ProjectData(cur.lastrowid, area, title, updated, priority, bool(archived))
+
+    def update_project(
+        self,
+        project_id: int,
+        area: str,
+        title: str,
+        updated: date,
+        priority: str,
+        archived: bool,
+    ) -> ProjectData:
+        """Обновляет данные проекта."""
+        area = validate_area(area)
+        title = validate_title(title, field_name="Название проекта")
+        priority = normalize_priority(priority)
+        if not isinstance(updated, date):
+            raise ValueError("Дата проекта некорректна.")
+
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET area = ?, title = ?, updated = ?, priority = ?, archived = ?
+                WHERE id = ?;
+                """,
+                (area, title, updated.isoformat(), priority, int(archived), project_id),
+            )
+        return ProjectData(project_id, area, title, updated, priority, bool(archived))
+
+    def delete_project(self, project_id: int) -> None:
+        """Удаляет проект по id."""
+        with self._conn:
+            self._conn.execute("DELETE FROM projects WHERE id = ?;", (project_id,))
+
     def set_project_archived(self, project_id: int, archived: bool) -> None:
         """Обновляет статус архивирования проекта."""
         with self._conn:
