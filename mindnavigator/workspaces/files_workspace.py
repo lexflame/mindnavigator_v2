@@ -5,7 +5,7 @@ from hashlib import sha256
 from pathlib import Path
 import mimetypes
 import re
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
@@ -15,9 +15,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QPlainTextEdit,
+    QStackedWidget,
+    QSplitter,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QButtonGroup,
 )
 
-from mindnavigator.storage import Database, default_db_path, get_database
+from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
 
 
 HASH_RE = re.compile(r"[a-fA-F0-9]{32,64}")
@@ -131,7 +136,12 @@ class FileWorkspace(QWidget):
         self._db = get_database()
         self._scan_thread: Optional[QThread] = None
         self._scan_worker: Optional[CloudScanWorker] = None
+        self._cloud_files: List[CloudFileData] = []
+        self._folder_index: Dict[str, Dict[str, object]] = {}
+        self._tree_items: Dict[str, QTreeWidgetItem] = {}
+        self._current_folder = ""
         self._build_ui()
+        self._load_cloud_files()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -148,17 +158,99 @@ class FileWorkspace(QWidget):
         self.status_label = QLabel("Синхронизация не запускалась.")
         self.status_label.setObjectName("FilesSyncStatus")
 
+        self.mode_group = QButtonGroup(self)
+        self.log_mode_button = QPushButton("Логи")
+        self.log_mode_button.setCheckable(True)
+        self.log_mode_button.setChecked(True)
+        self.log_mode_button.setObjectName("FilesModeButton")
+        self.nav_mode_button = QPushButton("Навигация")
+        self.nav_mode_button.setCheckable(True)
+        self.nav_mode_button.setObjectName("FilesModeButton")
+
+        self.mode_group.addButton(self.log_mode_button, 0)
+        self.mode_group.addButton(self.nav_mode_button, 1)
+        self.mode_group.buttonClicked[int].connect(self._switch_mode)
+
+        mode_layout = QHBoxLayout()
+        mode_layout.setSpacing(6)
+        mode_layout.addWidget(self.log_mode_button)
+        mode_layout.addWidget(self.nav_mode_button)
+
         header.addWidget(self.sync_button, 0, Qt.AlignLeft)
         header.addWidget(self.status_label, 1, Qt.AlignLeft)
         header.addStretch(1)
+        header.addLayout(mode_layout)
 
+        self.mode_stack = QStackedWidget()
+
+        sync_page = QWidget()
+        sync_layout = QVBoxLayout(sync_page)
+        sync_layout.setContentsMargins(0, 0, 0, 0)
         self.log_output = QPlainTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setObjectName("FilesSyncLog")
         self.log_output.setPlaceholderText("Здесь появятся результаты синхронизации…")
+        sync_layout.addWidget(self.log_output, 1)
+
+        nav_page = QWidget()
+        nav_layout = QVBoxLayout(nav_page)
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(12)
+
+        nav_header = QHBoxLayout()
+        nav_header.setSpacing(8)
+        self.path_label = QLabel("Облако")
+        self.path_label.setObjectName("FilesNavPath")
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("FilesNavCount")
+        nav_header.addWidget(self.path_label)
+        nav_header.addStretch(1)
+        nav_header.addWidget(self.count_label)
+
+        self.navigation_stack = QStackedWidget()
+        empty_page = QWidget()
+        empty_layout = QVBoxLayout(empty_page)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
+        self.empty_label = QLabel("В базе пока нет данных о файлах. Запустите синхронизацию.")
+        self.empty_label.setObjectName("FilesNavEmpty")
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        empty_layout.addWidget(self.empty_label, 1)
+
+        content_page = QWidget()
+        content_layout = QVBoxLayout(content_page)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        self.nav_splitter = QSplitter()
+        self.nav_splitter.setObjectName("FilesNavSplitter")
+
+        self.folder_tree = QTreeWidget()
+        self.folder_tree.setObjectName("FilesNavTree")
+        self.folder_tree.setHeaderHidden(True)
+        self.folder_tree.currentItemChanged.connect(self._on_tree_selection)
+
+        self.file_list = QTreeWidget()
+        self.file_list.setObjectName("FilesNavList")
+        self.file_list.setColumnCount(3)
+        self.file_list.setHeaderLabels(["Имя", "Размер", "Статус"])
+        self.file_list.setRootIsDecorated(False)
+        self.file_list.itemDoubleClicked.connect(self._on_file_list_double_clicked)
+
+        self.nav_splitter.addWidget(self.folder_tree)
+        self.nav_splitter.addWidget(self.file_list)
+        self.nav_splitter.setStretchFactor(0, 1)
+        self.nav_splitter.setStretchFactor(1, 2)
+        content_layout.addWidget(self.nav_splitter, 1)
+
+        self.navigation_stack.addWidget(empty_page)
+        self.navigation_stack.addWidget(content_page)
+
+        nav_layout.addLayout(nav_header)
+        nav_layout.addWidget(self.navigation_stack, 1)
+
+        self.mode_stack.addWidget(sync_page)
+        self.mode_stack.addWidget(nav_page)
 
         layout.addLayout(header)
-        layout.addWidget(self.log_output, 1)
+        layout.addWidget(self.mode_stack, 1)
 
         self.setStyleSheet(
             """
@@ -191,8 +283,167 @@ class FileWorkspace(QWidget):
                 padding: 10px;
                 font-size: 11px;
             }
+            QPushButton#FilesModeButton {
+                background: #1f2126;
+                border: 1px solid #30343b;
+                border-radius: 6px;
+                padding: 4px 12px;
+                color: #cdd0d5;
+                font-size: 11px;
+            }
+            QPushButton#FilesModeButton:checked {
+                background: #2d3139;
+                border-color: #3a3f48;
+                color: #ffffff;
+            }
+            QLabel#FilesNavPath {
+                color: #e0e0e0;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QLabel#FilesNavCount {
+                color: #9aa0a6;
+                font-size: 11px;
+            }
+            QLabel#FilesNavEmpty {
+                color: #9aa0a6;
+                font-size: 12px;
+            }
+            QTreeWidget#FilesNavTree, QTreeWidget#FilesNavList {
+                background: #1b1d22;
+                border: 1px solid #2f3136;
+                border-radius: 8px;
+                color: #d6d6d6;
+                font-size: 11px;
+            }
+            QTreeWidget#FilesNavTree::item:selected,
+            QTreeWidget#FilesNavList::item:selected {
+                background: #2c313a;
+                color: #ffffff;
+            }
             """
         )
+
+    def _switch_mode(self, index: int) -> None:
+        self.mode_stack.setCurrentIndex(index)
+
+    def _load_cloud_files(self) -> None:
+        self._cloud_files = self._db.fetch_cloud_files()
+        self._folder_index = self._build_folder_index(self._cloud_files)
+        self._rebuild_navigation()
+
+    def _build_folder_index(self, files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
+        index: Dict[str, Dict[str, object]] = {"": {"folders": set(), "files": []}}
+        for item in files:
+            rel_path = (item.rel_path or "").strip().strip("/")
+            if not rel_path:
+                continue
+            parts = [part for part in rel_path.split("/") if part]
+            if not parts:
+                continue
+            for idx in range(len(parts) - 1):
+                folder_path = "/".join(parts[: idx + 1])
+                parent_path = "/".join(parts[:idx])
+                index.setdefault(parent_path, {"folders": set(), "files": []})
+                index.setdefault(folder_path, {"folders": set(), "files": []})
+                folders: Set[str] = index[parent_path]["folders"]  # type: ignore[assignment]
+                folders.add(folder_path)
+            parent_path = "/".join(parts[:-1])
+            index.setdefault(parent_path, {"folders": set(), "files": []})
+            files_list: List[CloudFileData] = index[parent_path]["files"]  # type: ignore[assignment]
+            files_list.append(item)
+        return index
+
+    def _rebuild_navigation(self) -> None:
+        has_data = bool(self._cloud_files)
+        self.nav_mode_button.setEnabled(has_data)
+        if not has_data:
+            self.navigation_stack.setCurrentIndex(0)
+            self.folder_tree.clear()
+            self.file_list.clear()
+            self.path_label.setText("Облако")
+            self.count_label.setText("")
+            if self.mode_stack.currentIndex() == 1:
+                self.log_mode_button.setChecked(True)
+                self.mode_stack.setCurrentIndex(0)
+            return
+
+        self.navigation_stack.setCurrentIndex(1)
+        self.folder_tree.clear()
+        self._tree_items.clear()
+        root_item = QTreeWidgetItem(["Облако"])
+        root_item.setData(0, Qt.UserRole, "")
+        self.folder_tree.addTopLevelItem(root_item)
+        self._tree_items[""] = root_item
+        self._populate_tree(root_item, "")
+        root_item.setExpanded(True)
+        self.folder_tree.setCurrentItem(root_item)
+
+    def _populate_tree(self, parent_item: QTreeWidgetItem, folder_path: str) -> None:
+        data = self._folder_index.get(folder_path, {})
+        folders = sorted(data.get("folders", set()))
+        for child_path in folders:
+            name = child_path.split("/")[-1]
+            child_item = QTreeWidgetItem([name])
+            child_item.setData(0, Qt.UserRole, child_path)
+            parent_item.addChild(child_item)
+            self._tree_items[child_path] = child_item
+            self._populate_tree(child_item, child_path)
+
+    def _on_tree_selection(self, current: Optional[QTreeWidgetItem], _previous: Optional[QTreeWidgetItem]) -> None:
+        if not current:
+            return
+        folder_path = current.data(0, Qt.UserRole) or ""
+        self._set_current_folder(folder_path)
+
+    def _set_current_folder(self, folder_path: str) -> None:
+        self._current_folder = folder_path
+        if folder_path:
+            self.path_label.setText(f"Облако / {' / '.join(folder_path.split('/'))}")
+        else:
+            self.path_label.setText("Облако")
+        self._render_file_list(folder_path)
+
+    def _render_file_list(self, folder_path: str) -> None:
+        self.file_list.clear()
+        data = self._folder_index.get(folder_path, {})
+        folders = sorted(data.get("folders", set()))
+        files = sorted(data.get("files", []), key=lambda item: item.name.lower())
+        for child_path in folders:
+            name = child_path.split("/")[-1]
+            item = QTreeWidgetItem([name, "", "Папка"])
+            item.setData(0, Qt.UserRole, ("folder", child_path))
+            self.file_list.addTopLevelItem(item)
+        for file_item in files:
+            status = "OK" if file_item.valid else "Ошибка"
+            size = self._format_size(file_item.size)
+            item = QTreeWidgetItem([file_item.name, size, status])
+            item.setData(0, Qt.UserRole, ("file", file_item.rel_path))
+            self.file_list.addTopLevelItem(item)
+        self.count_label.setText(f"{len(folders)} папок, {len(files)} файлов")
+        self.file_list.resizeColumnToContents(0)
+
+    def _format_size(self, size: int) -> str:
+        size = max(0, int(size))
+        if size < 1024:
+            return f"{size} Б"
+        if size < 1024 * 1024:
+            return f"{size / 1024:.1f} КБ"
+        if size < 1024 * 1024 * 1024:
+            return f"{size / (1024 * 1024):.1f} МБ"
+        return f"{size / (1024 * 1024 * 1024):.1f} ГБ"
+
+    def _on_file_list_double_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        payload = item.data(0, Qt.UserRole)
+        if not payload:
+            return
+        if payload[0] == "folder":
+            self._select_folder(payload[1])
+
+    def _select_folder(self, folder_path: str) -> None:
+        tree_item = self._tree_items.get(folder_path)
+        if tree_item:
+            self.folder_tree.setCurrentItem(tree_item)
 
     def _start_sync(self) -> None:
         cloud_path = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
@@ -238,6 +489,7 @@ class FileWorkspace(QWidget):
         self._append_log(
             f"Итого: {summary.total} файлов, {summary.valid} совпадений, {summary.invalid} расхождений."
         )
+        self._load_cloud_files()
 
     def _cleanup_worker(self) -> None:
         if self._scan_worker:
