@@ -557,6 +557,7 @@ class MapCanvas(QWidget):
         super().__init__(parent)
         self.setMouseTracking(True)
         self._scale = 1.0
+        self._absolute_min_scale = 0.1
         self._min_scale = 0.5
         self._max_scale = 2.6
         self._offset = QPointF(80, 60)
@@ -598,7 +599,39 @@ class MapCanvas(QWidget):
         self._tiles_h = max(0, int(tiles_h or 0))
         self._tiles_w = max(0, int(tiles_w or 0))
         self._load_tiles()
+        self.reset_view()
         self.update()
+
+    def reset_view(self) -> None:
+        fit_scale = self._fit_scale_to_view()
+        self._min_scale = min(self._absolute_min_scale, fit_scale)
+        self._scale = min(1.0, fit_scale) if fit_scale > 0 else 1.0
+        self._offset = self._center_offset_for_scale(self._scale)
+
+    def _content_bounds(self) -> QRectF:
+        map_bounds = self._map_bounds()
+        if not map_bounds.isNull():
+            return map_bounds
+        if not self._background.isNull():
+            return QRectF(QPointF(0, 0), self._background.size())
+        return QRectF(0, 0, 1200, 800)
+
+    def _fit_scale_to_view(self) -> float:
+        bounds = self._content_bounds()
+        if bounds.isNull():
+            return 1.0
+        padding = 40
+        view_w = max(1, self.width() - padding)
+        view_h = max(1, self.height() - padding)
+        scale_x = view_w / bounds.width()
+        scale_y = view_h / bounds.height()
+        return max(0.01, min(scale_x, scale_y))
+
+    def _center_offset_for_scale(self, scale: float) -> QPointF:
+        bounds = self._content_bounds()
+        center_world = bounds.center()
+        view_center = QPointF(self.width() / 2, self.height() / 2)
+        return view_center - center_world * scale
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -618,6 +651,15 @@ class MapCanvas(QWidget):
             self._draw_preview(painter)
 
         painter.restore()
+
+    def resizeEvent(self, event):
+        world_center = self._map_to_world(QPointF(self.width() / 2, self.height() / 2))
+        super().resizeEvent(event)
+        fit_scale = self._fit_scale_to_view()
+        self._min_scale = min(self._absolute_min_scale, fit_scale)
+        if self._scale < self._min_scale:
+            self._scale = self._min_scale
+        self._offset = QPointF(self.width() / 2, self.height() / 2) - world_center * self._scale
 
     def _draw_background(self, painter: QPainter) -> None:
         if not self._map_pixmap.isNull():
