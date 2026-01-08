@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from typing import List, Optional
 
 import qtawesome as qta
@@ -12,7 +13,8 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QPen, 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
-    QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu
+    QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
+    QFileDialog
 )
 
 from mindnavigator.storage import get_database
@@ -24,6 +26,7 @@ class MapRow:
     title: str
     description: str
     project: str
+    tiles_path: str
     tiles_h: int
     tiles_w: int
 
@@ -33,8 +36,9 @@ class MapRoles:
     Title = Qt.UserRole + 2
     Description = Qt.UserRole + 3
     Project = Qt.UserRole + 4
-    TilesHeight = Qt.UserRole + 5
-    TilesWidth = Qt.UserRole + 6
+    TilesPath = Qt.UserRole + 5
+    TilesHeight = Qt.UserRole + 6
+    TilesWidth = Qt.UserRole + 7
 
 
 class MapsModel(QAbstractListModel):
@@ -50,7 +54,15 @@ class MapsModel(QAbstractListModel):
     def _load_maps(self) -> None:
         maps = self._db.fetch_maps()
         self._all_items = [
-            MapRow(item.id, item.title, item.description, item.project, item.tiles_h, item.tiles_w)
+            MapRow(
+                item.id,
+                item.title,
+                item.description,
+                item.project,
+                item.tiles_path,
+                item.tiles_h,
+                item.tiles_w,
+            )
             for item in maps
         ]
         self._rebuild()
@@ -72,6 +84,8 @@ class MapsModel(QAbstractListModel):
             return item.id
         if role == MapRoles.Project:
             return item.project
+        if role == MapRoles.TilesPath:
+            return item.tiles_path
         if role == MapRoles.TilesHeight:
             return item.tiles_h
         if role == MapRoles.TilesWidth:
@@ -80,27 +94,50 @@ class MapsModel(QAbstractListModel):
             return item.title
         return None
 
-    def add_map(self, title: str, description: str, project: str, tiles_h: int, tiles_w: int) -> None:
-        title = (title or "").strip()
-        if not title:
-            return
-        try:
-            created = self._db.create_map(title, description, project, tiles_h, tiles_w)
-        except ValueError:
-            return
-        self._all_items.append(
-            MapRow(created.id, created.title, created.description, created.project, created.tiles_h, created.tiles_w)
-        )
-        self._rebuild()
-
-    def update_map(
-        self, map_id: int, title: str, description: str, project: str, tiles_h: int, tiles_w: int
+    def add_map(
+        self,
+        title: str,
+        description: str,
+        project: str,
+        tiles_path: str,
+        tiles_h: int,
+        tiles_w: int,
     ) -> None:
         title = (title or "").strip()
         if not title:
             return
         try:
-            updated_map = self._db.update_map(map_id, title, description, project, tiles_h, tiles_w)
+            created = self._db.create_map(title, description, project, tiles_path, tiles_h, tiles_w)
+        except ValueError:
+            return
+        self._all_items.append(
+            MapRow(
+                created.id,
+                created.title,
+                created.description,
+                created.project,
+                created.tiles_path,
+                created.tiles_h,
+                created.tiles_w,
+            )
+        )
+        self._rebuild()
+
+    def update_map(
+        self,
+        map_id: int,
+        title: str,
+        description: str,
+        project: str,
+        tiles_path: str,
+        tiles_h: int,
+        tiles_w: int,
+    ) -> None:
+        title = (title or "").strip()
+        if not title:
+            return
+        try:
+            updated_map = self._db.update_map(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
         except ValueError:
             return
         updated = []
@@ -112,6 +149,7 @@ class MapsModel(QAbstractListModel):
                         updated_map.title,
                         updated_map.description,
                         updated_map.project,
+                        updated_map.tiles_path,
                         updated_map.tiles_h,
                         updated_map.tiles_w,
                     )
@@ -312,7 +350,9 @@ class MapEditDialog(QDialog):
         self.setWindowTitle("Редактирование карты")
         self.setObjectName("MapEditDialog")
         self.setMinimumWidth(460)
-        self.setMinimumHeight(360)
+        self.setMinimumHeight(400)
+
+        self._db = get_database()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -340,6 +380,22 @@ class MapEditDialog(QDialog):
         if idx >= 0:
             self.project_edit.setCurrentIndex(idx)
 
+        self.tiles_path = QLineEdit(map_row.tiles_path)
+        self.tiles_path.setPlaceholderText("Каталог хранения тайлов")
+
+        self.tiles_path_btn = QToolButton()
+        self.tiles_path_btn.setText("…")
+        self.tiles_path_btn.setCursor(Qt.PointingHandCursor)
+        self.tiles_path_btn.clicked.connect(self._on_pick_tiles_path)
+
+        tiles_path_row = QFrame()
+        tiles_path_row.setObjectName("MapTilesPathRow")
+        tiles_path_layout = QHBoxLayout(tiles_path_row)
+        tiles_path_layout.setContentsMargins(0, 0, 0, 0)
+        tiles_path_layout.setSpacing(6)
+        tiles_path_layout.addWidget(self.tiles_path, 1)
+        tiles_path_layout.addWidget(self.tiles_path_btn)
+
         self.tiles_w = QSpinBox()
         self.tiles_w.setRange(1, 512)
         self.tiles_w.setValue(map_row.tiles_w)
@@ -361,6 +417,7 @@ class MapEditDialog(QDialog):
         form.addRow("Название", self.title_edit)
         form.addRow("Описание", self.description_edit)
         form.addRow("Проект", self.project_edit)
+        form.addRow("Каталог хранения тайлов", tiles_path_row)
         form.addRow("Тайлы", tiles_block)
 
         layout.addLayout(form)
@@ -396,6 +453,18 @@ class MapEditDialog(QDialog):
                 min-height: 28px;
             }
 
+            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton {
+                background: #2a2b2f;
+                border: 1px solid #3a3b40;
+                border-radius: 6px;
+                padding: 6px 10px;
+                color: #e6e6e6;
+            }
+
+            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton:hover {
+                background: #34363b;
+            }
+
             QDialog#MapEditDialog QFrame#MapTilesBlock {
                 background: #202127;
                 border: 1px solid #2a2b2f;
@@ -427,6 +496,21 @@ class MapEditDialog(QDialog):
         titles = sorted({p.title for p in projects})
         return titles or ["Без проекта"]
 
+    def _cloud_storage_root(self) -> str:
+        return self._db.get_setting("cloud_storage_path", default="")
+
+    def _on_pick_tiles_path(self) -> None:
+        current = self.tiles_path.text().strip()
+        start_dir = current or self._cloud_storage_root() or str(Path.home())
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите каталог хранения тайлов",
+            start_dir,
+        )
+        if not selected:
+            return
+        self.tiles_path.setText(selected)
+
     def _on_accept(self):
         if not self.title_edit.text().strip():
             QMessageBox.warning(self, "Проверка", "Введите название карты.")
@@ -438,6 +522,7 @@ class MapEditDialog(QDialog):
             "title": self.title_edit.text().strip(),
             "description": self.description_edit.text().strip(),
             "project": self.project_edit.currentText(),
+            "tiles_path": self.tiles_path.text().strip(),
             "tiles_w": self.tiles_w.value(),
             "tiles_h": self.tiles_h.value(),
         }
@@ -873,6 +958,8 @@ class MapsListWorkspace(QWidget):
         super().__init__(parent)
         self.setObjectName("MapsWorkspace")
 
+        self._db = get_database()
+
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -900,6 +987,14 @@ class MapsListWorkspace(QWidget):
         self.new_project = QComboBox()
         self.new_project.setFixedWidth(200)
         self._refresh_projects()
+
+        self.new_tiles_path = QLineEdit()
+        self.new_tiles_path.setPlaceholderText("Каталог хранения тайлов…")
+
+        self.btn_tiles_path = QToolButton()
+        self.btn_tiles_path.setText("…")
+        self.btn_tiles_path.setCursor(Qt.PointingHandCursor)
+        self.btn_tiles_path.clicked.connect(self._on_pick_tiles_path)
 
         tiles_block = QFrame()
         tiles_block.setObjectName("MapsTilesBlock")
@@ -933,6 +1028,8 @@ class MapsListWorkspace(QWidget):
         create_layout.addWidget(self.new_title, 1)
         create_layout.addWidget(self.new_desc, 1)
         create_layout.addWidget(self.new_project)
+        create_layout.addWidget(self.new_tiles_path, 1)
+        create_layout.addWidget(self.btn_tiles_path)
         create_layout.addWidget(tiles_block)
         create_layout.addWidget(self.btn_add)
 
@@ -1137,6 +1234,21 @@ class MapsListWorkspace(QWidget):
         titles = self._project_titles()
         self.new_project.addItems(titles or ["Без проекта"])
 
+    def _cloud_storage_root(self) -> str:
+        return self._db.get_setting("cloud_storage_path", default="")
+
+    def _on_pick_tiles_path(self) -> None:
+        current = self.new_tiles_path.text().strip()
+        start_dir = current or self._cloud_storage_root() or str(Path.home())
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите каталог хранения тайлов",
+            start_dir,
+        )
+        if not selected:
+            return
+        self.new_tiles_path.setText(selected)
+
     def _on_tab_changed(self) -> None:
         if self.tab_project.isChecked():
             current = self.filter_project.currentText()
@@ -1156,11 +1268,13 @@ class MapsListWorkspace(QWidget):
             self.new_title.text(),
             self.new_desc.text(),
             self.new_project.currentText(),
+            self.new_tiles_path.text(),
             self.tiles_h.value(),
             self.tiles_w.value(),
         )
         self.new_title.clear()
         self.new_desc.clear()
+        self.new_tiles_path.clear()
         self.new_title.setFocus()
 
     def _on_edit_map(self, index: QModelIndex) -> None:
@@ -1171,6 +1285,7 @@ class MapsListWorkspace(QWidget):
             title=index.data(MapRoles.Title) or "",
             description=index.data(MapRoles.Description) or "",
             project=index.data(MapRoles.Project) or "",
+            tiles_path=index.data(MapRoles.TilesPath) or "",
             tiles_h=index.data(MapRoles.TilesHeight) or 0,
             tiles_w=index.data(MapRoles.TilesWidth) or 0,
         )
@@ -1182,6 +1297,7 @@ class MapsListWorkspace(QWidget):
                 values["title"],
                 values["description"],
                 values["project"],
+                values["tiles_path"],
                 values["tiles_h"],
                 values["tiles_w"],
             )
