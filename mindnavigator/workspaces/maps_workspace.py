@@ -44,13 +44,14 @@ class MapsModel(QAbstractListModel):
         self._all_items: List[MapRow] = []
         self._search = ""
         self._project_filter: Optional[str] = None
-        self._seed_defaults()
+        self._db = get_database()
+        self._load_maps()
 
-    def _seed_defaults(self) -> None:
+    def _load_maps(self) -> None:
+        maps = self._db.fetch_maps()
         self._all_items = [
-            MapRow(1, "Northern Ridge", "Точки обзора и маршруты патрулей.", "MindNavigator v2", 18, 24),
-            MapRow(2, "Sector 12", "Зоны контроля и минные поля.", "TACMap", 32, 32),
-            MapRow(3, "Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", 12, 20),
+            MapRow(item.id, item.title, item.description, item.project, item.tiles_h, item.tiles_w)
+            for item in maps
         ]
         self._rebuild()
 
@@ -83,8 +84,13 @@ class MapsModel(QAbstractListModel):
         title = (title or "").strip()
         if not title:
             return
-        new_id = max((item.id for item in self._all_items), default=0) + 1
-        self._all_items.append(MapRow(new_id, title, description.strip(), project, tiles_h, tiles_w))
+        try:
+            created = self._db.create_map(title, description, project, tiles_h, tiles_w)
+        except ValueError:
+            return
+        self._all_items.append(
+            MapRow(created.id, created.title, created.description, created.project, created.tiles_h, created.tiles_w)
+        )
         self._rebuild()
 
     def update_map(
@@ -93,10 +99,23 @@ class MapsModel(QAbstractListModel):
         title = (title or "").strip()
         if not title:
             return
+        try:
+            updated_map = self._db.update_map(map_id, title, description, project, tiles_h, tiles_w)
+        except ValueError:
+            return
         updated = []
         for item in self._all_items:
             if item.id == map_id:
-                updated.append(MapRow(map_id, title, description.strip(), project, tiles_h, tiles_w))
+                updated.append(
+                    MapRow(
+                        updated_map.id,
+                        updated_map.title,
+                        updated_map.description,
+                        updated_map.project,
+                        updated_map.tiles_h,
+                        updated_map.tiles_w,
+                    )
+                )
             else:
                 updated.append(item)
         self._all_items = updated
