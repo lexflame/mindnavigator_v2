@@ -371,7 +371,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         painter.setFont(self._font)
         painter.setPen(self.C_TEXT if not archived else self.C_DIM)
 
-        right_pad = 10
+        right_pad = 18
         menu_w = 30
         pr_w = 160
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
@@ -387,12 +387,13 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
         priority_w = 60
         pin_w = 16
-        pin_gap = 6
+        priority_gap = 8
+        pin_gap = 10
         priority_rect = QRect(pr_rect.left(), r.top(), priority_w, r.height())
         date_rect = QRect(
-            priority_rect.right(),
+            priority_rect.right() + priority_gap,
             r.top(),
-            pr_rect.width() - priority_w - pin_w - pin_gap,
+            pr_rect.width() - priority_w - priority_gap - pin_w - pin_gap,
             r.height(),
         )
 
@@ -428,7 +429,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             x += 22
             box_rect = QRect(x, cy - 7, 14, 14)
 
-            right_pad = 10
+            right_pad = 18
             menu_w = 30
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
 
