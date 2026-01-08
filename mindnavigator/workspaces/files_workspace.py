@@ -169,7 +169,7 @@ class FileWorkspace(QWidget):
 
         self.mode_group.addButton(self.log_mode_button, 0)
         self.mode_group.addButton(self.nav_mode_button, 1)
-        self.mode_group.buttonClicked[int].connect(self._switch_mode)
+        self.mode_group.idClicked.connect(self._switch_mode)
 
         mode_layout = QHBoxLayout()
         mode_layout.setSpacing(6)
