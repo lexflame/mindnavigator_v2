@@ -12,6 +12,7 @@ from .ui.search_nav import SearchNav
 from .workspaces.tasks_workspace import TasksWorkspace
 from .workspaces.projects_workspace import ProjectsWorkspace
 from .workspaces.maps_workspace import MapsListWorkspace
+from .workspaces.settings_workspace import SettingsWorkspace
 from .constants import APP_NAME
 
 
@@ -113,7 +114,7 @@ class MainWindow(QMainWindow):
         self.page_notes = self._placeholder("Заметки", "Рабочая область режима «Заметки».")
         self.page_files = self._placeholder("Файлы", "Рабочая область режима «Файлы».")
         self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
-        self.page_settings = self._placeholder("Настройки", "Рабочая область режима «Настройки».")
+        self.page_settings = SettingsWorkspace()
 
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
