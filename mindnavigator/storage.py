@@ -139,7 +139,7 @@ class Database:
 
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else default_db_path()
-        self._conn = sqlite3.connect(self.path)
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_db()
 
