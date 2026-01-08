@@ -973,6 +973,31 @@ class Database:
             row["updated_at"],
         )
 
+    def fetch_cloud_files(self) -> List[CloudFileData]:
+        """Возвращает список файлов облака."""
+        rows = self._conn.execute(
+            """
+            SELECT id, rel_path, name, description, checksum, hash_value, size, is_image, valid, updated_at
+            FROM cloud_files
+            ORDER BY rel_path;
+            """
+        ).fetchall()
+        return [
+            CloudFileData(
+                row["id"],
+                row["rel_path"],
+                row["name"],
+                row["description"],
+                row["checksum"],
+                row["hash_value"],
+                row["size"],
+                bool(row["is_image"]),
+                bool(row["valid"]),
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
     def remove_missing_cloud_files(self, rel_paths: Iterable[str]) -> None:
         """Удаляет записи о файлах, которых нет в облачном каталоге."""
         rel_paths = [path for path in rel_paths if path]
