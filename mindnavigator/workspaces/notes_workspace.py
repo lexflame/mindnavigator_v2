@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 
 import qtawesome as qta
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
 )
 
+from mindnavigator.storage import get_database
 
 @dataclass(frozen=True)
 class NoteItem:
@@ -67,6 +68,7 @@ class NoteRoles:
 class NotesModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._db = get_database()
         self._notes: List[NoteItem] = []
         self._rows: List[NoteItem] = []
         self._filter_mode = "Все"
@@ -74,56 +76,22 @@ class NotesModel(QAbstractListModel):
         self._project_filter: Optional[str] = None
         self._tag_filter: Optional[str] = None
         self._loading = True
-        self._load_seed_notes()
+        self._load_notes()
 
-    def _load_seed_notes(self):
-        now = datetime.now()
+    def _load_notes(self):
         self._notes = [
             NoteItem(
-                1,
-                "Онбординг продукта",
-                "Ключевые шаги запуска, список рисков и список блокеров для первой версии...",
-                ["product", "launch", "priority"],
-                now - timedelta(hours=2),
-                "MindNavigator",
-                favorite=True,
-                attachment=True,
-            ),
-            NoteItem(
-                2,
-                "Исследование пользователей",
-                "Сводка интервью: болевые точки, привычки ведения заметок, ожидания от поиска...",
-                ["research", "ux"],
-                now - timedelta(days=1, hours=3),
-                "Discovery",
-            ),
-            NoteItem(
-                3,
-                "Архитектура синхронизации",
-                "Контуры API: FastAPI, SQLite, оффлайн-очереди, форматы событий...",
-                ["backend", "sync"],
-                now - timedelta(days=2),
-                "Platform",
-                locked=True,
-            ),
-            NoteItem(
-                4,
-                "UI-референсы",
-                "Obsidian + Notion + IDE: контраст, карточки, минимализм, быстрые экшены...",
-                ["ui", "references"],
-                now - timedelta(days=3, hours=5),
-                "Design",
-                favorite=True,
-            ),
-            NoteItem(
-                5,
-                "Чеклист релиза",
-                "Checklist: тесты, документация, скриншоты, релизные заметки...",
-                ["release", "ops"],
-                now - timedelta(days=4),
-                "Delivery",
-                attachment=True,
-            ),
+                note.id,
+                note.title,
+                note.preview,
+                note.tags,
+                note.updated,
+                note.project,
+                favorite=note.favorite,
+                attachment=note.attachment,
+                locked=note.locked,
+            )
+            for note in self._db.fetch_notes()
         ]
         self._rebuild()
 
@@ -205,22 +173,21 @@ class NotesModel(QAbstractListModel):
         self._rebuild()
 
     def update_note(self, note_id: int, title: str, preview: str, tags: List[str]):
-        updated_notes = []
-        for note in self._notes:
-            if note.id == note_id:
-                note = NoteItem(
-                    note.id,
-                    title,
-                    preview,
-                    tags,
-                    datetime.now(),
-                    note.project,
-                    note.favorite,
-                    note.attachment,
-                    note.locked,
-                )
-            updated_notes.append(note)
-        self._notes = updated_notes
+        updated_note = self._db.update_note(note_id, title, preview, tags)
+        self._notes = [
+            NoteItem(
+                item.id,
+                updated_note.title if item.id == note_id else item.title,
+                updated_note.preview if item.id == note_id else item.preview,
+                updated_note.tags if item.id == note_id else item.tags,
+                updated_note.updated if item.id == note_id else item.updated,
+                updated_note.project if item.id == note_id else item.project,
+                favorite=updated_note.favorite if item.id == note_id else item.favorite,
+                attachment=updated_note.attachment if item.id == note_id else item.attachment,
+                locked=updated_note.locked if item.id == note_id else item.locked,
+            )
+            for item in self._notes
+        ]
         self._rebuild()
 
     def note_by_id(self, note_id: int) -> Optional[NoteItem]:
@@ -230,22 +197,48 @@ class NotesModel(QAbstractListModel):
         return None
 
     def toggle_favorite(self, note_id: int):
-        updated_notes = []
-        for note in self._notes:
-            if note.id == note_id:
-                note = NoteItem(
-                    note.id,
-                    note.title,
-                    note.preview,
-                    note.tags,
-                    note.updated,
-                    note.project,
-                    favorite=not note.favorite,
-                    attachment=note.attachment,
-                    locked=note.locked,
-                )
-            updated_notes.append(note)
-        self._notes = updated_notes
+        updated_note = self._db.toggle_note_favorite(note_id)
+        self._notes = [
+            NoteItem(
+                item.id,
+                updated_note.title if item.id == note_id else item.title,
+                updated_note.preview if item.id == note_id else item.preview,
+                updated_note.tags if item.id == note_id else item.tags,
+                updated_note.updated if item.id == note_id else item.updated,
+                updated_note.project if item.id == note_id else item.project,
+                favorite=updated_note.favorite if item.id == note_id else item.favorite,
+                attachment=updated_note.attachment if item.id == note_id else item.attachment,
+                locked=updated_note.locked if item.id == note_id else item.locked,
+            )
+            for item in self._notes
+        ]
+        self._rebuild()
+
+    def create_note(
+        self,
+        title: str,
+        preview: str,
+        tags: List[str],
+        project: str,
+    ) -> NoteItem:
+        created = self._db.create_note(title, preview, tags, project)
+        note = NoteItem(
+            created.id,
+            created.title,
+            created.preview,
+            created.tags,
+            created.updated,
+            created.project,
+            favorite=created.favorite,
+            attachment=created.attachment,
+            locked=created.locked,
+        )
+        self.add_note(note)
+        return note
+
+    def delete_note(self, note_id: int):
+        self._db.delete_note(note_id)
+        self._notes = [n for n in self._notes if n.id != note_id]
         self._rebuild()
 
     def _rebuild(self):
@@ -318,16 +311,12 @@ class NotesController(QObject):
         self.note_open_requested.emit(note_id)
 
     def create_note(self):
-        next_id = max((n.id for n in self._model._notes), default=0) + 1
-        note = NoteItem(
-            next_id,
+        note = self._model.create_note(
             "Новая заметка",
             "Краткое описание...",
             ["draft"],
-            datetime.now(),
             "Inbox",
         )
-        self._model.add_note(note)
         self.open_note(note.id)
 
     def rename_note(self, note_id: int, title: str):
@@ -340,8 +329,7 @@ class NotesController(QObject):
         self._model.toggle_favorite(note_id)
 
     def delete_note(self, note_id: int):
-        self._model._notes = [n for n in self._model._notes if n.id != note_id]
-        self._model._rebuild()
+        self._model.delete_note(note_id)
         if self._state.selected_note_id == note_id:
             self._state.selected_note_id = None
 

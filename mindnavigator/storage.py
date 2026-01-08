@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -58,6 +59,19 @@ class CloudFileData:
     is_image: bool
     valid: bool
     updated_at: str
+
+
+@dataclass(frozen=True)
+class NoteData:
+    id: int
+    title: str
+    preview: str
+    tags: List[str]
+    updated: datetime
+    project: str
+    favorite: bool = False
+    attachment: bool = False
+    locked: bool = False
 
 
 def default_db_path() -> Path:
@@ -181,6 +195,22 @@ class Database:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    preview TEXT NOT NULL DEFAULT '',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    project TEXT NOT NULL DEFAULT '',
+                    favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                    attachment INTEGER NOT NULL DEFAULT 0 CHECK (attachment IN (0, 1)),
+                    locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
@@ -209,6 +239,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
 
         self._ensure_task_project_column()
         self._ensure_task_description_column()
@@ -252,6 +283,10 @@ class Database:
         cur = self._conn.execute("SELECT COUNT(*) FROM maps;")
         if cur.fetchone()[0] == 0:
             self._seed_maps()
+
+        cur = self._conn.execute("SELECT COUNT(*) FROM notes;")
+        if cur.fetchone()[0] == 0:
+            self._seed_notes()
 
     def _seed_tasks(self) -> None:
         today = date.today()
@@ -313,6 +348,81 @@ class Database:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (title, description, project, tiles_path, tiles_h, tiles_w, now, now),
+                )
+
+    def _seed_notes(self) -> None:
+        now = datetime.utcnow()
+        examples = [
+            (
+                "Онбординг продукта",
+                "Ключевые шаги запуска, список рисков и список блокеров для первой версии...",
+                ["product", "launch", "priority"],
+                now - timedelta(hours=2),
+                "MindNavigator",
+                True,
+                True,
+                False,
+            ),
+            (
+                "Исследование пользователей",
+                "Сводка интервью: болевые точки, привычки ведения заметок, ожидания от поиска...",
+                ["research", "ux"],
+                now - timedelta(days=1, hours=3),
+                "Discovery",
+                False,
+                False,
+                False,
+            ),
+            (
+                "Архитектура синхронизации",
+                "Контуры API: FastAPI, SQLite, оффлайн-очереди, форматы событий...",
+                ["backend", "sync"],
+                now - timedelta(days=2),
+                "Platform",
+                False,
+                False,
+                True,
+            ),
+            (
+                "UI-референсы",
+                "Obsidian + Notion + IDE: контраст, карточки, минимализм, быстрые экшены...",
+                ["ui", "references"],
+                now - timedelta(days=3, hours=5),
+                "Design",
+                True,
+                False,
+                False,
+            ),
+            (
+                "Чеклист релиза",
+                "Checklist: тесты, документация, скриншоты, релизные заметки...",
+                ["release", "ops"],
+                now - timedelta(days=4),
+                "Delivery",
+                False,
+                True,
+                False,
+            ),
+        ]
+        with self._conn:
+            for title, preview, tags, updated, project, favorite, attachment, locked in examples:
+                created_at = updated.isoformat(timespec="seconds")
+                self._conn.execute(
+                    """
+                    INSERT INTO notes (title, preview, tags, project, favorite, attachment, locked, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        title,
+                        preview,
+                        json.dumps(tags),
+                        project,
+                        int(favorite),
+                        int(attachment),
+                        int(locked),
+                        created_at,
+                        updated.isoformat(timespec="seconds"),
+                    ),
                 )
 
     def fetch_tasks(self) -> List[TaskData]:
@@ -598,6 +708,170 @@ class Database:
                 (title, description, project, tiles_path, tiles_h, tiles_w, now, map_id),
             )
         return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
+
+    def fetch_notes(self) -> List[NoteData]:
+        """Возвращает список всех заметок."""
+        rows = self._conn.execute(
+            """
+            SELECT
+                id,
+                title,
+                preview,
+                tags,
+                project,
+                favorite,
+                attachment,
+                locked,
+                updated_at
+            FROM notes
+            ORDER BY updated_at DESC;
+            """
+        ).fetchall()
+        notes = []
+        for row in rows:
+            tags = json.loads(row["tags"] or "[]")
+            notes.append(
+                NoteData(
+                    id=row["id"],
+                    title=row["title"],
+                    preview=row["preview"] or "",
+                    tags=tags if isinstance(tags, list) else [],
+                    updated=datetime.fromisoformat(row["updated_at"]),
+                    project=row["project"] or "",
+                    favorite=bool(row["favorite"]),
+                    attachment=bool(row["attachment"]),
+                    locked=bool(row["locked"]),
+                )
+            )
+        return notes
+
+    def create_note(
+        self,
+        title: str,
+        preview: str,
+        tags: List[str],
+        project: str,
+        favorite: bool = False,
+        attachment: bool = False,
+        locked: bool = False,
+    ) -> NoteData:
+        """Создает заметку в базе данных."""
+        title = validate_title(title, field_name="Название заметки")
+        preview = (preview or "").strip()
+        project = (project or "").strip()
+        tags = [tag.strip() for tag in tags if tag.strip()]
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO notes (title, preview, tags, project, favorite, attachment, locked, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    title,
+                    preview,
+                    json.dumps(tags),
+                    project,
+                    int(bool(favorite)),
+                    int(bool(attachment)),
+                    int(bool(locked)),
+                    now,
+                    now,
+                ),
+            )
+        return NoteData(
+            id=cur.lastrowid,
+            title=title,
+            preview=preview,
+            tags=tags,
+            updated=datetime.fromisoformat(now),
+            project=project,
+            favorite=bool(favorite),
+            attachment=bool(attachment),
+            locked=bool(locked),
+        )
+
+    def update_note(
+        self,
+        note_id: int,
+        title: str,
+        preview: str,
+        tags: List[str],
+    ) -> NoteData:
+        """Обновляет данные заметки."""
+        title = validate_title(title, field_name="Название заметки")
+        preview = (preview or "").strip()
+        tags = [tag.strip() for tag in tags if tag.strip()]
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE notes
+                SET title = ?, preview = ?, tags = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (title, preview, json.dumps(tags), now, note_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, project, favorite, attachment, locked
+            FROM notes
+            WHERE id = ?;
+            """,
+            (note_id,),
+        ).fetchone()
+        return NoteData(
+            id=note_id,
+            title=title,
+            preview=preview,
+            tags=tags,
+            updated=datetime.fromisoformat(now),
+            project=row["project"] if row else "",
+            favorite=bool(row["favorite"]) if row else False,
+            attachment=bool(row["attachment"]) if row else False,
+            locked=bool(row["locked"]) if row else False,
+        )
+
+    def toggle_note_favorite(self, note_id: int) -> NoteData:
+        """Переключает избранное у заметки."""
+        row = self._conn.execute(
+            """
+            SELECT title, preview, tags, project, favorite, attachment, locked
+            FROM notes
+            WHERE id = ?;
+            """,
+            (note_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Заметка не найдена.")
+        favorite = not bool(row["favorite"])
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE notes
+                SET favorite = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (int(favorite), now, note_id),
+            )
+        tags = json.loads(row["tags"] or "[]")
+        return NoteData(
+            id=note_id,
+            title=row["title"],
+            preview=row["preview"] or "",
+            tags=tags if isinstance(tags, list) else [],
+            updated=datetime.fromisoformat(now),
+            project=row["project"] or "",
+            favorite=favorite,
+            attachment=bool(row["attachment"]),
+            locked=bool(row["locked"]),
+        )
+
+    def delete_note(self, note_id: int) -> None:
+        """Удаляет заметку."""
+        with self._conn:
+            self._conn.execute("DELETE FROM notes WHERE id = ?;", (note_id,))
 
     def get_setting(self, key: str, default: str = "") -> str:
         """Возвращает значение настройки."""
