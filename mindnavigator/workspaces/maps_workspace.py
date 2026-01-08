@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog
+    QFileDialog, QColorDialog
 )
 
 from mindnavigator.storage import get_database
@@ -543,6 +543,7 @@ class Marker:
     y: float
     color: QColor
     type: str
+    size: float
 
 
 class MapCanvas(QWidget):
@@ -552,6 +553,9 @@ class MapCanvas(QWidget):
 
     GRID_COLOR = QColor(70, 74, 82, 120)
     GRID_TEXT = QColor(150, 155, 160, 180)
+    DEFAULT_MARKER_SIZE = 8.0
+    MIN_MARKER_SIZE = 4.0
+    MAX_MARKER_SIZE = 22.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -575,13 +579,14 @@ class MapCanvas(QWidget):
         self._next_id = 1
         self._selected: Optional[Marker] = None
         self._preview_pos: Optional[QPointF] = None
+        self._dragging_marker_id: Optional[int] = None
         self._seed_markers()
 
     def _seed_markers(self) -> None:
         self._markers = [
-            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base"),
-            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point"),
-            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk"),
+            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", self.DEFAULT_MARKER_SIZE),
+            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", self.DEFAULT_MARKER_SIZE),
+            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", self.DEFAULT_MARKER_SIZE),
         ]
         self._next_id = 4
 
@@ -710,10 +715,14 @@ class MapCanvas(QWidget):
     def _draw_markers(self, painter: QPainter) -> None:
         for marker in self._markers:
             is_selected = self._selected and marker.id == self._selected.id
-            radius = 7 if is_selected else 5
+            radius = marker.size + (2.0 if is_selected else 0.0)
             painter.setBrush(marker.color)
-            painter.setPen(QPen(QColor("#111111"), 1.0 / self._scale))
+            painter.setPen(QPen(QColor("#111111"), max(1.0, 1.0 / self._scale)))
             painter.drawEllipse(QPointF(marker.x, marker.y), radius, radius)
+            if is_selected:
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.4 / self._scale)))
+                painter.drawEllipse(QPointF(marker.x, marker.y), radius + 2, radius + 2)
             painter.setPen(QColor("#e5e5e5"))
             painter.setFont(QFont("Segoe UI", 8))
             painter.drawText(QPointF(marker.x + 10, marker.y - 6), marker.name)
@@ -723,7 +732,7 @@ class MapCanvas(QWidget):
             return
         painter.setPen(QPen(QColor("#cfd8dc"), 1.0 / self._scale))
         painter.setBrush(QColor(200, 200, 200, 60))
-        painter.drawEllipse(self._preview_pos, 6, 6)
+        painter.drawEllipse(self._preview_pos, self.DEFAULT_MARKER_SIZE, self.DEFAULT_MARKER_SIZE)
 
     def _world_view_rect(self) -> QRectF:
         inv_scale = 1.0 / self._scale
@@ -793,9 +802,35 @@ class MapCanvas(QWidget):
     def _marker_at(self, world_pos: QPointF) -> Optional[Marker]:
         for marker in reversed(self._markers):
             dist = (QPointF(marker.x, marker.y) - world_pos)
-            if dist.manhattanLength() <= 10:
+            hit_radius = max(10.0, marker.size + 6.0)
+            if dist.manhattanLength() <= hit_radius:
                 return marker
         return None
+
+    def _marker_by_id(self, marker_id: int) -> Optional[Marker]:
+        for marker in self._markers:
+            if marker.id == marker_id:
+                return marker
+        return None
+
+    def _set_marker(self, updated: Marker) -> None:
+        self._markers = [updated if m.id == updated.id else m for m in self._markers]
+        self._selected = updated
+        self.markerSelected.emit(updated)
+        self.update()
+
+    def _zoom_to_marker(self, marker: Marker) -> None:
+        target_scale = min(self._max_scale, max(self._min_scale, self._scale * 1.4))
+        view_center = QPointF(self.width() / 2, self.height() / 2)
+        self._scale = target_scale
+        self._offset = view_center - QPointF(marker.x, marker.y) * self._scale
+        self.update()
+
+    def _adjust_marker_size(self, marker: Marker, delta: float) -> None:
+        new_size = min(self.MAX_MARKER_SIZE, max(self.MIN_MARKER_SIZE, marker.size + delta))
+        if new_size == marker.size:
+            return
+        self._set_marker(Marker(marker.id, marker.name, marker.x, marker.y, marker.color, marker.type, new_size))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
@@ -811,15 +846,32 @@ class MapCanvas(QWidget):
             if marker:
                 self._selected = marker
                 self.markerSelected.emit(marker)
+                self._dragging_marker_id = marker.id
                 self.update()
                 return
             self._selected = None
             self.markerSelected.emit(None)
+            self._dragging_marker_id = None
             self._panning = True
             self._last_pos = event.position()
             self.update()
 
     def mouseMoveEvent(self, event):
+        if self._dragging_marker_id is not None and self._tool == MapTool.SELECT:
+            world_pos = self._map_to_world(event.position())
+            marker = self._marker_by_id(self._dragging_marker_id)
+            if marker:
+                updated = Marker(
+                    marker.id,
+                    marker.name,
+                    world_pos.x(),
+                    world_pos.y(),
+                    marker.color,
+                    marker.type,
+                    marker.size,
+                )
+                self._set_marker(updated)
+                return
         if self._panning:
             delta = event.position() - self._last_pos
             self._offset += delta
@@ -833,8 +885,28 @@ class MapCanvas(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._panning = False
+            self._dragging_marker_id = None
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            world_pos = self._map_to_world(event.position())
+            marker = self._marker_at(world_pos)
+            if marker:
+                self._selected = marker
+                self.markerSelected.emit(marker)
+                self._zoom_to_marker(marker)
+                return
+        super().mouseDoubleClickEvent(event)
 
     def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            cursor_pos = event.position()
+            world_pos = self._map_to_world(cursor_pos)
+            marker = self._marker_at(world_pos)
+            if marker:
+                delta = 1.0 if event.angleDelta().y() > 0 else -1.0
+                self._adjust_marker_size(marker, delta)
+                return
         delta = event.angleDelta().y()
         if delta == 0:
             return
@@ -856,6 +928,7 @@ class MapCanvas(QWidget):
             float(world_pos.y()),
             QColor("#8be26f"),
             "Point",
+            self.DEFAULT_MARKER_SIZE,
         )
         self._next_id += 1
         self._markers.append(marker)
@@ -883,8 +956,30 @@ class MapCanvas(QWidget):
 
         name_edit = QLineEdit(marker.name)
         type_edit = QLineEdit(marker.type)
+        color_btn = QToolButton()
+        color_btn.setText("Выбрать…")
+        color_btn.setCursor(Qt.PointingHandCursor)
+        color_preview = QLabel()
+        color_preview.setFixedSize(26, 26)
+        color_preview.setStyleSheet(f"background: {marker.color.name()}; border: 1px solid #2a2b2f; border-radius: 4px;")
+        color_row = QHBoxLayout()
+        color_row.addWidget(color_preview)
+        color_row.addWidget(color_btn)
+        color_row.addStretch(1)
+        color_holder = QWidget()
+        color_holder.setLayout(color_row)
+        selected_color = {"value": marker.color}
+
+        def pick_color() -> None:
+            chosen = QColorDialog.getColor(selected_color["value"], dialog, "Цвет маркера")
+            if chosen.isValid():
+                selected_color["value"] = chosen
+                color_preview.setStyleSheet(f"background: {chosen.name()}; border: 1px solid #2a2b2f; border-radius: 4px;")
+
+        color_btn.clicked.connect(pick_color)
         form.addRow("Название", name_edit)
         form.addRow("Тип", type_edit)
+        form.addRow("Цвет", color_holder)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -916,7 +1011,15 @@ class MapCanvas(QWidget):
         """)
 
         if dialog.exec() == QDialog.Accepted:
-            updated = Marker(marker.id, name_edit.text().strip() or marker.name, marker.x, marker.y, marker.color, type_edit.text().strip() or marker.type)
+            updated = Marker(
+                marker.id,
+                name_edit.text().strip() or marker.name,
+                marker.x,
+                marker.y,
+                selected_color["value"],
+                type_edit.text().strip() or marker.type,
+                marker.size,
+            )
             self._markers = [updated if m.id == marker.id else m for m in self._markers]
             self._selected = updated
             self.markerSelected.emit(updated)
@@ -927,13 +1030,27 @@ class MapCanvas(QWidget):
         marker = self._marker_at(world_pos)
         menu = QMenu(self)
         act_add = menu.addAction("Добавить маркер")
+        act_color = menu.addAction("Выбрать цвет")
+        act_bigger = menu.addAction("Увеличить маркер")
+        act_smaller = menu.addAction("Уменьшить маркер")
         act_edit = menu.addAction("Редактировать маркер")
         act_delete = menu.addAction("Удалить маркер")
+        act_color.setEnabled(marker is not None)
+        act_bigger.setEnabled(marker is not None)
+        act_smaller.setEnabled(marker is not None)
         act_edit.setEnabled(marker is not None)
         act_delete.setEnabled(marker is not None)
         chosen = menu.exec(QCursor.pos())
         if chosen == act_add:
             self._add_marker(world_pos)
+        elif chosen == act_color and marker:
+            color = QColorDialog.getColor(marker.color, self, "Цвет маркера")
+            if color.isValid():
+                self._set_marker(Marker(marker.id, marker.name, marker.x, marker.y, color, marker.type, marker.size))
+        elif chosen == act_bigger and marker:
+            self._adjust_marker_size(marker, 1.5)
+        elif chosen == act_smaller and marker:
+            self._adjust_marker_size(marker, -1.5)
         elif chosen == act_edit and marker:
             self._edit_marker(marker)
         elif chosen == act_delete and marker:
