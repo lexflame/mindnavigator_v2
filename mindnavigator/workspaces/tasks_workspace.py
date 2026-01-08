@@ -695,6 +695,24 @@ class TaskEditDialog(QDialog):
                 width: 18px;
             }
 
+            QDialog#TaskEditDialog QComboBox QAbstractItemView {
+                background: #1c1d22;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                selection-background-color: #2f3238;
+                selection-color: #f2f2f2;
+                outline: none;
+            }
+
+            QDialog#TaskEditDialog QComboBox QAbstractItemView::item {
+                padding: 6px 10px;
+            }
+
+            QDialog#TaskEditDialog QComboBox QAbstractItemView::item:selected {
+                background: #2f3238;
+                color: #f2f2f2;
+            }
+
             QDialog#TaskEditDialog QCheckBox {
                 color: #cfcfcf;
                 padding: 4px 0;
