@@ -565,6 +565,11 @@ class MapCanvas(QWidget):
         self._grid_enabled = True
         self._tool = MapTool.SELECT
         self._background = QPixmap("assets/splash.png")
+        self._tiles_path = ""
+        self._tiles_w = 0
+        self._tiles_h = 0
+        self._tile_size = QSize(80, 80)
+        self._map_pixmap = QPixmap()
         self._markers: List[Marker] = []
         self._next_id = 1
         self._selected: Optional[Marker] = None
@@ -588,6 +593,13 @@ class MapCanvas(QWidget):
         self._grid_enabled = enabled
         self.update()
 
+    def set_tiles(self, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        self._tiles_path = (tiles_path or "").strip()
+        self._tiles_h = max(0, int(tiles_h or 0))
+        self._tiles_w = max(0, int(tiles_w or 0))
+        self._load_tiles()
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
@@ -608,6 +620,13 @@ class MapCanvas(QWidget):
         painter.restore()
 
     def _draw_background(self, painter: QPainter) -> None:
+        if not self._map_pixmap.isNull():
+            painter.setOpacity(1.0)
+            painter.drawPixmap(QPointF(0, 0), self._map_pixmap)
+            return
+        if not self._map_bounds().isNull():
+            painter.fillRect(self._map_bounds(), QColor("#3a3f36"))
+            return
         if self._background.isNull():
             painter.fillRect(QRectF(0, 0, 1200, 800), QColor("#3a3f36"))
             return
@@ -616,10 +635,17 @@ class MapCanvas(QWidget):
         painter.setOpacity(1.0)
 
     def _draw_grid(self, painter: QPainter) -> None:
-        spacing = 80
+        spacing_x = max(1, self._tile_size.width())
+        spacing_y = max(1, self._tile_size.height())
         rect = self._world_view_rect()
-        left = int(rect.left() // spacing * spacing)
-        top = int(rect.top() // spacing * spacing)
+        map_bounds = self._map_bounds()
+        if not map_bounds.isNull():
+            rect = rect.intersected(map_bounds)
+            if rect.isEmpty():
+                return
+
+        left = int(rect.left() // spacing_x * spacing_x)
+        top = int(rect.top() // spacing_y * spacing_y)
         right = int(rect.right())
         bottom = int(rect.bottom())
 
@@ -627,16 +653,16 @@ class MapCanvas(QWidget):
         pen.setWidthF(1.0 / self._scale)
         painter.setPen(pen)
 
-        for x in range(left, right + spacing, spacing):
+        for x in range(left, right + spacing_x, spacing_x):
             painter.drawLine(x, top, x, bottom)
-        for y in range(top, bottom + spacing, spacing):
+        for y in range(top, bottom + spacing_y, spacing_y):
             painter.drawLine(left, y, right, y)
 
         painter.setPen(self.GRID_TEXT)
         painter.setFont(QFont("Segoe UI", 8))
-        for x in range(left, right + spacing, spacing):
+        for x in range(left, right + spacing_x, spacing_x):
             painter.drawText(QPointF(x + 4, top + 14), f"{x}")
-        for y in range(top, bottom + spacing, spacing):
+        for y in range(top, bottom + spacing_y, spacing_y):
             painter.drawText(QPointF(left + 4, y - 4), f"{y}")
 
     def _draw_markers(self, painter: QPainter) -> None:
@@ -668,6 +694,59 @@ class MapCanvas(QWidget):
 
     def _map_from_world(self, pos: QPointF) -> QPointF:
         return pos * self._scale + self._offset
+
+    def _map_bounds(self) -> QRectF:
+        if self._tiles_w <= 0 or self._tiles_h <= 0:
+            return QRectF()
+        width = self._tile_size.width() * self._tiles_w
+        height = self._tile_size.height() * self._tiles_h
+        return QRectF(0, 0, float(width), float(height))
+
+    def _load_tiles(self) -> None:
+        self._map_pixmap = QPixmap()
+        base = Path(self._tiles_path)
+        tile_size = QSize(0, 0)
+        if self._tiles_w <= 0 or self._tiles_h <= 0:
+            return
+        if base and base.exists():
+            for row in range(1, self._tiles_h + 1):
+                for col in range(1, self._tiles_w + 1):
+                    tile_path = base / f"{row}_{col}.png"
+                    if not tile_path.exists():
+                        continue
+                    pixmap = QPixmap(str(tile_path))
+                    if pixmap.isNull():
+                        continue
+                    tile_size = pixmap.size()
+                    break
+                if tile_size.width() > 0:
+                    break
+        if tile_size.isEmpty():
+            tile_size = QSize(80, 80)
+        self._tile_size = tile_size
+        map_width = tile_size.width() * self._tiles_w
+        map_height = tile_size.height() * self._tiles_h
+        if map_width <= 0 or map_height <= 0:
+            return
+        self._map_pixmap = QPixmap(map_width, map_height)
+        self._map_pixmap.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(self._map_pixmap)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        if base and base.exists():
+            for row in range(1, self._tiles_h + 1):
+                for col in range(1, self._tiles_w + 1):
+                    tile_path = base / f"{row}_{col}.png"
+                    if not tile_path.exists():
+                        continue
+                    pixmap = QPixmap(str(tile_path))
+                    if pixmap.isNull():
+                        continue
+                    if pixmap.size() != tile_size:
+                        pixmap = pixmap.scaled(tile_size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+                    x = (col - 1) * tile_size.width()
+                    y = (row - 1) * tile_size.height()
+                    painter.drawPixmap(QPointF(x, y), pixmap)
+        painter.end()
 
     def _marker_at(self, world_pos: QPointF) -> Optional[Marker]:
         for marker in reversed(self._markers):
@@ -1311,4 +1390,9 @@ class MapsListWorkspace(QWidget):
             self.map_title.setText(f"{title} · {project}")
         else:
             self.map_title.setText(title)
+        self.editor_workspace.canvas.set_tiles(
+            index.data(MapRoles.TilesPath) or "",
+            index.data(MapRoles.TilesHeight) or 0,
+            index.data(MapRoles.TilesWidth) or 0,
+        )
         self.stack.setCurrentIndex(1)
