@@ -14,6 +14,7 @@ from .workspaces.projects_workspace import ProjectsWorkspace
 from .workspaces.maps_workspace import MapsListWorkspace
 from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
+from .workspaces.files_workspace import FileWorkspace
 from .constants import APP_NAME
 
 
@@ -113,7 +114,7 @@ class MainWindow(QMainWindow):
         self.page_projects = ProjectsWorkspace()
         self.page_maps = MapsListWorkspace()
         self.page_notes = NoteWorkspace()
-        self.page_files = self._placeholder("Файлы", "Рабочая область режима «Файлы».")
+        self.page_files = FileWorkspace()
         self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
         self.page_settings = SettingsWorkspace()
 
