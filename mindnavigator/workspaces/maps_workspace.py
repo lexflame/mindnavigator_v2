@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import qtawesome as qta
 from PySide6.QtCore import (
-    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPointF, QRectF, Signal
+    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPointF, QRectF, Signal, QTimer
 )
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QPen, QCursor
 from PySide6.QtWidgets import (
@@ -1390,9 +1390,15 @@ class MapsListWorkspace(QWidget):
             self.map_title.setText(f"{title} · {project}")
         else:
             self.map_title.setText(title)
-        self.editor_workspace.canvas.set_tiles(
-            index.data(MapRoles.TilesPath) or "",
-            index.data(MapRoles.TilesHeight) or 0,
-            index.data(MapRoles.TilesWidth) or 0,
-        )
         self.stack.setCurrentIndex(1)
+        tiles_path = index.data(MapRoles.TilesPath) or ""
+        tiles_height = index.data(MapRoles.TilesHeight) or 0
+        tiles_width = index.data(MapRoles.TilesWidth) or 0
+        QTimer.singleShot(
+            0,
+            lambda: self.editor_workspace.canvas.set_tiles(
+                tiles_path,
+                tiles_height,
+                tiles_width,
+            ),
+        )
