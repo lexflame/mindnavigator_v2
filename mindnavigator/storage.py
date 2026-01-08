@@ -41,6 +41,7 @@ class MapData:
     title: str
     description: str
     project: str
+    tiles_path: str
     tiles_h: int
     tiles_w: int
 
@@ -156,6 +157,7 @@ class Database:
                     title TEXT NOT NULL,
                     description TEXT NOT NULL DEFAULT '',
                     project TEXT NOT NULL DEFAULT '',
+                    tiles_path TEXT NOT NULL DEFAULT '',
                     tiles_h INTEGER NOT NULL CHECK (tiles_h > 0),
                     tiles_w INTEGER NOT NULL CHECK (tiles_w > 0),
                     created_at TEXT NOT NULL,
@@ -180,6 +182,7 @@ class Database:
 
         self._ensure_task_project_column()
         self._ensure_task_description_column()
+        self._ensure_map_tiles_path_column()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -197,6 +200,14 @@ class Database:
         if "description" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT '';")
+
+    def _ensure_map_tiles_path_column(self) -> None:
+        """Добавляет колонку tiles_path, если она отсутствует."""
+        columns = self._conn.execute("PRAGMA table_info(maps);").fetchall()
+        names = {row["name"] for row in columns}
+        if "tiles_path" not in names:
+            with self._conn:
+                self._conn.execute("ALTER TABLE maps ADD COLUMN tiles_path TEXT NOT NULL DEFAULT '';")
 
     def _seed_defaults(self) -> None:
         """Добавляет демонстрационные данные, если база пустая."""
@@ -259,19 +270,19 @@ class Database:
 
     def _seed_maps(self) -> None:
         examples = [
-            ("Northern Ridge", "Точки обзора и маршруты патрулей.", "MindNavigator v2", 18, 24),
-            ("Sector 12", "Зоны контроля и минные поля.", "TACMap", 32, 32),
-            ("Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", 12, 20),
+            ("Northern Ridge", "Точки обзора и маршруты патрулей.", "MindNavigator v2", "", 18, 24),
+            ("Sector 12", "Зоны контроля и минные поля.", "TACMap", "", 32, 32),
+            ("Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", "", 12, 20),
         ]
         now = datetime.utcnow().isoformat(timespec="seconds")
         with self._conn:
-            for title, description, project, tiles_h, tiles_w in examples:
+            for title, description, project, tiles_path, tiles_h, tiles_w in examples:
                 self._conn.execute(
                     """
-                    INSERT INTO maps (title, description, project, tiles_h, tiles_w, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    INSERT INTO maps (title, description, project, tiles_path, tiles_h, tiles_w, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     """,
-                    (title, description, project, tiles_h, tiles_w, now, now),
+                    (title, description, project, tiles_path, tiles_h, tiles_w, now, now),
                 )
 
     def fetch_tasks(self) -> List[TaskData]:
@@ -483,7 +494,7 @@ class Database:
     def fetch_maps(self) -> List[MapData]:
         """Возвращает список карт."""
         rows = self._conn.execute(
-            "SELECT id, title, description, project, tiles_h, tiles_w FROM maps;"
+            "SELECT id, title, description, project, tiles_path, tiles_h, tiles_w FROM maps;"
         ).fetchall()
         maps = []
         for row in rows:
@@ -493,17 +504,27 @@ class Database:
                     title=row["title"],
                     description=row["description"] or "",
                     project=row["project"] or "",
+                    tiles_path=row["tiles_path"] or "",
                     tiles_h=row["tiles_h"],
                     tiles_w=row["tiles_w"],
                 )
             )
         return maps
 
-    def create_map(self, title: str, description: str, project: str, tiles_h: int, tiles_w: int) -> MapData:
+    def create_map(
+        self,
+        title: str,
+        description: str,
+        project: str,
+        tiles_path: str,
+        tiles_h: int,
+        tiles_w: int,
+    ) -> MapData:
         """Создает карту."""
         title = validate_title(title, field_name="Название карты")
         description = (description or "").strip()
         project = (project or "").strip()
+        tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
             raise ValueError("Размер сетки должен быть больше нуля.")
 
@@ -511,18 +532,28 @@ class Database:
         with self._conn:
             cur = self._conn.execute(
                 """
-                INSERT INTO maps (title, description, project, tiles_h, tiles_w, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO maps (title, description, project, tiles_path, tiles_h, tiles_w, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (title, description, project, tiles_h, tiles_w, now, now),
+                (title, description, project, tiles_path, tiles_h, tiles_w, now, now),
             )
-        return MapData(cur.lastrowid, title, description, project, tiles_h, tiles_w)
+        return MapData(cur.lastrowid, title, description, project, tiles_path, tiles_h, tiles_w)
 
-    def update_map(self, map_id: int, title: str, description: str, project: str, tiles_h: int, tiles_w: int) -> MapData:
+    def update_map(
+        self,
+        map_id: int,
+        title: str,
+        description: str,
+        project: str,
+        tiles_path: str,
+        tiles_h: int,
+        tiles_w: int,
+    ) -> MapData:
         """Обновляет свойства карты."""
         title = validate_title(title, field_name="Название карты")
         description = (description or "").strip()
         project = (project or "").strip()
+        tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
             raise ValueError("Размер сетки должен быть больше нуля.")
 
@@ -531,12 +562,12 @@ class Database:
             self._conn.execute(
                 """
                 UPDATE maps
-                SET title = ?, description = ?, project = ?, tiles_h = ?, tiles_w = ?, updated_at = ?
+                SET title = ?, description = ?, project = ?, tiles_path = ?, tiles_h = ?, tiles_w = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (title, description, project, tiles_h, tiles_w, now, map_id),
+                (title, description, project, tiles_path, tiles_h, tiles_w, now, map_id),
             )
-        return MapData(map_id, title, description, project, tiles_h, tiles_w)
+        return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
 
     def get_setting(self, key: str, default: str = "") -> str:
         """Возвращает значение настройки."""
