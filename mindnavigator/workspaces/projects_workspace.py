@@ -384,14 +384,26 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         pr_color = self.C_ARCH if archived else self._prio_color(priority)
         painter.setFont(self._font_small)
         painter.setPen(pr_color)
-        painter.drawText(pr_rect.adjusted(0, 0, -58, 0), Qt.AlignVCenter | Qt.AlignRight,
+
+        priority_w = 60
+        pin_w = 16
+        pin_gap = 6
+        priority_rect = QRect(pr_rect.left(), r.top(), priority_w, r.height())
+        date_rect = QRect(
+            priority_rect.right(),
+            r.top(),
+            pr_rect.width() - priority_w - pin_w - pin_gap,
+            r.height(),
+        )
+
+        painter.drawText(priority_rect, Qt.AlignVCenter | Qt.AlignRight,
                          priority if not archived else "ARCH")
 
         painter.setPen(self.C_DIM)
-        painter.drawText(pr_rect.adjusted(0, 0, -4, 0), Qt.AlignVCenter | Qt.AlignRight,
-                         f"  обновл. {updated}")
+        painter.drawText(date_rect, Qt.AlignVCenter | Qt.AlignRight,
+                         f"обновл. {updated}")
 
-        pin_rect = QRect(pr_rect.right() - 18, cy - 8, 16, 16)
+        pin_rect = QRect(pr_rect.right() - pin_w, cy - 8, pin_w, 16)
         self._icon_pin.paint(painter, pin_rect)
 
         painter.setPen(self.C_BORDER)
