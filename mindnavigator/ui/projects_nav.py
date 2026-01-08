@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
 
 from mindnavigator.storage import get_database, ProjectData
@@ -35,6 +35,8 @@ class ProjectsNav(QWidget):
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.currentItemChanged.connect(self._on_project_selected)
+
+        self._selected_project_id = None
 
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
@@ -95,6 +97,7 @@ class ProjectsNav(QWidget):
 
     def _populate_projects(self):
         """Заполняет список доступными проектами."""
+        selected_id = self._selected_project_id
         self.list.clear()
         all_item = QListWidgetItem("Все проекты")
         all_item.setData(Qt.UserRole, None)
@@ -104,7 +107,19 @@ class ProjectsNav(QWidget):
         for project in projects:
             self.list.addItem(self._project_item(project))
 
-        self.list.setCurrentRow(0)
+        self._select_project_id(selected_id)
+
+    def _select_project_id(self, project_id):
+        """Выбирает проект по id, если он есть в списке."""
+        if self.list.count() == 0:
+            return
+        fallback_index = 0
+        for idx in range(self.list.count()):
+            item = self.list.item(idx)
+            if item.data(Qt.UserRole) == project_id:
+                self.list.setCurrentRow(idx)
+                return
+        self.list.setCurrentRow(fallback_index)
 
     def _project_item(self, project: ProjectData) -> QListWidgetItem:
         """Создает элемент списка проекта."""
@@ -117,9 +132,11 @@ class ProjectsNav(QWidget):
     def _on_project_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
         """Обрабатывает выбор проекта для фильтрации."""
         if current is None:
+            self._selected_project_id = None
             self.project_filter_changed.emit(None)
             return
         project_id = current.data(Qt.UserRole)
+        self._selected_project_id = project_id
         self.project_filter_changed.emit(project_id)
 
     def update_width_for_window(self, window_width: int):
@@ -132,9 +149,14 @@ class ProjectsNav(QWidget):
         """Обновляет заголовок панели для активного режима."""
         self.header.setText(f"Проекты · {mode_name}")
         is_tasks = mode_name == "Задачи"
-        self.hint.setVisible(is_tasks)
-        self.list.setVisible(is_tasks)
-        if is_tasks:
-            self.hint.setText("Фильтрация задач по проектам")
-        else:
-            self.hint.setText("Навигация (пока пусто)")
+        if not is_tasks:
+            current = self.list.currentItem()
+            self._selected_project_id = current.data(Qt.UserRole) if current else None
+        with QSignalBlocker(self.list):
+            self.hint.setVisible(is_tasks)
+            self.list.setVisible(is_tasks)
+            if is_tasks:
+                self.hint.setText("Фильтрация задач по проектам")
+                self._select_project_id(self._selected_project_id)
+            else:
+                self.hint.setText("Навигация (пока пусто)")
