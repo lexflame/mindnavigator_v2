@@ -130,7 +130,7 @@ class MapsModel(QAbstractListModel):
 
 class MapsItemDelegate(QStyledItemDelegate):
     ROW_H = 112
-    ROW_H_MIN = 108
+    ROW_H_MIN = 124
 
     C_BG = QColor("#16171a")
     C_ROW = QColor("#2a2d33")
@@ -174,7 +174,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         if desc:
             desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, desc).height()
 
-        total_height = title_height + desc_height + 72
+        total_height = title_height + desc_height + 96
         return QSize(option.rect.width(), max(self.ROW_H_MIN, total_height))
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
