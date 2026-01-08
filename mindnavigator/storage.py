@@ -163,6 +163,14 @@ class Database:
                 );
                 """
             )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL DEFAULT ''
+                );
+                """
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
@@ -529,6 +537,33 @@ class Database:
                 (title, description, project, tiles_h, tiles_w, now, map_id),
             )
         return MapData(map_id, title, description, project, tiles_h, tiles_w)
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        """Возвращает значение настройки."""
+        key = (key or "").strip()
+        if not key:
+            raise ValueError("Ключ настройки не должен быть пустым.")
+        cur = self._conn.execute("SELECT value FROM settings WHERE key = ?;", (key,))
+        row = cur.fetchone()
+        if not row:
+            return default
+        return row["value"]
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Сохраняет значение настройки."""
+        key = (key or "").strip()
+        if not key:
+            raise ValueError("Ключ настройки не должен быть пустым.")
+        value = (value or "").strip()
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO settings (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+                """,
+                (key, value),
+            )
 
 
 @lru_cache(maxsize=1)
