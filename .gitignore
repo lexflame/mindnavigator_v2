@@ -6,3 +6,4 @@
 *.pyc
 /mindnavigator/workspaces/__pycache__
 /build
+__pycache__
