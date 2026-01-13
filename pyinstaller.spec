@@ -37,7 +37,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="assets/icon.png",
+    icon="assets/icon.ico",
 )
 
 coll = COLLECT(
@@ -48,5 +48,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="MindNavigator",
+    name="MindNavigator (windows 11 x64)",
 )
