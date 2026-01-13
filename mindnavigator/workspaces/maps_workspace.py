@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.resources import resource_path
 
 
 @dataclass(frozen=True)
@@ -569,7 +570,7 @@ class MapCanvas(QWidget):
         self._last_pos = QPointF()
         self._grid_enabled = True
         self._tool = MapTool.SELECT
-        self._background = QPixmap("assets/splash.png")
+        self._background = QPixmap(resource_path("assets/splash.jpg"))
         self._tiles_path = ""
         self._tiles_w = 0
         self._tiles_h = 0

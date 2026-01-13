@@ -6,6 +6,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer
 
 from mindnavigator.constants import APP_NAME
+from mindnavigator.resources import resource_path
 from mindnavigator.ui.splash import show_splash
 from mindnavigator.main_window import MainWindow
 
@@ -18,7 +19,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setWindowIcon(QIcon("assets/icon.ico"))
+    app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
 
     # Выносим стили в отдельную константу для лучшей читаемости
     APP_STYLESHEET = """
@@ -80,7 +81,7 @@ def main():
     app.setStyleSheet(APP_STYLESHEET)
 
     # Показываем заставку
-    splash = show_splash(app, "assets/splash.jpg")
+    splash = show_splash(app, resource_path("assets/splash.jpg"))
     splash.set_status("Инициализация интерфейса…")
 
     # Создаём главное окно

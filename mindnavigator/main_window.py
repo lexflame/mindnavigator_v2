@@ -16,6 +16,7 @@ from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
 from .workspaces.files_workspace import FileWorkspace
 from .constants import APP_NAME
+from .resources import resource_path
 
 
 class MainWindow(QMainWindow):
@@ -43,7 +44,7 @@ class MainWindow(QMainWindow):
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
         self.setMinimumSize(1100, 700)
-        self.setWindowIcon(QIcon("assets/icon.png"))
+        self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
 
         self._resize_edge = ResizeEdge.NONE
         self._resizing = False
