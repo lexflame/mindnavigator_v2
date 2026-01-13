@@ -18,6 +18,8 @@ from .workspaces.files_workspace import FileWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 
+from .ui.styles import TITLEBAR_BACKGROUND
+
 
 class MainWindow(QMainWindow):
     """Главное окно приложения с кастомным заголовком и рабочими областями."""
@@ -80,6 +82,31 @@ class MainWindow(QMainWindow):
         container_layout.setSpacing(0)
 
         self.title_bar = TitleBar(self)
+        self.title_bar.setStyleSheet(f"""
+            QWidget#TitleBar {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2b3465, stop:0.5 #1b223a, stop:0.5001 #CCC, stop:1 #CCC);
+                border-bottom: 1px solid #2a2b2f;
+            }}
+            QLabel#TitleText {{
+                color: #eef1ff;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QToolButton {{
+                color: #cfcfcf;
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+            }}
+            QToolButton:hover {{ background: #2a2b2f; }}
+            QToolButton:pressed {{ background: #35363c; }}
+            QToolButton:last-child:hover {{
+                background: #b23b3b;
+                color: #ffffff;
+            }}
+        """)
+
         container_layout.addWidget(self.title_bar)
 
         body = QWidget()
@@ -131,9 +158,18 @@ class MainWindow(QMainWindow):
 
         self.projects_nav.project_filter_changed.connect(self.page_tasks.set_project_filter)
 
-        self.centralWidget().setStyleSheet("""
-            QWidget#OuterRoot { background: #16171a; }
-            QWidget#Container { background: #16171a; border: 1px solid #2a2b2f; }
+        MATH_PHYS_PATTERN = (
+            "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYwIiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEwIFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAiLz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJNMCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
+        )
+
+        self.centralWidget().setStyleSheet(f"""
+            QWidget#OuterRoot {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
+                background-image: url("{MATH_PHYS_PATTERN}");
+                background-position: top left;
+                background-repeat: repeat;
+            }}
+            QWidget#Container {{ border: 1px solid #2a2b2f; }}
         """)
 
         self.projects_nav.update_width_for_window(self.width())
