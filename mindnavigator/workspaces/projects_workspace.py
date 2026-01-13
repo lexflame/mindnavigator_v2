@@ -21,6 +21,7 @@ from mindnavigator.storage import (
     validate_title,
 )
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
 # - та же структура верхней панели
@@ -608,54 +609,54 @@ class ProjectEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.setStyleSheet("""
-            QDialog#ProjectEditDialog {
-                background: #16171a;
-            }
+        self.setStyleSheet(f"""
+            QDialog#ProjectEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
 
-            QDialog#ProjectEditDialog QLabel {
+            QDialog#ProjectEditDialog QLabel {{
                 color: #cfcfcf;
-            }
+            }}
 
-            QDialog#ProjectEditDialog QLabel#DialogTitle {
+            QDialog#ProjectEditDialog QLabel#DialogTitle {{
                 color: #f2f2f2;
                 font-size: 18px;
                 font-weight: 600;
-            }
+            }}
 
             QDialog#ProjectEditDialog QLineEdit,
             QDialog#ProjectEditDialog QComboBox,
-            QDialog#ProjectEditDialog QDateEdit {
+            QDialog#ProjectEditDialog QDateEdit {{
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 padding: 8px 10px;
                 border-radius: 6px;
                 min-height: 28px;
-            }
+            }}
 
-            QDialog#ProjectEditDialog QCheckBox {
+            QDialog#ProjectEditDialog QCheckBox {{
                 color: #cfcfcf;
                 padding: 4px 0;
-            }
+            }}
 
-            QDialog#ProjectEditDialog QComboBox::drop-down {
+            QDialog#ProjectEditDialog QComboBox::drop-down {{
                 border: none;
                 width: 18px;
-            }
+            }}
 
-            QDialog#ProjectEditDialog QDialogButtonBox QPushButton {
+            QDialog#ProjectEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
-            }
+            }}
 
-            QDialog#ProjectEditDialog QDialogButtonBox QPushButton:hover {
+            QDialog#ProjectEditDialog QDialogButtonBox QPushButton:hover {{
                 background: #34363b;
-            }
+            }}
         """)
 
     def _on_accept(self):
