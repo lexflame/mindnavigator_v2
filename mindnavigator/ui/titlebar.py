@@ -3,6 +3,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QPoint
 
 from ..constants import APP_NAME
+from ..resources import resource_path
 
 
 class TitleBar(QWidget):
@@ -28,7 +29,7 @@ class TitleBar(QWidget):
         layout.setSpacing(8)
 
         self.icon_label = QLabel()
-        pm = QPixmap("assets/icon.png")
+        pm = QPixmap(resource_path("assets/icon.ico"))
         if not pm.isNull():
             self.icon_label.setPixmap(pm.scaled(18, 18, Qt.KeepAspectRatio, Qt.FastTransformation))
         self.icon_label.setFixedSize(18, 18)
