@@ -796,7 +796,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
         self._icon_fire = qta.icon("fa5s.fire", color="#d0a93e")
-        self._icon_tomorrow = qta.icon("fa5s.calendar-plus", color="#cfcfcf")
+        self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color="#cfcfcf")
 
         self._font = QFont()
         self._font.setPointSize(10)
