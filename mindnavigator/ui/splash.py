@@ -2,6 +2,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 
+from ..resources import resource_path
+
 
 class SplashWidget(QWidget):
     """Быстрая заставка без прозрачности и анимаций."""
@@ -66,9 +68,9 @@ class SplashWidget(QWidget):
         self._app.processEvents()
 
 
-def show_splash(app: QApplication, image_path: str = "assets/splash.png") -> SplashWidget:
+def show_splash(app: QApplication, image_path: str = "assets/splash.jpg") -> SplashWidget:
     """Показывает заставку и возвращает её объект."""
-    splash = SplashWidget(app, image_path, w=460, h=280)
+    splash = SplashWidget(app, resource_path(image_path), w=460, h=280)
     splash.center_on_screen()
     splash.show()
     app.processEvents()
