@@ -1011,6 +1011,11 @@ class Database:
                 rel_paths,
             )
 
+    def reindex(self) -> None:
+        """Переиндексирует таблицы базы данных."""
+        with self._conn:
+            self._conn.execute("REINDEX;")
+
 
 @lru_cache(maxsize=1)
 def get_database() -> Database:
