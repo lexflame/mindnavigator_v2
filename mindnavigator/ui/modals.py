@@ -3,6 +3,8 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFrame, QLabel, QVBoxLayout, QWidget
 
+from .styles import MATH_PHYS_BACKGROUND
+
 
 class ModalOverlay(QFrame):
     """Полупрозрачный слой для затемнения интерфейса под модальными окнами."""
@@ -79,32 +81,32 @@ class ConfirmDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.setStyleSheet("""
-            QDialog#ConfirmDialog {
-                background: #16171a;
-            }
+        self.setStyleSheet(f"""
+            QDialog#ConfirmDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
 
-            QDialog#ConfirmDialog QLabel#DialogTitle {
+            QDialog#ConfirmDialog QLabel#DialogTitle {{
                 color: #f2f2f2;
                 font-size: 18px;
                 font-weight: 600;
-            }
+            }}
 
-            QDialog#ConfirmDialog QLabel#DialogMessage {
+            QDialog#ConfirmDialog QLabel#DialogMessage {{
                 color: #cfcfcf;
                 font-size: 13px;
-            }
+            }}
 
-            QDialog#ConfirmDialog QDialogButtonBox QPushButton {
+            QDialog#ConfirmDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
-            }
+            }}
 
-            QDialog#ConfirmDialog QDialogButtonBox QPushButton:hover {
+            QDialog#ConfirmDialog QDialogButtonBox QPushButton:hover {{
                 background: #34363b;
-            }
+            }}
         """)
