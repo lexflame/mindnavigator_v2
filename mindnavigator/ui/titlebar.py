@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, QPoint
 
 from ..constants import APP_NAME
 from ..resources import resource_path
-from .styles import MATH_PHYS_BACKGROUND
+from .styles import TITLEBAR_BACKGROUND
 
 
 class TitleBar(QWidget):
@@ -63,12 +63,13 @@ class TitleBar(QWidget):
 
         self.setStyleSheet(f"""
             QWidget#TitleBar {{
-                {MATH_PHYS_BACKGROUND}
+                {TITLEBAR_BACKGROUND}
                 border-bottom: 1px solid #2a2b2f;
             }}
             QLabel#TitleText {{
-                color: #cfcfcf;
+                color: #eef1ff;
                 font-size: 13px;
+                font-weight: 600;
             }}
             QToolButton {{
                 color: #cfcfcf;
