@@ -10,15 +10,18 @@ from mindnavigator.ui.splash import show_splash
 from mindnavigator.main_window import MainWindow
 
 
+
 def main():
     """Запускает приложение и управляет стартовой инициализацией."""
-    # Hardcore: может помочь на слабых GPU / старых драйверах
-    # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
+    # Отключаем использование высокоразрешающих пиктограмм (для слабых GPU/старых драйверов)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon("assets/icon.png"))
-    app.setStyleSheet("""
+
+    # Выносим стили в отдельную константу для лучшей читаемости
+    APP_STYLESHEET = """
         QMessageBox {
             background: #16171a;
         }
@@ -73,31 +76,40 @@ def main():
             background: #2a2b2f;
             margin: 4px 8px;
         }
-    """)
+    """
+    app.setStyleSheet(APP_STYLESHEET)
 
-    splash = show_splash(app, "assets/splash.png")
+    # Показываем заставку
+    splash = show_splash(app, "assets/splash.jpg")
     splash.set_status("Инициализация интерфейса…")
 
+    # Создаём главное окно
     window = MainWindow()
 
-    steps = (
+    # Этапы загрузки с задержками
+    startup_steps = [
         (150, "Подготовка модулей…"),
         (300, "Загрузка проекта…"),
         (450, "Проверка хранилища…"),
         (600, "Готово."),
-    )
-    for ms, text in steps:
-        QTimer.singleShot(ms, partial(splash.set_status, text))
+    ]
 
-    def finish_start():
-        """Показывает главное окно и закрывает заставку."""
+    for delay_ms, status_text in startup_steps:
+        QTimer.singleShot(delay_ms, partial(splash.set_status, status_text))
+
+    def finish_startup():
+        """Завершает стартовый процесс: показывает главное окно и закрывает заставку."""
         window.show()
-        QTimer.singleShot(0, window.showMaximized)
-        QTimer.singleShot(0, window.title_bar.sync_max_button)
+        # Используем один таймер для последовательных действий
+        QTimer.singleShot(0, lambda: (
+            window.showMaximized(),
+            window.title_bar.sync_max_button()
+        ))
         splash.close()
 
-    finish_start()
+    finish_startup()
     sys.exit(app.exec())
+
 
 
 if __name__ == "__main__":
