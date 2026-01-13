@@ -14,11 +14,11 @@ from mindnavigator.main_window import MainWindow
 def main():
     """Запускает приложение и управляет стартовой инициализацией."""
     # Отключаем использование высокоразрешающих пиктограмм (для слабых GPU/старых драйверов)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
+    # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setWindowIcon(QIcon("assets/icon.png"))
+    app.setWindowIcon(QIcon("assets/icon.ico"))
 
     # Выносим стили в отдельную константу для лучшей читаемости
     APP_STYLESHEET = """
