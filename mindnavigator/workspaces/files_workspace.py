@@ -7,7 +7,8 @@ import mimetypes
 import re
 from typing import Dict, List, Optional, Set
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal, QSize
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -20,7 +21,13 @@ from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QButtonGroup,
+    QListView,
+    QListWidget,
+    QListWidgetItem,
+    QAbstractItemView,
 )
+
+import qtawesome as qta
 
 from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
 
@@ -143,6 +150,10 @@ class FileWorkspace(QWidget):
         self._folder_index: Dict[str, Dict[str, object]] = {}
         self._tree_items: Dict[str, QTreeWidgetItem] = {}
         self._current_folder = ""
+        self._icon_cache: Dict[str, QIcon] = {}
+        self._icon_folder = qta.icon("fa5s.folder", color="#d0a93e")
+        self._icon_file_generic = qta.icon("fa5s.file", color="#cfcfcf")
+        self._icon_file_image = qta.icon("fa5s.file-image", color="#6ab7ff")
         self._build_ui()
         self._load_cloud_files()
 
@@ -230,15 +241,22 @@ class FileWorkspace(QWidget):
         self.folder_tree.setHeaderHidden(True)
         self.folder_tree.currentItemChanged.connect(self._on_tree_selection)
 
-        self.file_list = QTreeWidget()
-        self.file_list.setObjectName("FilesNavList")
-        self.file_list.setColumnCount(3)
-        self.file_list.setHeaderLabels(["Имя", "Размер", "Статус"])
-        self.file_list.setRootIsDecorated(False)
-        self.file_list.itemDoubleClicked.connect(self._on_file_list_double_clicked)
+        self.file_grid = QListWidget()
+        self.file_grid.setObjectName("FilesNavGrid")
+        self.file_grid.setViewMode(QListView.IconMode)
+        self.file_grid.setResizeMode(QListView.Adjust)
+        self.file_grid.setMovement(QListView.Static)
+        self.file_grid.setSpacing(12)
+        self.file_grid.setIconSize(QSize(64, 64))
+        self.file_grid.setGridSize(QSize(150, 120))
+        self.file_grid.setWordWrap(True)
+        self.file_grid.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.file_grid.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.file_grid.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.file_grid.itemDoubleClicked.connect(self._on_file_grid_double_clicked)
 
         self.nav_splitter.addWidget(self.folder_tree)
-        self.nav_splitter.addWidget(self.file_list)
+        self.nav_splitter.addWidget(self.file_grid)
         self.nav_splitter.setStretchFactor(0, 1)
         self.nav_splitter.setStretchFactor(1, 2)
         content_layout.addWidget(self.nav_splitter, 1)
@@ -312,7 +330,7 @@ class FileWorkspace(QWidget):
                 color: #9aa0a6;
                 font-size: 12px;
             }
-            QTreeWidget#FilesNavTree, QTreeWidget#FilesNavList {
+            QTreeWidget#FilesNavTree, QListWidget#FilesNavGrid {
                 background: #1b1d22;
                 border: 1px solid #2f3136;
                 border-radius: 8px;
@@ -320,9 +338,12 @@ class FileWorkspace(QWidget):
                 font-size: 11px;
             }
             QTreeWidget#FilesNavTree::item:selected,
-            QTreeWidget#FilesNavList::item:selected {
+            QListWidget#FilesNavGrid::item:selected {
                 background: #2c313a;
                 color: #ffffff;
+            }
+            QListWidget#FilesNavGrid::item {
+                padding: 6px;
             }
             """
         )
@@ -363,7 +384,7 @@ class FileWorkspace(QWidget):
         if not has_data:
             self.navigation_stack.setCurrentIndex(0)
             self.folder_tree.clear()
-            self.file_list.clear()
+            self.file_grid.clear()
             self.path_label.setText("Облако")
             self.count_label.setText("")
             if self.mode_stack.currentIndex() == 1:
@@ -405,26 +426,62 @@ class FileWorkspace(QWidget):
             self.path_label.setText(f"Облако / {' / '.join(folder_path.split('/'))}")
         else:
             self.path_label.setText("Облако")
-        self._render_file_list(folder_path)
+        self._render_file_grid(folder_path)
 
-    def _render_file_list(self, folder_path: str) -> None:
-        self.file_list.clear()
+    def _render_file_grid(self, folder_path: str) -> None:
+        self.file_grid.clear()
         data = self._folder_index.get(folder_path, {})
         folders = sorted(data.get("folders", set()))
         files = sorted(data.get("files", []), key=lambda item: item.name.lower())
+        cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
+        cloud_root_path = Path(cloud_root) if cloud_root else None
         for child_path in folders:
             name = child_path.split("/")[-1]
-            item = QTreeWidgetItem([name, "", "Папка"])
-            item.setData(0, Qt.UserRole, ("folder", child_path))
-            self.file_list.addTopLevelItem(item)
+            item = QListWidgetItem(name)
+            item.setIcon(self._icon_folder)
+            item.setData(Qt.UserRole, ("folder", child_path))
+            item.setToolTip(name)
+            self.file_grid.addItem(item)
         for file_item in files:
             status = "OK" if file_item.valid else "Ошибка"
             size = self._format_size(file_item.size)
-            item = QTreeWidgetItem([file_item.name, size, status])
-            item.setData(0, Qt.UserRole, ("file", file_item.rel_path))
-            self.file_list.addTopLevelItem(item)
+            label = f"{file_item.name}\n{size} • {status}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, ("file", file_item.rel_path))
+            item.setIcon(self._file_icon_for(file_item, cloud_root_path))
+            item.setToolTip(file_item.rel_path)
+            self.file_grid.addItem(item)
         self.count_label.setText(f"{len(folders)} папок, {len(files)} файлов")
-        self.file_list.resizeColumnToContents(0)
+
+    def _file_icon_for(self, file_item: CloudFileData, cloud_root: Optional[Path]) -> QIcon:
+        ext = Path(file_item.name).suffix.lower()
+        cache_key = ext or "file"
+        if file_item.is_image and cloud_root:
+            file_path = cloud_root / file_item.rel_path
+            if file_path.is_file():
+                pixmap = QPixmap(str(file_path))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(
+                        self.file_grid.iconSize(),
+                        Qt.KeepAspectRatio,
+                        Qt.SmoothTransformation,
+                    )
+                    return QIcon(scaled)
+        if cache_key in self._icon_cache:
+            return self._icon_cache[cache_key]
+
+        icon = self._icon_file_generic
+        if ext in {".doc", ".docx"}:
+            icon = qta.icon("fa5s.file-word", color="#3a7bd5")
+        elif ext in {".xls", ".xlsx"}:
+            icon = qta.icon("fa5s.file-excel", color="#2e7d32")
+        elif ext == ".pdf":
+            icon = qta.icon("fa5s.file-pdf", color="#c62828")
+        elif file_item.is_image:
+            icon = self._icon_file_image
+
+        self._icon_cache[cache_key] = icon
+        return icon
 
     def _format_size(self, size: int) -> str:
         size = max(0, int(size))
@@ -436,8 +493,8 @@ class FileWorkspace(QWidget):
             return f"{size / (1024 * 1024):.1f} МБ"
         return f"{size / (1024 * 1024 * 1024):.1f} ГБ"
 
-    def _on_file_list_double_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
-        payload = item.data(0, Qt.UserRole)
+    def _on_file_grid_double_clicked(self, item: QListWidgetItem) -> None:
+        payload = item.data(Qt.UserRole)
         if not payload:
             return
         if payload[0] == "folder":
