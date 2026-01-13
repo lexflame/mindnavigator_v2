@@ -35,5 +35,5 @@ python main.py
 
 ## Ресурсы
 Убедитесь, что рядом с `main.py` есть каталог `assets/` со следующими файлами:
-- `assets/icon.png`
-- `assets/splash.png`
+- `assets/icon.ico`
+- `assets/splash.jpg`
