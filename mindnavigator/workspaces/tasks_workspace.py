@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import get_database, normalize_priority, validate_time_text
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
@@ -640,96 +641,96 @@ class TaskEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.setStyleSheet("""
-            QDialog#TaskEditDialog {
-                background: #16171a;
-            }
+        self.setStyleSheet(f"""
+            QDialog#TaskEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
 
-            QDialog#TaskEditDialog QLabel {
+            QDialog#TaskEditDialog QLabel {{
                 color: #cfcfcf;
-            }
+            }}
 
-            QDialog#TaskEditDialog QLabel#DialogTitle {
+            QDialog#TaskEditDialog QLabel#DialogTitle {{
                 color: #f2f2f2;
                 font-size: 18px;
                 font-weight: 600;
-            }
+            }}
 
             QDialog#TaskEditDialog QLineEdit,
             QDialog#TaskEditDialog QPlainTextEdit,
             QDialog#TaskEditDialog QComboBox,
             QDialog#TaskEditDialog QDateEdit,
-            QDialog#TaskEditDialog QTimeEdit {
+            QDialog#TaskEditDialog QTimeEdit {{
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 padding: 8px 10px;
                 border-radius: 6px;
                 min-height: 28px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QPlainTextEdit {
+            QDialog#TaskEditDialog QPlainTextEdit {{
                 padding: 8px 10px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock {
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock {{
                 background: #202127;
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
-            }
+            }}
 
             QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QDateEdit,
-            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QTimeEdit {
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QTimeEdit {{
                 background: transparent;
                 border: none;
                 padding: 6px 6px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QCheckBox {
+            QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QCheckBox {{
                 color: #cfcfcf;
                 padding: 0 6px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QComboBox::drop-down {
+            QDialog#TaskEditDialog QComboBox::drop-down {{
                 border: none;
                 width: 18px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QComboBox QAbstractItemView {
+            QDialog#TaskEditDialog QComboBox QAbstractItemView {{
                 background: #1c1d22;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 selection-background-color: #2f3238;
                 selection-color: #f2f2f2;
                 outline: none;
-            }
+            }}
 
-            QDialog#TaskEditDialog QComboBox QAbstractItemView::item {
+            QDialog#TaskEditDialog QComboBox QAbstractItemView::item {{
                 padding: 6px 10px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QComboBox QAbstractItemView::item:selected {
+            QDialog#TaskEditDialog QComboBox QAbstractItemView::item:selected {{
                 background: #2f3238;
                 color: #f2f2f2;
-            }
+            }}
 
-            QDialog#TaskEditDialog QCheckBox {
+            QDialog#TaskEditDialog QCheckBox {{
                 color: #cfcfcf;
                 padding: 4px 0;
-            }
+            }}
 
-            QDialog#TaskEditDialog QDialogButtonBox QPushButton {
+            QDialog#TaskEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
-            }
+            }}
 
-            QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {
+            QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {{
                 background: #34363b;
-            }
+            }}
         """)
 
     def _on_accept(self):

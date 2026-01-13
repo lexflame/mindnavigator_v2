@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QPoint
 
 from ..constants import APP_NAME
 from ..resources import resource_path
+from .styles import MATH_PHYS_BACKGROUND
 
 
 class TitleBar(QWidget):
@@ -60,28 +61,28 @@ class TitleBar(QWidget):
         layout.addWidget(self.btn_max)
         layout.addWidget(self.btn_close)
 
-        self.setStyleSheet("""
-            QWidget#TitleBar {
-                background: #1b1c1f;
+        self.setStyleSheet(f"""
+            QWidget#TitleBar {{
+                {MATH_PHYS_BACKGROUND}
                 border-bottom: 1px solid #2a2b2f;
-            }
-            QLabel#TitleText {
+            }}
+            QLabel#TitleText {{
                 color: #cfcfcf;
                 font-size: 13px;
-            }
-            QToolButton {
+            }}
+            QToolButton {{
                 color: #cfcfcf;
                 background: transparent;
                 border: none;
                 border-radius: 6px;
                 font-size: 14px;
-            }
-            QToolButton:hover { background: #2a2b2f; }
-            QToolButton:pressed { background: #35363c; }
-            QToolButton:last-child:hover {
+            }}
+            QToolButton:hover {{ background: #2a2b2f; }}
+            QToolButton:pressed {{ background: #35363c; }}
+            QToolButton:last-child:hover {{
                 background: #b23b3b;
                 color: #ffffff;
-            }
+            }}
         """)
 
     def sync_max_button(self):

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.resources import resource_path
 
 
@@ -428,68 +429,68 @@ class MapEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.setStyleSheet("""
-            QDialog#MapEditDialog {
-                background: #16171a;
-            }
+        self.setStyleSheet(f"""
+            QDialog#MapEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
 
-            QDialog#MapEditDialog QLabel {
+            QDialog#MapEditDialog QLabel {{
                 color: #cfcfcf;
-            }
+            }}
 
-            QDialog#MapEditDialog QLabel#DialogTitle {
+            QDialog#MapEditDialog QLabel#DialogTitle {{
                 color: #f2f2f2;
                 font-size: 18px;
                 font-weight: 600;
-            }
+            }}
 
             QDialog#MapEditDialog QLineEdit,
             QDialog#MapEditDialog QComboBox,
-            QDialog#MapEditDialog QSpinBox {
+            QDialog#MapEditDialog QSpinBox {{
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 padding: 8px 10px;
                 border-radius: 6px;
                 min-height: 28px;
-            }
+            }}
 
-            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton {
+            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton {{
                 background: #2a2b2f;
                 border: 1px solid #3a3b40;
                 border-radius: 6px;
                 padding: 6px 10px;
                 color: #e6e6e6;
-            }
+            }}
 
-            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton:hover {
+            QDialog#MapEditDialog QFrame#MapTilesPathRow QToolButton:hover {{
                 background: #34363b;
-            }
+            }}
 
-            QDialog#MapEditDialog QFrame#MapTilesBlock {
+            QDialog#MapEditDialog QFrame#MapTilesBlock {{
                 background: #202127;
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
-            }
+            }}
 
-            QDialog#MapEditDialog QFrame#MapTilesBlock QSpinBox {
+            QDialog#MapEditDialog QFrame#MapTilesBlock QSpinBox {{
                 background: transparent;
                 border: none;
                 padding: 6px 6px;
-            }
+            }}
 
-            QDialog#MapEditDialog QDialogButtonBox QPushButton {
+            QDialog#MapEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
-            }
+            }}
 
-            QDialog#MapEditDialog QDialogButtonBox QPushButton:hover {
+            QDialog#MapEditDialog QDialogButtonBox QPushButton:hover {{
                 background: #34363b;
-            }
+            }}
         """)
 
     def _project_titles(self) -> List[str]:
@@ -988,27 +989,27 @@ class MapCanvas(QWidget):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
 
-        dialog.setStyleSheet("""
-            QDialog#MarkerEditDialog {
-                background: #16171a;
-            }
-            QDialog#MarkerEditDialog QLabel {
+        dialog.setStyleSheet(f"""
+            QDialog#MarkerEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#MarkerEditDialog QLabel {{
                 color: #cfcfcf;
-            }
-            QDialog#MarkerEditDialog QLineEdit {
+            }}
+            QDialog#MarkerEditDialog QLineEdit {{
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 padding: 6px 8px;
                 border-radius: 6px;
-            }
-            QDialog#MarkerEditDialog QDialogButtonBox QPushButton {
+            }}
+            QDialog#MarkerEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 6px 12px;
                 border-radius: 6px;
-            }
+            }}
         """)
 
         if dialog.exec() == QDialog.Accepted:
