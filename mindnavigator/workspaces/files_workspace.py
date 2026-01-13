@@ -100,6 +100,9 @@ class CloudScanWorker(QObject):
             self.progress.emit(f"{rel_path} — {status}", idx, total)
 
         self._db.remove_missing_cloud_files(rel_paths)
+        self.progress.emit("Переиндексация базы данных...", total, total)
+        self._db.reindex()
+        self.progress.emit("Переиндексация базы данных завершена.", total, total)
         self.finished.emit(ScanSummary(total, valid, invalid, skipped))
 
     def _hash_file(self, file_path: Path) -> str:
@@ -484,10 +487,12 @@ class FileWorkspace(QWidget):
     def _on_scan_finished(self, summary: ScanSummary) -> None:
         self.sync_button.setDisabled(False)
         self.status_label.setText(
-            f"Сканирование завершено: {summary.valid} OK, {summary.invalid} ошибок, {summary.skipped} пропущено."
+            "Синхронизация и переиндексация завершены: "
+            f"{summary.valid} OK, {summary.invalid} ошибок, {summary.skipped} пропущено."
         )
         self._append_log(
-            f"Итого: {summary.total} файлов, {summary.valid} совпадений, {summary.invalid} расхождений."
+            "Итого: "
+            f"{summary.total} файлов, {summary.valid} совпадений, {summary.invalid} расхождений."
         )
         self._load_cloud_files()
 
