@@ -365,10 +365,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             painter.fillRect(r, self.C_BG)
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            right_pad = 18
+            left_pad = 10
             menu_w = 24
-            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 4, menu_w, r.height() - 8)
-            text_rect = QRect(r.left() + 10, r.top(), menu_rect.left() - r.left() - 20, r.height())
+            menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
+            text_rect = QRect(menu_rect.right() + 8, r.top(), r.right() - menu_rect.right() - 18, r.height())
             painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, area)
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
@@ -474,9 +474,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
                 pos = event.position().toPoint()
                 r = option.rect
-                right_pad = 18
+                left_pad = 10
                 menu_w = 24
-                menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 4, menu_w, r.height() - 8)
+                menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
                 if menu_rect.contains(pos):
                     self._show_area_menu(index)
                     return True
