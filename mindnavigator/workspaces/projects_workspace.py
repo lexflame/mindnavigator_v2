@@ -286,7 +286,7 @@ class ProjectsModel(QAbstractListModel):
             if self._area_focus is not None and it.area != self._area_focus:
                 continue
 
-            if self._filter_mode == "Активные" and it.archived:
+            if self._filter_mode in ("Все", "Активные") and it.archived:
                 continue
             if self._filter_mode == "Архив" and not it.archived:
                 continue
