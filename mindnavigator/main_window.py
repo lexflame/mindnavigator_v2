@@ -1,8 +1,18 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget, QApplication
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QStackedWidget,
+    QApplication,
+    QSystemTrayIcon,
+    QMenu,
+)
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtCore import Qt, QPoint, QRect, QEvent
 
 from .windowing import ResizeEdge
 from .ui.titlebar import TitleBar
@@ -54,14 +64,66 @@ class MainWindow(QMainWindow):
         self._start_geom = QRect()
 
         self._restore_geom = QRect()
+        self._tray_icon: QSystemTrayIcon | None = None
+        self._was_maximized_before_minimize = False
+        self._was_maximized_before_fullscreen = False
 
         self._build_ui()
         self._wire_modes()
+        self._init_tray()
 
         self.setMouseTracking(True)
         self.installEventFilter(self)
 
         self.set_mode(self.MODE_TASKS)
+
+    def _init_tray(self):
+        """Настраивает системный трей для сворачивания приложения."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+
+        icon = QIcon(resource_path("assets/icon.ico"))
+        self._tray_icon = QSystemTrayIcon(icon, self)
+        self._tray_icon.setToolTip(APP_NAME)
+
+        menu = QMenu()
+        action_show = menu.addAction("Показать")
+        action_quit = menu.addAction("Выход")
+
+        action_show.triggered.connect(self._restore_from_tray)
+        action_quit.triggered.connect(QApplication.instance().quit)
+
+        self._tray_icon.setContextMenu(menu)
+        self._tray_icon.activated.connect(self._on_tray_activated)
+        self._tray_icon.show()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
+        """Обрабатывает клики по иконке в трее."""
+        if reason == QSystemTrayIcon.Trigger:
+            self._restore_from_tray()
+
+    def _restore_from_tray(self):
+        """Возвращает окно из трея."""
+        if self.isHidden():
+            if self._was_maximized_before_minimize:
+                self.showMaximized()
+            else:
+                self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self.title_bar.sync_max_button()
+
+    def _minimize_to_tray(self):
+        """Сворачивает окно в трей."""
+        if self._tray_icon is None:
+            return
+        self.hide()
+        self._tray_icon.showMessage(
+            APP_NAME,
+            "Приложение свернуто в трей.",
+            QSystemTrayIcon.Information,
+            2000,
+        )
 
     def _build_ui(self):
         """Создает и компонует основные виджеты окна."""
@@ -223,6 +285,29 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
+
+    def changeEvent(self, event):
+        """Обрабатывает сворачивание окна для отправки в трей."""
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowStateChange and self.isMinimized():
+            self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowMaximized)
+            self._minimize_to_tray()
+
+    def keyPressEvent(self, event):
+        """Обрабатывает горячие клавиши окна."""
+        if event.key() == Qt.Key_F11:
+            if self.isFullScreen():
+                if self._was_maximized_before_fullscreen:
+                    self.showMaximized()
+                else:
+                    self.showNormal()
+                self.title_bar.sync_max_button()
+            else:
+                self._was_maximized_before_fullscreen = self.isMaximized()
+                self.showFullScreen()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     # ----- Snap / detach -----
     def _snap_to_screen_edges(self, global_pos: QPoint):
