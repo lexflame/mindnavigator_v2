@@ -20,6 +20,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
+    app.setQuitOnLastWindowClosed(False)
 
     # Выносим стили в отдельную константу для лучшей читаемости
     APP_STYLESHEET = """

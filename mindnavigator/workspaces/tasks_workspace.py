@@ -180,6 +180,10 @@ class TasksModel(QAbstractListModel):
         self._drag_enabled = (mode == "План")
         self._rebuild()
 
+    def filter_mode(self) -> str:
+        """Возвращает текущий режим фильтра."""
+        return self._filter_mode
+
     def set_search(self, text: str):
         """Обновляет строку поиска и пересобирает список."""
         self._search = (text or "").strip().lower()
@@ -782,6 +786,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     C_BORDER = QColor("#3a3b40")
     C_TEXT = QColor("#cfcfcf")
     C_DIM = QColor("#8a8a8a")
+    C_TODAY = QColor("#f2a23a")
 
     C_OVERDUE = QColor("#c84b4b")
     C_HIGH = QColor("#d94f4f")
@@ -846,11 +851,29 @@ class TasksItemDelegate(QStyledItemDelegate):
         if row_type == "header":
             d: date = index.data(TaskRoles.Day)
             txt = self._format_header(d)
+            model = index.model()
+            is_plan = False
+            if hasattr(model, "filter_mode"):
+                is_plan = model.filter_mode() == "План"
+            show_today = is_plan and d == date.today()
             painter.fillRect(r, self.C_BG)
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            painter.drawText(r.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, txt)
+            text_rect = r.adjusted(10, 0, -10, 0)
+            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, txt)
+
+            if show_today:
+                metrics = QFontMetrics(self._font_header)
+                base_width = metrics.horizontalAdvance(txt)
+                today_rect = QRect(
+                    text_rect.left() + base_width + 6,
+                    text_rect.top(),
+                    text_rect.width() - base_width - 6,
+                    text_rect.height(),
+                )
+                painter.setPen(self.C_TODAY)
+                painter.drawText(today_rect, Qt.AlignVCenter | Qt.AlignLeft, "СЕГОДНЯ")
 
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
