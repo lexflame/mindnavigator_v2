@@ -275,6 +275,8 @@ class MainWindow(QMainWindow):
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_name}")
         self.projects_nav.set_mode_title(mode_name)
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
+        if mode_name == self.MODE_OBJECTS:
+            self.page_objects.refresh_objects()
 
         for btn, m in self._btn_to_mode.items():
             if m == mode_name:
