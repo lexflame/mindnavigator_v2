@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QMenu,
+    QMessageBox,
 )
 
 import qtawesome as qta
@@ -540,8 +541,12 @@ class FileWorkspace(QWidget):
         copy_action.triggered.connect(lambda: self._copy_path(rel_path))
 
         transfer_menu = menu.addMenu("FileTransfer")
-        placeholder_action = transfer_menu.addAction("Нет действий")
-        placeholder_action.setEnabled(False)
+        if item_type == "folder":
+            create_object_action = transfer_menu.addAction("Создать объект")
+            create_object_action.triggered.connect(lambda: self._create_object_from_folder(rel_path))
+        else:
+            placeholder_action = transfer_menu.addAction("Нет действий")
+            placeholder_action.setEnabled(False)
 
         menu.exec(self.file_grid.mapToGlobal(position))
 
@@ -553,6 +558,18 @@ class FileWorkspace(QWidget):
     def _open_parent_folder(self, rel_path: str) -> None:
         folder_path = "/".join(Path(rel_path).parts[:-1])
         self._select_folder(folder_path)
+
+    def _create_object_from_folder(self, rel_path: str) -> None:
+        try:
+            obj = self._db.create_object_from_folder_path(rel_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "FileTransfer", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "FileTransfer",
+            f"Создан объект: {obj.title}",
+        )
 
     def _format_description(self, raw_description: str) -> str:
         description = (raw_description or "").strip()
