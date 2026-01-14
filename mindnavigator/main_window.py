@@ -25,6 +25,7 @@ from .workspaces.maps_workspace import MapsListWorkspace
 from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
 from .workspaces.files_workspace import FileWorkspace
+from .workspaces.objects_workspace import ObjectWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 
@@ -205,7 +206,7 @@ class MainWindow(QMainWindow):
         self.page_maps = MapsListWorkspace()
         self.page_notes = NoteWorkspace()
         self.page_files = FileWorkspace()
-        self.page_objects = self._placeholder("Объекты", "Рабочая область режима «Объекты».")
+        self.page_objects = ObjectWorkspace()
         self.page_settings = SettingsWorkspace()
 
         self._page_index = {

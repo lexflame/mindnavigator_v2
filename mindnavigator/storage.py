@@ -75,6 +75,28 @@ class NoteData:
     locked: bool = False
 
 
+@dataclass(frozen=True)
+class ObjectData:
+    id: int
+    title: str
+    catalog: str
+    object_type: str
+    status: str
+    description: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class ObjectImageData:
+    id: int
+    object_id: int
+    rel_path: str
+    description: str
+    created_at: str
+    updated_at: str
+
+
 def default_db_path() -> Path:
     """Возвращает путь к файлу базы данных приложения."""
     base = Path.home() / ".mindnavigator"
@@ -213,6 +235,33 @@ class Database:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS objects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    catalog TEXT NOT NULL DEFAULT '',
+                    object_type TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS object_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    object_id INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+                    rel_path TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(object_id, rel_path)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
@@ -242,6 +291,8 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
 
         self._ensure_task_project_column()
         self._ensure_task_description_column()
@@ -298,6 +349,10 @@ class Database:
         cur = self._conn.execute("SELECT COUNT(*) FROM notes;")
         if cur.fetchone()[0] == 0:
             self._seed_notes()
+
+        cur = self._conn.execute("SELECT COUNT(*) FROM objects;")
+        if cur.fetchone()[0] == 0:
+            self._seed_objects()
 
     def _seed_tasks(self) -> None:
         today = date.today()
@@ -471,7 +526,34 @@ class Database:
                     parent_id=row["parent_id"],
                 )
             )
-        return tasks
+
+    def _seed_objects(self) -> None:
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        examples = [
+            (
+                "Центральный офис",
+                "Город / Административные",
+                "Бизнес-центр",
+                "В эксплуатации",
+                "Главный офис с зонами приема и переговорными.",
+            ),
+            (
+                "Складская зона Север",
+                "Логистика",
+                "Склад",
+                "Проектирование",
+                "Площадка под распределительный центр и технологические блоки.",
+            ),
+        ]
+        with self._conn:
+            for title, catalog, object_type, status, description in examples:
+                self._conn.execute(
+                    """
+                    INSERT INTO objects (title, catalog, object_type, status, description, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (title, catalog, object_type, status, description, now, now),
+                )
 
     def create_task(
         self,
@@ -934,6 +1016,196 @@ class Database:
         """Удаляет заметку."""
         with self._conn:
             self._conn.execute("DELETE FROM notes WHERE id = ?;", (note_id,))
+
+    def fetch_objects(self) -> List[ObjectData]:
+        """Возвращает список архитектурных объектов."""
+        rows = self._conn.execute(
+            """
+            SELECT id, title, catalog, object_type, status, description, created_at, updated_at
+            FROM objects
+            ORDER BY updated_at DESC;
+            """
+        ).fetchall()
+        return [
+            ObjectData(
+                row["id"],
+                row["title"],
+                row["catalog"] or "",
+                row["object_type"] or "",
+                row["status"] or "",
+                row["description"] or "",
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def create_object(
+        self,
+        title: str,
+        catalog: str,
+        object_type: str,
+        status: str,
+        description: str,
+    ) -> ObjectData:
+        """Создает архитектурный объект."""
+        title = validate_title(title, field_name="Название объекта")
+        catalog = (catalog or "").strip()
+        object_type = (object_type or "").strip()
+        status = (status or "").strip()
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO objects (title, catalog, object_type, status, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (title, catalog, object_type, status, description, now, now),
+            )
+        return ObjectData(cur.lastrowid, title, catalog, object_type, status, description, now, now)
+
+    def update_object(
+        self,
+        object_id: int,
+        title: str,
+        catalog: str,
+        object_type: str,
+        status: str,
+        description: str,
+    ) -> ObjectData:
+        """Обновляет архитектурный объект."""
+        title = validate_title(title, field_name="Название объекта")
+        catalog = (catalog or "").strip()
+        object_type = (object_type or "").strip()
+        status = (status or "").strip()
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE objects
+                SET title = ?, catalog = ?, object_type = ?, status = ?, description = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (title, catalog, object_type, status, description, now, object_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT created_at
+            FROM objects
+            WHERE id = ?;
+            """,
+            (object_id,),
+        ).fetchone()
+        created_at = row["created_at"] if row else now
+        return ObjectData(object_id, title, catalog, object_type, status, description, created_at, now)
+
+    def delete_object(self, object_id: int) -> None:
+        """Удаляет архитектурный объект."""
+        with self._conn:
+            self._conn.execute("DELETE FROM objects WHERE id = ?;", (object_id,))
+
+    def create_object_from_folder_path(self, folder_path: str) -> ObjectData:
+        """Создает объект на основе пути к папке."""
+        path = (folder_path or "").strip().strip("/")
+        if not path:
+            raise ValueError("Путь к папке не должен быть пустым.")
+        parts = [part for part in path.split("/") if part]
+        title = parts[-1] if parts else "Новый объект"
+        catalog = " / ".join(parts[:-1])
+        description = f"Объект создан из папки: {path}"
+        return self.create_object(title, catalog, "", "", description)
+
+    def fetch_object_images(self, object_id: int) -> List[ObjectImageData]:
+        """Возвращает список изображений объекта."""
+        rows = self._conn.execute(
+            """
+            SELECT id, object_id, rel_path, description, created_at, updated_at
+            FROM object_images
+            WHERE object_id = ?
+            ORDER BY created_at ASC;
+            """,
+            (object_id,),
+        ).fetchall()
+        return [
+            ObjectImageData(
+                row["id"],
+                row["object_id"],
+                row["rel_path"],
+                row["description"] or "",
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def add_object_image(self, object_id: int, rel_path: str, description: str = "") -> ObjectImageData:
+        """Добавляет изображение к объекту."""
+        rel_path = (rel_path or "").strip()
+        if not rel_path:
+            raise ValueError("Путь к изображению не должен быть пустым.")
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO object_images (object_id, rel_path, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (object_id, rel_path, description, now, now),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, object_id, rel_path, description, created_at, updated_at
+            FROM object_images
+            WHERE object_id = ? AND rel_path = ?;
+            """,
+            (object_id, rel_path),
+        ).fetchone()
+        return ObjectImageData(
+            row["id"],
+            row["object_id"],
+            row["rel_path"],
+            row["description"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def update_object_image(self, image_id: int, description: str) -> ObjectImageData:
+        """Обновляет описание изображения объекта."""
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE object_images
+                SET description = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (description, now, image_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, object_id, rel_path, description, created_at, updated_at
+            FROM object_images
+            WHERE id = ?;
+            """,
+            (image_id,),
+        ).fetchone()
+        return ObjectImageData(
+            row["id"],
+            row["object_id"],
+            row["rel_path"],
+            row["description"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def delete_object_image(self, image_id: int) -> None:
+        """Удаляет изображение объекта."""
+        with self._conn:
+            self._conn.execute("DELETE FROM object_images WHERE id = ?;", (image_id,))
 
     def get_setting(self, key: str, default: str = "") -> str:
         """Возвращает значение настройки."""
