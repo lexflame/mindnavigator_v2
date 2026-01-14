@@ -80,6 +80,9 @@ class ObjectsModel(QAbstractListModel):
         ]
         self._rebuild()
 
+    def reload(self) -> None:
+        self._load_objects()
+
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
             return 0
@@ -158,6 +161,12 @@ class ObjectsModel(QAbstractListModel):
         if row < 0 or row >= len(self._items):
             return None
         return self._items[row]
+
+    def row_for_object_id(self, object_id: int) -> Optional[int]:
+        for index, item in enumerate(self._items):
+            if item.id == object_id:
+                return index
+        return None
 
     def _rebuild(self) -> None:
         search = self._search
@@ -756,6 +765,21 @@ class ObjectWorkspace(QWidget):
                 return
 
         self.catalog_list.setCurrentRow(0)
+
+    def refresh_objects(self) -> None:
+        current_id = self._current_object_id
+        self.model.reload()
+        self._refresh_catalogs()
+        if current_id is None:
+            self._update_action_state(False)
+            return
+        row = self.model.row_for_object_id(current_id)
+        if row is None:
+            self._update_action_state(False)
+            return
+        index = self.model.index(row)
+        if index.isValid():
+            self.card_list.setCurrentIndex(index)
 
     def _on_search(self, text: str) -> None:
         self.model.set_search(text)
