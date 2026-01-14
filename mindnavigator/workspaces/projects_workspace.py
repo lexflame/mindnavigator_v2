@@ -158,6 +158,47 @@ class ProjectsModel(QAbstractListModel):
         )
         self._rebuild()
 
+    def area_has_active(self, area: str) -> bool:
+        """Проверяет наличие активных проектов в области."""
+        return any(
+            isinstance(it, ProjectRow) and it.area == area and not it.archived
+            for it in self._all_rows
+        )
+
+    def set_area_archived(self, area: str, archived: bool):
+        """Архивирует или восстанавливает все проекты области."""
+        self._db.set_projects_archived_for_area(area, archived)
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, ProjectRow) and it.area == area:
+                it = ProjectRow(it.id, it.area, it.title, it.updated, it.priority, archived)
+            new_all.append(it)
+        self._all_rows = new_all
+        self._rebuild()
+
+    def delete_area(self, area: str):
+        """Удаляет все проекты в области."""
+        self._db.delete_projects_by_area(area)
+        self._all_rows = [
+            it for it in self._all_rows if not (isinstance(it, ProjectRow) and it.area == area)
+        ]
+        if self._area_focus == area:
+            self._area_focus = None
+        self._rebuild()
+
+    def rename_area(self, area: str, new_area: str):
+        """Переименовывает область проектов."""
+        self._db.rename_project_area(area, new_area)
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, ProjectRow) and it.area == area:
+                it = ProjectRow(it.id, new_area, it.title, it.updated, it.priority, it.archived)
+            new_all.append(it)
+        self._all_rows = new_all
+        if self._area_focus == area:
+            self._area_focus = new_area
+        self._rebuild()
+
     def project_at_row(self, row_idx: int) -> Optional[ProjectRow]:
         """Возвращает проект по индексу строки или None."""
         if row_idx < 0 or row_idx >= len(self._rows):
@@ -324,9 +365,20 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             painter.fillRect(r, self.C_BG)
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            painter.drawText(r.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, area)
+            right_pad = 18
+            menu_w = 24
+            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 4, menu_w, r.height() - 8)
+            text_rect = QRect(r.left() + 10, r.top(), menu_rect.left() - r.left() - 20, r.height())
+            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, area)
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
+            painter.setPen(self.C_BORDER)
+            painter.setBrush(QColor("#1f2227"))
+            painter.drawRect(menu_rect)
+            self._icon_menu.paint(
+                painter,
+                QRect(menu_rect.center().x() - 7, menu_rect.center().y() - 7, 14, 14),
+            )
             painter.restore()
             return
 
@@ -418,6 +470,18 @@ class ProjectsItemDelegate(QStyledItemDelegate):
     def editorEvent(self, event, model, option, index):
         """Обрабатывает клики по индикатору архивации и меню."""
         row_type = index.data(ProjectRoles.RowType)
+        if row_type == "header":
+            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+                pos = event.position().toPoint()
+                r = option.rect
+                right_pad = 18
+                menu_w = 24
+                menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 4, menu_w, r.height() - 8)
+                if menu_rect.contains(pos):
+                    self._show_area_menu(index)
+                    return True
+            return False
+
         if row_type != "project":
             return False
 
@@ -501,6 +565,81 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if hasattr(model, "delete_project_by_row"):
             model.delete_project_by_row(index.row())
             self._refresh_area_combo()
+
+    def _show_area_menu(self, index: QModelIndex):
+        """Показывает меню действий области проектов."""
+        area = index.data(ProjectRoles.Area) or ""
+        model = index.model()
+        menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu {
+                background: #1f2227;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 14px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background: #2b2f36;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #2a2b2f;
+                margin: 4px 8px;
+            }
+        """)
+        act_edit = menu.addAction("Редактировать")
+        menu.addSeparator()
+        has_active = True
+        if hasattr(model, "area_has_active"):
+            has_active = model.area_has_active(area)
+        act_archive = menu.addAction("Архивировать" if has_active else "Восстановить")
+        act_delete = menu.addAction("Удалить")
+
+        chosen = menu.exec(QCursor.pos())
+        if chosen == act_edit:
+            self._edit_area(area, model)
+            return
+        if chosen == act_archive:
+            if hasattr(model, "set_area_archived"):
+                model.set_area_archived(area, archived=has_active)
+                self._refresh_area_combo(area)
+            return
+        if chosen != act_delete:
+            return
+
+        parent = menu.parentWidget() or None
+        dialog = ConfirmDialog(
+            "Удалить область",
+            f"Удалить все проекты в области:\n«{area}» ?",
+            parent=parent,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
+        )
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+            return
+
+        if hasattr(model, "delete_area"):
+            model.delete_area(area)
+            self._refresh_area_combo()
+
+    def _edit_area(self, area: str, model):
+        """Открывает диалог редактирования области проектов."""
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        dialog = ProjectAreaEditDialog(area, parent=parent)
+        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+            return
+
+        values = dialog.values()
+        if hasattr(model, "rename_area"):
+            try:
+                model.rename_area(area, values["area"])
+                self._refresh_area_combo(values["area"])
+            except ValueError as exc:
+                QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def _edit_project(self, index: QModelIndex):
         """Открывает диалог редактирования проекта."""
@@ -680,6 +819,93 @@ class ProjectEditDialog(QDialog):
             "updated": date(qd.year(), qd.month(), qd.day()),
             "priority": self.priority_edit.currentText().strip() or "Medium",
             "archived": self.archived_edit.isChecked(),
+        }
+
+
+class ProjectAreaEditDialog(QDialog):
+    def __init__(self, area: str, parent=None):
+        """Создает диалог редактирования области проектов."""
+        super().__init__(parent)
+        self.setWindowTitle("Редактирование области")
+        self.setObjectName("ProjectAreaEditDialog")
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
+        title_label = QLabel("Редактирование области")
+        title_label.setObjectName("DialogTitle")
+        layout.addWidget(title_label)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
+
+        self.area_edit = QLineEdit(area)
+        self.area_edit.setPlaceholderText("Область проекта")
+        form.addRow("Область", self.area_edit)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setStyleSheet(f"""
+            QDialog#ProjectAreaEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+
+            QDialog#ProjectAreaEditDialog QLabel {{
+                color: #cfcfcf;
+            }}
+
+            QDialog#ProjectAreaEditDialog QLabel#DialogTitle {{
+                color: #f2f2f2;
+                font-size: 18px;
+                font-weight: 600;
+            }}
+
+            QDialog#ProjectAreaEditDialog QLineEdit {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 8px 10px;
+                border-radius: 6px;
+                min-height: 28px;
+            }}
+
+            QDialog#ProjectAreaEditDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 8px 14px;
+                border-radius: 6px;
+                min-width: 90px;
+            }}
+
+            QDialog#ProjectAreaEditDialog QDialogButtonBox QPushButton:hover {{
+                background: #34363b;
+            }}
+        """)
+
+    def _on_accept(self):
+        """Проверяет ввод перед сохранением изменений."""
+        try:
+            validate_area(self.area_edit.text())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        self.accept()
+
+    def values(self) -> dict:
+        """Возвращает значения формы области."""
+        return {
+            "area": self.area_edit.text().strip(),
         }
 
 

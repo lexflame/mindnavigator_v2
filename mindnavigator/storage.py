@@ -626,6 +626,31 @@ class Database:
                 (int(archived), project_id),
             )
 
+    def set_projects_archived_for_area(self, area: str, archived: bool) -> None:
+        """Архивирует все проекты в области."""
+        area = validate_area(area)
+        with self._conn:
+            self._conn.execute(
+                "UPDATE projects SET archived = ? WHERE area = ?;",
+                (int(archived), area),
+            )
+
+    def delete_projects_by_area(self, area: str) -> None:
+        """Удаляет все проекты в области."""
+        area = validate_area(area)
+        with self._conn:
+            self._conn.execute("DELETE FROM projects WHERE area = ?;", (area,))
+
+    def rename_project_area(self, area: str, new_area: str) -> None:
+        """Переименовывает область проектов."""
+        area = validate_area(area)
+        new_area = validate_area(new_area)
+        with self._conn:
+            self._conn.execute(
+                "UPDATE projects SET area = ? WHERE area = ?;",
+                (new_area, area),
+            )
+
     def project_areas(self) -> List[str]:
         """Возвращает отсортированный список областей проекта."""
         rows = self._conn.execute("SELECT DISTINCT area FROM projects ORDER BY area;").fetchall()
