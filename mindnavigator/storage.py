@@ -526,6 +526,7 @@ class Database:
                     parent_id=row["parent_id"],
                 )
             )
+        return tasks
 
     def _seed_objects(self) -> None:
         now = datetime.utcnow().isoformat(timespec="seconds")
