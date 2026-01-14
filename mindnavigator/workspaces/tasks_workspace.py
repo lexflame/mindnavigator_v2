@@ -414,8 +414,6 @@ class TasksModel(QAbstractListModel):
             elif self._filter_mode == "План":
                 if it.done:
                     continue
-                if is_today(it.day):
-                    continue
 
             if search:
                 if search not in it.title.lower():
