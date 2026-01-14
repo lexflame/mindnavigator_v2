@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 import mimetypes
+import json
 import re
 from typing import Dict, List, Optional, Set
 
@@ -25,6 +26,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QAbstractItemView,
+    QApplication,
+    QMenu,
 )
 
 import qtawesome as qta
@@ -125,9 +128,17 @@ class CloudScanWorker(QObject):
 
     def _description_from_path(self, rel_path: str) -> str:
         path = Path(rel_path)
-        if path.parent == Path("."):
-            return ""
-        return " / ".join(part for part in path.parent.parts)
+        folder_parts = list(path.parent.parts) if path.parent != Path(".") else []
+        stem = path.stem
+        stem = HASH_RE.sub("", stem).replace("__", " ").strip(" -_")
+        description_text = " / ".join(part for part in [*folder_parts, stem] if part)
+        payload = {
+            "text": description_text,
+            "folders": folder_parts,
+            "stem": stem,
+            "extension": path.suffix.lower(),
+        }
+        return json.dumps(payload, ensure_ascii=False)
 
     def _is_image(self, file_path: Path) -> bool:
         if file_path.suffix.lower() in IMAGE_EXTENSIONS:
@@ -254,6 +265,8 @@ class FileWorkspace(QWidget):
         self.file_grid.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.file_grid.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.file_grid.itemDoubleClicked.connect(self._on_file_grid_double_clicked)
+        self.file_grid.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.file_grid.customContextMenuRequested.connect(self._show_file_context_menu)
 
         self.nav_splitter.addWidget(self.folder_tree)
         self.nav_splitter.addWidget(self.file_grid)
@@ -443,9 +456,9 @@ class FileWorkspace(QWidget):
             item.setToolTip(name)
             self.file_grid.addItem(item)
         for file_item in files:
-            status = "OK" if file_item.valid else "Ошибка"
+            description = self._format_description(file_item.description)
             size = self._format_size(file_item.size)
-            label = f"{file_item.name}\n{size} • {status}"
+            label = f"{file_item.name}\n{size} • {description}"
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, ("file", file_item.rel_path))
             item.setIcon(self._file_icon_for(file_item, cloud_root_path))
@@ -504,6 +517,56 @@ class FileWorkspace(QWidget):
         tree_item = self._tree_items.get(folder_path)
         if tree_item:
             self.folder_tree.setCurrentItem(tree_item)
+
+    def _show_file_context_menu(self, position) -> None:
+        item = self.file_grid.itemAt(position)
+        if item is None:
+            return
+        payload = item.data(Qt.UserRole)
+        if not payload:
+            return
+
+        menu = QMenu(self)
+        item_type, rel_path = payload
+
+        if item_type == "folder":
+            open_action = menu.addAction("Открыть")
+            open_action.triggered.connect(lambda: self._select_folder(rel_path))
+        else:
+            open_folder_action = menu.addAction("Открыть папку")
+            open_folder_action.triggered.connect(lambda: self._open_parent_folder(rel_path))
+
+        copy_action = menu.addAction("Копировать путь")
+        copy_action.triggered.connect(lambda: self._copy_path(rel_path))
+
+        transfer_menu = menu.addMenu("FileTransfer")
+        placeholder_action = transfer_menu.addAction("Нет действий")
+        placeholder_action.setEnabled(False)
+
+        menu.exec(self.file_grid.mapToGlobal(position))
+
+    def _copy_path(self, rel_path: str) -> None:
+        clipboard = QApplication.clipboard()
+        if clipboard:
+            clipboard.setText(rel_path)
+
+    def _open_parent_folder(self, rel_path: str) -> None:
+        folder_path = "/".join(Path(rel_path).parts[:-1])
+        self._select_folder(folder_path)
+
+    def _format_description(self, raw_description: str) -> str:
+        description = (raw_description or "").strip()
+        if not description:
+            return "Без описания"
+        try:
+            payload = json.loads(description)
+        except json.JSONDecodeError:
+            return description
+        if isinstance(payload, dict):
+            text = (payload.get("text") or "").strip()
+            if text:
+                return text
+        return description
 
     def _start_sync(self) -> None:
         cloud_path = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
