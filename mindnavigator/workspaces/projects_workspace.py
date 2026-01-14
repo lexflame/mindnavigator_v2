@@ -467,10 +467,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 margin: 4px 8px;
             }
         """)
-        act_open = menu.addAction("Открыть")
-        act_edit = menu.addAction("Переименовать")
+        act_edit = menu.addAction("Редактировать")
         menu.addSeparator()
-        act_archive = menu.addAction("Архивировать / Восстановить")
+        archived = bool(index.data(ProjectRoles.Archived))
+        act_archive = menu.addAction("Восстановить" if archived else "Архивировать")
         act_delete = menu.addAction("Удалить")
 
         chosen = menu.exec(QCursor.pos())
