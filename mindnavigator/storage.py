@@ -24,6 +24,7 @@ class TaskData:
     done: bool
     project_id: Optional[int] = None
     project_title: str = ""
+    parent_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,7 @@ class Database:
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     project_id INTEGER REFERENCES projects(id),
+                    parent_id INTEGER REFERENCES tasks(id),
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -243,6 +245,7 @@ class Database:
 
         self._ensure_task_project_column()
         self._ensure_task_description_column()
+        self._ensure_task_parent_column()
         self._ensure_map_tiles_path_column()
         self._seed_defaults()
 
@@ -261,6 +264,14 @@ class Database:
         if "description" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT '';")
+
+    def _ensure_task_parent_column(self) -> None:
+        """Добавляет колонку parent_id, если она отсутствует."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "parent_id" not in names:
+            with self._conn:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id);")
 
     def _ensure_map_tiles_path_column(self) -> None:
         """Добавляет колонку tiles_path, если она отсутствует."""
@@ -438,7 +449,8 @@ class Database:
                 t.priority,
                 t.done,
                 t.project_id,
-                COALESCE(p.title, '') AS project_title
+                COALESCE(p.title, '') AS project_title,
+                t.parent_id
             FROM tasks t
             LEFT JOIN projects p ON p.id = t.project_id;
             """
@@ -456,6 +468,7 @@ class Database:
                     done=bool(row["done"]),
                     project_id=row["project_id"],
                     project_title=row["project_title"] or "",
+                    parent_id=row["parent_id"],
                 )
             )
         return tasks
@@ -468,6 +481,7 @@ class Database:
         time_text: str,
         priority: str,
         project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -481,10 +495,10 @@ class Database:
         with self._conn:
             cur = self._conn.execute(
                 """
-                INSERT INTO tasks (title, description, day, time_text, priority, done, project_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?);
+                INSERT INTO tasks (title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?);
                 """,
-                (title, description, day.isoformat(), time_text, priority, project_id, now, now),
+                (title, description, day.isoformat(), time_text, priority, project_id, parent_id, now, now),
             )
         project_title = ""
         if project_id is not None:
@@ -494,7 +508,18 @@ class Database:
             ).fetchone()
             if row:
                 project_title = row["title"]
-        return TaskData(cur.lastrowid, day, time_text, title, description, priority, False, project_id, project_title)
+        return TaskData(
+            cur.lastrowid,
+            day,
+            time_text,
+            title,
+            description,
+            priority,
+            False,
+            project_id,
+            project_title,
+            parent_id,
+        )
 
     def update_task(
         self,
@@ -506,6 +531,7 @@ class Database:
         priority: str,
         done: bool,
         project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
     ) -> TaskData:
         """Обновляет задачу."""
         title = validate_title(title)
@@ -520,10 +546,10 @@ class Database:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, updated_at = ?
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (title, description, day.isoformat(), time_text, priority, int(done), project_id, now, task_id),
+                (title, description, day.isoformat(), time_text, priority, int(done), project_id, parent_id, now, task_id),
             )
         project_title = ""
         if project_id is not None:
@@ -533,7 +559,7 @@ class Database:
             ).fetchone()
             if row:
                 project_title = row["title"]
-        return TaskData(task_id, day, time_text, title, description, priority, bool(done), project_id, project_title)
+        return TaskData(task_id, day, time_text, title, description, priority, bool(done), project_id, project_title, parent_id)
 
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
@@ -547,7 +573,18 @@ class Database:
     def delete_task(self, task_id: int) -> None:
         """Удаляет задачу по id."""
         with self._conn:
-            self._conn.execute("DELETE FROM tasks WHERE id = ?;", (task_id,))
+            self._conn.execute(
+                """
+                WITH RECURSIVE descendants(id) AS (
+                    SELECT id FROM tasks WHERE id = ?
+                    UNION ALL
+                    SELECT t.id FROM tasks t
+                    JOIN descendants d ON t.parent_id = d.id
+                )
+                DELETE FROM tasks WHERE id IN (SELECT id FROM descendants);
+                """,
+                (task_id,),
+            )
 
     def fetch_projects(self) -> List[ProjectData]:
         """Возвращает список проектов."""

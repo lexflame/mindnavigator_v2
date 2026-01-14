@@ -18,6 +18,7 @@ from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+_PARENT_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class TaskRow:
     done: bool
     project_id: Optional[int] = None
     project_title: str = ""
+    parent_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,9 @@ class TaskRoles:
     DisplayTime = Qt.UserRole + 11
     ProjectTitle = Qt.UserRole + 12
     Expanded = Qt.UserRole + 13
+    HasSubtasks = Qt.UserRole + 14
+    SubtasksExpanded = Qt.UserRole + 15
+    SubtaskDepth = Qt.UserRole + 16
 
 
 class TasksModel(QAbstractListModel):
@@ -69,6 +74,8 @@ class TasksModel(QAbstractListModel):
         self._db = get_database()
         self._all_rows: List[Row] = []
         self._rows: List[Row] = []
+        self._task_depths: dict[int, int] = {}
+        self._task_children: dict[int, List[TaskRow]] = {}
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
         self._search = ""
         self._focus_day: Optional[date] = None
@@ -77,6 +84,7 @@ class TasksModel(QAbstractListModel):
         self._sort_asc = True
         self._drag_enabled = False
         self._expanded_task_ids: set[int] = set()
+        self._collapsed_subtask_ids: set[int] = set()
         self._reload_from_db()
 
     def _reload_from_db(self):
@@ -93,10 +101,18 @@ class TasksModel(QAbstractListModel):
                 t.done,
                 t.project_id,
                 t.project_title,
+                t.parent_id,
             )
             for t in tasks
         ]
+        self._prune_state()
         self._rebuild()
+
+    def _prune_state(self) -> None:
+        """Очищает локальные состояния раскрытия для удаленных задач."""
+        task_ids = {it.id for it in self._all_rows if isinstance(it, TaskRow)}
+        self._expanded_task_ids &= task_ids
+        self._collapsed_subtask_ids &= task_ids
 
     def rowCount(self, parent=QModelIndex()) -> int:
         """Возвращает количество строк с учетом фильтрации."""
@@ -153,6 +169,12 @@ class TasksModel(QAbstractListModel):
             return r.id in self._expanded_task_ids
         if role == TaskRoles.ProjectTitle:
             return r.project_title
+        if role == TaskRoles.HasSubtasks:
+            return bool(self._task_children.get(r.id))
+        if role == TaskRoles.SubtasksExpanded:
+            return r.id not in self._collapsed_subtask_ids
+        if role == TaskRoles.SubtaskDepth:
+            return self._task_depths.get(r.id, 0)
         if role == Qt.DisplayRole:
             return r.title
         return None
@@ -201,7 +223,14 @@ class TasksModel(QAbstractListModel):
 
     def add_task(self, title: str, day: date, time_text: str, priority: str):
         """Добавляет новую задачу и пересобирает текущий список."""
-        task = self._db.create_task(title=title, description="", day=day, time_text=time_text, priority=priority)
+        task = self._db.create_task(
+            title=title,
+            description="",
+            day=day,
+            time_text=time_text,
+            priority=priority,
+            parent_id=None,
+        )
         self._all_rows.append(
             TaskRow(
                 task.id,
@@ -213,6 +242,7 @@ class TasksModel(QAbstractListModel):
                 task.done,
                 task.project_id,
                 task.project_title,
+                task.parent_id,
             )
         )
         self._rebuild()
@@ -231,7 +261,7 @@ class TasksModel(QAbstractListModel):
         if row_idx < 0 or row_idx >= len(self._rows):
             return None
         r = self._rows[row_idx]
-        if isinstance(r, HeaderRow):
+        if isinstance(r, (HeaderRow, SortHeaderRow)):
             return None
         return r
 
@@ -259,6 +289,7 @@ class TasksModel(QAbstractListModel):
             priority=priority,
             done=done,
             project_id=project_id,
+            parent_id=r.parent_id,
         )
 
         new_all: List[Row] = []
@@ -274,6 +305,7 @@ class TasksModel(QAbstractListModel):
                     updated.done,
                     updated.project_id,
                     updated.project_title,
+                    updated.parent_id,
                 )
             new_all.append(it)
 
@@ -285,7 +317,7 @@ class TasksModel(QAbstractListModel):
         if row_idx < 0 or row_idx >= len(self._rows):
             return
         r = self._rows[row_idx]
-        if isinstance(r, HeaderRow):
+        if isinstance(r, (HeaderRow, SortHeaderRow)):
             return
 
         new_done = not r.done
@@ -303,6 +335,7 @@ class TasksModel(QAbstractListModel):
                     new_done,
                     it.project_id,
                     it.project_title,
+                    it.parent_id,
                 )
             new_all.append(it)
 
@@ -314,22 +347,21 @@ class TasksModel(QAbstractListModel):
         if row_idx < 0 or row_idx >= len(self._rows):
             return
         r = self._rows[row_idx]
-        if isinstance(r, HeaderRow):
+        if isinstance(r, (HeaderRow, SortHeaderRow)):
             return
 
         self._db.delete_task(r.id)
-        self._all_rows = [it for it in self._all_rows if not (isinstance(it, TaskRow) and it.id == r.id)]
-        self._expanded_task_ids.discard(r.id)
-        self._rebuild()
+        self._reload_from_db()
 
-    def move_task_to_day(self, task_id: int, new_day: date) -> bool:
+    def move_task_to_day(self, task_id: int, new_day: date, parent_id=_PARENT_UNSET) -> bool:
         """Переносит задачу на новую дату."""
         task = next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
         if task is None:
             return False
-        if task.day == new_day:
+        if task.day == new_day and parent_id is _PARENT_UNSET:
             return False
 
+        current_parent_id = task.parent_id if parent_id is _PARENT_UNSET else parent_id
         updated = self._db.update_task(
             task_id=task.id,
             title=task.title,
@@ -339,6 +371,7 @@ class TasksModel(QAbstractListModel):
             priority=task.priority,
             done=task.done,
             project_id=task.project_id,
+            parent_id=current_parent_id,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -353,6 +386,7 @@ class TasksModel(QAbstractListModel):
                     updated.done,
                     updated.project_id,
                     updated.project_title,
+                    updated.parent_id,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -370,6 +404,69 @@ class TasksModel(QAbstractListModel):
         if self._tasks_count_on_day(target, exclude_task_id=task.id) > 4:
             target += timedelta(days=1)
         return target
+
+    def move_task_to_parent(self, task_id: int, parent_id: Optional[int]) -> bool:
+        """Переносит задачу в подзадачу или возвращает в корень."""
+        task = next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
+        if task is None:
+            return False
+        if parent_id == task.id:
+            return False
+
+        parent_task = None
+        if parent_id is not None:
+            parent_task = next(
+                (it for it in self._all_rows if isinstance(it, TaskRow) and it.id == parent_id),
+                None,
+            )
+            if parent_task is None:
+                return False
+            if self._is_descendant(parent_id, task.id):
+                return False
+
+        target_day = parent_task.day if parent_task is not None else task.day
+        updated = self._db.update_task(
+            task_id=task.id,
+            title=task.title,
+            description=task.description,
+            day=target_day,
+            time_text=task.time_text,
+            priority=task.priority,
+            done=task.done,
+            project_id=task.project_id,
+            parent_id=parent_id,
+        )
+        new_all: List[Row] = []
+        for it in self._all_rows:
+            if isinstance(it, TaskRow) and it.id == task.id:
+                it = TaskRow(
+                    updated.id,
+                    updated.day,
+                    updated.time_text,
+                    updated.title,
+                    updated.description,
+                    updated.priority,
+                    updated.done,
+                    updated.project_id,
+                    updated.project_title,
+                    updated.parent_id,
+                )
+            new_all.append(it)
+        self._all_rows = new_all
+        self._rebuild()
+        return True
+
+    def _is_descendant(self, task_id: int, ancestor_id: int) -> bool:
+        """Проверяет, является ли задача потомком другой."""
+        parent_map = {
+            it.id: it.parent_id for it in self._all_rows if isinstance(it, TaskRow)
+        }
+        current = parent_map.get(task_id)
+        while current is not None:
+            if current == ancestor_id:
+                return True
+            current = parent_map.get(current)
+        return False
 
     def _tasks_count_on_day(self, day_value: date, exclude_task_id: Optional[int] = None) -> int:
         """Считает количество невыполненных задач на конкретный день."""
@@ -393,7 +490,8 @@ class TasksModel(QAbstractListModel):
 
         search = self._search
 
-        tasks: List[TaskRow] = []
+        base_tasks: List[TaskRow] = []
+        search_hits: set[int] = set()
         for it in self._all_rows:
             if not isinstance(it, TaskRow):
                 continue
@@ -419,11 +517,9 @@ class TasksModel(QAbstractListModel):
                 if it.done:
                     continue
 
-            if search:
-                if search not in it.title.lower():
-                    continue
-
-            tasks.append(it)
+            base_tasks.append(it)
+            if not search or search in it.title.lower():
+                search_hits.add(it.id)
 
         def time_key(t: str):
             """Преобразует строку времени в ключ сортировки."""
@@ -432,31 +528,75 @@ class TasksModel(QAbstractListModel):
             except Exception:
                 return datetime.min.time()
 
-        if self._filter_mode == "Все":
-            priority_order = {"high": 0, "medium": 1, "low": 2}
+        priority_order = {"high": 0, "medium": 1, "low": 2}
 
-            def sort_key(task: TaskRow):
+        def sort_key(task: TaskRow):
+            if self._filter_mode == "Все":
                 if self._sort_key == "title":
                     return (task.title.lower(), task.day, time_key(task.time_text), task.id)
                 if self._sort_key == "priority":
                     return (priority_order.get(task.priority.lower(), 3), task.day, time_key(task.time_text), task.id)
-                return (task.day, time_key(task.time_text), task.id)
+            return (task.day, time_key(task.time_text), task.id)
 
-            tasks.sort(key=sort_key, reverse=not self._sort_asc)
-        else:
-            tasks.sort(key=lambda x: (x.day, time_key(x.time_text), x.id))
+        task_ids = {t.id for t in base_tasks}
+        children_map: dict[Optional[int], List[TaskRow]] = {}
+        for task in base_tasks:
+            parent_id = task.parent_id if task.parent_id in task_ids else None
+            children_map.setdefault(parent_id, []).append(task)
+
+        include_cache: dict[int, bool] = {}
+
+        def should_include(task: TaskRow) -> bool:
+            if not search:
+                return True
+            cached = include_cache.get(task.id)
+            if cached is not None:
+                return cached
+            if task.id in search_hits:
+                include_cache[task.id] = True
+                return True
+            for child in children_map.get(task.id, []):
+                if should_include(child):
+                    include_cache[task.id] = True
+                    return True
+            include_cache[task.id] = False
+            return False
+
+        def sorted_children(task: TaskRow) -> List[TaskRow]:
+            children = [child for child in children_map.get(task.id, []) if should_include(child)]
+            children.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
+            return children
 
         new_rows: List[Row] = []
+        self._task_children = {}
+        self._task_depths = {}
+
+        def append_task(task: TaskRow, depth: int) -> None:
+            self._task_depths[task.id] = depth
+            children = sorted_children(task)
+            if children:
+                self._task_children[task.id] = children
+            new_rows.append(task)
+            if task.id in self._collapsed_subtask_ids:
+                return
+            for child in children:
+                append_task(child, depth + 1)
+
         if self._filter_mode == "Все":
             new_rows.append(SortHeaderRow())
-            new_rows.extend(tasks)
+            roots = [t for t in children_map.get(None, []) if should_include(t)]
+            roots.sort(key=sort_key, reverse=not self._sort_asc)
+            for root_task in roots:
+                append_task(root_task, 0)
         else:
             current_day: Optional[date] = None
-            for t in tasks:
-                if current_day != t.day:
-                    current_day = t.day
+            roots = [t for t in children_map.get(None, []) if should_include(t)]
+            roots.sort(key=sort_key)
+            for task in roots:
+                if current_day != task.day:
+                    current_day = task.day
                     new_rows.append(HeaderRow(current_day))
-                new_rows.append(t)
+                append_task(task, 0)
 
         self.beginResetModel()
         self._rows = new_rows
@@ -482,6 +622,17 @@ class TasksModel(QAbstractListModel):
         idx = self.index(row_idx)
         if idx.isValid():
             self.dataChanged.emit(idx, idx, [TaskRoles.Expanded, Qt.SizeHintRole])
+
+    def toggle_subtasks_expanded_by_row(self, row_idx: int) -> None:
+        """Переключает раскрытие списка подзадач."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        if task.id in self._collapsed_subtask_ids:
+            self._collapsed_subtask_ids.remove(task.id)
+        else:
+            self._collapsed_subtask_ids.add(task.id)
+        self._rebuild()
 
     def mimeTypes(self) -> List[str]:
         """Возвращает поддерживаемые типы данных для drag and drop."""
@@ -524,11 +675,20 @@ class TasksModel(QAbstractListModel):
         if target_row < 0:
             target_row = len(self._rows) - 1
 
+        if target_row < 0 or target_row >= len(self._rows):
+            return False
+
+        target_item = self._rows[target_row]
+        if isinstance(target_item, TaskRow):
+            return self.move_task_to_parent(task_id, target_item.id)
+        if isinstance(target_item, HeaderRow):
+            return self.move_task_to_day(task_id, target_item.day, parent_id=None)
+
         target_day = self._drop_target_day(target_row)
         if target_day is None:
             return False
 
-        return self.move_task_to_day(task_id, target_day)
+        return self.move_task_to_day(task_id, target_day, parent_id=None)
 
     def _drop_target_day(self, row_idx: int) -> Optional[date]:
         """Определяет дату для переноса по позиции drop."""
@@ -801,6 +961,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
         self._icon_fire = qta.icon("fa5s.fire", color="#d0a93e")
         self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color="#cfcfcf")
+        self._icon_subtask_open = qta.icon("fa5s.chevron-down", color="#8a8a8a")
+        self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color="#8a8a8a")
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -823,7 +985,9 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         title = index.data(TaskRoles.Title) or ""
         description = index.data(TaskRoles.Description) or ""
-        layout = self._row_layout(option.rect)
+        depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
+        has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+        layout = self._row_layout(option.rect, depth, has_subtasks)
         text_width = max(10, layout["title"].width())
 
         title_metrics = QFontMetrics(self._font)
@@ -909,6 +1073,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         done: bool = bool(index.data(TaskRoles.Done))
         overdue = self._is_overdue(day, done)
         expanded = bool(index.data(TaskRoles.Expanded))
+        has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+        subtasks_expanded = bool(index.data(TaskRoles.SubtasksExpanded))
+        depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -918,7 +1085,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
 
-        layout = self._row_layout(r)
+        layout = self._row_layout(r, depth, has_subtasks)
         cy = r.center().y()
 
         grip_rect = layout["grip"]
@@ -960,6 +1127,11 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
+
+        if has_subtasks:
+            toggle_rect = layout["subtask_toggle"]
+            toggle_icon = self._icon_subtask_open if subtasks_expanded else self._icon_subtask_closed
+            toggle_icon.paint(painter, toggle_rect)
 
         painter.setFont(self._font)
         if done:
@@ -1078,12 +1250,19 @@ class TasksItemDelegate(QStyledItemDelegate):
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
             pos = event.position().toPoint()
             r = option.rect
-            cy = r.center().y()
 
-            layout = self._row_layout(r)
+            depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
+            has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+            layout = self._row_layout(r, depth, has_subtasks)
             cb_rect = layout["checkbox"]
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
+            toggle_rect = layout.get("subtask_toggle")
+
+            if has_subtasks and toggle_rect and toggle_rect.contains(pos):
+                if hasattr(model, "toggle_subtasks_expanded_by_row"):
+                    model.toggle_subtasks_expanded_by_row(index.row())
+                return True
 
             if tomorrow_rect.contains(pos):
                 task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
@@ -1219,7 +1398,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
 
-    def _row_layout(self, r: QRect) -> dict:
+    def _row_layout(self, r: QRect, depth: int = 0, has_subtasks: bool = False) -> dict:
         """Возвращает прямоугольники основных колонок строки."""
         x = r.left() + 10
         cy = r.center().y()
@@ -1239,6 +1418,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         project_rect = QRect(x, r.top(), self.PROJECT_W, r.height())
         x += self.PROJECT_W + 6
 
+        indent = max(0, depth) * 14
+        x += indent
+
+        toggle_w = 16 if has_subtasks else 0
+        toggle_rect = QRect(x, cy - 8, toggle_w, 16)
+        if has_subtasks:
+            x += toggle_w + 4
+
         doc_rect = QRect(x, cy - 8, 16, 16)
         x += 22
 
@@ -1255,6 +1442,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             "tomorrow": tomorrow_rect,
             "date": time_rect,
             "project": project_rect,
+            "subtask_toggle": toggle_rect,
             "doc": doc_rect,
             "title": title_rect,
             "priority": pr_rect,
