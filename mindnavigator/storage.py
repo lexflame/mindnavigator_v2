@@ -49,29 +49,6 @@ class MapData:
 
 
 @dataclass(frozen=True)
-class MindNodeData:
-    id: int
-    map_id: int
-    parent_id: Optional[int]
-    title: str
-    node_type: str
-    source_type: str
-    source_id: Optional[int]
-    x: float
-    y: float
-    color: str
-
-
-@dataclass(frozen=True)
-class MindAttachmentData:
-    id: int
-    node_id: int
-    item_type: str
-    item_id: Optional[int]
-    item_title: str
-
-
-@dataclass(frozen=True)
 class CloudFileData:
     id: int
     rel_path: str
@@ -242,36 +219,6 @@ class Database:
             )
             self._conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS mind_nodes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    map_id INTEGER NOT NULL REFERENCES maps(id),
-                    parent_id INTEGER REFERENCES mind_nodes(id),
-                    title TEXT NOT NULL,
-                    node_type TEXT NOT NULL DEFAULT 'custom',
-                    source_type TEXT NOT NULL DEFAULT '',
-                    source_id INTEGER,
-                    x REAL NOT NULL DEFAULT 0,
-                    y REAL NOT NULL DEFAULT 0,
-                    color TEXT NOT NULL DEFAULT '#2f80ed',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                """
-            )
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS mind_attachments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    node_id INTEGER NOT NULL REFERENCES mind_nodes(id),
-                    item_type TEXT NOT NULL,
-                    item_id INTEGER,
-                    item_title TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-                """
-            )
-            self._conn.execute(
-                """
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -343,9 +290,6 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
-            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mind_nodes_map ON mind_nodes(map_id);")
-            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mind_nodes_parent ON mind_nodes(parent_id);")
-            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mind_attachments_node ON mind_attachments(node_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
@@ -909,189 +853,6 @@ class Database:
                 (title, description, project, tiles_path, tiles_h, tiles_w, now, map_id),
             )
         return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
-
-    def fetch_mind_nodes(self, map_id: int) -> List[MindNodeData]:
-        """Возвращает список узлов интеллект-карты."""
-        rows = self._conn.execute(
-            """
-            SELECT id, map_id, parent_id, title, node_type, source_type, source_id, x, y, color
-            FROM mind_nodes
-            WHERE map_id = ?
-            ORDER BY id;
-            """,
-            (map_id,),
-        ).fetchall()
-        nodes = []
-        for row in rows:
-            nodes.append(
-                MindNodeData(
-                    id=row["id"],
-                    map_id=row["map_id"],
-                    parent_id=row["parent_id"],
-                    title=row["title"],
-                    node_type=row["node_type"],
-                    source_type=row["source_type"] or "",
-                    source_id=row["source_id"],
-                    x=row["x"],
-                    y=row["y"],
-                    color=row["color"] or "#2f80ed",
-                )
-            )
-        return nodes
-
-    def create_mind_node(
-        self,
-        map_id: int,
-        title: str,
-        node_type: str = "custom",
-        source_type: str = "",
-        source_id: Optional[int] = None,
-        x: float = 0,
-        y: float = 0,
-        color: str = "#2f80ed",
-        parent_id: Optional[int] = None,
-    ) -> MindNodeData:
-        """Создает новый узел интеллект-карты."""
-        title = validate_title(title, field_name="Название узла")
-        node_type = (node_type or "custom").strip() or "custom"
-        source_type = (source_type or "").strip()
-        color = (color or "#2f80ed").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
-        with self._conn:
-            cur = self._conn.execute(
-                """
-                INSERT INTO mind_nodes (
-                    map_id,
-                    parent_id,
-                    title,
-                    node_type,
-                    source_type,
-                    source_id,
-                    x,
-                    y,
-                    color,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                (
-                    map_id,
-                    parent_id,
-                    title,
-                    node_type,
-                    source_type,
-                    source_id,
-                    float(x),
-                    float(y),
-                    color,
-                    now,
-                    now,
-                ),
-            )
-        return MindNodeData(
-            id=cur.lastrowid,
-            map_id=map_id,
-            parent_id=parent_id,
-            title=title,
-            node_type=node_type,
-            source_type=source_type,
-            source_id=source_id,
-            x=float(x),
-            y=float(y),
-            color=color,
-        )
-
-    def update_mind_node_position(self, node_id: int, x: float, y: float) -> None:
-        """Обновляет позицию узла."""
-        now = datetime.utcnow().isoformat(timespec="seconds")
-        with self._conn:
-            self._conn.execute(
-                "UPDATE mind_nodes SET x = ?, y = ?, updated_at = ? WHERE id = ?;",
-                (float(x), float(y), now, node_id),
-            )
-
-    def update_mind_node_title(self, node_id: int, title: str) -> None:
-        """Обновляет название узла."""
-        title = validate_title(title, field_name="Название узла")
-        now = datetime.utcnow().isoformat(timespec="seconds")
-        with self._conn:
-            self._conn.execute(
-                "UPDATE mind_nodes SET title = ?, updated_at = ? WHERE id = ?;",
-                (title, now, node_id),
-            )
-
-    def delete_mind_nodes(self, node_ids: Iterable[int]) -> None:
-        """Удаляет узлы интеллект-карты и связанные вложения."""
-        ids = [int(node_id) for node_id in node_ids]
-        if not ids:
-            return
-        placeholders = ", ".join("?" for _ in ids)
-        with self._conn:
-            self._conn.execute(
-                f"DELETE FROM mind_attachments WHERE node_id IN ({placeholders});",
-                ids,
-            )
-            self._conn.execute(
-                f"DELETE FROM mind_nodes WHERE id IN ({placeholders});",
-                ids,
-            )
-
-    def fetch_mind_attachments(self, node_id: int) -> List[MindAttachmentData]:
-        """Возвращает вложения узла интеллект-карты."""
-        rows = self._conn.execute(
-            """
-            SELECT id, node_id, item_type, item_id, item_title
-            FROM mind_attachments
-            WHERE node_id = ?
-            ORDER BY id DESC;
-            """,
-            (node_id,),
-        ).fetchall()
-        attachments = []
-        for row in rows:
-            attachments.append(
-                MindAttachmentData(
-                    id=row["id"],
-                    node_id=row["node_id"],
-                    item_type=row["item_type"],
-                    item_id=row["item_id"],
-                    item_title=row["item_title"],
-                )
-            )
-        return attachments
-
-    def add_mind_attachment(
-        self,
-        node_id: int,
-        item_type: str,
-        item_title: str,
-        item_id: Optional[int] = None,
-    ) -> MindAttachmentData:
-        """Добавляет вложение к узлу."""
-        item_type = (item_type or "").strip() or "custom"
-        item_title = validate_title(item_title, field_name="Название вложения")
-        now = datetime.utcnow().isoformat(timespec="seconds")
-        with self._conn:
-            cur = self._conn.execute(
-                """
-                INSERT INTO mind_attachments (node_id, item_type, item_id, item_title, created_at)
-                VALUES (?, ?, ?, ?, ?);
-                """,
-                (node_id, item_type, item_id, item_title, now),
-            )
-        return MindAttachmentData(
-            id=cur.lastrowid,
-            node_id=node_id,
-            item_type=item_type,
-            item_id=item_id,
-            item_title=item_title,
-        )
-
-    def remove_mind_attachment(self, attachment_id: int) -> None:
-        """Удаляет вложение узла."""
-        with self._conn:
-            self._conn.execute("DELETE FROM mind_attachments WHERE id = ?;", (attachment_id,))
 
     def fetch_notes(self) -> List[NoteData]:
         """Возвращает список всех заметок."""
