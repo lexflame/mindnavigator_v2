@@ -9,15 +9,29 @@ import qtawesome as qta
 from PySide6.QtCore import (
     Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPointF, QRectF, Signal, QTimer
 )
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QPen, QCursor
+from PySide6.QtGui import (
+    QPainter,
+    QColor,
+    QFont,
+    QFontMetrics,
+    QPixmap,
+    QPen,
+    QCursor,
+    QPainterPath,
+)
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QColorDialog
+    QFileDialog, QColorDialog, QGraphicsView, QGraphicsScene, QGraphicsObject,
+    QGraphicsPathItem, QGraphicsItem, QListWidget, QListWidgetItem, QTabWidget, QAbstractItemView
 )
 
-from mindnavigator.storage import get_database
+from mindnavigator.storage import (
+    get_database,
+    MindNodeData,
+    MindAttachmentData,
+)
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.resources import resource_path
 
@@ -1059,138 +1073,676 @@ class MapCanvas(QWidget):
             self._remove_marker(marker)
 
 
-class MapEditorWorkspace(QWidget):
+class MindNodeItem(QGraphicsObject):
+    def __init__(self, node: MindNodeData, attachment_count: int, on_moved=None, parent=None):
+        super().__init__(parent)
+        self.node = node
+        self._attachment_count = attachment_count
+        self._on_moved = on_moved
+        self._color = QColor(node.color)
+        self._title_font = QFont("Segoe UI", 10, QFont.Bold)
+        self._meta_font = QFont("Segoe UI", 8)
+        self._padding = 12
+        self._corner = 10
+        self._size = QSize(120, 48)
+        self.setFlags(
+            QGraphicsItem.ItemIsMovable
+            | QGraphicsItem.ItemIsSelectable
+            | QGraphicsItem.ItemSendsGeometryChanges
+        )
+        self._update_layout()
+        self.setPos(node.x, node.y)
+
+    def _source_label(self) -> str:
+        if self.node.source_type:
+            return self.node.source_type.capitalize()
+        return "Свободная тема"
+
+    def _meta_text(self) -> str:
+        return f"{self._source_label()} • {self._attachment_count} влож."
+
+    def _update_layout(self) -> None:
+        title_metrics = QFontMetrics(self._title_font)
+        meta_metrics = QFontMetrics(self._meta_font)
+        width = max(
+            title_metrics.horizontalAdvance(self.node.title),
+            meta_metrics.horizontalAdvance(self._meta_text()),
+        )
+        width = max(140, width + self._padding * 2)
+        height = self._padding * 2 + title_metrics.height() + meta_metrics.height()
+        self.prepareGeometryChange()
+        self._size = QSize(int(width), int(height))
+
+    def boundingRect(self):
+        return QRectF(0, 0, float(self._size.width()), float(self._size.height()))
+
+    def paint(self, painter, option, widget=None):
+        rect = self.boundingRect()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        base_color = QColor(self._color)
+        if self.isSelected():
+            base_color = base_color.lighter(120)
+        painter.setBrush(base_color)
+        painter.setPen(QPen(QColor("#1c1e22"), 1.2))
+        painter.drawRoundedRect(rect, self._corner, self._corner)
+
+        painter.setPen(QColor("#f4f6fb"))
+        painter.setFont(self._title_font)
+        painter.drawText(
+            QRectF(
+                self._padding,
+                self._padding - 2,
+                rect.width() - self._padding * 2,
+                rect.height(),
+            ),
+            Qt.AlignLeft | Qt.AlignTop,
+            self.node.title,
+        )
+
+        painter.setPen(QColor("#d3d7dd"))
+        painter.setFont(self._meta_font)
+        painter.drawText(
+            QRectF(
+                self._padding,
+                rect.height() - self._padding - 12,
+                rect.width() - self._padding * 2,
+                18,
+            ),
+            Qt.AlignLeft | Qt.AlignVCenter,
+            self._meta_text(),
+        )
+
+    def update_title(self, title: str) -> None:
+        self.node = MindNodeData(
+            id=self.node.id,
+            map_id=self.node.map_id,
+            parent_id=self.node.parent_id,
+            title=title,
+            node_type=self.node.node_type,
+            source_type=self.node.source_type,
+            source_id=self.node.source_id,
+            x=self.node.x,
+            y=self.node.y,
+            color=self.node.color,
+        )
+        self._update_layout()
+        self.update()
+
+    def update_attachment_count(self, count: int) -> None:
+        self._attachment_count = count
+        self._update_layout()
+        self.update()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionHasChanged:
+            pos = value
+            self.node = MindNodeData(
+                id=self.node.id,
+                map_id=self.node.map_id,
+                parent_id=self.node.parent_id,
+                title=self.node.title,
+                node_type=self.node.node_type,
+                source_type=self.node.source_type,
+                source_id=self.node.source_id,
+                x=float(pos.x()),
+                y=float(pos.y()),
+                color=self.node.color,
+            )
+            if self._on_moved:
+                self._on_moved(self.node)
+        return super().itemChange(change, value)
+
+
+class MindEdgeItem(QGraphicsPathItem):
+    def __init__(self, parent_item: MindNodeItem, child_item: MindNodeItem):
+        super().__init__()
+        self._parent_item = parent_item
+        self._child_item = child_item
+        pen = QPen(QColor("#5b6b75"), 2)
+        pen.setCapStyle(Qt.RoundCap)
+        self.setPen(pen)
+        self.setZValue(-2)
+        self.update_path()
+
+    def update_path(self) -> None:
+        parent_rect = self._parent_item.sceneBoundingRect()
+        child_rect = self._child_item.sceneBoundingRect()
+        start = parent_rect.center()
+        end = child_rect.center()
+        dx = max(60.0, abs(end.x() - start.x()) * 0.6)
+        path = QPainterPath(start)
+        path.cubicTo(start.x() + dx, start.y(), end.x() - dx, end.y(), end.x(), end.y())
+        self.setPath(path)
+
+
+class MindMapCanvas(QGraphicsView):
+    nodeSelected = Signal(object)
+    nodeMoved = Signal(int, float, float)
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("MapEditorWorkspace")
+        self.setRenderHint(QPainter.Antialiasing, True)
+        self.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        self.setDragMode(QGraphicsView.RubberBandDrag)
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scene = QGraphicsScene(self)
+        self._scene.setSceneRect(-2000, -2000, 4000, 4000)
+        self.setScene(self._scene)
+        self._nodes: dict[int, MindNodeItem] = {}
+        self._edges: list[MindEdgeItem] = []
+        self._edges_by_node: dict[int, list[MindEdgeItem]] = {}
+        self._scene.selectionChanged.connect(self._on_selection_changed)
+
+    def clear_nodes(self) -> None:
+        self._scene.clear()
+        self._nodes = {}
+        self._edges = []
+        self._edges_by_node = {}
+
+    def add_node(self, node: MindNodeData, attachment_count: int) -> None:
+        item = MindNodeItem(node, attachment_count, on_moved=self._on_node_moved)
+        self._scene.addItem(item)
+        self._nodes[node.id] = item
+        if node.parent_id and node.parent_id in self._nodes:
+            self._add_edge(self._nodes[node.parent_id], item)
+
+    def _add_edge(self, parent_item: MindNodeItem, child_item: MindNodeItem) -> None:
+        edge = MindEdgeItem(parent_item, child_item)
+        self._scene.addItem(edge)
+        self._edges.append(edge)
+        for item in (parent_item, child_item):
+            self._edges_by_node.setdefault(item.node.id, []).append(edge)
+
+    def update_attachment_count(self, node_id: int, count: int) -> None:
+        item = self._nodes.get(node_id)
+        if item:
+            item.update_attachment_count(count)
+
+    def update_node_title(self, node_id: int, title: str) -> None:
+        item = self._nodes.get(node_id)
+        if item:
+            item.update_title(title)
+
+    def remove_nodes(self, node_ids: list[int]) -> None:
+        for node_id in node_ids:
+            item = self._nodes.pop(node_id, None)
+            if item:
+                self._scene.removeItem(item)
+        remaining_edges = []
+        for edge in self._edges:
+            if edge._parent_item.node.id in node_ids or edge._child_item.node.id in node_ids:
+                self._scene.removeItem(edge)
+                continue
+            remaining_edges.append(edge)
+        self._edges = remaining_edges
+        for node_id in node_ids:
+            self._edges_by_node.pop(node_id, None)
+
+    def _on_node_moved(self, node: MindNodeData) -> None:
+        for edge in self._edges_by_node.get(node.id, []):
+            edge.update_path()
+        self.nodeMoved.emit(node.id, node.x, node.y)
+
+    def _on_selection_changed(self) -> None:
+        selected_items = self._scene.selectedItems()
+        for item in selected_items:
+            if isinstance(item, MindNodeItem):
+                self.nodeSelected.emit(item.node)
+                return
+        self.nodeSelected.emit(None)
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            factor = 1.12 if event.angleDelta().y() > 0 else 1 / 1.12
+            self.scale(factor, factor)
+            return
+        super().wheelEvent(event)
+
+
+class MindWorkspace(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("MindWorkspace")
+        self._db = get_database()
+        self._map_id: Optional[int] = None
+        self._map_title = ""
+        self._nodes: dict[int, MindNodeData] = {}
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.toolbar = QFrame()
-        self.toolbar.setObjectName("MapToolbar")
-        self.toolbar.setFixedWidth(54)
-        toolbar_layout = QVBoxLayout(self.toolbar)
-        toolbar_layout.setContentsMargins(6, 8, 6, 8)
-        toolbar_layout.setSpacing(8)
-        toolbar_layout.setAlignment(Qt.AlignTop)
+        self.source_panel = QFrame()
+        self.source_panel.setObjectName("MindSourcePanel")
+        self.source_panel.setFixedWidth(260)
+        source_layout = QVBoxLayout(self.source_panel)
+        source_layout.setContentsMargins(12, 12, 12, 12)
+        source_layout.setSpacing(8)
 
-        self.tool_group = QButtonGroup(self)
-        self.tool_group.setExclusive(True)
+        source_title = QLabel("Библиотека")
+        source_title.setObjectName("MindPanelTitle")
+        source_layout.addWidget(source_title)
 
-        def tool_button(icon_name: str, tooltip: str, tool: Optional[MapTool]) -> QToolButton:
-            btn = QToolButton()
-            btn.setIcon(qta.icon(icon_name, color="#d7d7d7"))
-            btn.setIconSize(QSize(20, 20))
-            btn.setCheckable(True)
-            btn.setToolTip(tooltip)
-            btn.setCursor(Qt.PointingHandCursor)
-            if tool is not None:
-                self.tool_group.addButton(btn)
-                btn.clicked.connect(lambda checked=False, t=tool: self.canvas.set_tool(t))
-            return btn
+        self.source_tabs = QTabWidget()
+        self.source_tabs.setObjectName("MindSourceTabs")
+        self.source_lists: dict[str, QListWidget] = {}
+        self._source_keys = ["project", "task", "object", "tag"]
+        for label, key in [
+            ("Проекты", "project"),
+            ("Задачи", "task"),
+            ("Объекты", "object"),
+            ("Метки", "tag"),
+        ]:
+            list_widget = QListWidget()
+            list_widget.setObjectName(f"MindSourceList_{key}")
+            list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
+            self.source_lists[key] = list_widget
+            self.source_tabs.addTab(list_widget, label)
+        source_layout.addWidget(self.source_tabs, 1)
 
-        self.btn_select = tool_button("fa5s.mouse-pointer", "Выбрать", MapTool.SELECT)
-        self.btn_marker = tool_button("fa5s.map-marker-alt", "Добавить маркер", MapTool.ADD_MARKER)
-        self.btn_region = tool_button("fa5s.draw-polygon", "Добавить регион", MapTool.ADD_REGION)
-        self.btn_measure = tool_button("fa5s.ruler", "Измерение", MapTool.MEASURE)
-        self.btn_grid = tool_button("fa5s.border-all", "Сетка", None)
-        self.btn_grid.setCheckable(True)
-        self.btn_grid.setChecked(True)
-        self.btn_grid.clicked.connect(lambda checked: self.canvas.set_grid_enabled(checked))
+        self.btn_add_node = QToolButton()
+        self.btn_add_node.setText("Создать узел")
+        self.btn_add_node.setCursor(Qt.PointingHandCursor)
+        self.btn_add_child = QToolButton()
+        self.btn_add_child.setText("Создать дочерний")
+        self.btn_add_child.setCursor(Qt.PointingHandCursor)
+        source_layout.addWidget(self.btn_add_node)
+        source_layout.addWidget(self.btn_add_child)
 
-        self.btn_camera = tool_button("fa5s.camera", "Скриншот", None)
-        self.btn_camera.setCheckable(False)
+        self.canvas = MindMapCanvas()
+        self.canvas.setObjectName("MindCanvas")
 
-        for btn in [self.btn_select, self.btn_marker, self.btn_region, self.btn_measure, self.btn_grid, self.btn_camera]:
-            toolbar_layout.addWidget(btn)
+        self.details_panel = QFrame()
+        self.details_panel.setObjectName("MindDetailsPanel")
+        self.details_panel.setFixedWidth(300)
+        details_layout = QVBoxLayout(self.details_panel)
+        details_layout.setContentsMargins(12, 12, 12, 12)
+        details_layout.setSpacing(8)
 
-        self.btn_select.setChecked(True)
+        details_title = QLabel("Свойства узла")
+        details_title.setObjectName("MindPanelTitle")
+        details_layout.addWidget(details_title)
 
-        self.canvas = MapCanvas()
-        self.canvas.setObjectName("MapCanvas")
+        self.node_title_edit = QLineEdit()
+        self.node_title_edit.setPlaceholderText("Название узла…")
+        details_layout.addWidget(self.node_title_edit)
 
-        self.info_panel = QFrame()
-        self.info_panel.setObjectName("MapInfoPanel")
-        self.info_panel.setFixedWidth(220)
-        info_layout = QVBoxLayout(self.info_panel)
-        info_layout.setContentsMargins(12, 12, 12, 12)
-        info_layout.setSpacing(8)
+        self.node_meta = QLabel("-")
+        self.node_meta.setObjectName("MindMeta")
+        details_layout.addWidget(self.node_meta)
 
-        self.info_title = QLabel("Данные объекта")
-        self.info_title.setObjectName("MapInfoTitle")
-        self.info_name = QLabel("-")
-        self.info_type = QLabel("-")
-        self.info_coords = QLabel("-")
-        for label in [self.info_name, self.info_type, self.info_coords]:
-            label.setObjectName("MapInfoValue")
+        attachments_label = QLabel("Вложения")
+        attachments_label.setObjectName("MindSectionTitle")
+        details_layout.addWidget(attachments_label)
 
-        info_layout.addWidget(self.info_title)
-        info_layout.addWidget(self.info_name)
-        info_layout.addWidget(self.info_type)
-        info_layout.addWidget(self.info_coords)
-        info_layout.addStretch(1)
+        self.attachments_list = QListWidget()
+        self.attachments_list.setObjectName("MindAttachmentsList")
+        details_layout.addWidget(self.attachments_list, 1)
 
-        root.addWidget(self.toolbar)
+        self.btn_remove_attachment = QToolButton()
+        self.btn_remove_attachment.setText("Удалить вложение")
+        self.btn_remove_attachment.setCursor(Qt.PointingHandCursor)
+        details_layout.addWidget(self.btn_remove_attachment)
+
+        attach_editor = QFrame()
+        attach_layout = QVBoxLayout(attach_editor)
+        attach_layout.setContentsMargins(0, 0, 0, 0)
+        attach_layout.setSpacing(6)
+
+        self.attach_type = QComboBox()
+        self.attach_type.addItems(["Задачи", "Проекты", "Метки", "Заметки"])
+        self.attach_items = QListWidget()
+        self.attach_items.setObjectName("MindAttachItems")
+        self.btn_attach = QToolButton()
+        self.btn_attach.setText("Прикрепить")
+        self.btn_attach.setCursor(Qt.PointingHandCursor)
+        attach_layout.addWidget(self.attach_type)
+        attach_layout.addWidget(self.attach_items)
+        attach_layout.addWidget(self.btn_attach)
+        details_layout.addWidget(attach_editor)
+
+        self.btn_delete_node = QToolButton()
+        self.btn_delete_node.setText("Удалить узел")
+        self.btn_delete_node.setCursor(Qt.PointingHandCursor)
+        details_layout.addWidget(self.btn_delete_node)
+
+        root.addWidget(self.source_panel)
         root.addWidget(self.canvas, 1)
-        root.addWidget(self.info_panel)
+        root.addWidget(self.details_panel)
 
-        self.info_panel.hide()
+        self.canvas.nodeSelected.connect(self._on_node_selected)
+        self.canvas.nodeMoved.connect(self._on_node_moved)
+        self.btn_add_node.clicked.connect(lambda: self._create_node(parent_id=None))
+        self.btn_add_child.clicked.connect(self._create_child_node)
+        self.btn_attach.clicked.connect(self._attach_item)
+        self.attach_type.currentIndexChanged.connect(self._refresh_attach_items)
+        self.btn_remove_attachment.clicked.connect(self._remove_attachment)
+        self.btn_delete_node.clicked.connect(self._delete_selected_node)
+        self.node_title_edit.editingFinished.connect(self._rename_node)
 
-        self.canvas.markerSelected.connect(self._on_marker_selected)
+        self.details_panel.setEnabled(False)
+        self._refresh_sources()
+        self._refresh_attach_items()
 
         self.setStyleSheet("""
-            QWidget#MapEditorWorkspace {
-                background: #15171b;
-            }
+            QWidget#MindWorkspace { background: #14161a; }
 
-            QFrame#MapToolbar {
+            QFrame#MindSourcePanel, QFrame#MindDetailsPanel {
                 background: #1b1d22;
                 border-right: 1px solid #2a2b2f;
             }
 
-            QFrame#MapToolbar QToolButton {
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 6px;
-                padding: 6px;
-            }
-
-            QFrame#MapToolbar QToolButton:checked {
-                background: #2a2d33;
-                border: 1px solid #3a3b40;
-            }
-
-            QFrame#MapToolbar QToolButton:hover {
-                background: #24262c;
-            }
-
-            QFrame#MapInfoPanel {
-                background: rgba(26, 28, 32, 0.92);
+            QFrame#MindDetailsPanel {
+                border-right: none;
                 border-left: 1px solid #2a2b2f;
             }
 
-            QLabel#MapInfoTitle {
-                color: #f2f2f2;
+            QLabel#MindPanelTitle {
+                color: #f1f1f1;
                 font-size: 14px;
                 font-weight: 600;
             }
 
-            QLabel#MapInfoValue {
+            QLabel#MindSectionTitle {
                 color: #cfcfcf;
                 font-size: 12px;
+                font-weight: 600;
+            }
+
+            QLabel#MindMeta {
+                color: #9aa3ab;
+                font-size: 11px;
+            }
+
+            QTabWidget#MindSourceTabs::pane {
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }
+
+            QTabBar::tab {
+                background: #23252b;
+                color: #cfcfcf;
+                padding: 6px 10px;
+                border: 1px solid #2a2b2f;
+                border-bottom: none;
+            }
+
+            QTabBar::tab:selected {
+                background: #2b2f36;
+                color: #ffffff;
+            }
+
+            QListWidget, QLineEdit, QComboBox {
+                background: #202127;
+                color: #dfe2e6;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+                padding: 6px;
+            }
+
+            QToolButton {
+                background: #2a2d33;
+                border: 1px solid #3a3b40;
+                border-radius: 6px;
+                padding: 6px 10px;
+                color: #e6e6e6;
+            }
+
+            QToolButton:hover {
+                background: #34363b;
             }
         """)
 
-    def _on_marker_selected(self, marker: Optional[Marker]) -> None:
-        if not marker:
-            self.info_panel.hide()
+    def load_map(self, map_id: int, map_title: str) -> None:
+        self._map_id = map_id
+        self._map_title = map_title or "Mind Map"
+        self._reload_nodes()
+
+    def _reload_nodes(self) -> None:
+        if self._map_id is None:
             return
-        self.info_panel.show()
-        self.info_name.setText(f"Имя: {marker.name}")
-        self.info_type.setText(f"Тип: {marker.type}")
-        self.info_coords.setText(f"Координаты: {marker.x:.0f}, {marker.y:.0f}")
+        nodes = self._db.fetch_mind_nodes(self._map_id)
+        if not nodes:
+            root_node = self._db.create_mind_node(
+                map_id=self._map_id,
+                title=self._map_title,
+                node_type="root",
+                source_type="map",
+                x=0,
+                y=0,
+                color="#2f80ed",
+            )
+            nodes = [root_node]
+        self._nodes = {node.id: node for node in nodes}
+        self.canvas.clear_nodes()
+        attachment_counts = {
+            node.id: len(self._db.fetch_mind_attachments(node.id)) for node in nodes
+        }
+        for node in nodes:
+            self.canvas.add_node(node, attachment_counts.get(node.id, 0))
+        self.details_panel.setEnabled(False)
+        self.node_title_edit.clear()
+        self.node_meta.setText("-")
+        self.attachments_list.clear()
+
+    def _refresh_sources(self) -> None:
+        projects = self._db.fetch_projects()
+        tasks = self._db.fetch_tasks()
+        objects = self._db.fetch_objects()
+        notes = self._db.fetch_notes()
+        tags = sorted({tag for note in notes for tag in note.tags})
+
+        def fill_list(key: str, items: list[tuple[str, Optional[int]]]) -> None:
+            widget = self.source_lists[key]
+            widget.clear()
+            for title, item_id in items:
+                item = QListWidgetItem(title)
+                item.setData(Qt.UserRole, item_id)
+                widget.addItem(item)
+
+        fill_list("project", [(p.title, p.id) for p in projects])
+        fill_list("task", [(t.title, t.id) for t in tasks])
+        fill_list("object", [(o.title, o.id) for o in objects])
+        fill_list("tag", [(tag, None) for tag in tags])
+
+    def _selected_source(self) -> Optional[tuple[str, Optional[int], str]]:
+        current_index = self.source_tabs.currentIndex()
+        if current_index < 0 or current_index >= len(self._source_keys):
+            return None
+        key = self._source_keys[current_index]
+        widget = self.source_lists[key]
+        item = widget.currentItem()
+        if not item:
+            return None
+        return key, item.data(Qt.UserRole), item.text()
+
+    def _create_node(self, parent_id: Optional[int]) -> None:
+        if self._map_id is None:
+            return
+        source = self._selected_source()
+        if not source:
+            QMessageBox.information(self, "Добавление узла", "Выберите элемент в библиотеке.")
+            return
+        source_type, source_id, title = source
+        color_map = {
+            "project": "#2f80ed",
+            "task": "#6fcf97",
+            "object": "#f2994a",
+            "tag": "#bb6bd9",
+        }
+        color = color_map.get(source_type, "#2f80ed")
+        if parent_id and parent_id in self._nodes:
+            parent_item = self.canvas._nodes.get(parent_id)
+            parent_pos = parent_item.pos() if parent_item else QPointF(0, 0)
+        else:
+            parent_pos = self.canvas.mapToScene(self.canvas.viewport().rect().center())
+        offset_x = 180
+        offset_y = 80 * max(1, len([n for n in self._nodes.values() if n.parent_id == parent_id]))
+        new_pos = QPointF(parent_pos.x() + offset_x, parent_pos.y() + offset_y)
+        node = self._db.create_mind_node(
+            map_id=self._map_id,
+            title=title,
+            node_type="source",
+            source_type=source_type,
+            source_id=source_id,
+            x=new_pos.x(),
+            y=new_pos.y(),
+            color=color,
+            parent_id=parent_id,
+        )
+        self._nodes[node.id] = node
+        self.canvas.add_node(node, 0)
+
+    def _create_child_node(self) -> None:
+        selected = self._current_node()
+        if not selected:
+            QMessageBox.information(self, "Добавление узла", "Сначала выберите узел на карте.")
+            return
+        self._create_node(parent_id=selected.id)
+
+    def _current_node(self) -> Optional[MindNodeData]:
+        selected_items = self.canvas._scene.selectedItems()
+        for item in selected_items:
+            if isinstance(item, MindNodeItem):
+                return item.node
+        return None
+
+    def _on_node_selected(self, node: Optional[MindNodeData]) -> None:
+        if not node:
+            self.details_panel.setEnabled(False)
+            self.node_title_edit.clear()
+            self.node_meta.setText("-")
+            self.attachments_list.clear()
+            return
+        self.details_panel.setEnabled(True)
+        self.node_title_edit.setText(node.title)
+        source = node.source_type.capitalize() if node.source_type else "Свободная тема"
+        self.node_meta.setText(f"{source} · ID {node.id}")
+        self._refresh_attachments(node.id)
+
+    def _refresh_attachments(self, node_id: int) -> None:
+        self.attachments_list.clear()
+        attachments = self._db.fetch_mind_attachments(node_id)
+        for att in attachments:
+            item = QListWidgetItem(f"{att.item_type}: {att.item_title}")
+            item.setData(Qt.UserRole, att.id)
+            self.attachments_list.addItem(item)
+        self.canvas.update_attachment_count(node_id, len(attachments))
+
+    def _refresh_attach_items(self) -> None:
+        self.attach_items.clear()
+        mode = self.attach_type.currentText()
+        if mode == "Задачи":
+            items = [(t.title, t.id, "task") for t in self._db.fetch_tasks()]
+        elif mode == "Проекты":
+            items = [(p.title, p.id, "project") for p in self._db.fetch_projects()]
+        elif mode == "Заметки":
+            items = [(n.title, n.id, "note") for n in self._db.fetch_notes()]
+        else:
+            tags = sorted({tag for note in self._db.fetch_notes() for tag in note.tags})
+            items = [(tag, None, "tag") for tag in tags]
+        for title, item_id, item_type in items:
+            item = QListWidgetItem(title)
+            item.setData(Qt.UserRole, (item_type, item_id))
+            self.attach_items.addItem(item)
+
+    def _attach_item(self) -> None:
+        node = self._current_node()
+        if not node:
+            QMessageBox.information(self, "Вложения", "Выберите узел, чтобы прикрепить данные.")
+            return
+        item = self.attach_items.currentItem()
+        if not item:
+            QMessageBox.information(self, "Вложения", "Выберите элемент для вложения.")
+            return
+        item_type, item_id = item.data(Qt.UserRole)
+        self._db.add_mind_attachment(node.id, item_type, item.text(), item_id)
+        self._refresh_attachments(node.id)
+
+    def _remove_attachment(self) -> None:
+        node = self._current_node()
+        if not node:
+            return
+        item = self.attachments_list.currentItem()
+        if not item:
+            return
+        attachment_id = item.data(Qt.UserRole)
+        self._db.remove_mind_attachment(attachment_id)
+        self._refresh_attachments(node.id)
+
+    def _rename_node(self) -> None:
+        node = self._current_node()
+        if not node:
+            return
+        title = self.node_title_edit.text().strip()
+        if not title:
+            return
+        self._db.update_mind_node_title(node.id, title)
+        self.canvas.update_node_title(node.id, title)
+        self._nodes[node.id] = MindNodeData(
+            id=node.id,
+            map_id=node.map_id,
+            parent_id=node.parent_id,
+            title=title,
+            node_type=node.node_type,
+            source_type=node.source_type,
+            source_id=node.source_id,
+            x=node.x,
+            y=node.y,
+            color=node.color,
+        )
+        self.node_meta.setText(f"{node.source_type.capitalize() if node.source_type else 'Свободная тема'} · ID {node.id}")
+
+    def _on_node_moved(self, node_id: int, x: float, y: float) -> None:
+        self._db.update_mind_node_position(node_id, x, y)
+        if node_id in self._nodes:
+            node = self._nodes[node_id]
+            self._nodes[node_id] = MindNodeData(
+                id=node.id,
+                map_id=node.map_id,
+                parent_id=node.parent_id,
+                title=node.title,
+                node_type=node.node_type,
+                source_type=node.source_type,
+                source_id=node.source_id,
+                x=x,
+                y=y,
+                color=node.color,
+            )
+
+    def _collect_descendants(self, node_id: int) -> list[int]:
+        to_visit = [node_id]
+        collected = []
+        while to_visit:
+            current = to_visit.pop()
+            collected.append(current)
+            children = [n.id for n in self._nodes.values() if n.parent_id == current]
+            to_visit.extend(children)
+        return collected
+
+    def _delete_selected_node(self) -> None:
+        node = self._current_node()
+        if not node:
+            return
+        if QMessageBox.question(
+            self,
+            "Удалить узел",
+            "Удалить выбранный узел вместе с дочерними элементами?",
+        ) != QMessageBox.Yes:
+            return
+        ids = self._collect_descendants(node.id)
+        self._db.delete_mind_nodes(ids)
+        for node_id in ids:
+            self._nodes.pop(node_id, None)
+        self.canvas.remove_nodes(ids)
+        self.details_panel.setEnabled(False)
+        self.node_title_edit.clear()
+        self.node_meta.setText("-")
+        self.attachments_list.clear()
 
 
 class MapsListWorkspace(QWidget):
@@ -1341,7 +1893,7 @@ class MapsListWorkspace(QWidget):
         self.list.editRequested.connect(self._on_edit_map)
         self.list.openRequested.connect(self._on_open_map)
 
-        self.editor_workspace = MapEditorWorkspace()
+        self.editor_workspace = MindWorkspace()
         self.editor_header = QFrame()
         self.editor_header.setObjectName("MapEditorHeader")
         header_layout = QHBoxLayout(self.editor_header)
@@ -1352,7 +1904,7 @@ class MapsListWorkspace(QWidget):
         self.btn_back.setText("Назад к списку")
         self.btn_back.setCursor(Qt.PointingHandCursor)
         self.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(list_page))
-        self.map_title = QLabel("Редактор карты")
+        self.map_title = QLabel("Mind Workspace")
         self.map_title.setObjectName("MapEditorTitle")
         header_layout.addWidget(self.btn_back)
         header_layout.addWidget(self.map_title)
@@ -1545,6 +2097,7 @@ class MapsListWorkspace(QWidget):
     def _on_open_map(self, index: QModelIndex) -> None:
         if not index.isValid():
             return
+        map_id = index.data(MapRoles.Id)
         title = index.data(MapRoles.Title) or "Карта"
         project = index.data(MapRoles.Project) or ""
         if project:
@@ -1552,14 +2105,5 @@ class MapsListWorkspace(QWidget):
         else:
             self.map_title.setText(title)
         self.stack.setCurrentIndex(1)
-        tiles_path = index.data(MapRoles.TilesPath) or ""
-        tiles_height = index.data(MapRoles.TilesHeight) or 0
-        tiles_width = index.data(MapRoles.TilesWidth) or 0
-        QTimer.singleShot(
-            0,
-            lambda: self.editor_workspace.canvas.set_tiles(
-                tiles_path,
-                tiles_height,
-                tiles_width,
-            ),
-        )
+        if map_id:
+            QTimer.singleShot(0, lambda: self.editor_workspace.load_map(map_id, title))
