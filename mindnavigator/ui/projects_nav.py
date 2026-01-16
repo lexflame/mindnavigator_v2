@@ -251,7 +251,7 @@ class ProjectsNav(QWidget):
                     "value": {
                         "id": marker.id,
                         "map_id": marker.map_id,
-                        "object_id": marker.object_id,
+                        "object_ids": marker.object_ids,
                     },
                 }
             )
