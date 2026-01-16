@@ -29,3 +29,60 @@ TITLEBAR_BACKGROUND = f"""
     background-position: top left;
     background-repeat: repeat;
 """
+
+APP_STYLESHEET = """
+    QMessageBox {
+        background: #16171a;
+    }
+    QMessageBox QLabel {
+        color: #cfcfcf;
+    }
+    QMessageBox QPushButton {
+        background: #2a2b2f;
+        color: #e6e6e6;
+        border: 1px solid #3a3b40;
+        padding: 6px 12px;
+        border-radius: 6px;
+        min-width: 90px;
+    }
+    QMessageBox QPushButton:hover {
+        background: #34363b;
+    }
+    QComboBox::drop-down {
+        border: none;
+        width: 18px;
+    }
+    QComboBox QAbstractItemView {
+        background: #1c1d22;
+        color: #e6e6e6;
+        border: 1px solid #2a2b2f;
+        selection-background-color: #2f3238;
+        selection-color: #f2f2f2;
+        outline: none;
+    }
+    QComboBox QAbstractItemView::item {
+        padding: 6px 10px;
+    }
+    QComboBox QAbstractItemView::item:selected {
+        background: #2f3238;
+        color: #f2f2f2;
+    }
+    QMenu {
+        background: #1f2227;
+        color: #e6e6e6;
+        border: 1px solid #2a2b2f;
+        padding: 4px;
+    }
+    QMenu::item {
+        padding: 6px 14px;
+        border-radius: 4px;
+    }
+    QMenu::item:selected {
+        background: #2b2f36;
+    }
+    QMenu::separator {
+        height: 1px;
+        background: #2a2b2f;
+        margin: 4px 8px;
+    }
+"""

@@ -194,6 +194,7 @@ class Database:
         self.path = Path(path) if path else default_db_path()
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._closed = False
         self._init_db()
 
     def _init_db(self) -> None:
@@ -1689,6 +1690,13 @@ class Database:
         """Переиндексирует таблицы базы данных."""
         with self._conn:
             self._conn.execute("REINDEX;")
+
+    def close(self) -> None:
+        """Закрывает соединение с базой данных."""
+        if self._closed:
+            return
+        self._conn.close()
+        self._closed = True
 
 
 @lru_cache(maxsize=1)
