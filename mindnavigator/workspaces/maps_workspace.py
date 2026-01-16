@@ -1890,9 +1890,6 @@ class MapsListWorkspace(QWidget):
         self.new_title.returnPressed.connect(self._on_create_map)
         self.list.editRequested.connect(self._on_edit_map)
         self.list.openRequested.connect(self._on_open_map)
-        self.marker_search.textChanged.connect(self._on_marker_search_changed)
-        self.marker_search_results.clicked.connect(self._on_marker_search_selected)
-
         self.editor_workspace = MapEditorWorkspace()
         self.editor_workspace.fullscreenToggled.connect(self._on_map_fullscreen_toggled)
         self.editor_workspace.markersChanged.connect(self._refresh_marker_search)
@@ -1935,6 +1932,9 @@ class MapsListWorkspace(QWidget):
         header_layout.addWidget(search_container)
         header_layout.addWidget(self.map_title)
         header_layout.addStretch(1)
+
+        self.marker_search.textChanged.connect(self._on_marker_search_changed)
+        self.marker_search_results.clicked.connect(self._on_marker_search_selected)
 
         editor_page = QWidget()
         editor_layout = QVBoxLayout(editor_page)
