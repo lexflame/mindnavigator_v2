@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 import qtawesome as qta
 from PySide6.QtCore import (
-    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPoint, QPointF, QRectF, Signal, QTimer
+    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPoint, QPointF, QRectF, Signal, QTimer, QEvent
 )
 from PySide6.QtGui import (
     QPainter,
@@ -2158,6 +2158,8 @@ class MapsListWorkspace(QWidget):
         self.marker_search.setObjectName("MapMarkerSearch")
         self.marker_search.setPlaceholderText("Поиск меток…")
         self.marker_search.setFixedWidth(260)
+        self.marker_search.setClearButtonEnabled(True)
+        self.marker_search.installEventFilter(self)
 
         self.marker_search_results = QListView(self)
         self.marker_search_results.setObjectName("MapMarkerSearchResults")
@@ -2565,7 +2567,7 @@ class MapsListWorkspace(QWidget):
         if self._map_fullscreen_active == enabled:
             return
         self._map_fullscreen_active = enabled
-        self.editor_header.setVisible(not enabled)
+        self.editor_header.setVisible(True)
         if enabled:
             self.marker_search_results.setVisible(False)
         self.editor_workspace.set_fullscreen_state(enabled)
@@ -2581,3 +2583,15 @@ class MapsListWorkspace(QWidget):
         self.marker_search_results.setFixedWidth(self.marker_search.width())
         global_pos = self.marker_search.mapToGlobal(QPoint(0, self.marker_search.height()))
         self.marker_search_results.move(global_pos)
+
+    def _clear_marker_search(self) -> None:
+        self.marker_search.clear()
+        self.marker_search_results.setVisible(False)
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.marker_search and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Escape:
+                if self.marker_search.text().strip() or self.marker_search_results.isVisible():
+                    self._clear_marker_search()
+                    return True
+        return super().eventFilter(obj, event)
