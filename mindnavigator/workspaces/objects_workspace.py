@@ -64,6 +64,9 @@ class ObjectsModel(QAbstractListModel):
         self._all_items: List[ObjectRow] = []
         self._items: List[ObjectRow] = []
         self._catalog_filter: Optional[str] = None
+        self._project_filter_id: Optional[int] = None
+        self._task_filter_id: Optional[int] = None
+        self._marker_filter_id: Optional[int] = None
         self._search = ""
         self._load_objects()
 
@@ -116,6 +119,27 @@ class ObjectsModel(QAbstractListModel):
 
     def set_catalog_filter(self, catalog: Optional[str]) -> None:
         self._catalog_filter = catalog
+        self._rebuild()
+
+    def set_project_filter(self, project_id: Optional[int]) -> None:
+        self._project_filter_id = project_id
+        if project_id is not None:
+            self._task_filter_id = None
+            self._marker_filter_id = None
+        self._rebuild()
+
+    def set_task_filter(self, task_id: Optional[int]) -> None:
+        self._task_filter_id = task_id
+        if task_id is not None:
+            self._project_filter_id = None
+            self._marker_filter_id = None
+        self._rebuild()
+
+    def set_marker_filter(self, marker_id: Optional[int]) -> None:
+        self._marker_filter_id = marker_id
+        if marker_id is not None:
+            self._project_filter_id = None
+            self._task_filter_id = None
         self._rebuild()
 
     def catalogs(self) -> List[str]:
@@ -173,8 +197,25 @@ class ObjectsModel(QAbstractListModel):
     def _rebuild(self) -> None:
         search = self._search
         catalog = self._catalog_filter
+        object_ids = None
+        if self._marker_filter_id is not None or self._project_filter_id is not None or self._task_filter_id is not None:
+            object_ids = set()
+            for marker in self._db.fetch_map_markers():
+                if marker.object_id is None:
+                    continue
+                if self._marker_filter_id is not None:
+                    if marker.id == self._marker_filter_id:
+                        object_ids.add(marker.object_id)
+                elif self._project_filter_id is not None:
+                    if marker.project_id == self._project_filter_id:
+                        object_ids.add(marker.object_id)
+                elif self._task_filter_id is not None:
+                    if marker.task_id == self._task_filter_id:
+                        object_ids.add(marker.object_id)
         items: List[ObjectRow] = []
         for item in self._all_items:
+            if object_ids is not None and item.id not in object_ids:
+                continue
             if catalog:
                 if item.catalog != catalog and not item.catalog.startswith(f"{catalog}/"):
                     continue
@@ -802,6 +843,15 @@ class ObjectWorkspace(QWidget):
         index = self.model.index(row)
         if index.isValid():
             self.card_list.setCurrentIndex(index)
+
+    def set_project_filter(self, project_id: Optional[int]) -> None:
+        self.model.set_project_filter(project_id)
+
+    def set_task_filter(self, task_id: Optional[int]) -> None:
+        self.model.set_task_filter(task_id)
+
+    def set_marker_filter(self, marker_id: Optional[int]) -> None:
+        self.model.set_marker_filter(marker_id)
 
     def _on_search(self, text: str) -> None:
         self.model.set_search(text)
