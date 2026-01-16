@@ -158,10 +158,12 @@ class FileWorkspace(QWidget):
         self._db = get_database()
         self._scan_thread: Optional[QThread] = None
         self._scan_worker: Optional[CloudScanWorker] = None
+        self._all_cloud_files: List[CloudFileData] = []
         self._cloud_files: List[CloudFileData] = []
         self._folder_index: Dict[str, Dict[str, object]] = {}
         self._tree_items: Dict[str, QTreeWidgetItem] = {}
         self._current_folder = ""
+        self._project_filter_id: Optional[int] = None
         self._icon_cache: Dict[str, QIcon] = {}
         self._icon_folder = qta.icon("fa5s.folder", color="#d0a93e")
         self._icon_file_generic = qta.icon("fa5s.file", color="#cfcfcf")
@@ -366,9 +368,51 @@ class FileWorkspace(QWidget):
         self.mode_stack.setCurrentIndex(index)
 
     def _load_cloud_files(self) -> None:
-        self._cloud_files = self._db.fetch_cloud_files()
+        self._all_cloud_files = self._db.fetch_cloud_files()
+        self._apply_project_filter()
+
+    def set_project_filter(self, project_id: Optional[int]) -> None:
+        """Устанавливает фильтр по проекту для облачных файлов."""
+        self._project_filter_id = project_id
+        self._apply_project_filter()
+
+    def _apply_project_filter(self) -> None:
+        project = None
+        if self._project_filter_id is not None:
+            project = next(
+                (p for p in self._db.fetch_projects() if p.id == self._project_filter_id),
+                None,
+            )
+        if project is None:
+            self._cloud_files = list(self._all_cloud_files)
+        else:
+            self._cloud_files = [
+                item
+                for item in self._all_cloud_files
+                if self._file_matches_project(item, project)
+            ]
         self._folder_index = self._build_folder_index(self._cloud_files)
         self._rebuild_navigation()
+
+    def _file_matches_project(self, item: CloudFileData, project) -> bool:
+        project_tokens = [project.title.lower(), project.area.lower()]
+        rel_path = (item.rel_path or "").lower()
+        if any(token and token in rel_path for token in project_tokens):
+            return True
+        description = (item.description or "").strip()
+        if not description:
+            return False
+        try:
+            payload = json.loads(description)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            folders = [str(part).lower() for part in payload.get("folders", [])]
+            text = str(payload.get("text", "")).lower()
+            for token in project_tokens:
+                if token and (token in text or token in folders):
+                    return True
+        return False
 
     def _build_folder_index(self, files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
         index: Dict[str, Dict[str, object]] = {"": {"folders": set(), "files": []}}
