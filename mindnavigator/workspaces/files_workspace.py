@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 import mimetypes
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QMenu,
     QMessageBox,
+    QDialog,
 )
 
 import qtawesome as qta
@@ -148,10 +150,147 @@ class CloudScanWorker(QObject):
         return mime.startswith("image/")
 
 
+class ImagePreviewDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        images: List[CloudFileData],
+        start_index: int,
+        cloud_root: Path,
+        description_formatter,
+    ) -> None:
+        super().__init__(parent)
+        self._images = images
+        self._current_index = max(0, min(start_index, len(images) - 1))
+        self._cloud_root = cloud_root
+        self._format_description = description_formatter
+        self._pixmap_cache: Dict[str, QPixmap] = {}
+
+        self.setWindowTitle("Просмотр изображения")
+        self.setMinimumSize(800, 600)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+
+        self.path_label = QLabel()
+        self.path_label.setObjectName("FilesImagePath")
+        self.path_label.setAlignment(Qt.AlignCenter)
+
+        self.image_label = QLabel()
+        self.image_label.setObjectName("FilesImagePreview")
+        self.image_label.setAlignment(Qt.AlignCenter)
+
+        self.description_label = QLabel()
+        self.description_label.setObjectName("FilesImageDescription")
+        self.description_label.setAlignment(Qt.AlignCenter)
+        self.description_label.setWordWrap(True)
+
+        layout.addWidget(self.path_label)
+        layout.addWidget(self.image_label, 1)
+        layout.addWidget(self.description_label)
+
+        self.setStyleSheet(
+            """
+            QDialog {
+                background: #0f1115;
+            }
+            QLabel#FilesImagePath {
+                color: #f0f0f0;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QLabel#FilesImagePreview {
+                color: #9aa0a6;
+            }
+            QLabel#FilesImageDescription {
+                color: #e0e0e0;
+                background: rgba(30, 33, 39, 0.85);
+                border: 1px solid #2f333b;
+                border-radius: 10px;
+                padding: 12px 18px;
+                font-size: 12px;
+            }
+            """
+        )
+
+        self._update_image()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Left:
+            self._show_previous()
+            return
+        if event.key() == Qt.Key_Right:
+            self._show_next()
+            return
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_pixmap()
+
+    def _show_previous(self) -> None:
+        if not self._images:
+            return
+        self._current_index = max(0, self._current_index - 1)
+        self._update_image()
+
+    def _show_next(self) -> None:
+        if not self._images:
+            return
+        self._current_index = min(len(self._images) - 1, self._current_index + 1)
+        self._update_image()
+
+    def _update_image(self) -> None:
+        if not self._images:
+            self.path_label.setText("Нет изображений")
+            self.description_label.setText("")
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображения отсутствуют")
+            return
+
+        current = self._images[self._current_index]
+        self.path_label.setText(current.rel_path)
+        self.description_label.setText(self._format_description(current.description))
+
+        file_path = self._cloud_root / current.rel_path
+        if not file_path.is_file():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+
+        cache_key = current.rel_path
+        pixmap = self._pixmap_cache.get(cache_key)
+        if pixmap is None:
+            pixmap = QPixmap(str(file_path))
+            self._pixmap_cache[cache_key] = pixmap
+        self._update_pixmap(pixmap)
+
+    def _update_pixmap(self, pixmap: Optional[QPixmap] = None) -> None:
+        if pixmap is None:
+            current = self._images[self._current_index] if self._images else None
+            if not current:
+                return
+            pixmap = self._pixmap_cache.get(current.rel_path)
+        if not pixmap or pixmap.isNull():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+        target_size = self.image_label.size()
+        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled)
+        self.image_label.setText("")
+
+
 class FileWorkspace(QWidget):
     """Рабочая область для синхронизации файлов облака."""
 
     CLOUD_STORAGE_KEY = "cloud_storage_path"
+    CLOUD_LAST_SYNC_KEY = "cloud_last_sync_at"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -165,10 +304,12 @@ class FileWorkspace(QWidget):
         self._current_folder = ""
         self._project_filter_id: Optional[int] = None
         self._icon_cache: Dict[str, QIcon] = {}
+        self._default_mode_applied = False
         self._icon_folder = qta.icon("fa5s.folder", color="#d0a93e")
         self._icon_file_generic = qta.icon("fa5s.file", color="#cfcfcf")
         self._icon_file_image = qta.icon("fa5s.file-image", color="#6ab7ff")
         self._build_ui()
+        self._update_sync_status()
         self._load_cloud_files()
 
     def _build_ui(self) -> None:
@@ -189,10 +330,10 @@ class FileWorkspace(QWidget):
         self.mode_group = QButtonGroup(self)
         self.log_mode_button = QPushButton("Логи")
         self.log_mode_button.setCheckable(True)
-        self.log_mode_button.setChecked(True)
         self.log_mode_button.setObjectName("FilesModeButton")
         self.nav_mode_button = QPushButton("Навигация")
         self.nav_mode_button.setCheckable(True)
+        self.nav_mode_button.setChecked(True)
         self.nav_mode_button.setObjectName("FilesModeButton")
 
         self.mode_group.addButton(self.log_mode_button, 0)
@@ -285,6 +426,7 @@ class FileWorkspace(QWidget):
 
         self.mode_stack.addWidget(sync_page)
         self.mode_stack.addWidget(nav_page)
+        self.mode_stack.setCurrentIndex(1)
 
         layout.addLayout(header)
         layout.addWidget(self.mode_stack, 1)
@@ -453,6 +595,10 @@ class FileWorkspace(QWidget):
         self.navigation_stack.setCurrentIndex(1)
         self.folder_tree.clear()
         self._tree_items.clear()
+        if not self._default_mode_applied:
+            self.nav_mode_button.setChecked(True)
+            self.mode_stack.setCurrentIndex(1)
+            self._default_mode_applied = True
         root_item = QTreeWidgetItem(["Облако"])
         root_item.setData(0, Qt.UserRole, "")
         self.folder_tree.addTopLevelItem(root_item)
@@ -557,6 +703,8 @@ class FileWorkspace(QWidget):
             return
         if payload[0] == "folder":
             self._select_folder(payload[1])
+        elif payload[0] == "file":
+            self._open_image_preview(payload[1])
 
     def _select_folder(self, folder_path: str) -> None:
         tree_item = self._tree_items.get(folder_path)
@@ -629,6 +777,40 @@ class FileWorkspace(QWidget):
                 return text
         return description
 
+    def _find_file_by_rel_path(self, rel_path: str) -> Optional[CloudFileData]:
+        return next((item for item in self._cloud_files if item.rel_path == rel_path), None)
+
+    def _current_folder_images(self) -> List[CloudFileData]:
+        data = self._folder_index.get(self._current_folder, {})
+        files = data.get("files", [])
+        image_files = [item for item in files if item.is_image]
+        return sorted(image_files, key=lambda item: item.name.lower())
+
+    def _open_image_preview(self, rel_path: str) -> None:
+        file_item = self._find_file_by_rel_path(rel_path)
+        if not file_item or not file_item.is_image:
+            return
+        cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "Просмотр изображения", "Путь к облаку не задан.")
+            return
+        images = self._current_folder_images()
+        if not images:
+            return
+        try:
+            start_index = next(idx for idx, item in enumerate(images) if item.rel_path == rel_path)
+        except StopIteration:
+            return
+        dialog = ImagePreviewDialog(
+            self,
+            images=images,
+            start_index=start_index,
+            cloud_root=Path(cloud_root),
+            description_formatter=self._format_description,
+        )
+        dialog.showFullScreen()
+        dialog.exec()
+
     def _start_sync(self) -> None:
         cloud_path = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
         if not cloud_path:
@@ -667,10 +849,8 @@ class FileWorkspace(QWidget):
 
     def _on_scan_finished(self, summary: ScanSummary) -> None:
         self.sync_button.setDisabled(False)
-        self.status_label.setText(
-            "Синхронизация и переиндексация завершены: "
-            f"{summary.valid} OK, {summary.invalid} ошибок, {summary.skipped} пропущено."
-        )
+        self._store_last_sync()
+        self.status_label.setText(self._build_sync_status_text(summary))
         self._append_log(
             "Итого: "
             f"{summary.total} файлов, {summary.valid} совпадений, {summary.invalid} расхождений."
@@ -685,3 +865,29 @@ class FileWorkspace(QWidget):
 
     def _append_log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
+
+    def _build_sync_status_text(self, summary: Optional[ScanSummary] = None) -> str:
+        last_sync = self._db.get_setting(self.CLOUD_LAST_SYNC_KEY, default="").strip()
+        if last_sync:
+            try:
+                timestamp = last_sync.replace("T", " ").split(".")[0]
+            except ValueError:
+                timestamp = last_sync
+            base = f"Последняя синхронизация: {timestamp}"
+        else:
+            base = "Синхронизация не запускалась."
+
+        if summary:
+            return (
+                "Синхронизация завершена: "
+                f"{summary.valid} OK, {summary.invalid} ошибок, {summary.skipped} пропущено. "
+                f"{base}"
+            )
+        return base
+
+    def _store_last_sync(self) -> None:
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        self._db.set_setting(self.CLOUD_LAST_SYNC_KEY, timestamp)
+
+    def _update_sync_status(self) -> None:
+        self.status_label.setText(self._build_sync_status_text())
