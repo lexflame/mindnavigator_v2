@@ -68,6 +68,7 @@ class ProjectsModel(QAbstractListModel):
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
+        self._task_filter_id: Optional[int] = None
         self._reload_from_db()
 
     def _reload_from_db(self):
@@ -152,6 +153,11 @@ class ProjectsModel(QAbstractListModel):
     def set_area_focus(self, area: Optional[str]):
         """Фиксирует активную область проектов."""
         self._area_focus = area
+        self._rebuild()
+
+    def set_task_filter(self, task_id: Optional[int]):
+        """Фильтрует проекты по выбранной задаче."""
+        self._task_filter_id = task_id
         self._rebuild()
 
     def add_project(self, area: str, title: str, updated: date, priority: str, archived: bool):
@@ -281,11 +287,21 @@ class ProjectsModel(QAbstractListModel):
     def _rebuild(self):
         """Пересобирает список проектов с учетом фильтров."""
         search = self._search
+        task_project_id = None
+        if self._task_filter_id is not None:
+            for task in self._db.fetch_tasks():
+                if task.id == self._task_filter_id:
+                    task_project_id = task.project_id
+                    break
 
         projects: List[ProjectRow] = []
         for it in self._all_rows:
             if not isinstance(it, ProjectRow):
                 continue
+
+            if self._task_filter_id is not None:
+                if task_project_id is None or it.id != task_project_id:
+                    continue
 
             if self._area_focus is not None and it.area != self._area_focus:
                 continue
@@ -1048,6 +1064,10 @@ class ProjectsWorkspace(QWidget):
     def refresh_projects(self) -> None:
         """Перезагружает список проектов из базы."""
         self.model.refresh()
+
+    def set_task_filter(self, task_id: Optional[int]) -> None:
+        """Устанавливает фильтр по задаче для списка проектов."""
+        self.model.set_task_filter(task_id)
 
     def _refresh_area_combo(self, selected: Optional[str] = None):
         """Обновляет список областей проектов."""

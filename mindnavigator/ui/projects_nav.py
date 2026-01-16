@@ -8,6 +8,7 @@ class ProjectsNav(QWidget):
     """Панель навигации по проектам справа от левого меню."""
 
     project_filter_changed = Signal(object)
+    filter_changed = Signal(str, object)
 
     def __init__(self, parent=None):
         """Создает и настраивает блок навигации проектов."""
@@ -34,16 +35,17 @@ class ProjectsNav(QWidget):
         self.list.setSelectionMode(QListWidget.SingleSelection)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.currentItemChanged.connect(self._on_project_selected)
+        self.list.currentItemChanged.connect(self._on_item_selected)
 
-        self._selected_project_id = None
+        self._selected_key = None
+        self._mode_name = "Задачи"
 
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
         layout.addWidget(self.list, 1)
         layout.addStretch(0)
 
-        self._populate_projects()
+        self._populate_for_mode(self._mode_name)
 
         self.setFixedHeight(self._fixed_h)
 
@@ -95,49 +97,184 @@ class ProjectsNav(QWidget):
             }
         """)
 
-    def _populate_projects(self):
-        """Заполняет список доступными проектами."""
-        selected_id = self._selected_project_id
+    def _populate_for_mode(self, mode_name: str):
+        """Заполняет список навигации для активного режима."""
+        selected_key = self._selected_key
         self.list.clear()
-        all_item = QListWidgetItem("Все проекты")
-        all_item.setData(Qt.UserRole, None)
-        self.list.addItem(all_item)
+        entries = []
+        hint = ""
+        header = mode_name
+        if mode_name == "Задачи":
+            header = "Проекты"
+            hint = "Фильтрация задач по проектам"
+            entries = self._project_entries()
+            self._add_clear_item("Все проекты")
+            self._add_entries(entries)
+        elif mode_name == "Проекты":
+            header = "Задачи"
+            hint = "Фильтрация проектов по задачам"
+            entries = self._task_entries()
+            self._add_clear_item("Все задачи")
+            self._add_entries(entries)
+        elif mode_name == "Файлы":
+            header = "Проекты"
+            hint = "Фильтрация файлов по проектам"
+            entries = self._project_entries()
+            self._add_clear_item("Все проекты")
+            self._add_entries(entries)
+        elif mode_name == "Карты":
+            header = "Проекты"
+            hint = "Фильтрация карт по проектам"
+            entries = self._project_entries()
+            self._add_clear_item("Все проекты")
+            self._add_entries(entries)
+        elif mode_name == "Заметки":
+            header = "Задачи и карты"
+            hint = "Фильтрация заметок по задачам или проектам карт"
+            self._add_clear_item("Без фильтра")
+            self._add_section("Задачи", self._task_entries())
+            self._add_section("Карты", self._map_entries())
+        elif mode_name == "Объекты":
+            header = "Проекты и метки"
+            hint = "Фильтрация объектов по проектам, задачам и меткам"
+            self._add_clear_item("Без фильтра")
+            self._add_section("Проекты", self._project_entries())
+            self._add_section("Задачи", self._task_entries())
+            self._add_section("Метки на карте", self._marker_entries())
+        else:
+            header = "Навигация"
+            hint = "Навигация (пока пусто)"
 
-        projects = sorted(get_database().fetch_projects(), key=lambda p: (p.area.lower(), p.title.lower()))
-        for project in projects:
-            self.list.addItem(self._project_item(project))
+        self.header.setText(header)
+        self.hint.setText(hint)
+        self._select_key(selected_key)
 
-        self._select_project_id(selected_id)
+    def _add_clear_item(self, label: str) -> None:
+        item = QListWidgetItem(label)
+        item.setData(Qt.UserRole, {"kind": "clear", "value": None})
+        self.list.addItem(item)
 
-    def _select_project_id(self, project_id):
-        """Выбирает проект по id, если он есть в списке."""
+    def _add_section(self, title: str, entries: list[dict]) -> None:
+        if title:
+            header_item = QListWidgetItem(title)
+            header_item.setFlags(Qt.ItemIsEnabled)
+            header_item.setForeground(Qt.gray)
+            header_item.setData(Qt.UserRole, {"kind": "section", "value": None})
+            self.list.addItem(header_item)
+        self._add_entries(entries)
+
+    def _add_entries(self, entries: list[dict]) -> None:
+        if not entries:
+            empty = QListWidgetItem("— нет данных —")
+            empty.setFlags(Qt.ItemIsEnabled)
+            empty.setForeground(Qt.gray)
+            empty.setData(Qt.UserRole, {"kind": "empty", "value": None})
+            self.list.addItem(empty)
+            return
+        for entry in entries:
+            item = QListWidgetItem(entry["label"])
+            item.setData(Qt.UserRole, {"kind": entry["kind"], "value": entry["value"]})
+            self.list.addItem(item)
+
+    def _select_key(self, key):
         if self.list.count() == 0:
             return
         fallback_index = 0
         for idx in range(self.list.count()):
             item = self.list.item(idx)
-            if item.data(Qt.UserRole) == project_id:
+            data = item.data(Qt.UserRole) or {}
+            if data.get("kind") in {"section", "empty"}:
+                continue
+            if key is not None and data == key:
                 self.list.setCurrentRow(idx)
                 return
         self.list.setCurrentRow(fallback_index)
 
-    def _project_item(self, project: ProjectData) -> QListWidgetItem:
-        """Создает элемент списка проекта."""
+    def _project_item_label(self, project: ProjectData) -> str:
         suffix = " · архив" if project.archived else ""
-        text = f"{project.area} · {project.title}{suffix}"
-        item = QListWidgetItem(text)
-        item.setData(Qt.UserRole, project.id)
-        return item
+        return f"{project.area} · {project.title}{suffix}"
 
-    def _on_project_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
-        """Обрабатывает выбор проекта для фильтрации."""
+    def _project_entries(self) -> list[dict]:
+        projects = sorted(get_database().fetch_projects(), key=lambda p: (p.area.lower(), p.title.lower()))
+        entries = []
+        for project in projects:
+            entries.append(
+                {
+                    "label": self._project_item_label(project),
+                    "kind": "project",
+                    "value": {"id": project.id, "title": project.title, "area": project.area},
+                }
+            )
+        return entries
+
+    def _task_entries(self) -> list[dict]:
+        tasks = sorted(
+            get_database().fetch_tasks(),
+            key=lambda t: (t.day, t.time_text or "", t.title.lower()),
+        )
+        entries = []
+        for task in tasks:
+            label = task.title
+            if task.project_title:
+                label = f"{task.title} · {task.project_title}"
+            entries.append(
+                {"label": label, "kind": "task", "value": {"id": task.id, "project_id": task.project_id}}
+            )
+        return entries
+
+    def _map_entries(self) -> list[dict]:
+        maps = sorted(get_database().fetch_maps(), key=lambda m: m.title.lower())
+        entries = []
+        for item in maps:
+            label = item.title
+            if item.project:
+                label = f"{item.title} · {item.project}"
+            entries.append(
+                {"label": label, "kind": "map", "value": {"id": item.id, "project": item.project}}
+            )
+        return entries
+
+    def _marker_entries(self) -> list[dict]:
+        maps = {m.id: m.title for m in get_database().fetch_maps()}
+        markers = sorted(
+            get_database().fetch_map_markers(),
+            key=lambda m: (maps.get(m.map_id, "").lower(), m.name.lower()),
+        )
+        entries = []
+        for marker in markers:
+            map_title = maps.get(marker.map_id, "Без карты")
+            label = f"{marker.name} · {map_title}"
+            entries.append(
+                {
+                    "label": label,
+                    "kind": "marker",
+                    "value": {
+                        "id": marker.id,
+                        "map_id": marker.map_id,
+                        "object_id": marker.object_id,
+                    },
+                }
+            )
+        return entries
+
+    def _on_item_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
+        """Обрабатывает выбор элемента для фильтрации."""
         if current is None:
-            self._selected_project_id = None
+            self._selected_key = None
+            self.filter_changed.emit("clear", None)
             self.project_filter_changed.emit(None)
             return
-        project_id = current.data(Qt.UserRole)
-        self._selected_project_id = project_id
-        self.project_filter_changed.emit(project_id)
+        data = current.data(Qt.UserRole) or {}
+        kind = data.get("kind")
+        value = data.get("value")
+        if kind in {"section", "empty"}:
+            return
+        self._selected_key = data
+        if kind == "project":
+            self.project_filter_changed.emit(value["id"])
+        elif kind == "clear":
+            self.project_filter_changed.emit(None)
+        self.filter_changed.emit(kind or "clear", value)
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""
@@ -147,16 +284,9 @@ class ProjectsNav(QWidget):
 
     def set_mode_title(self, mode_name: str):
         """Обновляет заголовок панели для активного режима."""
-        self.header.setText(f"Проекты · {mode_name}")
-        is_tasks = mode_name == "Задачи"
-        if not is_tasks:
-            current = self.list.currentItem()
-            self._selected_project_id = current.data(Qt.UserRole) if current else None
+        self._mode_name = mode_name
         with QSignalBlocker(self.list):
-            self.hint.setVisible(is_tasks)
-            self.list.setVisible(is_tasks)
-            if is_tasks:
-                self.hint.setText("Фильтрация задач по проектам")
-                self._select_project_id(self._selected_project_id)
-            else:
-                self.hint.setText("Навигация (пока пусто)")
+            self._populate_for_mode(mode_name)
+        current = self.list.currentItem()
+        if current is not None:
+            self._on_item_selected(current, None)

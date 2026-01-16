@@ -221,7 +221,8 @@ class MainWindow(QMainWindow):
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
-        self.projects_nav.project_filter_changed.connect(self.page_tasks.set_project_filter)
+        self.projects_nav.filter_changed.connect(self._on_nav_filter_changed)
+        self._current_mode = self.MODE_TASKS
 
         MATH_PHYS_PATTERN = (
             "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYwIiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEwIFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAiLz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJNMCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
@@ -275,6 +276,7 @@ class MainWindow(QMainWindow):
     def set_mode(self, mode_name: str):
         """Переключает активную рабочую область и обновляет заголовки."""
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_name}")
+        self._current_mode = mode_name
         self.projects_nav.set_mode_title(mode_name)
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
         if mode_name == self.MODE_TASKS:
@@ -288,6 +290,54 @@ class MainWindow(QMainWindow):
             if m == mode_name:
                 btn.setChecked(True)
                 break
+
+    def _on_nav_filter_changed(self, kind: str, value: object) -> None:
+        mode = self._current_mode
+        if mode == self.MODE_TASKS:
+            if kind == "project":
+                self.page_tasks.set_project_filter(value["id"])
+            elif kind == "clear":
+                self.page_tasks.set_project_filter(None)
+            return
+        if mode == self.MODE_PROJECTS:
+            if kind == "task":
+                self.page_projects.set_task_filter(value["id"])
+            elif kind == "clear":
+                self.page_projects.set_task_filter(None)
+            return
+        if mode == self.MODE_FILES:
+            if kind == "project":
+                self.page_files.set_project_filter(value["id"])
+            elif kind == "clear":
+                self.page_files.set_project_filter(None)
+            return
+        if mode == self.MODE_MAPS:
+            if kind == "project":
+                self.page_maps.set_project_filter(value["title"])
+            elif kind == "clear":
+                self.page_maps.set_project_filter(None)
+            return
+        if mode == self.MODE_NOTES:
+            if kind == "task":
+                self.page_notes.set_task_filter(value["id"])
+            elif kind == "map":
+                project = value.get("project") or None
+                self.page_notes.set_project_filter(project)
+            elif kind == "clear":
+                self.page_notes.set_project_filter(None)
+                self.page_notes.set_task_filter(None)
+            return
+        if mode == self.MODE_OBJECTS:
+            if kind == "project":
+                self.page_objects.set_project_filter(value["id"])
+            elif kind == "task":
+                self.page_objects.set_task_filter(value["id"])
+            elif kind == "marker":
+                self.page_objects.set_marker_filter(value["id"])
+            elif kind == "clear":
+                self.page_objects.set_project_filter(None)
+                self.page_objects.set_task_filter(None)
+                self.page_objects.set_marker_filter(None)
 
     def resizeEvent(self, event):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
