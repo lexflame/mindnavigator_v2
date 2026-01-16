@@ -1149,6 +1149,8 @@ class MapCanvas(QWidget):
 
 
 class MapEditorWorkspace(QWidget):
+    fullscreenToggled = Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("MapEditorWorkspace")
@@ -1157,6 +1159,8 @@ class MapEditorWorkspace(QWidget):
         self._projects_by_id = {}
         self._notes_by_id = {}
         self._objects_by_id = {}
+        self._info_panel_was_visible = False
+        self._fullscreen_active = False
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -1194,10 +1198,22 @@ class MapEditorWorkspace(QWidget):
         self.btn_grid.setChecked(True)
         self.btn_grid.clicked.connect(lambda checked: self.canvas.set_grid_enabled(checked))
 
+        self.btn_fullscreen = tool_button("fa5s.expand", "Полноэкранный режим", None)
+        self.btn_fullscreen.setCheckable(True)
+        self.btn_fullscreen.clicked.connect(self._on_fullscreen_toggled)
+
         self.btn_camera = tool_button("fa5s.camera", "Скриншот", None)
         self.btn_camera.setCheckable(False)
 
-        for btn in [self.btn_select, self.btn_marker, self.btn_region, self.btn_measure, self.btn_grid, self.btn_camera]:
+        for btn in [
+            self.btn_select,
+            self.btn_marker,
+            self.btn_region,
+            self.btn_measure,
+            self.btn_grid,
+            self.btn_fullscreen,
+            self.btn_camera,
+        ]:
             toolbar_layout.addWidget(btn)
 
         self.btn_select.setChecked(True)
@@ -1294,7 +1310,24 @@ class MapEditorWorkspace(QWidget):
             }
         """)
 
+    def set_fullscreen_state(self, enabled: bool) -> None:
+        self.btn_fullscreen.blockSignals(True)
+        self.btn_fullscreen.setChecked(enabled)
+        self.btn_fullscreen.blockSignals(False)
+        self._fullscreen_active = enabled
+        if enabled:
+            self._info_panel_was_visible = self.info_panel.isVisible()
+            self.info_panel.hide()
+        elif self._info_panel_was_visible:
+            self.info_panel.show()
+
+    def _on_fullscreen_toggled(self, checked: bool) -> None:
+        self.fullscreenToggled.emit(checked)
+
     def _on_marker_selected(self, marker: Optional[Marker]) -> None:
+        if self._fullscreen_active:
+            self.info_panel.hide()
+            return
         if not marker:
             self.info_panel.hide()
             return
@@ -1334,6 +1367,7 @@ class MapsListWorkspace(QWidget):
         self.setObjectName("MapsWorkspace")
 
         self._db = get_database()
+        self._map_fullscreen_active = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
@@ -1477,6 +1511,7 @@ class MapsListWorkspace(QWidget):
         self.list.openRequested.connect(self._on_open_map)
 
         self.editor_workspace = MapEditorWorkspace()
+        self.editor_workspace.fullscreenToggled.connect(self._on_map_fullscreen_toggled)
         self.editor_header = QFrame()
         self.editor_header.setObjectName("MapEditorHeader")
         header_layout = QHBoxLayout(self.editor_header)
@@ -1698,3 +1733,17 @@ class MapsListWorkspace(QWidget):
                 tiles_width,
             ),
         )
+
+    def _on_map_fullscreen_toggled(self, enabled: bool) -> None:
+        window = self.window()
+        if window and hasattr(window, "set_map_fullscreen"):
+            window.set_map_fullscreen(enabled)
+        else:
+            self.set_map_fullscreen_state(enabled)
+
+    def set_map_fullscreen_state(self, enabled: bool) -> None:
+        if self._map_fullscreen_active == enabled:
+            return
+        self._map_fullscreen_active = enabled
+        self.editor_header.setVisible(not enabled)
+        self.editor_workspace.set_fullscreen_state(enabled)
