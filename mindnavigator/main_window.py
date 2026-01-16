@@ -29,7 +29,7 @@ from .workspaces.objects_workspace import ObjectWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 
-from .ui.styles import TITLEBAR_BACKGROUND
+from .ui.styles import MATH_PHYS_PATTERN, TITLEBAR_BACKGROUND
 
 
 class MainWindow(QMainWindow):
@@ -147,30 +147,7 @@ class MainWindow(QMainWindow):
         container_layout.setSpacing(0)
 
         self.title_bar = TitleBar(self)
-        self.title_bar.setStyleSheet(f"""
-            QWidget#TitleBar {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2b3465, stop:0.5 #1b223a, stop:0.5001 #CCC, stop:1 #CCC);
-                border-bottom: 1px solid #2a2b2f;
-            }}
-            QLabel#TitleText {{
-                color: #eef1ff;
-                font-size: 13px;
-                font-weight: 600;
-            }}
-            QToolButton {{
-                color: #cfcfcf;
-                background: transparent;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }}
-            QToolButton:hover {{ background: #2a2b2f; }}
-            QToolButton:pressed {{ background: #35363c; }}
-            QToolButton:last-child:hover {{
-                background: #b23b3b;
-                color: #ffffff;
-            }}
-        """)
+        self._apply_titlebar_style()
 
         container_layout.addWidget(self.title_bar)
 
@@ -224,19 +201,7 @@ class MainWindow(QMainWindow):
         self.projects_nav.filter_changed.connect(self._on_nav_filter_changed)
         self._current_mode = self.MODE_TASKS
 
-        MATH_PHYS_PATTERN = (
-            "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYwIiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEwIFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAiLz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJNMCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
-        )
-
-        self.centralWidget().setStyleSheet(f"""
-            QWidget#OuterRoot {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
-                background-image: url("{MATH_PHYS_PATTERN}");
-                background-position: top left;
-                background-repeat: repeat;
-            }}
-            QWidget#Container {{ border: 1px solid #2a2b2f; }}
-        """)
+        self._apply_root_style()
 
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
@@ -258,6 +223,45 @@ class MainWindow(QMainWindow):
         l.addWidget(s)
         w.setStyleSheet("QWidget#Placeholder { background: #16171a; }")
         return w
+
+    def _apply_titlebar_style(self) -> None:
+        """Применяет стили к заголовку окна."""
+        self.title_bar.setStyleSheet(f"""
+            QWidget#TitleBar {{
+                {TITLEBAR_BACKGROUND}
+                border-bottom: 1px solid #2a2b2f;
+            }}
+            QLabel#TitleText {{
+                color: #eef1ff;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QToolButton {{
+                color: #cfcfcf;
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+            }}
+            QToolButton:hover {{ background: #2a2b2f; }}
+            QToolButton:pressed {{ background: #35363c; }}
+            QToolButton:last-child:hover {{
+                background: #b23b3b;
+                color: #ffffff;
+            }}
+        """)
+
+    def _apply_root_style(self) -> None:
+        """Применяет базовые стили к корневому контейнеру."""
+        self.centralWidget().setStyleSheet(f"""
+            QWidget#OuterRoot {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
+                background-image: url("{MATH_PHYS_PATTERN}");
+                background-position: top left;
+                background-repeat: repeat;
+            }}
+            QWidget#Container {{ border: 1px solid #2a2b2f; }}
+        """)
 
     def _wire_modes(self):
         """Связывает кнопки левого меню с режимами рабочих областей."""
