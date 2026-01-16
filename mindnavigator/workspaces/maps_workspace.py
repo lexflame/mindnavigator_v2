@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QColorDialog
+    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit
 )
 
 from mindnavigator.storage import get_database
@@ -546,6 +546,8 @@ class Marker:
     color: QColor
     type: str
     size: float
+    description: str = ""
+    properties: str = ""
     task_id: Optional[int] = None
     project_id: Optional[int] = None
     note_id: Optional[int] = None
@@ -594,9 +596,9 @@ class MapCanvas(QWidget):
 
     def _seed_markers(self) -> None:
         self._markers = [
-            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", self.DEFAULT_MARKER_SIZE),
-            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", self.DEFAULT_MARKER_SIZE),
-            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", self.DEFAULT_MARKER_SIZE),
+            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", self.DEFAULT_MARKER_SIZE, "Опорный пункт"),
+            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", self.DEFAULT_MARKER_SIZE, "Контрольная точка"),
+            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", self.DEFAULT_MARKER_SIZE, "Зона риска"),
         ]
         self._next_id = 4
 
@@ -855,6 +857,8 @@ class MapCanvas(QWidget):
                 marker.color,
                 marker.type,
                 new_size,
+                marker.description,
+                marker.properties,
                 marker.task_id,
                 marker.project_id,
                 marker.note_id,
@@ -899,6 +903,8 @@ class MapCanvas(QWidget):
                     marker.color,
                     marker.type,
                     marker.size,
+                    marker.description,
+                    marker.properties,
                     marker.task_id,
                     marker.project_id,
                     marker.note_id,
@@ -963,6 +969,8 @@ class MapCanvas(QWidget):
             QColor("#8be26f"),
             "Point",
             self.DEFAULT_MARKER_SIZE,
+            "",
+            "",
             None,
             None,
             None,
@@ -1017,6 +1025,11 @@ class MapCanvas(QWidget):
 
         name_edit = QLineEdit(marker.name)
         type_edit = QLineEdit(marker.type)
+        size_edit = QDoubleSpinBox()
+        size_edit.setRange(self.MIN_MARKER_SIZE, self.MAX_MARKER_SIZE)
+        size_edit.setDecimals(1)
+        size_edit.setSingleStep(0.5)
+        size_edit.setValue(marker.size)
         task_combo = QComboBox()
         project_combo = QComboBox()
         note_combo = QComboBox()
@@ -1039,6 +1052,16 @@ class MapCanvas(QWidget):
         color_holder.setLayout(color_row)
         selected_color = {"value": marker.color}
 
+        description_edit = QPlainTextEdit()
+        description_edit.setPlaceholderText("Описание метки…")
+        description_edit.setPlainText(marker.description)
+        description_edit.setFixedHeight(80)
+
+        properties_edit = QPlainTextEdit()
+        properties_edit.setPlaceholderText("Свойства, теги или заметки…")
+        properties_edit.setPlainText(marker.properties)
+        properties_edit.setFixedHeight(90)
+
         def pick_color() -> None:
             chosen = QColorDialog.getColor(selected_color["value"], dialog, "Цвет маркера")
             if chosen.isValid():
@@ -1048,11 +1071,14 @@ class MapCanvas(QWidget):
         color_btn.clicked.connect(pick_color)
         form.addRow("Название", name_edit)
         form.addRow("Тип", type_edit)
+        form.addRow("Размер", size_edit)
         form.addRow("Задача", task_combo)
         form.addRow("Проект", project_combo)
         form.addRow("Заметка", note_combo)
         form.addRow("Объект", object_combo)
         form.addRow("Цвет", color_holder)
+        form.addRow("Описание", description_edit)
+        form.addRow("Свойства", properties_edit)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -1074,6 +1100,20 @@ class MapCanvas(QWidget):
                 padding: 6px 8px;
                 border-radius: 6px;
             }}
+            QDialog#MarkerEditDialog QPlainTextEdit {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+            QDialog#MarkerEditDialog QDoubleSpinBox {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 4px 6px;
+                border-radius: 6px;
+            }}
             QDialog#MarkerEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
@@ -1091,7 +1131,9 @@ class MapCanvas(QWidget):
                 marker.y,
                 selected_color["value"],
                 type_edit.text().strip() or marker.type,
-                marker.size,
+                size_edit.value(),
+                description_edit.toPlainText().strip(),
+                properties_edit.toPlainText().strip(),
                 task_combo.currentData(),
                 project_combo.currentData(),
                 note_combo.currentData(),
@@ -1102,16 +1144,67 @@ class MapCanvas(QWidget):
             self.markerSelected.emit(updated)
             self.update()
 
+    def _view_marker(self, marker: Marker) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Метка на карте")
+        dialog.setObjectName("MarkerViewDialog")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        form = QFormLayout()
+
+        name_label = QLabel(marker.name)
+        type_label = QLabel(marker.type or "—")
+        coords_label = QLabel(f"{marker.x:.0f}, {marker.y:.0f}")
+        size_label = QLabel(f"{marker.size:.1f}")
+        color_label = QLabel(marker.color.name())
+        desc_label = QLabel(marker.description or "—")
+        desc_label.setWordWrap(True)
+        props_label = QLabel(marker.properties or "—")
+        props_label.setWordWrap(True)
+
+        form.addRow("Название", name_label)
+        form.addRow("Тип", type_label)
+        form.addRow("Координаты", coords_label)
+        form.addRow("Размер", size_label)
+        form.addRow("Цвет", color_label)
+        form.addRow("Описание", desc_label)
+        form.addRow("Свойства", props_label)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.setStyleSheet(f"""
+            QDialog#MarkerViewDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#MarkerViewDialog QLabel {{
+                color: #cfcfcf;
+            }}
+            QDialog#MarkerViewDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+        """)
+        dialog.exec()
+
     def _open_context_menu(self, pos) -> None:
         world_pos = self._map_to_world(pos)
         marker = self._marker_at(world_pos)
         menu = QMenu(self)
         act_add = menu.addAction("Добавить маркер")
+        act_view = menu.addAction("Просмотреть метку")
         act_color = menu.addAction("Выбрать цвет")
         act_bigger = menu.addAction("Увеличить маркер")
         act_smaller = menu.addAction("Уменьшить маркер")
         act_edit = menu.addAction("Редактировать маркер")
         act_delete = menu.addAction("Удалить маркер")
+        act_view.setEnabled(marker is not None)
         act_color.setEnabled(marker is not None)
         act_bigger.setEnabled(marker is not None)
         act_smaller.setEnabled(marker is not None)
@@ -1120,6 +1213,8 @@ class MapCanvas(QWidget):
         chosen = menu.exec(QCursor.pos())
         if chosen == act_add:
             self._add_marker(world_pos)
+        elif chosen == act_view and marker:
+            self._view_marker(marker)
         elif chosen == act_color and marker:
             color = QColorDialog.getColor(marker.color, self, "Цвет маркера")
             if color.isValid():
@@ -1132,6 +1227,8 @@ class MapCanvas(QWidget):
                         color,
                         marker.type,
                         marker.size,
+                        marker.description,
+                        marker.properties,
                         marker.task_id,
                         marker.project_id,
                         marker.note_id,
