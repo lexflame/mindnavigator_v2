@@ -7,7 +7,7 @@ import re
 import zipfile
 from typing import List, Optional
 from PySide6.QtCore import Qt, QSize, QRect, QModelIndex, QAbstractListModel
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QImageReader
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -501,10 +501,9 @@ class CloudImagePickerDialog(QDialog):
             list_item.setData(Qt.UserRole, item.rel_path)
             if cloud_path:
                 file_path = cloud_path / item.rel_path
-                if file_path.is_file():
-                    pixmap = QPixmap(str(file_path))
-                    if not pixmap.isNull():
-                        list_item.setIcon(pixmap.scaled(72, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                pixmap = _load_scaled_pixmap(file_path, QSize(72, 72))
+                if not pixmap.isNull():
+                    list_item.setIcon(pixmap)
             self.list_widget.addItem(list_item)
 
         layout.addWidget(self.list_widget, 1)
@@ -664,6 +663,19 @@ class ObjectWorkspace(QWidget):
         nav_row.addWidget(self.image_counter)
         nav_row.addWidget(self.preview_button)
 
+        self.thumbnail_list = QListWidget()
+        self.thumbnail_list.setObjectName("ObjectsImageThumbnails")
+        self.thumbnail_list.setViewMode(QListView.IconMode)
+        self.thumbnail_list.setFlow(QListView.LeftToRight)
+        self.thumbnail_list.setResizeMode(QListView.Adjust)
+        self.thumbnail_list.setMovement(QListView.Static)
+        self.thumbnail_list.setIconSize(QSize(64, 64))
+        self.thumbnail_list.setGridSize(QSize(78, 78))
+        self.thumbnail_list.setFixedHeight(92)
+        self.thumbnail_list.setSpacing(6)
+        self.thumbnail_list.setSelectionMode(QListWidget.SingleSelection)
+        self.thumbnail_list.currentRowChanged.connect(self._on_thumbnail_selected)
+
         self.image_label = QLabel("Нет изображений")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumHeight(220)
@@ -678,6 +690,7 @@ class ObjectWorkspace(QWidget):
         self.save_comment_button.clicked.connect(self._save_image_comment)
 
         image_layout.addLayout(nav_row)
+        image_layout.addWidget(self.thumbnail_list)
         image_layout.addWidget(self.image_label)
         image_layout.addWidget(self.image_comment)
         image_layout.addWidget(self.save_comment_button, 0, Qt.AlignRight)
@@ -783,6 +796,18 @@ class ObjectWorkspace(QWidget):
                 border-radius: 8px;
                 color: #7d8590;
             }
+            QListWidget#ObjectsImageThumbnails {
+                background: #111318;
+                border: 1px solid #2f333b;
+                border-radius: 8px;
+            }
+            QListWidget#ObjectsImageThumbnails::item {
+                padding: 4px;
+            }
+            QListWidget#ObjectsImageThumbnails::item:selected {
+                background: #2d3440;
+                border-radius: 6px;
+            }
             QPlainTextEdit#ObjectsImageComment {
                 background: #1f232a;
                 border: 1px solid #2f333b;
@@ -886,6 +911,7 @@ class ObjectWorkspace(QWidget):
         self.preview_button.setEnabled(enabled)
         self.image_comment.setEnabled(enabled)
         self.save_comment_button.setEnabled(enabled)
+        self.thumbnail_list.setEnabled(enabled)
         if not enabled:
             self.details_title.setText("Выберите объект")
             self.details_meta.setText("")
@@ -893,6 +919,7 @@ class ObjectWorkspace(QWidget):
             self.image_label.setText("Нет изображений")
             self.image_counter.setText("0/0")
             self.image_comment.setPlainText("")
+            self.thumbnail_list.clear()
 
     def _add_object(self) -> None:
         dialog = ObjectEditDialog(self)
@@ -966,7 +993,27 @@ class ObjectWorkspace(QWidget):
     def _load_images(self, object_id: int) -> None:
         self._images = self._db.fetch_object_images(object_id)
         self._current_image_index = 0
+        self._refresh_thumbnails()
         self._update_image_view()
+
+    def _refresh_thumbnails(self) -> None:
+        self.thumbnail_list.blockSignals(True)
+        self.thumbnail_list.clear()
+        cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
+        for idx, image in enumerate(self._images):
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, idx)
+            item.setToolTip(image.rel_path)
+            if cloud_root:
+                file_path = Path(cloud_root) / image.rel_path
+                pixmap = _load_scaled_pixmap(file_path, self.thumbnail_list.iconSize())
+                if not pixmap.isNull():
+                    item.setIcon(pixmap)
+            self.thumbnail_list.addItem(item)
+        self.thumbnail_list.setEnabled(bool(self._images))
+        if self._images:
+            self.thumbnail_list.setCurrentRow(self._current_image_index)
+        self.thumbnail_list.blockSignals(False)
 
     def _update_image_view(self) -> None:
         total = len(self._images)
@@ -983,21 +1030,21 @@ class ObjectWorkspace(QWidget):
         pixmap = QPixmap()
         if cloud_root:
             file_path = Path(cloud_root) / image.rel_path
-            if file_path.is_file():
-                pixmap = QPixmap(str(file_path))
+            target_size = self.image_label.size()
+            if not target_size.isValid() or target_size.width() < 10:
+                target_size = QSize(720, 420)
+            pixmap = _load_scaled_pixmap(file_path, target_size)
         if pixmap.isNull():
             self.image_label.setText("Изображение недоступно")
             self.image_label.setPixmap(QPixmap())
         else:
-            scaled = pixmap.scaled(
-                self.image_label.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-            self.image_label.setPixmap(scaled)
+            self.image_label.setPixmap(pixmap)
             self.image_label.setText("")
         self.image_counter.setText(f"{self._current_image_index + 1}/{total}")
         self.image_comment.setPlainText(image.description)
+        self.thumbnail_list.blockSignals(True)
+        self.thumbnail_list.setCurrentRow(self._current_image_index)
+        self.thumbnail_list.blockSignals(False)
 
     def _prev_image(self) -> None:
         if not self._images:
@@ -1019,6 +1066,12 @@ class ObjectWorkspace(QWidget):
         updated = self._db.update_object_image(image.id, text)
         self._images[self._current_image_index] = updated
 
+    def _on_thumbnail_selected(self, row: int) -> None:
+        if row < 0 or row >= len(self._images):
+            return
+        self._current_image_index = row
+        self._update_image_view()
+
     def _preview_image(self) -> None:
         if not self._images:
             return
@@ -1035,9 +1088,9 @@ class ObjectWorkspace(QWidget):
         layout = QVBoxLayout(dialog)
         label = QLabel()
         label.setAlignment(Qt.AlignCenter)
-        pixmap = QPixmap(str(file_path))
+        pixmap = _load_scaled_pixmap(file_path, QSize(760, 540))
         if not pixmap.isNull():
-            label.setPixmap(pixmap.scaled(760, 540, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            label.setPixmap(pixmap)
         layout.addWidget(label)
         dialog.exec()
 
@@ -1045,6 +1098,19 @@ class ObjectWorkspace(QWidget):
         super().resizeEvent(event)
         if self._images:
             self._update_image_view()
+
+
+def _load_scaled_pixmap(file_path: Path, size: QSize) -> QPixmap:
+    if not file_path.is_file():
+        return QPixmap()
+    reader = QImageReader(str(file_path))
+    reader.setAutoTransform(True)
+    if size.isValid():
+        reader.setScaledSize(size)
+    image = reader.read()
+    if image.isNull():
+        return QPixmap()
+    return QPixmap.fromImage(image)
 
 
 def extract_text_from_document(file_path: Path) -> str:
