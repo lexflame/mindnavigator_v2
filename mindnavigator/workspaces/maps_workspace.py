@@ -871,7 +871,8 @@ class MapCanvas(QWidget):
         return QRectF(top_left, bottom_right).normalized()
 
     def _map_to_world(self, pos: QPointF) -> QPointF:
-        return (pos - self._offset) / self._scale
+        pos_f = QPointF(pos)
+        return (pos_f - self._offset) / self._scale
 
     def _map_from_world(self, pos: QPointF) -> QPointF:
         return pos * self._scale + self._offset
@@ -1270,6 +1271,19 @@ class MapCanvas(QWidget):
         dialog.setObjectName("MarkerViewDialog")
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(12, 12, 12, 12)
+
+        header = QHBoxLayout()
+        title_label = QLabel("Свойства метки")
+        title_label.setObjectName("MarkerViewTitle")
+        edit_btn = QToolButton()
+        edit_btn.setText("Редактировать")
+        edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.clicked.connect(lambda _checked=False: (dialog.accept(), self._edit_marker(marker)))
+        header.addWidget(title_label)
+        header.addStretch(1)
+        header.addWidget(edit_btn)
+        layout.addLayout(header)
+
         form = QFormLayout()
 
         name_label = QLabel(marker.name)
@@ -1330,6 +1344,20 @@ class MapCanvas(QWidget):
             }}
             QDialog#MarkerViewDialog QLabel {{
                 color: #cfcfcf;
+            }}
+            QDialog#MarkerViewDialog QLabel#MarkerViewTitle {{
+                color: #f2f2f2;
+                font-weight: 600;
+            }}
+            QDialog#MarkerViewDialog QToolButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+            QDialog#MarkerViewDialog QToolButton:hover {{
+                background: #34363b;
             }}
             QDialog#MarkerViewDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
