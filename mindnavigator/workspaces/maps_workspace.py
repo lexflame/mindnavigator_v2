@@ -10,7 +10,17 @@ import qtawesome as qta
 from PySide6.QtCore import (
     Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPoint, QPointF, QRectF, Signal, QTimer
 )
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPixmap, QPen, QCursor, QPolygonF
+from PySide6.QtGui import (
+    QPainter,
+    QColor,
+    QFont,
+    QFontMetrics,
+    QFontMetricsF,
+    QPixmap,
+    QPen,
+    QCursor,
+    QPolygonF,
+)
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
