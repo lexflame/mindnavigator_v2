@@ -49,6 +49,35 @@ class MapData:
 
 
 @dataclass(frozen=True)
+class MapMarkerData:
+    id: int
+    map_id: int
+    name: str
+    x: float
+    y: float
+    color: str
+    type: str
+    size: float
+    description: str
+    properties: str
+    task_id: Optional[int]
+    project_id: Optional[int]
+    note_id: Optional[int]
+    object_id: Optional[int]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class TaskAttachmentData:
+    id: int
+    task_id: int
+    kind: str
+    ref_id: int
+    created_at: str
+
+
+@dataclass(frozen=True)
 class CloudFileData:
     id: int
     rel_path: str
@@ -219,6 +248,28 @@ class Database:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS map_markers (
+                    id INTEGER PRIMARY KEY,
+                    map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    x REAL NOT NULL,
+                    y REAL NOT NULL,
+                    color TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    size REAL NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    properties TEXT NOT NULL DEFAULT '',
+                    task_id INTEGER REFERENCES tasks(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    note_id INTEGER REFERENCES notes(id),
+                    object_id INTEGER REFERENCES objects(id),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -230,6 +281,18 @@ class Database:
                     locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS task_attachments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    ref_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(task_id, kind, ref_id)
                 );
                 """
             )
@@ -290,7 +353,9 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
 
@@ -669,6 +734,62 @@ class Database:
                 (task_id,),
             )
 
+    def fetch_task_attachments(self, task_id: int) -> List[TaskAttachmentData]:
+        """Возвращает список вложений задачи."""
+        rows = self._conn.execute(
+            """
+            SELECT id, task_id, kind, ref_id, created_at
+            FROM task_attachments
+            WHERE task_id = ?
+            ORDER BY created_at ASC;
+            """,
+            (task_id,),
+        ).fetchall()
+        attachments = []
+        for row in rows:
+            attachments.append(
+                TaskAttachmentData(
+                    id=row["id"],
+                    task_id=row["task_id"],
+                    kind=row["kind"],
+                    ref_id=row["ref_id"],
+                    created_at=row["created_at"],
+                )
+            )
+        return attachments
+
+    def add_task_attachment(self, task_id: int, kind: str, ref_id: int) -> TaskAttachmentData:
+        """Добавляет вложение к задаче."""
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO task_attachments (task_id, kind, ref_id, created_at)
+                VALUES (?, ?, ?, ?);
+                """,
+                (task_id, kind, ref_id, now),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, task_id, kind, ref_id, created_at
+            FROM task_attachments
+            WHERE task_id = ? AND kind = ? AND ref_id = ?;
+            """,
+            (task_id, kind, ref_id),
+        ).fetchone()
+        return TaskAttachmentData(
+            id=row["id"],
+            task_id=row["task_id"],
+            kind=row["kind"],
+            ref_id=row["ref_id"],
+            created_at=row["created_at"],
+        )
+
+    def delete_task_attachment(self, attachment_id: int) -> None:
+        """Удаляет вложение задачи."""
+        with self._conn:
+            self._conn.execute("DELETE FROM task_attachments WHERE id = ?;", (attachment_id,))
+
     def fetch_projects(self) -> List[ProjectData]:
         """Возвращает список проектов."""
         rows = self._conn.execute(
@@ -853,6 +974,204 @@ class Database:
                 (title, description, project, tiles_path, tiles_h, tiles_w, now, map_id),
             )
         return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
+
+    def fetch_map_markers(self, map_id: Optional[int] = None) -> List[MapMarkerData]:
+        """Возвращает список меток карты."""
+        if map_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    type,
+                    size,
+                    description,
+                    properties,
+                    task_id,
+                    project_id,
+                    note_id,
+                    object_id,
+                    created_at,
+                    updated_at
+                FROM map_markers;
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    type,
+                    size,
+                    description,
+                    properties,
+                    task_id,
+                    project_id,
+                    note_id,
+                    object_id,
+                    created_at,
+                    updated_at
+                FROM map_markers
+                WHERE map_id = ?;
+                """,
+                (map_id,),
+            ).fetchall()
+        markers = []
+        for row in rows:
+            markers.append(
+                MapMarkerData(
+                    id=row["id"],
+                    map_id=row["map_id"],
+                    name=row["name"],
+                    x=row["x"],
+                    y=row["y"],
+                    color=row["color"],
+                    type=row["type"],
+                    size=row["size"],
+                    description=row["description"] or "",
+                    properties=row["properties"] or "",
+                    task_id=row["task_id"],
+                    project_id=row["project_id"],
+                    note_id=row["note_id"],
+                    object_id=row["object_id"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+            )
+        return markers
+
+    def upsert_map_marker(
+        self,
+        marker_id: int,
+        map_id: int,
+        name: str,
+        x: float,
+        y: float,
+        color: str,
+        marker_type: str,
+        size: float,
+        description: str = "",
+        properties: str = "",
+        task_id: Optional[int] = None,
+        project_id: Optional[int] = None,
+        note_id: Optional[int] = None,
+        object_id: Optional[int] = None,
+    ) -> MapMarkerData:
+        """Создает или обновляет метку карты."""
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO map_markers (
+                    id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    type,
+                    size,
+                    description,
+                    properties,
+                    task_id,
+                    project_id,
+                    note_id,
+                    object_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    map_id = excluded.map_id,
+                    name = excluded.name,
+                    x = excluded.x,
+                    y = excluded.y,
+                    color = excluded.color,
+                    type = excluded.type,
+                    size = excluded.size,
+                    description = excluded.description,
+                    properties = excluded.properties,
+                    task_id = excluded.task_id,
+                    project_id = excluded.project_id,
+                    note_id = excluded.note_id,
+                    object_id = excluded.object_id,
+                    created_at = map_markers.created_at,
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    marker_id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    marker_type,
+                    size,
+                    description,
+                    properties,
+                    task_id,
+                    project_id,
+                    note_id,
+                    object_id,
+                    now,
+                    now,
+                ),
+            )
+        row = self._conn.execute(
+            """
+            SELECT
+                id,
+                map_id,
+                name,
+                x,
+                y,
+                color,
+                type,
+                size,
+                description,
+                properties,
+                task_id,
+                project_id,
+                note_id,
+                object_id,
+                created_at,
+                updated_at
+            FROM map_markers
+            WHERE id = ?;
+            """,
+            (marker_id,),
+        ).fetchone()
+        return MapMarkerData(
+            id=row["id"],
+            map_id=row["map_id"],
+            name=row["name"],
+            x=row["x"],
+            y=row["y"],
+            color=row["color"],
+            type=row["type"],
+            size=row["size"],
+            description=row["description"] or "",
+            properties=row["properties"] or "",
+            task_id=row["task_id"],
+            project_id=row["project_id"],
+            note_id=row["note_id"],
+            object_id=row["object_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def delete_map_marker(self, marker_id: int) -> None:
+        """Удаляет метку карты."""
+        with self._conn:
+            self._conn.execute("DELETE FROM map_markers WHERE id = ?;", (marker_id,))
 
     def fetch_notes(self) -> List[NoteData]:
         """Возвращает список всех заметок."""
