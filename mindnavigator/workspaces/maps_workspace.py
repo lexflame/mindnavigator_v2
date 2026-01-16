@@ -569,11 +569,12 @@ class MapCanvas(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
         self._scale = 1.0
         self._absolute_min_scale = 0.1
         self._min_scale = 0.5
-        self._max_scale = 2.6
+        self._max_scale = 6.0
         self._offset = QPointF(80, 60)
         self._panning = False
         self._last_pos = QPointF()
@@ -618,6 +619,9 @@ class MapCanvas(QWidget):
         self._next_id = max((m.id for m in self._markers), default=0) + 1
         self.markerSelected.emit(None)
         self.update()
+
+    def markers(self) -> List[Marker]:
+        return list(self._markers)
 
     def set_attachment_sources(self, tasks, projects, notes, objects) -> None:
         self._tasks = list(tasks)
@@ -951,6 +955,16 @@ class MapCanvas(QWidget):
         view_center = QPointF(self.width() / 2, self.height() / 2)
         self._scale = target_scale
         self._offset = view_center - QPointF(marker.x, marker.y) * self._scale
+        self.update()
+
+    def focus_on_marker(self, marker: Marker, zoom_boost: float = 4.0) -> None:
+        target_scale = min(self._max_scale, max(self._min_scale, self._scale + zoom_boost))
+        view_center = QPointF(self.width() / 2, self.height() / 2)
+        self._selected = marker
+        self.markerSelected.emit(marker)
+        self._scale = target_scale
+        self._offset = view_center - QPointF(marker.x, marker.y) * self._scale
+        self.setFocus(Qt.OtherFocusReason)
         self.update()
 
     def _adjust_marker_size(self, marker: Marker, delta: float) -> None:
@@ -1379,8 +1393,39 @@ class MapCanvas(QWidget):
             self._remove_marker(marker)
 
 
+class MarkerSearchModel(QAbstractListModel):
+    MarkerRole = Qt.UserRole + 1
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._items: List[Marker] = []
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return len(self._items)
+
+    def data(self, index: QModelIndex, role: int):
+        if not index.isValid():
+            return None
+        marker = self._items[index.row()]
+        if role == Qt.DisplayRole:
+            title = marker.name or "Метка"
+            marker_type = marker.type or "—"
+            return f"{title} · {marker_type} ({marker.x:.0f}, {marker.y:.0f})"
+        if role == self.MarkerRole:
+            return marker
+        return None
+
+    def set_markers(self, markers: List[Marker]) -> None:
+        self.beginResetModel()
+        self._items = list(markers)
+        self.endResetModel()
+
+
 class MapEditorWorkspace(QWidget):
     fullscreenToggled = Signal(bool)
+    markersChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1595,6 +1640,7 @@ class MapEditorWorkspace(QWidget):
             self.canvas.set_markers(defaults)
             for marker in defaults:
                 self._sync_marker(marker)
+            self.markersChanged.emit()
             return
         loaded = []
         for marker in markers:
@@ -1616,6 +1662,13 @@ class MapEditorWorkspace(QWidget):
                 )
             )
         self.canvas.set_markers(loaded)
+        self.markersChanged.emit()
+
+    def markers(self) -> List[Marker]:
+        return self.canvas.markers()
+
+    def focus_marker(self, marker: Marker, zoom_boost: float = 4.0) -> None:
+        self.canvas.focus_on_marker(marker, zoom_boost=zoom_boost)
 
     def _sync_marker(self, marker: Marker) -> None:
         if self._current_map_id is None:
@@ -1639,14 +1692,17 @@ class MapEditorWorkspace(QWidget):
 
     def _on_marker_added(self, marker: Marker) -> None:
         self._sync_marker(marker)
+        self.markersChanged.emit()
 
     def _on_marker_updated(self, marker: Marker) -> None:
         self._sync_marker(marker)
+        self.markersChanged.emit()
 
     def _on_marker_removed(self, marker_id: int) -> None:
         if self._current_map_id is None:
             return
         self._db.delete_map_marker(marker_id)
+        self.markersChanged.emit()
 
     def _format_link(self, label: str, item_id: Optional[int], source: dict) -> str:
         if item_id is None:
@@ -1806,9 +1862,12 @@ class MapsListWorkspace(QWidget):
         self.new_title.returnPressed.connect(self._on_create_map)
         self.list.editRequested.connect(self._on_edit_map)
         self.list.openRequested.connect(self._on_open_map)
+        self.marker_search.textChanged.connect(self._on_marker_search_changed)
+        self.marker_search_results.clicked.connect(self._on_marker_search_selected)
 
         self.editor_workspace = MapEditorWorkspace()
         self.editor_workspace.fullscreenToggled.connect(self._on_map_fullscreen_toggled)
+        self.editor_workspace.markersChanged.connect(self._refresh_marker_search)
         self.editor_header = QFrame()
         self.editor_header.setObjectName("MapEditorHeader")
         header_layout = QHBoxLayout(self.editor_header)
@@ -1822,6 +1881,30 @@ class MapsListWorkspace(QWidget):
         self.map_title = QLabel("Редактор карты")
         self.map_title.setObjectName("MapEditorTitle")
         header_layout.addWidget(self.btn_back)
+        self.marker_search = QLineEdit()
+        self.marker_search.setObjectName("MapMarkerSearch")
+        self.marker_search.setPlaceholderText("Поиск меток…")
+        self.marker_search.setFixedWidth(260)
+
+        self.marker_search_results = QListView()
+        self.marker_search_results.setObjectName("MapMarkerSearchResults")
+        self.marker_search_results.setFixedWidth(260)
+        self.marker_search_results.setFixedHeight(180)
+        self.marker_search_results.setVisible(False)
+        self.marker_search_results.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        self.marker_search_model = MarkerSearchModel(self.marker_search_results)
+        self.marker_search_results.setModel(self.marker_search_model)
+
+        search_container = QFrame()
+        search_container.setObjectName("MapMarkerSearchContainer")
+        search_layout = QVBoxLayout(search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(4)
+        search_layout.addWidget(self.marker_search)
+        search_layout.addWidget(self.marker_search_results)
+
+        header_layout.addWidget(search_container)
         header_layout.addWidget(self.map_title)
         header_layout.addStretch(1)
 
@@ -1922,6 +2005,29 @@ class MapsListWorkspace(QWidget):
                 padding: 6px 10px;
                 border-radius: 6px;
                 color: #e6e6e6;
+            }
+
+            QLineEdit#MapMarkerSearch {
+                background: #202127;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }
+
+            QListView#MapMarkerSearchResults {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+                color: #e6e6e6;
+            }
+
+            QListView#MapMarkerSearchResults::item {
+                padding: 6px 8px;
+            }
+
+            QListView#MapMarkerSearchResults::item:selected {
+                background: #2a2b2f;
             }
 
             QLabel#MapEditorTitle {
@@ -2036,6 +2142,8 @@ class MapsListWorkspace(QWidget):
         else:
             self.map_title.setText(title)
         self.stack.setCurrentIndex(1)
+        self.marker_search.clear()
+        self.marker_search_results.setVisible(False)
         tiles_path = index.data(MapRoles.TilesPath) or ""
         tiles_height = index.data(MapRoles.TilesHeight) or 0
         tiles_width = index.data(MapRoles.TilesWidth) or 0
@@ -2048,6 +2156,37 @@ class MapsListWorkspace(QWidget):
                 tiles_width,
             ),
         )
+
+    def _on_marker_search_changed(self, text: str) -> None:
+        query = (text or "").strip()
+        if not query:
+            self.marker_search_model.set_markers([])
+            self.marker_search_results.setVisible(False)
+            return
+        matches = self._filter_markers(query)
+        self.marker_search_model.set_markers(matches)
+        self.marker_search_results.setVisible(bool(matches))
+
+    def _refresh_marker_search(self) -> None:
+        text = self.marker_search.text()
+        if text.strip():
+            self._on_marker_search_changed(text)
+
+    def _filter_markers(self, query: str) -> List[Marker]:
+        needle = query.lower()
+        matches = []
+        for marker in self.editor_workspace.markers():
+            hay = f"{marker.name} {marker.type} {marker.description} {marker.properties}".lower()
+            if needle in hay:
+                matches.append(marker)
+        return matches
+
+    def _on_marker_search_selected(self, index: QModelIndex) -> None:
+        marker = index.data(MarkerSearchModel.MarkerRole)
+        if not marker:
+            return
+        self.editor_workspace.focus_marker(marker, zoom_boost=4.0)
+        self.marker_search_results.setVisible(False)
 
     def _on_map_fullscreen_toggled(self, enabled: bool) -> None:
         window = self.window()
