@@ -876,8 +876,7 @@ class MapCanvas(QWidget):
                 painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.4 / self._scale)))
                 painter.drawEllipse(QPointF(marker.x, marker.y), radius + 2, radius + 2)
             painter.setPen(QColor("#e5e5e5"))
-            font_size = max(6.0, min(18.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE)))
-            painter.setFont(QFont("Segoe UI", font_size))
+            painter.setFont(QFont("Segoe UI", self._marker_label_font_size(marker)))
             painter.drawText(
                 QPointF(marker.x + marker.size + 6.0, marker.y - (marker.size + 2.0)),
                 marker.name,
@@ -1019,9 +1018,11 @@ class MapCanvas(QWidget):
             self._resize_handle_regions[name] = rect
         painter.restore()
 
+    def _marker_label_font_size(self, marker: Marker) -> float:
+        return max(6.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE))
+
     def _marker_label_rect(self, marker: Marker) -> QRectF:
-        font_size = max(6.0, min(18.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE)))
-        font = QFont("Segoe UI", font_size)
+        font = QFont("Segoe UI", self._marker_label_font_size(marker))
         metrics = QFontMetricsF(font)
         text = marker.name
         width = metrics.horizontalAdvance(text)
