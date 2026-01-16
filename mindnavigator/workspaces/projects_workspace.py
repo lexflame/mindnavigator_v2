@@ -86,6 +86,10 @@ class ProjectsModel(QAbstractListModel):
         ]
         self._rebuild()
 
+    def refresh(self) -> None:
+        """Перезагружает данные проектов из базы."""
+        self._reload_from_db()
+
     def rowCount(self, parent=QModelIndex()) -> int:
         """Возвращает количество строк в модели."""
         if parent.isValid():
@@ -1040,6 +1044,10 @@ class ProjectsWorkspace(QWidget):
             self.model.set_area_focus(None)
         else:
             self.model.set_area_focus(text)
+
+    def refresh_projects(self) -> None:
+        """Перезагружает список проектов из базы."""
+        self.model.refresh()
 
     def _refresh_area_combo(self, selected: Optional[str] = None):
         """Обновляет список областей проектов."""
