@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 import qtawesome as qta
 from PySide6.QtCore import (
-    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPointF, QRectF, Signal, QTimer
+    Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPoint, QPointF, QRectF, Signal, QTimer
 )
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPixmap, QPen, QCursor, QPolygonF
 from PySide6.QtWidgets import (
@@ -2148,10 +2148,11 @@ class MapsListWorkspace(QWidget):
         self.marker_search.setPlaceholderText("Поиск меток…")
         self.marker_search.setFixedWidth(260)
 
-        self.marker_search_results = QListView()
+        self.marker_search_results = QListView(self)
         self.marker_search_results.setObjectName("MapMarkerSearchResults")
         self.marker_search_results.setFixedWidth(260)
         self.marker_search_results.setFixedHeight(180)
+        self.marker_search_results.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
         self.marker_search_results.setVisible(False)
         self.marker_search_results.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
@@ -2164,8 +2165,6 @@ class MapsListWorkspace(QWidget):
         search_layout.setContentsMargins(0, 0, 0, 0)
         search_layout.setSpacing(4)
         search_layout.addWidget(self.marker_search)
-        search_layout.addWidget(self.marker_search_results)
-
         header_layout.addWidget(search_container)
         header_layout.addWidget(self.map_title)
         header_layout.addStretch(1)
@@ -2371,6 +2370,8 @@ class MapsListWorkspace(QWidget):
         super().resizeEvent(event)
         if hasattr(self, "loading_overlay"):
             self.loading_overlay.setGeometry(self.rect())
+        if hasattr(self, "marker_search_results") and self.marker_search_results.isVisible():
+            self._position_marker_search_results()
 
     def _project_titles(self) -> List[str]:
         projects = get_database().fetch_projects()
@@ -2516,7 +2517,10 @@ class MapsListWorkspace(QWidget):
             return
         matches = self._filter_markers(query)
         self.marker_search_model.set_markers(matches)
-        self.marker_search_results.setVisible(bool(matches))
+        if matches:
+            self._show_marker_search_results()
+        else:
+            self.marker_search_results.setVisible(False)
 
     def _refresh_marker_search(self) -> None:
         text = self.marker_search.text()
@@ -2551,4 +2555,18 @@ class MapsListWorkspace(QWidget):
             return
         self._map_fullscreen_active = enabled
         self.editor_header.setVisible(not enabled)
+        if enabled:
+            self.marker_search_results.setVisible(False)
         self.editor_workspace.set_fullscreen_state(enabled)
+
+    def _show_marker_search_results(self) -> None:
+        self._position_marker_search_results()
+        self.marker_search_results.setVisible(True)
+        self.marker_search_results.raise_()
+
+    def _position_marker_search_results(self) -> None:
+        if not self.marker_search.isVisible():
+            return
+        self.marker_search_results.setFixedWidth(self.marker_search.width())
+        global_pos = self.marker_search.mapToGlobal(QPoint(0, self.marker_search.height()))
+        self.marker_search_results.move(global_pos)
