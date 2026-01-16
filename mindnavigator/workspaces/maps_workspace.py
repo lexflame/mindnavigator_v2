@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import qtawesome as qta
 from PySide6.QtCore import (
     Qt, QSize, QRect, QAbstractListModel, QModelIndex, QPointF, QRectF, Signal, QTimer
 )
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QPen, QCursor
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QPen, QCursor, QPolygonF
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
@@ -589,6 +589,8 @@ class MapCanvas(QWidget):
         self._markers: List[Marker] = []
         self._next_id = 1
         self._selected: Optional[Marker] = None
+        self._resize_marker_id: Optional[int] = None
+        self._resize_handle_regions: Dict[str, QRectF] = {}
         self._preview_pos: Optional[QPointF] = None
         self._dragging_marker_id: Optional[int] = None
         self._tasks = []
@@ -616,6 +618,7 @@ class MapCanvas(QWidget):
     def set_markers(self, markers: List[Marker]) -> None:
         self._markers = list(markers)
         self._selected = None
+        self._resize_marker_id = None
         self._next_id = max((m.id for m in self._markers), default=0) + 1
         self.markerSelected.emit(None)
         self.update()
@@ -843,6 +846,7 @@ class MapCanvas(QWidget):
             painter.drawText(QPointF(left + 4, y - 4), f"{y}")
 
     def _draw_markers(self, painter: QPainter) -> None:
+        self._resize_handle_regions = {}
         for marker in self._markers:
             is_selected = self._selected and marker.id == self._selected.id
             radius = marker.size + (2.0 if is_selected else 0.0)
@@ -854,8 +858,14 @@ class MapCanvas(QWidget):
                 painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.4 / self._scale)))
                 painter.drawEllipse(QPointF(marker.x, marker.y), radius + 2, radius + 2)
             painter.setPen(QColor("#e5e5e5"))
-            painter.setFont(QFont("Segoe UI", 8))
-            painter.drawText(QPointF(marker.x + 10, marker.y - 6), marker.name)
+            font_size = max(6.0, min(18.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE)))
+            painter.setFont(QFont("Segoe UI", font_size))
+            painter.drawText(
+                QPointF(marker.x + marker.size + 6.0, marker.y - (marker.size + 2.0)),
+                marker.name,
+            )
+            if self._resize_marker_id == marker.id:
+                self._draw_resize_handles(painter, marker)
 
     def _draw_preview(self, painter: QPainter) -> None:
         if not self._preview_pos:
@@ -951,6 +961,63 @@ class MapCanvas(QWidget):
         self.markerUpdated.emit(updated)
         self.update()
 
+    def _draw_resize_handles(self, painter: QPainter, marker: Marker) -> None:
+        handle_size = max(6.0, marker.size * 0.8)
+        arrow_length = handle_size
+        arrow_width = handle_size * 0.85
+        offset = marker.size + handle_size + 6.0
+        positions = {
+            "left": QPointF(marker.x - offset, marker.y),
+            "right": QPointF(marker.x + offset, marker.y),
+            "top": QPointF(marker.x, marker.y - offset),
+            "bottom": QPointF(marker.x, marker.y + offset),
+        }
+        self._resize_handle_regions = {}
+        painter.save()
+        painter.setBrush(QColor("#3a3f48"))
+        painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.1 / self._scale)))
+        for direction, center in positions.items():
+            if direction == "left":
+                tip = QPointF(center.x() - arrow_length / 2, center.y())
+                base_top = QPointF(center.x() + arrow_length / 2, center.y() - arrow_width / 2)
+                base_bottom = QPointF(center.x() + arrow_length / 2, center.y() + arrow_width / 2)
+            elif direction == "right":
+                tip = QPointF(center.x() + arrow_length / 2, center.y())
+                base_top = QPointF(center.x() - arrow_length / 2, center.y() - arrow_width / 2)
+                base_bottom = QPointF(center.x() - arrow_length / 2, center.y() + arrow_width / 2)
+            elif direction == "top":
+                tip = QPointF(center.x(), center.y() - arrow_length / 2)
+                base_top = QPointF(center.x() - arrow_width / 2, center.y() + arrow_length / 2)
+                base_bottom = QPointF(center.x() + arrow_width / 2, center.y() + arrow_length / 2)
+            else:
+                tip = QPointF(center.x(), center.y() + arrow_length / 2)
+                base_top = QPointF(center.x() - arrow_width / 2, center.y() - arrow_length / 2)
+                base_bottom = QPointF(center.x() + arrow_width / 2, center.y() - arrow_length / 2)
+            polygon = QPolygonF([tip, base_top, base_bottom])
+            painter.drawPolygon(polygon)
+            self._resize_handle_regions[direction] = QRectF(
+                center.x() - arrow_length / 2,
+                center.y() - arrow_length / 2,
+                arrow_length,
+                arrow_length,
+            )
+        painter.restore()
+
+    def _resize_handle_at(self, world_pos: QPointF) -> Optional[str]:
+        for direction, rect in self._resize_handle_regions.items():
+            if rect.contains(world_pos):
+                return direction
+        return None
+
+    def _enable_resize_mode(self, marker_id: int) -> None:
+        marker = self._marker_by_id(marker_id)
+        if not marker:
+            return
+        self._selected = marker
+        self.markerSelected.emit(marker)
+        self._resize_marker_id = marker_id
+        self.update()
+
     def _zoom_to_marker(self, marker: Marker) -> None:
         target_scale = min(self._max_scale, max(self._min_scale, self._scale * 1.4))
         view_center = QPointF(self.width() / 2, self.height() / 2)
@@ -997,6 +1064,15 @@ class MapCanvas(QWidget):
 
         if event.button() == Qt.LeftButton:
             world_pos = self._map_to_world(event.position())
+            if self._resize_marker_id is not None:
+                handle = self._resize_handle_at(world_pos)
+                if handle:
+                    marker = self._marker_by_id(self._resize_marker_id)
+                    if marker:
+                        delta = 1.0 if handle in ("right", "bottom") else -1.0
+                        self._adjust_marker_size(marker, delta)
+                    return
+                self._resize_marker_id = None
             if self._tool == MapTool.ADD_MARKER:
                 self._add_marker(world_pos)
                 return
@@ -1154,6 +1230,15 @@ class MapCanvas(QWidget):
         size_edit.setDecimals(1)
         size_edit.setSingleStep(0.5)
         size_edit.setValue(marker.size)
+        resize_btn = QToolButton()
+        resize_btn.setText("Изменить размер")
+        resize_btn.setCursor(Qt.PointingHandCursor)
+        size_row = QHBoxLayout()
+        size_row.addWidget(size_edit)
+        size_row.addWidget(resize_btn)
+        size_row.addStretch(1)
+        size_holder = QWidget()
+        size_holder.setLayout(size_row)
         task_combo = QComboBox()
         project_combo = QComboBox()
         note_combo = QComboBox()
@@ -1195,7 +1280,7 @@ class MapCanvas(QWidget):
         color_btn.clicked.connect(pick_color)
         form.addRow("Название", name_edit)
         form.addRow("Тип", type_edit)
-        form.addRow("Размер", size_edit)
+        form.addRow("Размер", size_holder)
         form.addRow("Задача", task_combo)
         form.addRow("Проект", project_combo)
         form.addRow("Заметка", note_combo)
@@ -1209,6 +1294,13 @@ class MapCanvas(QWidget):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        resize_requested = {"value": False}
+
+        def request_resize() -> None:
+            resize_requested["value"] = True
+            dialog.accept()
+
+        resize_btn.clicked.connect(request_resize)
 
         dialog.setStyleSheet(f"""
             QDialog#MarkerEditDialog {{
@@ -1238,6 +1330,16 @@ class MapCanvas(QWidget):
                 padding: 4px 6px;
                 border-radius: 6px;
             }}
+            QDialog#MarkerEditDialog QToolButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 10px;
+                border-radius: 6px;
+            }}
+            QDialog#MarkerEditDialog QToolButton:hover {{
+                background: #34363b;
+            }}
             QDialog#MarkerEditDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
@@ -1264,6 +1366,8 @@ class MapCanvas(QWidget):
                 object_combo.currentData(),
             )
             self._set_marker(updated)
+            if resize_requested["value"]:
+                self._enable_resize_mode(updated.id)
 
     def _view_marker(self, marker: Marker) -> None:
         dialog = QDialog(self)
