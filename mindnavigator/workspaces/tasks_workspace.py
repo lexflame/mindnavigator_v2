@@ -34,6 +34,7 @@ class TaskRow:
     done: bool
     project_id: Optional[int] = None
     project_title: str = ""
+    project_area: str = ""
     parent_id: Optional[int] = None
 
 
@@ -67,6 +68,7 @@ class TaskRoles:
     HasSubtasks = Qt.UserRole + 14
     SubtasksExpanded = Qt.UserRole + 15
     SubtaskDepth = Qt.UserRole + 16
+    ProjectArea = Qt.UserRole + 17
 
 
 class TasksModel(QAbstractListModel):
@@ -103,12 +105,17 @@ class TasksModel(QAbstractListModel):
                 t.done,
                 t.project_id,
                 t.project_title,
+                t.project_area,
                 t.parent_id,
             )
             for t in tasks
         ]
         self._prune_state()
         self._rebuild()
+
+    def refresh(self) -> None:
+        """Перезагружает данные задач из базы."""
+        self._reload_from_db()
 
     def _prune_state(self) -> None:
         """Очищает локальные состояния раскрытия для удаленных задач."""
@@ -171,6 +178,8 @@ class TasksModel(QAbstractListModel):
             return r.id in self._expanded_task_ids
         if role == TaskRoles.ProjectTitle:
             return r.project_title
+        if role == TaskRoles.ProjectArea:
+            return r.project_area
         if role == TaskRoles.HasSubtasks:
             return bool(self._task_children.get(r.id))
         if role == TaskRoles.SubtasksExpanded:
@@ -244,6 +253,7 @@ class TasksModel(QAbstractListModel):
                 task.done,
                 task.project_id,
                 task.project_title,
+                task.project_area,
                 task.parent_id,
             )
         )
@@ -307,6 +317,7 @@ class TasksModel(QAbstractListModel):
                     updated.done,
                     updated.project_id,
                     updated.project_title,
+                    updated.project_area,
                     updated.parent_id,
                 )
             new_all.append(it)
@@ -337,6 +348,7 @@ class TasksModel(QAbstractListModel):
                     new_done,
                     it.project_id,
                     it.project_title,
+                    it.project_area,
                     it.parent_id,
                 )
             new_all.append(it)
@@ -388,6 +400,7 @@ class TasksModel(QAbstractListModel):
                     updated.done,
                     updated.project_id,
                     updated.project_title,
+                    updated.project_area,
                     updated.parent_id,
                 )
             new_all.append(it)
@@ -451,6 +464,7 @@ class TasksModel(QAbstractListModel):
                     updated.done,
                     updated.project_id,
                     updated.project_title,
+                    updated.project_area,
                     updated.parent_id,
                 )
             new_all.append(it)
@@ -742,6 +756,8 @@ class TaskEditDialog(QDialog):
         self.project_edit.addItem("Без проекта", None)
         projects = get_database().fetch_projects()
         for project in projects:
+            if project.archived:
+                continue
             self.project_edit.addItem(f"{project.area} · {project.title}", project.id)
         if task.project_id is not None:
             idx = self.project_edit.findData(task.project_id)
@@ -928,6 +944,18 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {{
+                background: #34363b;
+            }}
+
+            QDialog#TaskEditDialog QToolButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 10px;
+                border-radius: 6px;
+            }}
+
+            QDialog#TaskEditDialog QToolButton:hover {{
                 background: #34363b;
             }}
 
@@ -1515,6 +1543,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         title: str = index.data(TaskRoles.Title) or ""
         description: str = index.data(TaskRoles.Description) or ""
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
+        project_area: str = index.data(TaskRoles.ProjectArea) or ""
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
         overdue = self._is_overdue(day, done)
@@ -1564,8 +1593,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         if project_title:
             painter.setFont(self._font_small)
             painter.setPen(self.C_DIM)
+            display_project = f"{project_area} / {project_title}" if project_area else project_title
             elided_project = QFontMetrics(self._font_small).elidedText(
-                project_title,
+                display_project,
                 Qt.ElideRight,
                 project_rect.width(),
             )
@@ -2205,6 +2235,10 @@ class TasksWorkspace(QWidget):
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
         self.model.set_project_filter(project_id)
+
+    def refresh_tasks(self) -> None:
+        """Перезагружает список задач из базы."""
+        self.model.refresh()
 
     def _set_drag_drop_state(self, enabled: bool):
         """Включает или выключает drag and drop списка."""
