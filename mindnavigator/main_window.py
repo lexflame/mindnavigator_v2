@@ -68,6 +68,8 @@ class MainWindow(QMainWindow):
         self._tray_icon: QSystemTrayIcon | None = None
         self._was_maximized_before_minimize = False
         self._was_maximized_before_fullscreen = False
+        self._map_fullscreen_active = False
+        self._map_fullscreen_restore: dict[str, bool] = {}
 
         self._build_ui()
         self._wire_modes()
@@ -298,6 +300,10 @@ class MainWindow(QMainWindow):
 
     def keyPressEvent(self, event):
         """Обрабатывает горячие клавиши окна."""
+        if event.key() == Qt.Key_Escape and self._map_fullscreen_active:
+            self.set_map_fullscreen(False)
+            event.accept()
+            return
         if event.key() == Qt.Key_F11:
             if self.isFullScreen():
                 if self._was_maximized_before_fullscreen:
@@ -495,3 +501,29 @@ class MainWindow(QMainWindow):
                 return False
 
         return super().eventFilter(obj, event)
+
+    def set_map_fullscreen(self, enabled: bool) -> None:
+        if self._map_fullscreen_active == enabled:
+            return
+        self._map_fullscreen_active = enabled
+        if enabled:
+            self._map_fullscreen_restore = {
+                "title_bar": self.title_bar.isVisible(),
+                "left_rail": self.left_rail.isVisible(),
+                "nav_column": self.nav_column.isVisible(),
+            }
+            self._was_maximized_before_fullscreen = self.isMaximized()
+            self.title_bar.setVisible(False)
+            self.left_rail.setVisible(False)
+            self.nav_column.setVisible(False)
+            self.showFullScreen()
+        else:
+            self.title_bar.setVisible(self._map_fullscreen_restore.get("title_bar", True))
+            self.left_rail.setVisible(self._map_fullscreen_restore.get("left_rail", True))
+            self.nav_column.setVisible(self._map_fullscreen_restore.get("nav_column", True))
+            if self._was_maximized_before_fullscreen:
+                self.showMaximized()
+            else:
+                self.showNormal()
+            self.title_bar.sync_max_button()
+        self.page_maps.set_map_fullscreen_state(enabled)
