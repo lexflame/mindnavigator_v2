@@ -199,6 +199,7 @@ class MainWindow(QMainWindow):
         }
 
         self.projects_nav.filter_changed.connect(self._on_nav_filter_changed)
+        self.search_nav.resultActivated.connect(self._on_search_result_activated)
         self._current_mode = self.MODE_TASKS
 
         self._apply_root_style()
@@ -342,6 +343,22 @@ class MainWindow(QMainWindow):
                 self.page_objects.set_project_filter(None)
                 self.page_objects.set_task_filter(None)
                 self.page_objects.set_marker_filter(None)
+            return
+
+    def _on_search_result_activated(self, payload: dict) -> None:
+        entity = payload.get("entity")
+        if entity == "task":
+            self.set_mode(self.MODE_TASKS)
+        elif entity == "project":
+            self.set_mode(self.MODE_PROJECTS)
+        elif entity == "map" or entity == "marker":
+            self.set_mode(self.MODE_MAPS)
+        elif entity == "note":
+            self.set_mode(self.MODE_NOTES)
+        elif entity == "file":
+            self.set_mode(self.MODE_FILES)
+        elif entity == "object":
+            self.set_mode(self.MODE_OBJECTS)
 
     def resizeEvent(self, event):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
