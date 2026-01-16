@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit
+    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar
 )
 
 from mindnavigator.storage import get_database
@@ -2051,6 +2051,39 @@ class MapsListWorkspace(QWidget):
         self.stack.addWidget(editor_page)
         self.stack.setCurrentWidget(list_page)
 
+        self.loading_overlay = QFrame(self)
+        self.loading_overlay.setObjectName("MapsLoadingOverlay")
+        self.loading_overlay.setVisible(False)
+        self.loading_overlay.setAttribute(Qt.WA_StyledBackground, True)
+        overlay_layout = QVBoxLayout(self.loading_overlay)
+        overlay_layout.setContentsMargins(0, 0, 0, 0)
+        overlay_layout.addStretch(1)
+
+        overlay_card = QFrame()
+        overlay_card.setObjectName("MapsLoadingCard")
+        overlay_card_layout = QVBoxLayout(overlay_card)
+        overlay_card_layout.setContentsMargins(24, 18, 24, 20)
+        overlay_card_layout.setSpacing(12)
+
+        self.loading_title = QLabel("Загрузка карты…")
+        self.loading_title.setObjectName("MapsLoadingTitle")
+        self.loading_hint = QLabel("Подготавливаем тайлы и маркеры")
+        self.loading_hint.setObjectName("MapsLoadingHint")
+        self.loading_hint.setAlignment(Qt.AlignCenter)
+
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setObjectName("MapsLoadingBar")
+        self.loading_bar.setRange(0, 0)
+        self.loading_bar.setTextVisible(False)
+        self.loading_bar.setFixedHeight(8)
+
+        overlay_card_layout.addWidget(self.loading_title, alignment=Qt.AlignCenter)
+        overlay_card_layout.addWidget(self.loading_hint, alignment=Qt.AlignCenter)
+        overlay_card_layout.addWidget(self.loading_bar)
+
+        overlay_layout.addWidget(overlay_card, alignment=Qt.AlignCenter)
+        overlay_layout.addStretch(1)
+
         self.setStyleSheet("""
             QWidget#MapsWorkspace { background: #16171a; }
 
@@ -2167,7 +2200,44 @@ class MapsListWorkspace(QWidget):
                 font-size: 14px;
                 font-weight: 600;
             }
+
+            QFrame#MapsLoadingOverlay {
+                background: rgba(8, 9, 12, 0.75);
+            }
+
+            QFrame#MapsLoadingCard {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+                border-radius: 12px;
+            }
+
+            QLabel#MapsLoadingTitle {
+                color: #f2f2f2;
+                font-size: 16px;
+                font-weight: 600;
+            }
+
+            QLabel#MapsLoadingHint {
+                color: #cfcfcf;
+                font-size: 12px;
+            }
+
+            QProgressBar#MapsLoadingBar {
+                background: #2a2b2f;
+                border: none;
+                border-radius: 4px;
+            }
+
+            QProgressBar#MapsLoadingBar::chunk {
+                background: #5fa8ff;
+                border-radius: 4px;
+            }
         """)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "loading_overlay"):
+            self.loading_overlay.setGeometry(self.rect())
 
     def _project_titles(self) -> List[str]:
         projects = get_database().fetch_projects()
@@ -2271,23 +2341,39 @@ class MapsListWorkspace(QWidget):
         project = index.data(MapRoles.Project) or ""
         if project:
             self.map_title.setText(f"{title} · {project}")
+            self.loading_title.setText(f"Загрузка карты «{title}»")
         else:
             self.map_title.setText(title)
+            self.loading_title.setText(f"Загрузка карты «{title}»")
         self.stack.setCurrentIndex(1)
         self.marker_search.clear()
         self.marker_search_results.setVisible(False)
         tiles_path = index.data(MapRoles.TilesPath) or ""
         tiles_height = index.data(MapRoles.TilesHeight) or 0
         tiles_width = index.data(MapRoles.TilesWidth) or 0
+        self._show_loading_overlay()
         QTimer.singleShot(
             0,
-            lambda: self.editor_workspace.load_map(
+            lambda: self._load_map_with_overlay(
                 map_id,
                 tiles_path,
                 tiles_height,
                 tiles_width,
             ),
         )
+
+    def _load_map_with_overlay(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        self.editor_workspace.load_map(map_id, tiles_path, tiles_h, tiles_w)
+        QTimer.singleShot(0, self._hide_loading_overlay)
+
+    def _show_loading_overlay(self) -> None:
+        self.loading_overlay.setGeometry(self.rect())
+        self.loading_overlay.raise_()
+        self.loading_overlay.setVisible(True)
+        self.loading_overlay.repaint()
+
+    def _hide_loading_overlay(self) -> None:
+        self.loading_overlay.setVisible(False)
 
     def _on_marker_search_changed(self, text: str) -> None:
         query = (text or "").strip()
