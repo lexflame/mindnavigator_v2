@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
 from typing import List, Optional
@@ -592,6 +593,10 @@ class MapCanvas(QWidget):
         self._projects = []
         self._notes = []
         self._objects = []
+        self._tasks_by_id = {}
+        self._projects_by_id = {}
+        self._notes_by_id = {}
+        self._objects_by_id = {}
         self._seed_markers()
 
     def _seed_markers(self) -> None:
@@ -607,6 +612,97 @@ class MapCanvas(QWidget):
         self._projects = list(projects)
         self._notes = list(notes)
         self._objects = list(objects)
+        self._tasks_by_id = {item.id: item for item in tasks}
+        self._projects_by_id = {item.id: item for item in projects}
+        self._notes_by_id = {item.id: item for item in notes}
+        self._objects_by_id = {item.id: item for item in objects}
+
+    def _open_attachment_view(self, kind: str, item_id: int) -> None:
+        sources = {
+            "task": self._tasks_by_id,
+            "project": self._projects_by_id,
+            "note": self._notes_by_id,
+            "object": self._objects_by_id,
+        }
+        item = sources.get(kind, {}).get(item_id)
+        if not item:
+            QMessageBox.warning(self, "Элемент не найден", "Не удалось найти выбранный элемент.")
+            return
+
+        dialog = QDialog(self)
+        dialog.setObjectName("MapAttachmentDialog")
+        dialog.setWindowTitle("Просмотр вложения")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        form = QFormLayout()
+
+        def add_row(label: str, value: str, wrap: bool = False) -> None:
+            value_label = QLabel(value or "—")
+            if wrap:
+                value_label.setWordWrap(True)
+            form.addRow(label, value_label)
+
+        if kind == "task":
+            dialog.setWindowTitle("Задача на карте")
+            add_row("Название", item.title)
+            add_row("Проект", item.project_title or "—")
+            add_row("Дата", item.day.strftime("%d.%m.%Y") if item.day else "—")
+            add_row("Время", item.time_text or "—")
+            add_row("Приоритет", item.priority or "—")
+            add_row("Статус", "Выполнена" if item.done else "В работе")
+            add_row("Описание", item.description or "—", wrap=True)
+        elif kind == "project":
+            dialog.setWindowTitle("Проект на карте")
+            add_row("Название", item.title)
+            add_row("Область", item.area or "—")
+            add_row(
+                "Обновлен",
+                item.updated.strftime("%d.%m.%Y") if item.updated else "—",
+            )
+            add_row("Приоритет", item.priority or "—")
+            add_row("Архив", "Да" if item.archived else "Нет")
+        elif kind == "note":
+            dialog.setWindowTitle("Заметка на карте")
+            add_row("Название", item.title)
+            add_row("Проект", item.project or "—")
+            updated = item.updated.strftime("%d.%m.%Y %H:%M") if isinstance(item.updated, datetime) else str(item.updated)
+            add_row("Обновлено", updated)
+            add_row("Теги", ", ".join(item.tags) if item.tags else "—")
+            add_row("Избранное", "Да" if item.favorite else "Нет")
+            add_row("Вложения", "Да" if item.attachment else "Нет")
+            add_row("Описание", item.preview or "—", wrap=True)
+        elif kind == "object":
+            dialog.setWindowTitle("Объект на карте")
+            add_row("Название", item.title)
+            add_row("Каталог", item.catalog or "—")
+            add_row("Тип", item.object_type or "—")
+            add_row("Статус", item.status or "—")
+            add_row("Создан", item.created_at or "—")
+            add_row("Обновлен", item.updated_at or "—")
+            add_row("Описание", item.description or "—", wrap=True)
+
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.setStyleSheet(f"""
+            QDialog#MapAttachmentDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#MapAttachmentDialog QLabel {{
+                color: #cfcfcf;
+            }}
+            QDialog#MapAttachmentDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+        """)
+        dialog.exec()
 
     def set_tool(self, tool: MapTool) -> None:
         self._tool = tool
@@ -1162,6 +1258,30 @@ class MapCanvas(QWidget):
         props_label = QLabel(marker.properties or "—")
         props_label.setWordWrap(True)
 
+        def attachment_label(kind: str, item_id: Optional[int], source: dict) -> QLabel:
+            label = QLabel()
+            label.setTextFormat(Qt.RichText)
+            label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            label.setOpenExternalLinks(False)
+            if item_id is None:
+                label.setText("—")
+                return label
+            item = source.get(item_id)
+            if not item:
+                label.setText("не найдено")
+                return label
+            title = getattr(item, "title", None) or getattr(item, "name", "—")
+            label.setText(f'<a href="{kind}:{item_id}">{title}</a>')
+            label.linkActivated.connect(
+                lambda _link, k=kind, i=item_id: self._open_attachment_view(k, i)
+            )
+            return label
+
+        task_link = attachment_label("task", marker.task_id, self._tasks_by_id)
+        project_link = attachment_label("project", marker.project_id, self._projects_by_id)
+        note_link = attachment_label("note", marker.note_id, self._notes_by_id)
+        object_link = attachment_label("object", marker.object_id, self._objects_by_id)
+
         form.addRow("Название", name_label)
         form.addRow("Тип", type_label)
         form.addRow("Координаты", coords_label)
@@ -1169,6 +1289,10 @@ class MapCanvas(QWidget):
         form.addRow("Цвет", color_label)
         form.addRow("Описание", desc_label)
         form.addRow("Свойства", props_label)
+        form.addRow("Задача", task_link)
+        form.addRow("Проект", project_link)
+        form.addRow("Заметка", note_link)
+        form.addRow("Объект", object_link)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
