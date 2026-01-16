@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QDialogButtonBox,
     QMessageBox,
+    QTreeWidget,
+    QTreeWidgetItem,
 )
 
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
@@ -173,8 +175,9 @@ class ObjectsModel(QAbstractListModel):
         catalog = self._catalog_filter
         items: List[ObjectRow] = []
         for item in self._all_items:
-            if catalog and item.catalog != catalog:
-                continue
+            if catalog:
+                if item.catalog != catalog and not item.catalog.startswith(f"{catalog}/"):
+                    continue
             if search:
                 hay = f"{item.title} {item.catalog} {item.object_type} {item.status} {item.description}".lower()
                 if search not in hay:
@@ -187,8 +190,8 @@ class ObjectsModel(QAbstractListModel):
 
 
 class ObjectCardDelegate(QStyledItemDelegate):
-    CARD_H = 140
-    CARD_MIN_W = 320
+    CARD_H = 170
+    CARD_W = 240
 
     C_BG = QColor("#171a20")
     C_BORDER = QColor("#2f333b")
@@ -210,11 +213,11 @@ class ObjectCardDelegate(QStyledItemDelegate):
         self._font_desc.setPointSize(9)
 
     def sizeHint(self, option, index):
-        return QSize(max(self.CARD_MIN_W, option.rect.width()), self.CARD_H)
+        return QSize(self.CARD_W, self.CARD_H)
 
     def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
         painter.save()
-        rect = option.rect.adjusted(10, 6, -10, -6)
+        rect = option.rect.adjusted(8, 8, -8, -8)
         radius = 12
 
         painter.setRenderHint(QPainter.Antialiasing)
@@ -232,7 +235,7 @@ class ObjectCardDelegate(QStyledItemDelegate):
         description = index.data(ObjectRoles.Description) or ""
 
         x = rect.x() + 18
-        y = rect.y() + 14
+        y = rect.y() + 12
         w = rect.width() - 36
 
         painter.setPen(self.C_TEXT)
@@ -241,7 +244,7 @@ class ObjectCardDelegate(QStyledItemDelegate):
         title_text = title_metrics.elidedText(title, Qt.ElideRight, w)
         painter.drawText(QRect(x, y, w, 20), Qt.AlignLeft | Qt.AlignVCenter, title_text)
 
-        meta_y = y + 26
+        meta_y = y + 24
         painter.setFont(self._font_meta)
         painter.setPen(self.C_MUTED)
         meta_parts = [part for part in [catalog, object_type, status] if part]
@@ -250,10 +253,10 @@ class ObjectCardDelegate(QStyledItemDelegate):
         meta_text = meta_metrics.elidedText(meta_text, Qt.ElideRight, w)
         painter.drawText(QRect(x, meta_y, w, 18), Qt.AlignLeft | Qt.AlignVCenter, meta_text)
 
-        desc_y = meta_y + 22
+        desc_y = meta_y + 20
         painter.setFont(self._font_desc)
         painter.setPen(self.C_TEXT)
-        desc_rect = QRect(x, desc_y, w, rect.height() - 50)
+        desc_rect = QRect(x, desc_y, w, rect.height() - 46)
         desc_text = description.strip() or "Описание пока не добавлено."
         painter.drawText(desc_rect, Qt.TextWordWrap, desc_text)
 
@@ -540,10 +543,11 @@ class ObjectWorkspace(QWidget):
         self.splitter = QSplitter()
         self.splitter.setObjectName("ObjectsSplitter")
 
-        self.catalog_list = QListWidget()
-        self.catalog_list.setObjectName("ObjectsCatalogs")
-        self.catalog_list.setFixedWidth(220)
-        self.catalog_list.itemSelectionChanged.connect(self._on_catalog_selected)
+        self.catalog_tree = QTreeWidget()
+        self.catalog_tree.setObjectName("ObjectsCatalogs")
+        self.catalog_tree.setHeaderHidden(True)
+        self.catalog_tree.setFixedWidth(220)
+        self.catalog_tree.itemSelectionChanged.connect(self._on_catalog_selected)
 
         self.model = ObjectsModel(self)
         self.card_list = QListView()
@@ -551,7 +555,11 @@ class ObjectWorkspace(QWidget):
         self.card_list.setModel(self.model)
         self.card_list.setItemDelegate(ObjectCardDelegate(self.card_list))
         self.card_list.setSelectionMode(QListView.SingleSelection)
-        self.card_list.setSpacing(6)
+        self.card_list.setViewMode(QListView.IconMode)
+        self.card_list.setResizeMode(QListView.Adjust)
+        self.card_list.setUniformItemSizes(True)
+        self.card_list.setGridSize(QSize(256, 190))
+        self.card_list.setSpacing(10)
         self.card_list.selectionModel().currentChanged.connect(self._on_object_selected)
 
         self.details_panel = QWidget()
@@ -646,7 +654,7 @@ class ObjectWorkspace(QWidget):
         right_splitter.setStretchFactor(0, 3)
         right_splitter.setStretchFactor(1, 2)
 
-        self.splitter.addWidget(self.catalog_list)
+        self.splitter.addWidget(self.catalog_tree)
         self.splitter.addWidget(right_splitter)
         self.splitter.setStretchFactor(1, 1)
 
@@ -686,18 +694,18 @@ class ObjectWorkspace(QWidget):
                 background: #3a2323;
                 border-color: #4b2b2b;
             }
-            QListWidget#ObjectsCatalogs {
+            QTreeWidget#ObjectsCatalogs {
                 background: #171a20;
                 border: 1px solid #2f333b;
                 border-radius: 10px;
                 color: #e6e6e6;
                 padding: 6px;
             }
-            QListWidget#ObjectsCatalogs::item {
+            QTreeWidget#ObjectsCatalogs::item {
                 padding: 8px 6px;
                 border-radius: 6px;
             }
-            QListWidget#ObjectsCatalogs::item:selected {
+            QTreeWidget#ObjectsCatalogs::item:selected {
                 background: #2d3440;
             }
             QListView#ObjectsCards {
@@ -745,26 +753,40 @@ class ObjectWorkspace(QWidget):
         )
 
     def _refresh_catalogs(self) -> None:
-        current = self.catalog_list.currentItem()
-        current_name = current.data(Qt.UserRole) if current else None
-        self.catalog_list.clear()
+        current = self.catalog_tree.currentItem()
+        current_name = current.data(0, Qt.UserRole) if current else None
+        self.catalog_tree.clear()
 
-        all_item = QListWidgetItem("Все объекты")
-        all_item.setData(Qt.UserRole, None)
-        self.catalog_list.addItem(all_item)
+        root = QTreeWidgetItem(["Все объекты"])
+        root.setData(0, Qt.UserRole, None)
+        self.catalog_tree.addTopLevelItem(root)
 
+        tree_items: dict[tuple[str, ...], QTreeWidgetItem] = {(): root}
         for catalog in self.model.catalogs():
-            item = QListWidgetItem(catalog)
-            item.setData(Qt.UserRole, catalog)
-            self.catalog_list.addItem(item)
+            parts = [part.strip() for part in catalog.split("/") if part.strip()]
+            parent_key: tuple[str, ...] = ()
+            for part in parts:
+                key = parent_key + (part,)
+                item = tree_items.get(key)
+                if item is None:
+                    parent = tree_items[parent_key]
+                    item = QTreeWidgetItem([part])
+                    item.setData(0, Qt.UserRole, "/".join(key))
+                    parent.addChild(item)
+                    tree_items[key] = item
+                parent_key = key
 
-        for idx in range(self.catalog_list.count()):
-            item = self.catalog_list.item(idx)
-            if item.data(Qt.UserRole) == current_name:
-                self.catalog_list.setCurrentItem(item)
+        root.setExpanded(True)
+        if current_name is None:
+            self.catalog_tree.setCurrentItem(root)
+            return
+
+        for item in tree_items.values():
+            if item.data(0, Qt.UserRole) == current_name:
+                self.catalog_tree.setCurrentItem(item)
                 return
 
-        self.catalog_list.setCurrentRow(0)
+        self.catalog_tree.setCurrentItem(root)
 
     def refresh_objects(self) -> None:
         current_id = self._current_object_id
@@ -785,8 +807,8 @@ class ObjectWorkspace(QWidget):
         self.model.set_search(text)
 
     def _on_catalog_selected(self) -> None:
-        item = self.catalog_list.currentItem()
-        catalog = item.data(Qt.UserRole) if item else None
+        item = self.catalog_tree.currentItem()
+        catalog = item.data(0, Qt.UserRole) if item else None
         self.model.set_catalog_filter(catalog)
 
     def _on_object_selected(self, current: QModelIndex, _previous: QModelIndex) -> None:
