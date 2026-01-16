@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import List, Union, Optional
+import json
+from pathlib import Path
+from typing import List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea
 )
 
 from mindnavigator.storage import get_database, normalize_priority, validate_time_text
@@ -798,6 +800,41 @@ class TaskEditDialog(QDialog):
 
         layout.addLayout(form)
 
+        self._db = get_database()
+        self._task_id = task.id
+        self._attachments: List = []
+        self._notes_by_id = {}
+        self._objects_by_id = {}
+        self._maps_by_id = {}
+        self._markers_by_id = {}
+        self._cloud_files_by_id = {}
+
+        attachments_frame = QFrame()
+        attachments_frame.setObjectName("TaskAttachments")
+        attachments_layout = QVBoxLayout(attachments_frame)
+        attachments_layout.setContentsMargins(12, 10, 12, 10)
+        attachments_layout.setSpacing(8)
+
+        attachments_header = QHBoxLayout()
+        attachments_title = QLabel("Вложения")
+        attachments_title.setObjectName("TaskAttachmentsTitle")
+        self.attachments_add_btn = QToolButton()
+        self.attachments_add_btn.setText("Добавить")
+        self.attachments_add_btn.setCursor(Qt.PointingHandCursor)
+        self.attachments_add_btn.clicked.connect(self._open_attachment_dialog)
+        attachments_header.addWidget(attachments_title)
+        attachments_header.addStretch(1)
+        attachments_header.addWidget(self.attachments_add_btn)
+        attachments_layout.addLayout(attachments_header)
+
+        self.attachments_list = QVBoxLayout()
+        self.attachments_list.setSpacing(6)
+        attachments_layout.addLayout(self.attachments_list)
+        layout.addWidget(attachments_frame)
+
+        self._load_attachment_sources()
+        self._refresh_attachments()
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
@@ -893,6 +930,37 @@ class TaskEditDialog(QDialog):
             QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {{
                 background: #34363b;
             }}
+
+            QDialog#TaskEditDialog QFrame#TaskAttachments {{
+                background: #1c1d22;
+                border: 1px solid #2a2b2f;
+                border-radius: 8px;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskAttachmentsTitle {{
+                color: #f2f2f2;
+                font-weight: 600;
+            }}
+
+            QDialog#TaskEditDialog QFrame#TaskAttachmentRow {{
+                background: #202127;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskAttachmentKind {{
+                color: #cfcfcf;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskAttachmentLink {{
+                color: #6ab7ff;
+            }}
+
+            QDialog#TaskEditDialog QToolButton#TaskAttachmentRemove {{
+                background: transparent;
+                border: none;
+                padding: 4px;
+            }}
         """)
 
     def _on_accept(self):
@@ -914,6 +982,384 @@ class TaskEditDialog(QDialog):
         if not self.time_toggle.isChecked():
             return ""
         return self.time_edit.time().toString("HH:mm")
+
+    def _load_attachment_sources(self) -> None:
+        notes = self._db.fetch_notes()
+        objects = self._db.fetch_objects()
+        maps = self._db.fetch_maps()
+        markers = self._db.fetch_map_markers()
+        cloud_files = self._db.fetch_cloud_files()
+        self._notes_by_id = {note.id: note for note in notes}
+        self._objects_by_id = {item.id: item for item in objects}
+        self._maps_by_id = {item.id: item for item in maps}
+        self._markers_by_id = {item.id: item for item in markers}
+        self._cloud_files_by_id = {item.id: item for item in cloud_files}
+
+    def _refresh_attachments(self) -> None:
+        self._load_attachment_sources()
+        self._attachments = self._db.fetch_task_attachments(self._task_id)
+        self._clear_layout(self.attachments_list)
+        if not self._attachments:
+            empty = QLabel("Нет вложений")
+            empty.setStyleSheet("color: #8a8a8a;")
+            self.attachments_list.addWidget(empty)
+            return
+        for attachment in self._attachments:
+            row = QFrame()
+            row.setObjectName("TaskAttachmentRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(8, 6, 8, 6)
+            row_layout.setSpacing(8)
+
+            kind_label = QLabel(self._attachment_kind_label(attachment.kind))
+            kind_label.setObjectName("TaskAttachmentKind")
+            link_text = self._attachment_display_text(attachment)
+            link_label = QLabel(f"<a href='{attachment.id}'>{link_text}</a>")
+            link_label.setObjectName("TaskAttachmentLink")
+            link_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            link_label.setOpenExternalLinks(False)
+            link_label.linkActivated.connect(lambda _link, att=attachment: self._open_attachment(att))
+
+            remove_btn = QToolButton()
+            remove_btn.setObjectName("TaskAttachmentRemove")
+            remove_btn.setIcon(qta.icon("fa5s.times", color="#cfcfcf"))
+            remove_btn.setCursor(Qt.PointingHandCursor)
+            remove_btn.clicked.connect(lambda _checked=False, att=attachment: self._remove_attachment(att))
+
+            row_layout.addWidget(kind_label)
+            row_layout.addWidget(link_label, 1)
+            row_layout.addWidget(remove_btn)
+            self.attachments_list.addWidget(row)
+
+    def _clear_layout(self, layout: QVBoxLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+    def _attachment_kind_label(self, kind: str) -> str:
+        labels = {
+            "note": "Заметка",
+            "object": "Объект",
+            "map": "Карта",
+            "marker": "Метка карты",
+            "file": "Файл",
+            "image": "Изображение",
+        }
+        return labels.get(kind, kind)
+
+    def _cloud_file_link_text(self, file_item) -> str:
+        description = (file_item.description or "").strip()
+        if description:
+            try:
+                payload = json.loads(description)
+            except json.JSONDecodeError:
+                return description
+            if isinstance(payload, dict):
+                text = (payload.get("text") or "").strip()
+                if text:
+                    return text
+        return file_item.name
+
+    def _attachment_display_text(self, attachment) -> str:
+        if attachment.kind == "note":
+            note = self._notes_by_id.get(attachment.ref_id)
+            return note.title if note else "Заметка не найдена"
+        if attachment.kind == "object":
+            obj = self._objects_by_id.get(attachment.ref_id)
+            return obj.title if obj else "Объект не найден"
+        if attachment.kind == "map":
+            map_item = self._maps_by_id.get(attachment.ref_id)
+            return map_item.title if map_item else "Карта не найдена"
+        if attachment.kind == "marker":
+            marker = self._markers_by_id.get(attachment.ref_id)
+            if not marker:
+                return "Метка не найдена"
+            map_title = self._maps_by_id.get(marker.map_id).title if marker.map_id in self._maps_by_id else ""
+            if map_title:
+                return f"{marker.name} · {map_title}"
+            return marker.name
+        if attachment.kind in {"file", "image"}:
+            file_item = self._cloud_files_by_id.get(attachment.ref_id)
+            return self._cloud_file_link_text(file_item) if file_item else "Файл не найден"
+        return "Вложение"
+
+    def _open_attachment_dialog(self) -> None:
+        self._load_attachment_sources()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавить вложение")
+        dialog.setObjectName("TaskAttachmentDialog")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        form = QFormLayout()
+
+        kind_combo = QComboBox()
+        kind_items = [
+            ("Заметка", "note"),
+            ("Объект", "object"),
+            ("Карта", "map"),
+            ("Метка карты", "marker"),
+            ("Файл", "file"),
+            ("Изображение", "image"),
+        ]
+        for label, key in kind_items:
+            kind_combo.addItem(label, key)
+
+        item_combo = QComboBox()
+
+        def fill_items(kind: str) -> None:
+            item_combo.clear()
+            items = []
+            if kind == "note":
+                items = sorted(self._notes_by_id.values(), key=lambda item: item.title.lower())
+                for item in items:
+                    label = f"{item.title} · {item.project}" if item.project else item.title
+                    item_combo.addItem(label, item.id)
+            elif kind == "object":
+                items = sorted(self._objects_by_id.values(), key=lambda item: item.title.lower())
+                for item in items:
+                    label = f"{item.title} · {item.catalog}" if item.catalog else item.title
+                    item_combo.addItem(label, item.id)
+            elif kind == "map":
+                items = sorted(self._maps_by_id.values(), key=lambda item: item.title.lower())
+                for item in items:
+                    label = f"{item.title} · {item.project}" if item.project else item.title
+                    item_combo.addItem(label, item.id)
+            elif kind == "marker":
+                markers = sorted(self._markers_by_id.values(), key=lambda item: item.name.lower())
+                for marker in markers:
+                    map_title = self._maps_by_id.get(marker.map_id).title if marker.map_id in self._maps_by_id else ""
+                    label = f"{marker.name} · {map_title}" if map_title else marker.name
+                    item_combo.addItem(label, marker.id)
+            elif kind in {"file", "image"}:
+                files = [item for item in self._cloud_files_by_id.values() if item.is_image == (kind == "image")]
+                files = sorted(files, key=lambda item: item.name.lower())
+                for item in files:
+                    item_combo.addItem(self._cloud_file_link_text(item), item.id)
+            if item_combo.count() == 0:
+                item_combo.addItem("— нет доступных —", None)
+
+        kind_combo.currentIndexChanged.connect(lambda idx: fill_items(kind_combo.currentData()))
+        fill_items(kind_combo.currentData())
+
+        form.addRow("Тип", kind_combo)
+        form.addRow("Элемент", item_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        dialog.setStyleSheet(f"""
+            QDialog#TaskAttachmentDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#TaskAttachmentDialog QLabel {{
+                color: #cfcfcf;
+            }}
+            QDialog#TaskAttachmentDialog QComboBox {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+            QDialog#TaskAttachmentDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+        """)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+        kind = kind_combo.currentData()
+        ref_id = item_combo.currentData()
+        if ref_id is None:
+            QMessageBox.warning(self, "Вложения", "Нет доступных элементов для добавления.")
+            return
+        self._db.add_task_attachment(self._task_id, kind, ref_id)
+        self._refresh_attachments()
+
+    def _remove_attachment(self, attachment) -> None:
+        self._db.delete_task_attachment(attachment.id)
+        self._refresh_attachments()
+
+    def _open_attachment(self, attachment) -> None:
+        if attachment.kind == "image":
+            file_item = self._cloud_files_by_id.get(attachment.ref_id)
+            if not file_item:
+                QMessageBox.warning(self, "Вложения", "Файл изображения не найден.")
+                return
+            self._open_image_preview(file_item)
+            return
+        if attachment.kind == "file":
+            file_item = self._cloud_files_by_id.get(attachment.ref_id)
+            if not file_item:
+                QMessageBox.warning(self, "Вложения", "Файл не найден.")
+                return
+            self._open_file_info(file_item)
+            return
+        if attachment.kind == "note":
+            note = self._notes_by_id.get(attachment.ref_id)
+            if not note:
+                QMessageBox.warning(self, "Вложения", "Заметка не найдена.")
+                return
+            rows = [
+                ("Название", note.title),
+                ("Проект", note.project or "—"),
+                ("Обновлено", note.updated.strftime("%d.%m.%Y %H:%M")),
+                ("Теги", ", ".join(note.tags) if note.tags else "—"),
+                ("Избранное", "Да" if note.favorite else "Нет"),
+                ("Вложения", "Да" if note.attachment else "Нет"),
+                ("Описание", note.preview or "—"),
+            ]
+            self._open_info_dialog("Заметка", rows, wrap_rows={"Описание"})
+            return
+        if attachment.kind == "object":
+            obj = self._objects_by_id.get(attachment.ref_id)
+            if not obj:
+                QMessageBox.warning(self, "Вложения", "Объект не найден.")
+                return
+            rows = [
+                ("Название", obj.title),
+                ("Каталог", obj.catalog or "—"),
+                ("Тип", obj.object_type or "—"),
+                ("Статус", obj.status or "—"),
+                ("Создан", obj.created_at or "—"),
+                ("Обновлен", obj.updated_at or "—"),
+                ("Описание", obj.description or "—"),
+            ]
+            self._open_info_dialog("Объект", rows, wrap_rows={"Описание"})
+            return
+        if attachment.kind == "map":
+            map_item = self._maps_by_id.get(attachment.ref_id)
+            if not map_item:
+                QMessageBox.warning(self, "Вложения", "Карта не найдена.")
+                return
+            rows = [
+                ("Название", map_item.title),
+                ("Проект", map_item.project or "—"),
+                ("Описание", map_item.description or "—"),
+                ("Тайлы", f"{map_item.tiles_w} × {map_item.tiles_h}"),
+            ]
+            self._open_info_dialog("Карта", rows, wrap_rows={"Описание"})
+            return
+        if attachment.kind == "marker":
+            marker = self._markers_by_id.get(attachment.ref_id)
+            if not marker:
+                QMessageBox.warning(self, "Вложения", "Метка не найдена.")
+                return
+            map_title = self._maps_by_id.get(marker.map_id).title if marker.map_id in self._maps_by_id else "—"
+            rows = [
+                ("Название", marker.name),
+                ("Карта", map_title),
+                ("Тип", marker.type),
+                ("Координаты", f"{marker.x:.0f}, {marker.y:.0f}"),
+                ("Описание", marker.description or "—"),
+                ("Свойства", marker.properties or "—"),
+            ]
+            self._open_info_dialog("Метка карты", rows, wrap_rows={"Описание", "Свойства"})
+
+    def _open_info_dialog(self, title: str, rows: List[Tuple[str, str]], wrap_rows: Optional[Set[str]] = None) -> None:
+        dialog = QDialog(self)
+        dialog.setObjectName("TaskAttachmentInfoDialog")
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        form = QFormLayout()
+
+        wrap_rows = wrap_rows or set()
+        for label, value in rows:
+            value_label = QLabel(value or "—")
+            if label in wrap_rows:
+                value_label.setWordWrap(True)
+            form.addRow(label, value_label)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.setStyleSheet(f"""
+            QDialog#TaskAttachmentInfoDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#TaskAttachmentInfoDialog QLabel {{
+                color: #cfcfcf;
+            }}
+            QDialog#TaskAttachmentInfoDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+        """)
+        exec_with_overlay(dialog, self)
+
+    def _open_file_info(self, file_item) -> None:
+        description = self._cloud_file_link_text(file_item)
+        rows = [
+            ("Название", file_item.name),
+            ("Путь", file_item.rel_path),
+            ("Описание", description),
+            ("Размер", f"{file_item.size} байт"),
+        ]
+        self._open_info_dialog("Файл", rows, wrap_rows={"Путь", "Описание"})
+
+    def _open_image_preview(self, file_item) -> None:
+        cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "Изображение", "Папка облачного хранилища не настроена.")
+            return
+        file_path = Path(cloud_root) / file_item.rel_path
+        if not file_path.is_file():
+            QMessageBox.warning(self, "Изображение", "Файл изображения недоступен.")
+            return
+        pixmap = QPixmap(str(file_path))
+        if pixmap.isNull():
+            QMessageBox.warning(self, "Изображение", "Не удалось открыть изображение.")
+            return
+        dialog = QDialog(self)
+        dialog.setObjectName("TaskImagePreview")
+        dialog.setWindowTitle(file_item.name)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        image_label = QLabel()
+        image_label.setPixmap(pixmap)
+        image_label.setAlignment(Qt.AlignCenter)
+        scroll.setWidget(image_label)
+        layout.addWidget(scroll)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.setStyleSheet(f"""
+            QDialog#TaskImagePreview {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#TaskImagePreview QScrollArea {{
+                background: #131417;
+                border: 1px solid #2a2b2f;
+            }}
+            QDialog#TaskImagePreview QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+        """)
+        exec_with_overlay(dialog, self)
 
     def values(self):
         """Возвращает текущие значения формы в виде словаря."""
