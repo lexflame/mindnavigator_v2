@@ -61,10 +61,11 @@ class MapMarkerData:
     size: float
     description: str
     properties: str
-    task_id: Optional[int]
-    project_id: Optional[int]
-    note_id: Optional[int]
-    object_id: Optional[int]
+    task_ids: List[int]
+    project_ids: List[int]
+    note_ids: List[int]
+    object_ids: List[int]
+    file_ids: List[int]
     created_at: str
     updated_at: str
 
@@ -261,10 +262,11 @@ class Database:
                     size REAL NOT NULL,
                     description TEXT NOT NULL DEFAULT '',
                     properties TEXT NOT NULL DEFAULT '',
-                    task_id INTEGER REFERENCES tasks(id),
-                    project_id INTEGER REFERENCES projects(id),
-                    note_id INTEGER REFERENCES notes(id),
-                    object_id INTEGER REFERENCES objects(id),
+                    task_ids TEXT NOT NULL DEFAULT '[]',
+                    project_ids TEXT NOT NULL DEFAULT '[]',
+                    note_ids TEXT NOT NULL DEFAULT '[]',
+                    object_ids TEXT NOT NULL DEFAULT '[]',
+                    file_ids TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -365,6 +367,7 @@ class Database:
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
         self._ensure_map_tiles_path_column()
+        self._ensure_marker_attachment_columns()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -398,6 +401,51 @@ class Database:
         if "tiles_path" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE maps ADD COLUMN tiles_path TEXT NOT NULL DEFAULT '';")
+
+    def _ensure_marker_attachment_columns(self) -> None:
+        """Добавляет новые колонки для вложений маркера карты."""
+        columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
+        names = {row["name"] for row in columns}
+        additions = {
+            "task_ids": "ALTER TABLE map_markers ADD COLUMN task_ids TEXT NOT NULL DEFAULT '[]';",
+            "project_ids": "ALTER TABLE map_markers ADD COLUMN project_ids TEXT NOT NULL DEFAULT '[]';",
+            "note_ids": "ALTER TABLE map_markers ADD COLUMN note_ids TEXT NOT NULL DEFAULT '[]';",
+            "object_ids": "ALTER TABLE map_markers ADD COLUMN object_ids TEXT NOT NULL DEFAULT '[]';",
+            "file_ids": "ALTER TABLE map_markers ADD COLUMN file_ids TEXT NOT NULL DEFAULT '[]';",
+        }
+        legacy_columns = ("task_id", "project_id", "note_id", "object_id")
+        for column, ddl in additions.items():
+            if column not in names:
+                with self._conn:
+                    self._conn.execute(ddl)
+        legacy_present = any(column in names for column in legacy_columns)
+        if legacy_present:
+            rows = self._conn.execute(
+                """
+                SELECT id, task_id, project_id, note_id, object_id
+                FROM map_markers;
+                """
+            ).fetchall()
+            with self._conn:
+                for row in rows:
+                    task_ids = [row["task_id"]] if row["task_id"] is not None else []
+                    project_ids = [row["project_id"]] if row["project_id"] is not None else []
+                    note_ids = [row["note_id"]] if row["note_id"] is not None else []
+                    object_ids = [row["object_id"]] if row["object_id"] is not None else []
+                    self._conn.execute(
+                        """
+                        UPDATE map_markers
+                        SET task_ids = ?, project_ids = ?, note_ids = ?, object_ids = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            json.dumps(task_ids, ensure_ascii=False),
+                            json.dumps(project_ids, ensure_ascii=False),
+                            json.dumps(note_ids, ensure_ascii=False),
+                            json.dumps(object_ids, ensure_ascii=False),
+                            row["id"],
+                        ),
+                    )
 
     def _seed_defaults(self) -> None:
         """Добавляет демонстрационные данные, если база пустая."""
@@ -1012,10 +1060,11 @@ class Database:
                     size,
                     description,
                     properties,
-                    task_id,
-                    project_id,
-                    note_id,
-                    object_id,
+                    task_ids,
+                    project_ids,
+                    note_ids,
+                    object_ids,
+                    file_ids,
                     created_at,
                     updated_at
                 FROM map_markers;
@@ -1035,10 +1084,11 @@ class Database:
                     size,
                     description,
                     properties,
-                    task_id,
-                    project_id,
-                    note_id,
-                    object_id,
+                    task_ids,
+                    project_ids,
+                    note_ids,
+                    object_ids,
+                    file_ids,
                     created_at,
                     updated_at
                 FROM map_markers
@@ -1060,10 +1110,11 @@ class Database:
                     size=row["size"],
                     description=row["description"] or "",
                     properties=row["properties"] or "",
-                    task_id=row["task_id"],
-                    project_id=row["project_id"],
-                    note_id=row["note_id"],
-                    object_id=row["object_id"],
+                    task_ids=json.loads(row["task_ids"] or "[]"),
+                    project_ids=json.loads(row["project_ids"] or "[]"),
+                    note_ids=json.loads(row["note_ids"] or "[]"),
+                    object_ids=json.loads(row["object_ids"] or "[]"),
+                    file_ids=json.loads(row["file_ids"] or "[]"),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -1082,13 +1133,19 @@ class Database:
         size: float,
         description: str = "",
         properties: str = "",
-        task_id: Optional[int] = None,
-        project_id: Optional[int] = None,
-        note_id: Optional[int] = None,
-        object_id: Optional[int] = None,
+        task_ids: Optional[List[int]] = None,
+        project_ids: Optional[List[int]] = None,
+        note_ids: Optional[List[int]] = None,
+        object_ids: Optional[List[int]] = None,
+        file_ids: Optional[List[int]] = None,
     ) -> MapMarkerData:
         """Создает или обновляет метку карты."""
         now = datetime.utcnow().isoformat(timespec="seconds")
+        task_ids = task_ids or []
+        project_ids = project_ids or []
+        note_ids = note_ids or []
+        object_ids = object_ids or []
+        file_ids = file_ids or []
         with self._conn:
             self._conn.execute(
                 """
@@ -1103,13 +1160,14 @@ class Database:
                     size,
                     description,
                     properties,
-                    task_id,
-                    project_id,
-                    note_id,
-                    object_id,
+                    task_ids,
+                    project_ids,
+                    note_ids,
+                    object_ids,
+                    file_ids,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     map_id = excluded.map_id,
                     name = excluded.name,
@@ -1120,10 +1178,11 @@ class Database:
                     size = excluded.size,
                     description = excluded.description,
                     properties = excluded.properties,
-                    task_id = excluded.task_id,
-                    project_id = excluded.project_id,
-                    note_id = excluded.note_id,
-                    object_id = excluded.object_id,
+                    task_ids = excluded.task_ids,
+                    project_ids = excluded.project_ids,
+                    note_ids = excluded.note_ids,
+                    object_ids = excluded.object_ids,
+                    file_ids = excluded.file_ids,
                     created_at = map_markers.created_at,
                     updated_at = excluded.updated_at;
                 """,
@@ -1138,10 +1197,11 @@ class Database:
                     size,
                     description,
                     properties,
-                    task_id,
-                    project_id,
-                    note_id,
-                    object_id,
+                    json.dumps(task_ids, ensure_ascii=False),
+                    json.dumps(project_ids, ensure_ascii=False),
+                    json.dumps(note_ids, ensure_ascii=False),
+                    json.dumps(object_ids, ensure_ascii=False),
+                    json.dumps(file_ids, ensure_ascii=False),
                     now,
                     now,
                 ),
@@ -1159,10 +1219,11 @@ class Database:
                 size,
                 description,
                 properties,
-                task_id,
-                project_id,
-                note_id,
-                object_id,
+                task_ids,
+                project_ids,
+                note_ids,
+                object_ids,
+                file_ids,
                 created_at,
                 updated_at
             FROM map_markers
@@ -1181,10 +1242,11 @@ class Database:
             size=row["size"],
             description=row["description"] or "",
             properties=row["properties"] or "",
-            task_id=row["task_id"],
-            project_id=row["project_id"],
-            note_id=row["note_id"],
-            object_id=row["object_id"],
+            task_ids=json.loads(row["task_ids"] or "[]"),
+            project_ids=json.loads(row["project_ids"] or "[]"),
+            note_ids=json.loads(row["note_ids"] or "[]"),
+            object_ids=json.loads(row["object_ids"] or "[]"),
+            file_ids=json.loads(row["file_ids"] or "[]"),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

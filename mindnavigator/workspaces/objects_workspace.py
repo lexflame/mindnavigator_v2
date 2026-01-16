@@ -201,17 +201,17 @@ class ObjectsModel(QAbstractListModel):
         if self._marker_filter_id is not None or self._project_filter_id is not None or self._task_filter_id is not None:
             object_ids = set()
             for marker in self._db.fetch_map_markers():
-                if marker.object_id is None:
+                if not marker.object_ids:
                     continue
                 if self._marker_filter_id is not None:
                     if marker.id == self._marker_filter_id:
-                        object_ids.add(marker.object_id)
+                        object_ids.update(marker.object_ids)
                 elif self._project_filter_id is not None:
-                    if marker.project_id == self._project_filter_id:
-                        object_ids.add(marker.object_id)
+                    if self._project_filter_id in marker.project_ids:
+                        object_ids.update(marker.object_ids)
                 elif self._task_filter_id is not None:
-                    if marker.task_id == self._task_filter_id:
-                        object_ids.add(marker.object_id)
+                    if self._task_filter_id in marker.task_ids:
+                        object_ids.update(marker.object_ids)
         items: List[ObjectRow] = []
         for item in self._all_items:
             if object_ids is not None and item.id not in object_ids:

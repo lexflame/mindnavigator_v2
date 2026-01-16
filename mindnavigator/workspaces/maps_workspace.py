@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -25,7 +25,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar
+    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
+    QListWidget, QListWidgetItem, QAbstractItemView
 )
 
 from mindnavigator.storage import get_database
@@ -559,10 +560,11 @@ class Marker:
     size: float
     description: str = ""
     properties: str = ""
-    task_id: Optional[int] = None
-    project_id: Optional[int] = None
-    note_id: Optional[int] = None
-    object_id: Optional[int] = None
+    task_ids: List[int] = field(default_factory=list)
+    project_ids: List[int] = field(default_factory=list)
+    note_ids: List[int] = field(default_factory=list)
+    object_ids: List[int] = field(default_factory=list)
+    file_ids: List[int] = field(default_factory=list)
 
 
 class MapCanvas(QWidget):
@@ -615,10 +617,12 @@ class MapCanvas(QWidget):
         self._projects = []
         self._notes = []
         self._objects = []
+        self._files = []
         self._tasks_by_id = {}
         self._projects_by_id = {}
         self._notes_by_id = {}
         self._objects_by_id = {}
+        self._files_by_id = {}
         self._seed_markers()
 
     @staticmethod
@@ -644,15 +648,17 @@ class MapCanvas(QWidget):
     def markers(self) -> List[Marker]:
         return list(self._markers)
 
-    def set_attachment_sources(self, tasks, projects, notes, objects) -> None:
+    def set_attachment_sources(self, tasks, projects, notes, objects, files) -> None:
         self._tasks = list(tasks)
         self._projects = list(projects)
         self._notes = list(notes)
         self._objects = list(objects)
+        self._files = list(files)
         self._tasks_by_id = {item.id: item for item in tasks}
         self._projects_by_id = {item.id: item for item in projects}
         self._notes_by_id = {item.id: item for item in notes}
         self._objects_by_id = {item.id: item for item in objects}
+        self._files_by_id = {item.id: item for item in files}
 
     def _open_attachment_view(self, kind: str, item_id: int) -> None:
         sources = {
@@ -660,6 +666,7 @@ class MapCanvas(QWidget):
             "project": self._projects_by_id,
             "note": self._notes_by_id,
             "object": self._objects_by_id,
+            "file": self._files_by_id,
         }
         item = sources.get(kind, {}).get(item_id)
         if not item:
@@ -717,6 +724,13 @@ class MapCanvas(QWidget):
             add_row("Создан", item.created_at or "—")
             add_row("Обновлен", item.updated_at or "—")
             add_row("Описание", item.description or "—", wrap=True)
+        elif kind == "file":
+            dialog.setWindowTitle("Файл на карте")
+            add_row("Название", item.name or "—")
+            add_row("Путь", item.rel_path or "—", wrap=True)
+            add_row("Описание", item.description or "—", wrap=True)
+            add_row("Размер", f"{item.size:,} байт")
+            add_row("Хэш", item.hash_value or "—", wrap=True)
 
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -1124,10 +1138,11 @@ class MapCanvas(QWidget):
                 new_size,
                 marker.description,
                 marker.properties,
-                marker.task_id,
-                marker.project_id,
-                marker.note_id,
-                marker.object_id,
+                marker.task_ids,
+                marker.project_ids,
+                marker.note_ids,
+                marker.object_ids,
+                marker.file_ids,
             )
         )
 
@@ -1194,10 +1209,11 @@ class MapCanvas(QWidget):
                         new_size,
                         marker.description,
                         marker.properties,
-                        marker.task_id,
-                        marker.project_id,
-                        marker.note_id,
-                        marker.object_id,
+                        marker.task_ids,
+                        marker.project_ids,
+                        marker.note_ids,
+                        marker.object_ids,
+                        marker.file_ids,
                     )
                     self._set_marker(updated)
                     return
@@ -1213,10 +1229,11 @@ class MapCanvas(QWidget):
                     marker.size,
                     marker.description,
                     marker.properties,
-                    marker.task_id,
-                    marker.project_id,
-                    marker.note_id,
-                    marker.object_id,
+                    marker.task_ids,
+                    marker.project_ids,
+                    marker.note_ids,
+                    marker.object_ids,
+                    marker.file_ids,
                 )
                 self._set_marker(updated)
                 return
@@ -1243,10 +1260,11 @@ class MapCanvas(QWidget):
                     marker.size,
                     marker.description,
                     marker.properties,
-                    marker.task_id,
-                    marker.project_id,
-                    marker.note_id,
-                    marker.object_id,
+                    marker.task_ids,
+                    marker.project_ids,
+                    marker.note_ids,
+                    marker.object_ids,
+                    marker.file_ids,
                 )
                 self._set_marker(updated)
                 return
@@ -1311,10 +1329,11 @@ class MapCanvas(QWidget):
             self.DEFAULT_MARKER_SIZE,
             "",
             "",
-            None,
-            None,
-            None,
-            None,
+            [],
+            [],
+            [],
+            [],
+            [],
         )
         self._next_id += 1
         self._markers.append(marker)
@@ -1345,16 +1364,39 @@ class MapCanvas(QWidget):
         def object_label(item) -> str:
             return f"{item.title} · {item.catalog}" if item.catalog else item.title
 
-        def fill_combo(combo: QComboBox, items, current_id: Optional[int], label_builder) -> None:
-            combo.clear()
-            combo.addItem("— не выбрано —", None)
+        def file_label(item) -> str:
+            return item.name or item.rel_path
+
+        def build_checklist(items, selected_ids: List[int], label_builder) -> QListWidget:
+            widget = QListWidget()
+            widget.setSelectionMode(QAbstractItemView.NoSelection)
+            widget.setObjectName("MarkerAttachmentList")
+            if not items:
+                empty_item = QListWidgetItem("— нет доступных элементов —")
+                empty_item.setFlags(Qt.NoItemFlags)
+                widget.addItem(empty_item)
+                widget.setFixedHeight(46)
+                return widget
+            selected = set(selected_ids)
             for item in items:
-                combo.addItem(label_builder(item), item.id)
-            if current_id is None:
-                combo.setCurrentIndex(0)
-            else:
-                idx = combo.findData(current_id)
-                combo.setCurrentIndex(idx if idx >= 0 else 0)
+                list_item = QListWidgetItem(label_builder(item))
+                list_item.setData(Qt.UserRole, item.id)
+                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                list_item.setCheckState(Qt.Checked if item.id in selected else Qt.Unchecked)
+                widget.addItem(list_item)
+            widget.setMinimumHeight(120)
+            return widget
+
+        def collect_checked(list_widget: QListWidget) -> List[int]:
+            selected = []
+            for idx in range(list_widget.count()):
+                item = list_widget.item(idx)
+                item_id = item.data(Qt.UserRole)
+                if item_id is None:
+                    continue
+                if item.checkState() == Qt.Checked:
+                    selected.append(item_id)
+            return selected
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Редактирование маркера")
@@ -1379,14 +1421,11 @@ class MapCanvas(QWidget):
         size_row.addStretch(1)
         size_holder = QWidget()
         size_holder.setLayout(size_row)
-        task_combo = QComboBox()
-        project_combo = QComboBox()
-        note_combo = QComboBox()
-        object_combo = QComboBox()
-        fill_combo(task_combo, self._tasks, marker.task_id, task_label)
-        fill_combo(project_combo, self._projects, marker.project_id, project_label)
-        fill_combo(note_combo, self._notes, marker.note_id, note_label)
-        fill_combo(object_combo, self._objects, marker.object_id, object_label)
+        task_list = build_checklist(self._tasks, marker.task_ids, task_label)
+        project_list = build_checklist(self._projects, marker.project_ids, project_label)
+        note_list = build_checklist(self._notes, marker.note_ids, note_label)
+        object_list = build_checklist(self._objects, marker.object_ids, object_label)
+        file_list = build_checklist(self._files, marker.file_ids, file_label)
         color_btn = QToolButton()
         color_btn.setText("Выбрать…")
         color_btn.setCursor(Qt.PointingHandCursor)
@@ -1421,10 +1460,11 @@ class MapCanvas(QWidget):
         form.addRow("Название", name_edit)
         form.addRow("Тип", type_edit)
         form.addRow("Размер", size_holder)
-        form.addRow("Задача", task_combo)
-        form.addRow("Проект", project_combo)
-        form.addRow("Заметка", note_combo)
-        form.addRow("Объект", object_combo)
+        form.addRow("Задачи", task_list)
+        form.addRow("Проекты", project_list)
+        form.addRow("Заметки", note_list)
+        form.addRow("Объекты", object_list)
+        form.addRow("Файлы", file_list)
         form.addRow("Цвет", color_holder)
         form.addRow("Описание", description_edit)
         form.addRow("Свойства", properties_edit)
@@ -1470,6 +1510,15 @@ class MapCanvas(QWidget):
                 padding: 4px 6px;
                 border-radius: 6px;
             }}
+            QDialog#MarkerEditDialog QListWidget#MarkerAttachmentList {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }}
+            QDialog#MarkerEditDialog QListWidget::item {{
+                padding: 4px 6px;
+            }}
             QDialog#MarkerEditDialog QToolButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
@@ -1500,10 +1549,11 @@ class MapCanvas(QWidget):
                 size_edit.value(),
                 description_edit.toPlainText().strip(),
                 properties_edit.toPlainText().strip(),
-                task_combo.currentData(),
-                project_combo.currentData(),
-                note_combo.currentData(),
-                object_combo.currentData(),
+                collect_checked(task_list),
+                collect_checked(project_list),
+                collect_checked(note_list),
+                collect_checked(object_list),
+                collect_checked(file_list),
             )
             self._set_marker(updated)
             if resize_requested["value"]:
@@ -1540,29 +1590,41 @@ class MapCanvas(QWidget):
         props_label = QLabel(marker.properties or "—")
         props_label.setWordWrap(True)
 
-        def attachment_label(kind: str, item_id: Optional[int], source: dict) -> QLabel:
+        def handle_link(link: str) -> None:
+            if ":" not in link:
+                return
+            kind, item_id = link.split(":", 1)
+            try:
+                parsed_id = int(item_id)
+            except ValueError:
+                return
+            self._open_attachment_view(kind, parsed_id)
+
+        def attachment_label(kind: str, item_ids: List[int], source: dict) -> QLabel:
             label = QLabel()
             label.setTextFormat(Qt.RichText)
             label.setTextInteractionFlags(Qt.TextBrowserInteraction)
             label.setOpenExternalLinks(False)
-            if item_id is None:
+            if not item_ids:
                 label.setText("—")
                 return label
-            item = source.get(item_id)
-            if not item:
-                label.setText("не найдено")
-                return label
-            title = getattr(item, "title", None) or getattr(item, "name", "—")
-            label.setText(f'<a href="{kind}:{item_id}">{title}</a>')
-            label.linkActivated.connect(
-                lambda _link, k=kind, i=item_id: self._open_attachment_view(k, i)
-            )
+            links = []
+            for item_id in item_ids:
+                item = source.get(item_id)
+                if not item:
+                    links.append("не найдено")
+                    continue
+                title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+                links.append(f'<a href="{kind}:{item_id}">{title}</a>')
+            label.setText("<br>".join(links))
+            label.linkActivated.connect(handle_link)
             return label
 
-        task_link = attachment_label("task", marker.task_id, self._tasks_by_id)
-        project_link = attachment_label("project", marker.project_id, self._projects_by_id)
-        note_link = attachment_label("note", marker.note_id, self._notes_by_id)
-        object_link = attachment_label("object", marker.object_id, self._objects_by_id)
+        task_link = attachment_label("task", marker.task_ids, self._tasks_by_id)
+        project_link = attachment_label("project", marker.project_ids, self._projects_by_id)
+        note_link = attachment_label("note", marker.note_ids, self._notes_by_id)
+        object_link = attachment_label("object", marker.object_ids, self._objects_by_id)
+        file_link = attachment_label("file", marker.file_ids, self._files_by_id)
 
         form.addRow("Название", name_label)
         form.addRow("Тип", type_label)
@@ -1571,10 +1633,11 @@ class MapCanvas(QWidget):
         form.addRow("Цвет", color_label)
         form.addRow("Описание", desc_label)
         form.addRow("Свойства", props_label)
-        form.addRow("Задача", task_link)
-        form.addRow("Проект", project_link)
-        form.addRow("Заметка", note_link)
-        form.addRow("Объект", object_link)
+        form.addRow("Задачи", task_link)
+        form.addRow("Проекты", project_link)
+        form.addRow("Заметки", note_link)
+        form.addRow("Объекты", object_link)
+        form.addRow("Файлы", file_link)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -1651,10 +1714,11 @@ class MapCanvas(QWidget):
                         marker.size,
                         marker.description,
                         marker.properties,
-                        marker.task_id,
-                        marker.project_id,
-                        marker.note_id,
-                        marker.object_id,
+                        marker.task_ids,
+                        marker.project_ids,
+                        marker.note_ids,
+                        marker.object_ids,
+                        marker.file_ids,
                     )
                 )
         elif chosen == act_bigger and marker:
@@ -1791,6 +1855,7 @@ class MapEditorWorkspace(QWidget):
         self.info_project = QLabel("-")
         self.info_note = QLabel("-")
         self.info_object = QLabel("-")
+        self.info_file = QLabel("-")
         for label in [
             self.info_name,
             self.info_type,
@@ -1799,6 +1864,7 @@ class MapEditorWorkspace(QWidget):
             self.info_project,
             self.info_note,
             self.info_object,
+            self.info_file,
         ]:
             label.setObjectName("MapInfoValue")
 
@@ -1810,6 +1876,7 @@ class MapEditorWorkspace(QWidget):
         info_layout.addWidget(self.info_project)
         info_layout.addWidget(self.info_note)
         info_layout.addWidget(self.info_object)
+        info_layout.addWidget(self.info_file)
         info_layout.addStretch(1)
 
         root.addWidget(self.toolbar)
@@ -1891,21 +1958,24 @@ class MapEditorWorkspace(QWidget):
         self.info_name.setText(f"Имя: {marker.name}")
         self.info_type.setText(f"Тип: {marker.type}")
         self.info_coords.setText(f"Координаты: {marker.x:.0f}, {marker.y:.0f}")
-        self.info_task.setText(self._format_link("Задача", marker.task_id, self._tasks_by_id))
-        self.info_project.setText(self._format_link("Проект", marker.project_id, self._projects_by_id))
-        self.info_note.setText(self._format_link("Заметка", marker.note_id, self._notes_by_id))
-        self.info_object.setText(self._format_link("Объект", marker.object_id, self._objects_by_id))
+        self.info_task.setText(self._format_links("Задачи", marker.task_ids, self._tasks_by_id))
+        self.info_project.setText(self._format_links("Проекты", marker.project_ids, self._projects_by_id))
+        self.info_note.setText(self._format_links("Заметки", marker.note_ids, self._notes_by_id))
+        self.info_object.setText(self._format_links("Объекты", marker.object_ids, self._objects_by_id))
+        self.info_file.setText(self._format_links("Файлы", marker.file_ids, self._files_by_id))
 
     def _load_attachment_sources(self) -> None:
         tasks = self._db.fetch_tasks()
         projects = self._db.fetch_projects()
         notes = self._db.fetch_notes()
         objects = self._db.fetch_objects()
+        files = self._db.fetch_cloud_files()
         self._tasks_by_id = {task.id: task for task in tasks}
         self._projects_by_id = {project.id: project for project in projects}
         self._notes_by_id = {note.id: note for note in notes}
         self._objects_by_id = {item.id: item for item in objects}
-        self.canvas.set_attachment_sources(tasks, projects, notes, objects)
+        self._files_by_id = {item.id: item for item in files}
+        self.canvas.set_attachment_sources(tasks, projects, notes, objects, files)
 
     def load_map(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
         self._current_map_id = map_id
@@ -1931,10 +2001,11 @@ class MapEditorWorkspace(QWidget):
                     marker.size,
                     marker.description,
                     marker.properties,
-                    marker.task_id,
-                    marker.project_id,
-                    marker.note_id,
-                    marker.object_id,
+                    marker.task_ids,
+                    marker.project_ids,
+                    marker.note_ids,
+                    marker.object_ids,
+                    marker.file_ids,
                 )
             )
         self.canvas.set_markers(loaded)
@@ -1960,10 +2031,11 @@ class MapEditorWorkspace(QWidget):
             size=marker.size,
             description=marker.description,
             properties=marker.properties,
-            task_id=marker.task_id,
-            project_id=marker.project_id,
-            note_id=marker.note_id,
-            object_id=marker.object_id,
+            task_ids=marker.task_ids,
+            project_ids=marker.project_ids,
+            note_ids=marker.note_ids,
+            object_ids=marker.object_ids,
+            file_ids=marker.file_ids,
         )
 
     def _on_marker_added(self, marker: Marker) -> None:
@@ -1980,14 +2052,18 @@ class MapEditorWorkspace(QWidget):
         self._db.delete_map_marker(marker_id)
         self.markersChanged.emit()
 
-    def _format_link(self, label: str, item_id: Optional[int], source: dict) -> str:
-        if item_id is None:
+    def _format_links(self, label: str, item_ids: List[int], source: dict) -> str:
+        if not item_ids:
             return f"{label}: —"
-        item = source.get(item_id)
-        if not item:
-            return f"{label}: не найдено"
-        title = getattr(item, "title", None) or getattr(item, "name", "—")
-        return f"{label}: {title}"
+        titles = []
+        for item_id in item_ids:
+            item = source.get(item_id)
+            if not item:
+                titles.append("не найдено")
+                continue
+            title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+            titles.append(title)
+        return f"{label}: {', '.join(titles)}"
 
 
 class MapsListWorkspace(QWidget):
