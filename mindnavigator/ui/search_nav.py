@@ -1,11 +1,13 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem
 
 from mindnavigator.storage import get_database
 
 
 class SearchNav(QWidget):
     """Панель быстрого поиска по всем сущностям приложения."""
+
+    resultActivated = Signal(dict)
 
     def __init__(self, parent=None):
         """Создает и настраивает блок быстрого поиска."""
@@ -16,7 +18,6 @@ class SearchNav(QWidget):
         self._max_w = 420
         self._fixed_h = 420
         self._db = get_database()
-        self._result_items = []
         self._max_results = 8
 
         layout = QVBoxLayout(self)
@@ -49,8 +50,16 @@ class SearchNav(QWidget):
         self.results_placeholder.setObjectName("SearchResultsPlaceholder")
         self.results_placeholder.setWordWrap(True)
 
+        self.results_list = QListWidget()
+        self.results_list.setObjectName("SearchResultsList")
+        self.results_list.setSelectionMode(QListWidget.SingleSelection)
+        self.results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.results_list.setVisible(False)
+        self.results_list.itemDoubleClicked.connect(self._on_result_double_clicked)
+
         self.results_layout.addWidget(self.results_title)
         self.results_layout.addWidget(self.results_placeholder)
+        self.results_layout.addWidget(self.results_list)
         self.results_layout.addStretch(1)
 
         layout.addWidget(self.header)
@@ -100,6 +109,18 @@ class SearchNav(QWidget):
                 color: #6e7178;
                 font-size: 11px;
             }
+            QListWidget#SearchResultsList {
+                background: transparent;
+                border: none;
+            }
+            QListWidget#SearchResultsList::item {
+                color: #cfcfcf;
+                padding: 4px 6px;
+            }
+            QListWidget#SearchResultsList::item:selected {
+                background: #2a2b2f;
+                border-radius: 4px;
+            }
             QLabel#SearchResultItem {
                 color: #cfcfcf;
                 font-size: 12px;
@@ -112,38 +133,125 @@ class SearchNav(QWidget):
         w = max(self._min_w, min(self._max_w, w))
         self.setFixedWidth(w)
 
-    def _clear_result_items(self):
-        for item in self._result_items:
-            self.results_layout.removeWidget(item)
-            item.deleteLater()
-        self._result_items.clear()
+    def _on_result_double_clicked(self, item: QListWidgetItem) -> None:
+        payload = item.data(Qt.UserRole) or {}
+        if payload:
+            self.resultActivated.emit(payload)
+
+    @staticmethod
+    def _match_query(query: str, *values: str) -> bool:
+        needle = query.lower()
+        return any(needle in (value or "").lower() for value in values)
+
+    def _collect_matches(self, query: str) -> list[dict]:
+        matches: list[dict] = []
+        for task in self._db.fetch_tasks():
+            if self._match_query(query, task.title, task.description, task.project_title, task.project_area):
+                matches.append(
+                    {
+                        "entity": "task",
+                        "label": f"Задача: {task.title}",
+                        "tooltip": task.description or task.project_title,
+                        "id": task.id,
+                    }
+                )
+        for project in self._db.fetch_projects():
+            if self._match_query(query, project.title, project.area):
+                matches.append(
+                    {
+                        "entity": "project",
+                        "label": f"Проект: {project.title}",
+                        "tooltip": project.area,
+                        "id": project.id,
+                    }
+                )
+        maps = self._db.fetch_maps()
+        map_titles = {item.id: item.title for item in maps}
+        for map_item in maps:
+            if self._match_query(query, map_item.title, map_item.description, map_item.project):
+                tooltip = map_item.project or map_item.description
+                matches.append(
+                    {
+                        "entity": "map",
+                        "label": f"Карта: {map_item.title}",
+                        "tooltip": tooltip,
+                        "id": map_item.id,
+                    }
+                )
+        for marker in self._db.fetch_map_markers():
+            if self._match_query(query, marker.name, marker.description, marker.properties):
+                map_title = map_titles.get(marker.map_id, "")
+                tooltip = f"Карта: {map_title}" if map_title else ""
+                matches.append(
+                    {
+                        "entity": "marker",
+                        "label": f"Метка: {marker.name}",
+                        "tooltip": tooltip,
+                        "id": marker.id,
+                        "map_id": marker.map_id,
+                    }
+                )
+        for note in self._db.fetch_notes():
+            tags = " ".join(note.tags or [])
+            if self._match_query(query, note.title, note.preview, tags, note.project):
+                tooltip = note.project or note.preview
+                matches.append(
+                    {
+                        "entity": "note",
+                        "label": f"Заметка: {note.title}",
+                        "tooltip": tooltip,
+                        "id": note.id,
+                    }
+                )
+        for file_item in self._db.fetch_cloud_files():
+            if self._match_query(query, file_item.name, file_item.rel_path, file_item.description):
+                tooltip = file_item.rel_path or file_item.description
+                matches.append(
+                    {
+                        "entity": "file",
+                        "label": f"Файл: {file_item.name}",
+                        "tooltip": tooltip,
+                        "id": file_item.id,
+                    }
+                )
+        for obj in self._db.fetch_objects():
+            if self._match_query(query, obj.title, obj.catalog, obj.object_type, obj.status, obj.description):
+                tooltip_parts = [obj.catalog, obj.object_type, obj.status]
+                tooltip = " · ".join(part for part in tooltip_parts if part)
+                matches.append(
+                    {
+                        "entity": "object",
+                        "label": f"Объект: {obj.title}",
+                        "tooltip": tooltip,
+                        "id": obj.id,
+                    }
+                )
+        return matches
 
     def _update_results(self, text: str):
         query = (text or "").strip().lower()
-        self._clear_result_items()
+        self.results_list.clear()
 
         if not query:
             self.results_placeholder.setText("Начните ввод, чтобы увидеть совпадения")
             self.results_placeholder.setVisible(True)
+            self.results_list.setVisible(False)
             return
 
-        matches = []
-        for task in self._db.fetch_tasks():
-            if query in task.title.lower():
-                matches.append(("Задача", task.title))
-        for project in self._db.fetch_projects():
-            if query in project.title.lower():
-                matches.append(("Проект", project.title))
+        matches = self._collect_matches(query)
 
         if not matches:
             self.results_placeholder.setText("Ничего не найдено")
             self.results_placeholder.setVisible(True)
+            self.results_list.setVisible(False)
             return
 
         self.results_placeholder.setVisible(False)
-        for kind, title in matches[: self._max_results]:
-            label = QLabel(f"{kind}: {title}")
-            label.setObjectName("SearchResultItem")
-            label.setWordWrap(True)
-            self.results_layout.insertWidget(self.results_layout.count() - 1, label)
-            self._result_items.append(label)
+        self.results_list.setVisible(True)
+        for match in matches[: self._max_results]:
+            item = QListWidgetItem(match["label"])
+            item.setData(Qt.UserRole, match)
+            tooltip = match.get("tooltip")
+            if tooltip:
+                item.setToolTip(tooltip)
+            self.results_list.addItem(item)
