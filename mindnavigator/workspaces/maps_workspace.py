@@ -546,6 +546,10 @@ class Marker:
     color: QColor
     type: str
     size: float
+    task_id: Optional[int] = None
+    project_id: Optional[int] = None
+    note_id: Optional[int] = None
+    object_id: Optional[int] = None
 
 
 class MapCanvas(QWidget):
@@ -582,6 +586,10 @@ class MapCanvas(QWidget):
         self._selected: Optional[Marker] = None
         self._preview_pos: Optional[QPointF] = None
         self._dragging_marker_id: Optional[int] = None
+        self._tasks = []
+        self._projects = []
+        self._notes = []
+        self._objects = []
         self._seed_markers()
 
     def _seed_markers(self) -> None:
@@ -591,6 +599,12 @@ class MapCanvas(QWidget):
             Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", self.DEFAULT_MARKER_SIZE),
         ]
         self._next_id = 4
+
+    def set_attachment_sources(self, tasks, projects, notes, objects) -> None:
+        self._tasks = list(tasks)
+        self._projects = list(projects)
+        self._notes = list(notes)
+        self._objects = list(objects)
 
     def set_tool(self, tool: MapTool) -> None:
         self._tool = tool
@@ -832,7 +846,21 @@ class MapCanvas(QWidget):
         new_size = min(self.MAX_MARKER_SIZE, max(self.MIN_MARKER_SIZE, marker.size + delta))
         if new_size == marker.size:
             return
-        self._set_marker(Marker(marker.id, marker.name, marker.x, marker.y, marker.color, marker.type, new_size))
+        self._set_marker(
+            Marker(
+                marker.id,
+                marker.name,
+                marker.x,
+                marker.y,
+                marker.color,
+                marker.type,
+                new_size,
+                marker.task_id,
+                marker.project_id,
+                marker.note_id,
+                marker.object_id,
+            )
+        )
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
@@ -871,6 +899,10 @@ class MapCanvas(QWidget):
                     marker.color,
                     marker.type,
                     marker.size,
+                    marker.task_id,
+                    marker.project_id,
+                    marker.note_id,
+                    marker.object_id,
                 )
                 self._set_marker(updated)
                 return
@@ -931,6 +963,10 @@ class MapCanvas(QWidget):
             QColor("#8be26f"),
             "Point",
             self.DEFAULT_MARKER_SIZE,
+            None,
+            None,
+            None,
+            None,
         )
         self._next_id += 1
         self._markers.append(marker)
@@ -949,6 +985,29 @@ class MapCanvas(QWidget):
         self.update()
 
     def _edit_marker(self, marker: Marker) -> None:
+        def task_label(item) -> str:
+            return f"{item.title} · {item.project_title}" if item.project_title else item.title
+
+        def project_label(item) -> str:
+            return f"{item.title} · {item.area}" if item.area else item.title
+
+        def note_label(item) -> str:
+            return f"{item.title} · {item.project}" if item.project else item.title
+
+        def object_label(item) -> str:
+            return f"{item.title} · {item.catalog}" if item.catalog else item.title
+
+        def fill_combo(combo: QComboBox, items, current_id: Optional[int], label_builder) -> None:
+            combo.clear()
+            combo.addItem("— не выбрано —", None)
+            for item in items:
+                combo.addItem(label_builder(item), item.id)
+            if current_id is None:
+                combo.setCurrentIndex(0)
+            else:
+                idx = combo.findData(current_id)
+                combo.setCurrentIndex(idx if idx >= 0 else 0)
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Редактирование маркера")
         dialog.setObjectName("MarkerEditDialog")
@@ -958,6 +1017,14 @@ class MapCanvas(QWidget):
 
         name_edit = QLineEdit(marker.name)
         type_edit = QLineEdit(marker.type)
+        task_combo = QComboBox()
+        project_combo = QComboBox()
+        note_combo = QComboBox()
+        object_combo = QComboBox()
+        fill_combo(task_combo, self._tasks, marker.task_id, task_label)
+        fill_combo(project_combo, self._projects, marker.project_id, project_label)
+        fill_combo(note_combo, self._notes, marker.note_id, note_label)
+        fill_combo(object_combo, self._objects, marker.object_id, object_label)
         color_btn = QToolButton()
         color_btn.setText("Выбрать…")
         color_btn.setCursor(Qt.PointingHandCursor)
@@ -981,6 +1048,10 @@ class MapCanvas(QWidget):
         color_btn.clicked.connect(pick_color)
         form.addRow("Название", name_edit)
         form.addRow("Тип", type_edit)
+        form.addRow("Задача", task_combo)
+        form.addRow("Проект", project_combo)
+        form.addRow("Заметка", note_combo)
+        form.addRow("Объект", object_combo)
         form.addRow("Цвет", color_holder)
         layout.addLayout(form)
 
@@ -1021,6 +1092,10 @@ class MapCanvas(QWidget):
                 selected_color["value"],
                 type_edit.text().strip() or marker.type,
                 marker.size,
+                task_combo.currentData(),
+                project_combo.currentData(),
+                note_combo.currentData(),
+                object_combo.currentData(),
             )
             self._markers = [updated if m.id == marker.id else m for m in self._markers]
             self._selected = updated
@@ -1048,7 +1123,21 @@ class MapCanvas(QWidget):
         elif chosen == act_color and marker:
             color = QColorDialog.getColor(marker.color, self, "Цвет маркера")
             if color.isValid():
-                self._set_marker(Marker(marker.id, marker.name, marker.x, marker.y, color, marker.type, marker.size))
+                self._set_marker(
+                    Marker(
+                        marker.id,
+                        marker.name,
+                        marker.x,
+                        marker.y,
+                        color,
+                        marker.type,
+                        marker.size,
+                        marker.task_id,
+                        marker.project_id,
+                        marker.note_id,
+                        marker.object_id,
+                    )
+                )
         elif chosen == act_bigger and marker:
             self._adjust_marker_size(marker, 1.5)
         elif chosen == act_smaller and marker:
@@ -1063,6 +1152,11 @@ class MapEditorWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("MapEditorWorkspace")
+        self._db = get_database()
+        self._tasks_by_id = {}
+        self._projects_by_id = {}
+        self._notes_by_id = {}
+        self._objects_by_id = {}
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -1110,6 +1204,7 @@ class MapEditorWorkspace(QWidget):
 
         self.canvas = MapCanvas()
         self.canvas.setObjectName("MapCanvas")
+        self._load_attachment_sources()
 
         self.info_panel = QFrame()
         self.info_panel.setObjectName("MapInfoPanel")
@@ -1123,13 +1218,29 @@ class MapEditorWorkspace(QWidget):
         self.info_name = QLabel("-")
         self.info_type = QLabel("-")
         self.info_coords = QLabel("-")
-        for label in [self.info_name, self.info_type, self.info_coords]:
+        self.info_task = QLabel("-")
+        self.info_project = QLabel("-")
+        self.info_note = QLabel("-")
+        self.info_object = QLabel("-")
+        for label in [
+            self.info_name,
+            self.info_type,
+            self.info_coords,
+            self.info_task,
+            self.info_project,
+            self.info_note,
+            self.info_object,
+        ]:
             label.setObjectName("MapInfoValue")
 
         info_layout.addWidget(self.info_title)
         info_layout.addWidget(self.info_name)
         info_layout.addWidget(self.info_type)
         info_layout.addWidget(self.info_coords)
+        info_layout.addWidget(self.info_task)
+        info_layout.addWidget(self.info_project)
+        info_layout.addWidget(self.info_note)
+        info_layout.addWidget(self.info_object)
         info_layout.addStretch(1)
 
         root.addWidget(self.toolbar)
@@ -1191,6 +1302,30 @@ class MapEditorWorkspace(QWidget):
         self.info_name.setText(f"Имя: {marker.name}")
         self.info_type.setText(f"Тип: {marker.type}")
         self.info_coords.setText(f"Координаты: {marker.x:.0f}, {marker.y:.0f}")
+        self.info_task.setText(self._format_link("Задача", marker.task_id, self._tasks_by_id))
+        self.info_project.setText(self._format_link("Проект", marker.project_id, self._projects_by_id))
+        self.info_note.setText(self._format_link("Заметка", marker.note_id, self._notes_by_id))
+        self.info_object.setText(self._format_link("Объект", marker.object_id, self._objects_by_id))
+
+    def _load_attachment_sources(self) -> None:
+        tasks = self._db.fetch_tasks()
+        projects = self._db.fetch_projects()
+        notes = self._db.fetch_notes()
+        objects = self._db.fetch_objects()
+        self._tasks_by_id = {task.id: task for task in tasks}
+        self._projects_by_id = {project.id: project for project in projects}
+        self._notes_by_id = {note.id: note for note in notes}
+        self._objects_by_id = {item.id: item for item in objects}
+        self.canvas.set_attachment_sources(tasks, projects, notes, objects)
+
+    def _format_link(self, label: str, item_id: Optional[int], source: dict) -> str:
+        if item_id is None:
+            return f"{label}: —"
+        item = source.get(item_id)
+        if not item:
+            return f"{label}: не найдено"
+        title = getattr(item, "title", None) or getattr(item, "name", "—")
+        return f"{label}: {title}"
 
 
 class MapsListWorkspace(QWidget):
