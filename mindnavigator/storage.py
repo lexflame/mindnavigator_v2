@@ -24,6 +24,7 @@ class TaskData:
     done: bool
     project_id: Optional[int] = None
     project_title: str = ""
+    project_area: str = ""
     parent_id: Optional[int] = None
 
 
@@ -570,6 +571,7 @@ class Database:
                 t.done,
                 t.project_id,
                 COALESCE(p.title, '') AS project_title,
+                COALESCE(p.area, '') AS project_area,
                 t.parent_id
             FROM tasks t
             LEFT JOIN projects p ON p.id = t.project_id;
@@ -588,6 +590,7 @@ class Database:
                     done=bool(row["done"]),
                     project_id=row["project_id"],
                     project_title=row["project_title"] or "",
+                    project_area=row["project_area"] or "",
                     parent_id=row["parent_id"],
                 )
             )
@@ -649,12 +652,14 @@ class Database:
                 (title, description, day.isoformat(), time_text, priority, project_id, parent_id, now, now),
             )
         project_title = ""
+        project_area = ""
         if project_id is not None:
             row = self._conn.execute(
-                "SELECT title FROM projects WHERE id = ?;",
+                "SELECT area, title FROM projects WHERE id = ?;",
                 (project_id,),
             ).fetchone()
             if row:
+                project_area = row["area"]
                 project_title = row["title"]
         return TaskData(
             cur.lastrowid,
@@ -666,6 +671,7 @@ class Database:
             False,
             project_id,
             project_title,
+            project_area,
             parent_id,
         )
 
@@ -700,14 +706,28 @@ class Database:
                 (title, description, day.isoformat(), time_text, priority, int(done), project_id, parent_id, now, task_id),
             )
         project_title = ""
+        project_area = ""
         if project_id is not None:
             row = self._conn.execute(
-                "SELECT title FROM projects WHERE id = ?;",
+                "SELECT area, title FROM projects WHERE id = ?;",
                 (project_id,),
             ).fetchone()
             if row:
+                project_area = row["area"]
                 project_title = row["title"]
-        return TaskData(task_id, day, time_text, title, description, priority, bool(done), project_id, project_title, parent_id)
+        return TaskData(
+            task_id,
+            day,
+            time_text,
+            title,
+            description,
+            priority,
+            bool(done),
+            project_id,
+            project_title,
+            project_area,
+            parent_id,
+        )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
