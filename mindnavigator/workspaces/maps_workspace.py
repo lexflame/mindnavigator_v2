@@ -1970,6 +1970,22 @@ class MapsListWorkspace(QWidget):
         else:
             self.model.set_project_filter(None)
 
+    def set_project_filter(self, project: Optional[str]) -> None:
+        """Устанавливает фильтр карт из внешней навигации."""
+        if project:
+            self.tab_project.setChecked(True)
+            idx = self.filter_project.findText(project)
+            if idx >= 0:
+                self.filter_project.setCurrentIndex(idx)
+            else:
+                self.filter_project.addItem(project)
+                self.filter_project.setCurrentText(project)
+            self.model.set_project_filter(project)
+        else:
+            self.tab_all.setChecked(True)
+            self.filter_project.setCurrentIndex(0)
+            self.model.set_project_filter(None)
+
     def _on_create_map(self) -> None:
         self.model.add_map(
             self.new_title.text(),

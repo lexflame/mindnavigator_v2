@@ -50,6 +50,7 @@ class NoteWorkspaceState:
     search_text: str = ""
     project_filter: Optional[str] = None
     tag_filter: Optional[str] = None
+    task_filter: Optional[int] = None
 
 
 class NoteRoles:
@@ -75,6 +76,7 @@ class NotesModel(QAbstractListModel):
         self._search = ""
         self._project_filter: Optional[str] = None
         self._tag_filter: Optional[str] = None
+        self._task_filter_id: Optional[int] = None
         self._loading = True
         self._load_notes()
 
@@ -160,12 +162,20 @@ class NotesModel(QAbstractListModel):
 
     def set_project_filter(self, project: Optional[str]):
         self._project_filter = project
+        self._task_filter_id = None
         self._filter_mode = "По проекту" if project else self._filter_mode
         self._rebuild()
 
     def set_tag_filter(self, tag: Optional[str]):
         self._tag_filter = tag
         self._filter_mode = "По тегу" if tag else self._filter_mode
+        self._rebuild()
+
+    def set_task_filter(self, task_id: Optional[int]):
+        self._task_filter_id = task_id
+        self._project_filter = None
+        if task_id is not None:
+            self._filter_mode = "По задаче"
         self._rebuild()
 
     def add_note(self, note: NoteItem):
@@ -255,6 +265,16 @@ class NotesModel(QAbstractListModel):
         elif self._filter_mode == "Последние":
             notes.sort(key=lambda n: n.updated, reverse=True)
             notes = notes[:12]
+        elif self._filter_mode == "По задаче" and self._task_filter_id is not None:
+            task_project = None
+            for task in self._db.fetch_tasks():
+                if task.id == self._task_filter_id:
+                    task_project = task.project_title
+                    break
+            if task_project:
+                notes = [n for n in notes if n.project == task_project]
+            else:
+                notes = []
         elif self._filter_mode == "По проекту" and self._project_filter:
             notes = [n for n in notes if n.project == self._project_filter]
         elif self._filter_mode == "По тегу" and self._tag_filter:
@@ -305,6 +325,10 @@ class NotesController(QObject):
     def set_tag_filter(self, tag: Optional[str]):
         self._state.tag_filter = tag
         self._model.set_tag_filter(tag)
+
+    def set_task_filter(self, task_id: Optional[int]):
+        self._state.task_filter = task_id
+        self._model.set_task_filter(task_id)
 
     def open_note(self, note_id: int):
         self._state.selected_note_id = note_id
@@ -835,6 +859,16 @@ class NoteWorkspace(QWidget):
 
         self.controller.initialize()
         self.controller.start_autosave()
+
+    def set_project_filter(self, project: Optional[str]) -> None:
+        """Устанавливает фильтр по проекту из внешней навигации."""
+        self.controller.set_project_filter(project)
+        self._refresh_empty_state()
+
+    def set_task_filter(self, task_id: Optional[int]) -> None:
+        """Устанавливает фильтр по задаче из внешней навигации."""
+        self.controller.set_task_filter(task_id)
+        self._refresh_empty_state()
 
     def _on_filter_changed(self):
         btn = self.filters_group.checkedButton()
