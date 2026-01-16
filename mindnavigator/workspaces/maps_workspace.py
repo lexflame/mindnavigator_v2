@@ -559,6 +559,7 @@ class MapCanvas(QWidget):
     markerSelected = Signal(object)
     markerAdded = Signal(object)
     markerRemoved = Signal(int)
+    markerUpdated = Signal(object)
 
     GRID_COLOR = QColor(70, 74, 82, 120)
     GRID_TEXT = QColor(150, 155, 160, 180)
@@ -599,13 +600,24 @@ class MapCanvas(QWidget):
         self._objects_by_id = {}
         self._seed_markers()
 
-    def _seed_markers(self) -> None:
-        self._markers = [
-            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", self.DEFAULT_MARKER_SIZE, "Опорный пункт"),
-            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", self.DEFAULT_MARKER_SIZE, "Контрольная точка"),
-            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", self.DEFAULT_MARKER_SIZE, "Зона риска"),
+    @staticmethod
+    def default_markers() -> List[Marker]:
+        return [
+            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", MapCanvas.DEFAULT_MARKER_SIZE, "Опорный пункт"),
+            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", MapCanvas.DEFAULT_MARKER_SIZE, "Контрольная точка"),
+            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", MapCanvas.DEFAULT_MARKER_SIZE, "Зона риска"),
         ]
-        self._next_id = 4
+
+    def _seed_markers(self) -> None:
+        self._markers = self.default_markers()
+        self._next_id = max((m.id for m in self._markers), default=0) + 1
+
+    def set_markers(self, markers: List[Marker]) -> None:
+        self._markers = list(markers)
+        self._selected = None
+        self._next_id = max((m.id for m in self._markers), default=0) + 1
+        self.markerSelected.emit(None)
+        self.update()
 
     def set_attachment_sources(self, tasks, projects, notes, objects) -> None:
         self._tasks = list(tasks)
@@ -931,6 +943,7 @@ class MapCanvas(QWidget):
         self._markers = [updated if m.id == updated.id else m for m in self._markers]
         self._selected = updated
         self.markerSelected.emit(updated)
+        self.markerUpdated.emit(updated)
         self.update()
 
     def _zoom_to_marker(self, marker: Marker) -> None:
@@ -1235,10 +1248,7 @@ class MapCanvas(QWidget):
                 note_combo.currentData(),
                 object_combo.currentData(),
             )
-            self._markers = [updated if m.id == marker.id else m for m in self._markers]
-            self._selected = updated
-            self.markerSelected.emit(updated)
-            self.update()
+            self._set_marker(updated)
 
     def _view_marker(self, marker: Marker) -> None:
         dialog = QDialog(self)
@@ -1382,6 +1392,7 @@ class MapEditorWorkspace(QWidget):
         self._objects_by_id = {}
         self._info_panel_was_visible = False
         self._fullscreen_active = False
+        self._current_map_id: Optional[int] = None
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -1487,6 +1498,9 @@ class MapEditorWorkspace(QWidget):
         self.info_panel.hide()
 
         self.canvas.markerSelected.connect(self._on_marker_selected)
+        self.canvas.markerAdded.connect(self._on_marker_added)
+        self.canvas.markerUpdated.connect(self._on_marker_updated)
+        self.canvas.markerRemoved.connect(self._on_marker_removed)
 
         self.setStyleSheet("""
             QWidget#MapEditorWorkspace {
@@ -1571,6 +1585,68 @@ class MapEditorWorkspace(QWidget):
         self._notes_by_id = {note.id: note for note in notes}
         self._objects_by_id = {item.id: item for item in objects}
         self.canvas.set_attachment_sources(tasks, projects, notes, objects)
+
+    def load_map(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        self._current_map_id = map_id
+        self.canvas.set_tiles(tiles_path, tiles_h, tiles_w)
+        markers = self._db.fetch_map_markers(map_id)
+        if not markers:
+            defaults = self.canvas.default_markers()
+            self.canvas.set_markers(defaults)
+            for marker in defaults:
+                self._sync_marker(marker)
+            return
+        loaded = []
+        for marker in markers:
+            loaded.append(
+                Marker(
+                    marker.id,
+                    marker.name,
+                    marker.x,
+                    marker.y,
+                    QColor(marker.color),
+                    marker.type,
+                    marker.size,
+                    marker.description,
+                    marker.properties,
+                    marker.task_id,
+                    marker.project_id,
+                    marker.note_id,
+                    marker.object_id,
+                )
+            )
+        self.canvas.set_markers(loaded)
+
+    def _sync_marker(self, marker: Marker) -> None:
+        if self._current_map_id is None:
+            return
+        self._db.upsert_map_marker(
+            marker_id=marker.id,
+            map_id=self._current_map_id,
+            name=marker.name,
+            x=marker.x,
+            y=marker.y,
+            color=marker.color.name(),
+            marker_type=marker.type,
+            size=marker.size,
+            description=marker.description,
+            properties=marker.properties,
+            task_id=marker.task_id,
+            project_id=marker.project_id,
+            note_id=marker.note_id,
+            object_id=marker.object_id,
+        )
+
+    def _on_marker_added(self, marker: Marker) -> None:
+        self._sync_marker(marker)
+
+    def _on_marker_updated(self, marker: Marker) -> None:
+        self._sync_marker(marker)
+
+    def _on_marker_removed(self, marker_id: int) -> None:
+        if self._current_map_id is None:
+            return
+        self._db.delete_map_marker(marker_id)
 
     def _format_link(self, label: str, item_id: Optional[int], source: dict) -> str:
         if item_id is None:
@@ -1936,6 +2012,7 @@ class MapsListWorkspace(QWidget):
     def _on_open_map(self, index: QModelIndex) -> None:
         if not index.isValid():
             return
+        map_id = index.data(MapRoles.Id)
         title = index.data(MapRoles.Title) or "Карта"
         project = index.data(MapRoles.Project) or ""
         if project:
@@ -1948,7 +2025,8 @@ class MapsListWorkspace(QWidget):
         tiles_width = index.data(MapRoles.TilesWidth) or 0
         QTimer.singleShot(
             0,
-            lambda: self.editor_workspace.canvas.set_tiles(
+            lambda: self.editor_workspace.load_map(
+                map_id,
                 tiles_path,
                 tiles_height,
                 tiles_width,
