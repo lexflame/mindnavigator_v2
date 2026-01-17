@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 import qtawesome as qta
 
 from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
+from mindnavigator.workspaces.objects_workspace import DOC_EXTENSIONS, extract_text_from_document
 
 
 HASH_RE = re.compile(r"[a-fA-F0-9]{32,64}")
@@ -737,8 +738,12 @@ class FileWorkspace(QWidget):
             create_object_action = transfer_menu.addAction("Создать объект")
             create_object_action.triggered.connect(lambda: self._create_object_from_folder(rel_path))
         else:
-            placeholder_action = transfer_menu.addAction("Нет действий")
-            placeholder_action.setEnabled(False)
+            if Path(rel_path).suffix.lower() in DOC_EXTENSIONS:
+                import_note_action = transfer_menu.addAction("Импорт в заметку")
+                import_note_action.triggered.connect(lambda: self._import_note_from_file(rel_path))
+            else:
+                placeholder_action = transfer_menu.addAction("Нет действий")
+                placeholder_action.setEnabled(False)
 
         menu.exec(self.file_grid.mapToGlobal(position))
 
@@ -761,6 +766,27 @@ class FileWorkspace(QWidget):
             self,
             "FileTransfer",
             f"Создан объект: {obj.title}",
+        )
+
+    def _import_note_from_file(self, rel_path: str) -> None:
+        cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "FileTransfer", "Путь к облаку не задан.")
+            return
+        file_path = Path(cloud_root) / rel_path
+        if not file_path.is_file():
+            QMessageBox.warning(self, "FileTransfer", "Файл не найден в облаке.")
+            return
+        text = extract_text_from_document(file_path)
+        if not text:
+            QMessageBox.warning(self, "FileTransfer", "Не удалось извлечь текст из файла.")
+            return
+        title = Path(rel_path).stem or "Импортированная заметка"
+        note = self._db.create_note(title, text, [], "")
+        QMessageBox.information(
+            self,
+            "FileTransfer",
+            f"Создана заметка: {note.title}",
         )
 
     def _format_description(self, raw_description: str) -> str:
