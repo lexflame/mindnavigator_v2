@@ -364,6 +364,7 @@ class EntityPickerDialog(QDialog):
         selected_ids=None,
         parent=None,
         initial_query: str = "",
+        anchor_widget: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
@@ -385,6 +386,7 @@ class EntityPickerDialog(QDialog):
 
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.list_widget.setSpacing(6)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Добавить")
@@ -395,42 +397,60 @@ class EntityPickerDialog(QDialog):
         layout.addWidget(self.list_widget, 1)
         layout.addWidget(buttons)
 
+        if anchor_widget is not None:
+            self._apply_anchor_geometry(anchor_widget)
+
         self.setStyleSheet(
-            """
+            f"""
             QDialog#EntityPickerDialog {
-                background: #171a22;
-                color: #d8d8d8;
+                {MATH_PHYS_BACKGROUND}
+                color: #e2e2e2;
             }
             QLineEdit {
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
+                background: rgba(28, 31, 38, 0.85);
+                color: #e8e8e8;
+                border: 1px solid #2e3137;
+                padding: 7px 10px;
                 border-radius: 6px;
             }
             QListWidget {
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
+                background: rgba(24, 27, 34, 0.92);
+                color: #dfe2e7;
+                border: 1px solid #2e3137;
                 border-radius: 6px;
             }
             QListWidget::item {
-                padding: 6px 8px;
+                background: #f1f3f8;
+                color: #1c1f24;
+                border: 1px solid #d6dbe6;
+                border-radius: 6px;
+                padding: 8px 10px;
+                margin-bottom: 6px;
+            }
+            QListWidget::item:hover {
+                background: #e6ebf5;
             }
             QDialogButtonBox QPushButton {
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
+                background: #2a2f3b;
+                color: #e8e8e8;
+                border: 1px solid #3a3f4a;
+                padding: 6px 14px;
                 border-radius: 6px;
             }
             QDialogButtonBox QPushButton:hover {
-                background: #34363b;
+                background: #343b4b;
             }
             """
         )
 
         self._reload()
+
+    def _apply_anchor_geometry(self, anchor_widget: QWidget) -> None:
+        anchor_width = anchor_widget.width()
+        if anchor_width > 0:
+            self.setFixedWidth(anchor_width)
+        global_pos = anchor_widget.mapToGlobal(QPoint(0, anchor_widget.height()))
+        self.move(global_pos)
 
     def selected_items(self) -> list[ChipItem]:
         selected = []
@@ -1270,6 +1290,9 @@ class MapLabelEditDialog(QDialog):
         link_input = self._link_inputs.get(key)
         if not source or not link_input:
             return
+        if key == "file":
+            self._open_file_picker(source, link_input)
+            return
 
         def fetch_fn(search_query: str) -> list[ChipItem]:
             items = []
@@ -1287,6 +1310,7 @@ class MapLabelEditDialog(QDialog):
             [item.id for item in link_input.items()],
             self,
             initial_query=query,
+            anchor_widget=link_input,
         )
         if dialog.exec() == QDialog.Accepted:
             to_add = [
@@ -1296,3 +1320,19 @@ class MapLabelEditDialog(QDialog):
             link_input.add_items(to_add)
             link_input.clear_search()
             self._mark_dirty()
+
+    def _open_file_picker(self, source: MapLabelEntitySource, link_input: EntityLinksInput) -> None:
+        dialog = AttachFileSelectNav(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        rel_path = dialog.selected_rel_path()
+        if not rel_path:
+            return
+        matched = next((item for item in source.items if item.rel_path == rel_path), None)
+        if not matched:
+            QMessageBox.warning(self, "Файлы", "Не удалось найти файл в базе.")
+            return
+        title = source.label_fn(matched)
+        link_input.add_items([EntityLinkItem(matched.id, title, f"{source.item_prefix}:{matched.id}")])
+        link_input.clear_search()
+        self._mark_dirty()

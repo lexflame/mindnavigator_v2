@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QPen,
     QCursor,
     QPolygonF,
+    QGuiApplication,
 )
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
@@ -1489,6 +1490,7 @@ class MapCanvas(QWidget):
             size_range=(self.MIN_MARKER_SIZE, self.MAX_MARKER_SIZE),
             parent=self,
         )
+        self._ensure_dialog_fits_screen(dialog)
 
         # Пример использования результата: dialog.result_marker(), dialog.image_path(), dialog.parent_path().
         if dialog.exec() == QDialog.Accepted:
@@ -1496,6 +1498,24 @@ class MapCanvas(QWidget):
             self._set_marker(updated)
             if dialog.resize_requested():
                 self._enable_resize_mode(updated.id)
+
+    def _ensure_dialog_fits_screen(self, dialog: QDialog) -> None:
+        screen = QGuiApplication.screenAt(self.mapToGlobal(self.rect().center()))
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        margin = 40
+        max_width = max(360, available.width() - margin)
+        max_height = max(300, available.height() - margin)
+        dialog.setMinimumSize(min(dialog.minimumWidth(), max_width), min(dialog.minimumHeight(), max_height))
+        dialog.resize(min(dialog.width(), max_width), min(dialog.height(), max_height))
+        x = available.x() + (available.width() - dialog.width()) // 2
+        y = available.y() + (available.height() - dialog.height()) // 2
+        x = min(max(x, available.x() + 10), available.x() + available.width() - dialog.width() - 10)
+        y = min(max(y, available.y() + 10), available.y() + available.height() - dialog.height() - 10)
+        dialog.move(x, y)
 
     def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
         image_path = (marker.image_path or "").strip()
