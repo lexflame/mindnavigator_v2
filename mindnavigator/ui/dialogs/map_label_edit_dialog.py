@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -36,6 +36,8 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.storage import get_database
+from mindnavigator.ui.dialogs.attach_file_select_nav import AttachFileSelectNav
 
 
 @dataclass(frozen=True)
@@ -359,11 +361,13 @@ class MapLabelEditDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("MapLabelEditDialog")
+        self._db = get_database()
         self._marker = marker
         self._entity_sources = entity_sources
         self._dirty = False
         self._resize_requested = False
         self._image_path = ""
+        self._image_icon: QIcon | None = None
         self._parent_path = ""
         self._size_range = size_range
         self._chip_inputs: dict[str, TagChipsInput] = {}
@@ -899,18 +903,9 @@ class MapLabelEditDialog(QDialog):
             f"background: {color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
         )
 
-    def _choose_image(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Выберите изображение",
-            "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
-        )
-        if file_path:
-            self._set_image(file_path)
-
     def _clear_image(self) -> None:
         self._image_path = ""
+        self._image_icon = None
         self.preview.set_image(None)
         self._update_image_hint()
         self._mark_dirty()
@@ -923,6 +918,7 @@ class MapLabelEditDialog(QDialog):
         scaled = pixmap.scaled(self.preview.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
         self.preview.set_image(scaled)
         self._image_path = file_path
+        self._image_icon = None
         self._update_image_hint()
         self._mark_dirty()
 
@@ -937,6 +933,46 @@ class MapLabelEditDialog(QDialog):
         else:
             self.image_hint.setText("Нет изображения")
             self.image_hint.setToolTip("")
+
+    def _choose_image(self) -> None:
+        dialog = AttachFileSelectNav(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        rel_path = dialog.selected_rel_path()
+        if not rel_path:
+            return
+        self._set_cloud_image(rel_path, dialog.selected_icon())
+
+    def _set_cloud_image(self, rel_path: str, icon: QIcon | None) -> None:
+        cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "Изображение", "Путь к облаку не задан.")
+            return
+        file_path = Path(cloud_root) / rel_path
+        if file_path.is_file():
+            pixmap = QPixmap(str(file_path))
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(
+                    self.preview.size(),
+                    Qt.KeepAspectRatioByExpanding,
+                    Qt.SmoothTransformation,
+                )
+                self.preview.set_image(scaled)
+                self._image_path = rel_path
+                self._image_icon = icon
+                self._update_image_hint()
+                self._mark_dirty()
+                return
+        if icon is not None:
+            fallback = icon.pixmap(self.preview.size())
+            if not fallback.isNull():
+                self.preview.set_image(fallback)
+                self._image_path = rel_path
+                self._image_icon = icon
+                self._update_image_hint()
+                self._mark_dirty()
+                return
+        QMessageBox.warning(self, "Изображение", "Не удалось загрузить файл из облака.")
 
     def _pick_parent_folder(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Выберите каталог")
