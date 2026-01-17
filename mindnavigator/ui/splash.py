@@ -1,3 +1,12 @@
+"""Заставка приложения и функции её показа.
+
+Входные данные:
+    Экземпляр QApplication и путь к изображению заставки.
+
+Выходные данные:
+    Виджет заставки и обновлённые статусы загрузки.
+"""
+
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt

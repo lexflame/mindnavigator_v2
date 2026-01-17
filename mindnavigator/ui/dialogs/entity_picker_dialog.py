@@ -1,5 +1,14 @@
 """Reusable entity picker dialog."""
 
+"""Диалог выбора сущностей с чипами.
+
+Входные данные:
+    Список доступных сущностей и выбранные элементы.
+
+Выходные данные:
+    Итоговый набор выбранных сущностей.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
