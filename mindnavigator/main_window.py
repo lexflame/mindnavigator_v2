@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QToolButton,
     QStackedWidget,
     QApplication,
     QSystemTrayIcon,
@@ -162,6 +163,24 @@ class MainWindow(QMainWindow):
         self.left_rail = LeftRail()
         body_layout.addWidget(self.left_rail)
 
+        self.nav_toggle_container = QWidget()
+        self.nav_toggle_container.setObjectName("NavToggleContainer")
+        nav_toggle_layout = QVBoxLayout(self.nav_toggle_container)
+        nav_toggle_layout.setContentsMargins(0, 0, 0, 0)
+        nav_toggle_layout.setSpacing(0)
+
+        self.nav_toggle = QToolButton()
+        self.nav_toggle.setObjectName("NavToggleButton")
+        self.nav_toggle.setText("⟨")
+        self.nav_toggle.setCursor(Qt.PointingHandCursor)
+        self.nav_toggle.setToolTip("Свернуть навигацию")
+
+        nav_toggle_layout.addStretch(1)
+        nav_toggle_layout.addWidget(self.nav_toggle)
+        nav_toggle_layout.addStretch(1)
+
+        body_layout.addWidget(self.nav_toggle_container)
+
         self.nav_column = QWidget()
         self.nav_column.setObjectName("NavColumn")
         nav_layout = QVBoxLayout(self.nav_column)
@@ -202,10 +221,13 @@ class MainWindow(QMainWindow):
         self.search_nav.resultActivated.connect(self._on_search_result_activated)
         self._current_mode = self.MODE_TASKS
 
+        self.nav_toggle.clicked.connect(self._toggle_nav_column)
+
         self._apply_root_style()
 
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
+        self._set_nav_collapsed(False)
 
     def _placeholder(self, title: str, subtitle: str) -> QWidget:
         """Возвращает временный экран-заглушку для неготовых режимов."""
@@ -262,7 +284,29 @@ class MainWindow(QMainWindow):
                 background-repeat: repeat;
             }}
             QWidget#Container {{ border: 1px solid #2a2b2f; }}
+            QWidget#NavToggleContainer {{
+                background: #1e1f22;
+                border-right: 1px solid #2a2b2f;
+            }}
+            QToolButton#NavToggleButton {{
+                background: transparent;
+                border: none;
+                color: #cfcfcf;
+                font-size: 16px;
+                padding: 4px 2px;
+            }}
+            QToolButton#NavToggleButton:hover {{
+                background: #2a2b2f;
+            }}
         """)
+
+    def _set_nav_collapsed(self, collapsed: bool) -> None:
+        self.nav_column.setVisible(not collapsed)
+        self.nav_toggle.setText("⟩" if collapsed else "⟨")
+        self.nav_toggle.setToolTip("Развернуть навигацию" if collapsed else "Свернуть навигацию")
+
+    def _toggle_nav_column(self) -> None:
+        self._set_nav_collapsed(self.nav_column.isVisible())
 
     def _wire_modes(self):
         """Связывает кнопки левого меню с режимами рабочих областей."""
@@ -585,16 +629,19 @@ class MainWindow(QMainWindow):
             self._map_fullscreen_restore = {
                 "title_bar": self.title_bar.isVisible(),
                 "left_rail": self.left_rail.isVisible(),
+                "nav_toggle": self.nav_toggle_container.isVisible(),
                 "nav_column": self.nav_column.isVisible(),
             }
             self._was_maximized_before_fullscreen = self.isMaximized()
             self.title_bar.setVisible(False)
             self.left_rail.setVisible(False)
+            self.nav_toggle_container.setVisible(False)
             self.nav_column.setVisible(False)
             self.showFullScreen()
         else:
             self.title_bar.setVisible(self._map_fullscreen_restore.get("title_bar", True))
             self.left_rail.setVisible(self._map_fullscreen_restore.get("left_rail", True))
+            self.nav_toggle_container.setVisible(self._map_fullscreen_restore.get("nav_toggle", True))
             self.nav_column.setVisible(self._map_fullscreen_restore.get("nav_column", True))
             if self._was_maximized_before_fullscreen:
                 self.showMaximized()
