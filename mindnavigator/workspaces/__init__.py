@@ -1,3 +1,11 @@
+"""Рабочие области (workspaces) приложения.
+
+Входные данные:
+    Нет. Модуль агрегирует классы рабочих областей.
+
+Выходные данные:
+    Классы рабочих областей для импорта.
+"""
 
 from .projects_workspace import ProjectsWorkspace
 from .maps_workspace import MapsListWorkspace
