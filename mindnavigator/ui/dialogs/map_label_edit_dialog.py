@@ -364,6 +364,7 @@ class EntityPickerDialog(QDialog):
         selected_ids=None,
         parent=None,
         initial_query: str = "",
+        anchor_widget: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
@@ -372,6 +373,7 @@ class EntityPickerDialog(QDialog):
         self._fetch_fn = fetch_fn
         self._selected_ids = set(selected_ids or [])
         self._items: list[ChipItem] = []
+        self._anchor_widget = anchor_widget
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -385,6 +387,7 @@ class EntityPickerDialog(QDialog):
 
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.list_widget.setSpacing(6)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Добавить")
@@ -398,8 +401,8 @@ class EntityPickerDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog#EntityPickerDialog {
-                background: #171a22;
-                color: #d8d8d8;
+                background: rgba(20, 22, 30, 0.92);
+                color: #e6e6e6;
             }
             QLineEdit {
                 background: #202127;
@@ -415,17 +418,17 @@ class EntityPickerDialog(QDialog):
                 border-radius: 6px;
             }
             QListWidget::item {
-                padding: 6px 8px;
-                margin: 4px 6px;
-                background: #f1f3f8;
-                color: #1f232b;
+                padding: 8px 10px;
+                margin: 0px 6px;
+                background: #2a2f36;
+                color: #e6e6e6;
                 border-radius: 6px;
             }
             QListWidget::item:hover {
-                background: #e5e9f2;
+                background: #333840;
             }
             QListWidget::item:checked {
-                background: #dde6ff;
+                background: #3b4a7a;
             }
             QListWidget::item:disabled {
                 background: transparent;
@@ -445,6 +448,15 @@ class EntityPickerDialog(QDialog):
         )
 
         self._reload()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        if not self._anchor_widget:
+            return
+        width = self._anchor_widget.width()
+        self.resize(width, self.height())
+        anchor_pos = self._anchor_widget.mapToGlobal(QPoint(0, self._anchor_widget.height()))
+        self.move(anchor_pos)
 
     def selected_items(self) -> list[ChipItem]:
         selected = []
@@ -1316,6 +1328,7 @@ class MapLabelEditDialog(QDialog):
             [item.id for item in link_input.items()],
             self,
             initial_query=query,
+            anchor_widget=link_input,
         )
         if dialog.exec() == QDialog.Accepted:
             to_add = [
