@@ -66,6 +66,7 @@ class MapMarkerData:
     note_ids: List[int]
     object_ids: List[int]
     file_ids: List[int]
+    image_path: str
     created_at: str
     updated_at: str
 
@@ -267,6 +268,7 @@ class Database:
                     note_ids TEXT NOT NULL DEFAULT '[]',
                     object_ids TEXT NOT NULL DEFAULT '[]',
                     file_ids TEXT NOT NULL DEFAULT '[]',
+                    image_path TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -368,6 +370,7 @@ class Database:
         self._ensure_task_parent_column()
         self._ensure_map_tiles_path_column()
         self._ensure_marker_attachment_columns()
+        self._ensure_marker_image_column()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -446,6 +449,14 @@ class Database:
                             row["id"],
                         ),
                     )
+
+    def _ensure_marker_image_column(self) -> None:
+        """Добавляет колонку превью для маркеров, если она отсутствует."""
+        columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
+        names = {row["name"] for row in columns}
+        if "image_path" not in names:
+            with self._conn:
+                self._conn.execute("ALTER TABLE map_markers ADD COLUMN image_path TEXT NOT NULL DEFAULT '';")
 
     def _seed_defaults(self) -> None:
         """Добавляет демонстрационные данные, если база пустая."""
@@ -1065,6 +1076,7 @@ class Database:
                     note_ids,
                     object_ids,
                     file_ids,
+                    image_path,
                     created_at,
                     updated_at
                 FROM map_markers;
@@ -1089,6 +1101,7 @@ class Database:
                     note_ids,
                     object_ids,
                     file_ids,
+                    image_path,
                     created_at,
                     updated_at
                 FROM map_markers
@@ -1115,6 +1128,7 @@ class Database:
                     note_ids=json.loads(row["note_ids"] or "[]"),
                     object_ids=json.loads(row["object_ids"] or "[]"),
                     file_ids=json.loads(row["file_ids"] or "[]"),
+                    image_path=row["image_path"] or "",
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -1138,6 +1152,7 @@ class Database:
         note_ids: Optional[List[int]] = None,
         object_ids: Optional[List[int]] = None,
         file_ids: Optional[List[int]] = None,
+        image_path: str = "",
     ) -> MapMarkerData:
         """Создает или обновляет метку карты."""
         now = datetime.utcnow().isoformat(timespec="seconds")
@@ -1146,6 +1161,7 @@ class Database:
         note_ids = note_ids or []
         object_ids = object_ids or []
         file_ids = file_ids or []
+        image_path = (image_path or "").strip()
         with self._conn:
             self._conn.execute(
                 """
@@ -1165,9 +1181,10 @@ class Database:
                     note_ids,
                     object_ids,
                     file_ids,
+                    image_path,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     map_id = excluded.map_id,
                     name = excluded.name,
@@ -1183,6 +1200,7 @@ class Database:
                     note_ids = excluded.note_ids,
                     object_ids = excluded.object_ids,
                     file_ids = excluded.file_ids,
+                    image_path = excluded.image_path,
                     created_at = map_markers.created_at,
                     updated_at = excluded.updated_at;
                 """,
@@ -1202,6 +1220,7 @@ class Database:
                     json.dumps(note_ids, ensure_ascii=False),
                     json.dumps(object_ids, ensure_ascii=False),
                     json.dumps(file_ids, ensure_ascii=False),
+                    image_path,
                     now,
                     now,
                 ),
@@ -1224,6 +1243,7 @@ class Database:
                 note_ids,
                 object_ids,
                 file_ids,
+                image_path,
                 created_at,
                 updated_at
             FROM map_markers
@@ -1247,6 +1267,7 @@ class Database:
             note_ids=json.loads(row["note_ids"] or "[]"),
             object_ids=json.loads(row["object_ids"] or "[]"),
             file_ids=json.loads(row["file_ids"] or "[]"),
+            image_path=row["image_path"] or "",
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

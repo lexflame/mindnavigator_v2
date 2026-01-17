@@ -567,6 +567,7 @@ class Marker:
     note_ids: List[int] = field(default_factory=list)
     object_ids: List[int] = field(default_factory=list)
     file_ids: List[int] = field(default_factory=list)
+    image_path: str = ""
 
 
 class MapCanvas(QWidget):
@@ -1145,6 +1146,7 @@ class MapCanvas(QWidget):
                 marker.note_ids,
                 marker.object_ids,
                 marker.file_ids,
+                marker.image_path,
             )
         )
 
@@ -1224,6 +1226,7 @@ class MapCanvas(QWidget):
                         marker.note_ids,
                         marker.object_ids,
                         marker.file_ids,
+                        marker.image_path,
                     )
                     self._set_marker(updated)
                     return
@@ -1244,6 +1247,7 @@ class MapCanvas(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.image_path,
                 )
                 self._set_marker(updated)
                 return
@@ -1275,6 +1279,7 @@ class MapCanvas(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.image_path,
                 )
                 self._set_marker(updated)
                 return
@@ -1402,6 +1407,25 @@ class MapCanvas(QWidget):
             if dialog.resize_requested():
                 self._enable_resize_mode(updated.id)
 
+    def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
+        image_path = (marker.image_path or "").strip()
+        if not image_path:
+            return None
+        path = Path(image_path)
+        file_path = path if path.is_file() else None
+        if file_path is None:
+            cloud_root = get_database().get_setting("cloud_storage_path", default="").strip()
+            if cloud_root:
+                candidate = Path(cloud_root) / image_path
+                if candidate.is_file():
+                    file_path = candidate
+        if not file_path:
+            return None
+        pixmap = QPixmap(str(file_path))
+        if pixmap.isNull():
+            return None
+        return pixmap.scaled(target, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
     def _view_marker(self, marker: Marker) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Метка на карте")
@@ -1448,6 +1472,22 @@ class MapCanvas(QWidget):
         left_layout.setContentsMargins(12, 12, 12, 12)
         left_layout.setSpacing(12)
 
+        preview_title = QLabel("Превью")
+        preview_title.setObjectName("MapLabelSectionTitle")
+        preview_label = QLabel("Нет изображения")
+        preview_label.setObjectName("MapLabelPreview")
+        preview_label.setAlignment(Qt.AlignCenter)
+        preview_label.setFixedHeight(168)
+        preview_size = QSize(left_panel.width() - 24, 168)
+        preview_pixmap = self._load_marker_preview(marker, preview_size)
+        if preview_pixmap is not None:
+            preview_label.setPixmap(preview_pixmap)
+            preview_label.setText("")
+        elif marker.image_path:
+            preview_label.setText("Изображение недоступно")
+        if marker.image_path:
+            preview_label.setToolTip(marker.image_path)
+
         color_title = QLabel("Цвет метки")
         color_title.setObjectName("MapLabelSectionTitle")
         color_preview = QLabel()
@@ -1477,6 +1517,8 @@ class MapCanvas(QWidget):
         size_value.setObjectName("MapLabelValue")
         size_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
+        left_layout.addWidget(preview_title)
+        left_layout.addWidget(preview_label)
         left_layout.addWidget(color_title)
         left_layout.addLayout(color_row)
         left_layout.addSpacing(6)
@@ -1676,6 +1718,12 @@ class MapCanvas(QWidget):
             QLabel#MapLabelValue a {{
                 color: #a8abb3;
             }}
+            QLabel#MapLabelPreview {{
+                border: 1px dashed #3a3b40;
+                border-radius: 8px;
+                color: #8e919a;
+                background: #1b1d24;
+            }}
             QToolButton, QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
@@ -1746,6 +1794,7 @@ class MapCanvas(QWidget):
                         marker.note_ids,
                         marker.object_ids,
                         marker.file_ids,
+                        marker.image_path,
                     )
                 )
         elif chosen == act_bigger and marker:
@@ -2033,6 +2082,7 @@ class MapEditorWorkspace(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.image_path,
                 )
             )
         self.canvas.set_markers(loaded)
@@ -2063,6 +2113,7 @@ class MapEditorWorkspace(QWidget):
             note_ids=marker.note_ids,
             object_ids=marker.object_ids,
             file_ids=marker.file_ids,
+            image_path=marker.image_path,
         )
 
     def _on_marker_added(self, marker: Marker) -> None:
