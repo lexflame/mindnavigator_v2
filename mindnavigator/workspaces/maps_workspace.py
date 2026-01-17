@@ -1828,6 +1828,13 @@ class MapCanvas(QWidget):
             label.setTextFormat(Qt.RichText)
             label.setTextInteractionFlags(Qt.TextBrowserInteraction)
             label.setOpenExternalLinks(False)
+            label.setStyleSheet(
+                "QLabel a {"
+                "background-color: #f1f3f6;"
+                "border-radius: 4px;"
+                "padding: 1px 4px;"
+                "}"
+            )
             if not item_ids:
                 label.setText("—")
                 return label
