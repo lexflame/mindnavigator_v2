@@ -400,46 +400,60 @@ class EntityPickerDialog(QDialog):
         if anchor_widget is not None:
             self._apply_anchor_geometry(anchor_widget)
 
+        MATH_PHYS_BACKGROUND = (
+            "data:image/svg+xml;base64,"
+            "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhl"
+            "aWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ry"
+            "b2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAg"
+            "ICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYw"
+            "IiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEw"
+            "IFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAi"
+            "Lz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0i"
+            "bm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0"
+            "aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJN"
+            "MCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
+        )
+
         self.setStyleSheet(
             f"""
-            QDialog#EntityPickerDialog {
+            QDialog#EntityPickerDialog {{
                 {MATH_PHYS_BACKGROUND}
                 color: #e2e2e2;
-            }
-            QLineEdit {
+            }}
+            QLineEdit {{
                 background: rgba(28, 31, 38, 0.85);
                 color: #e8e8e8;
                 border: 1px solid #2e3137;
                 padding: 7px 10px;
                 border-radius: 6px;
-            }
-            QListWidget {
+            }}
+            QListWidget {{
                 background: rgba(24, 27, 34, 0.92);
                 color: #dfe2e7;
                 border: 1px solid #2e3137;
                 border-radius: 6px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 background: #f1f3f8;
                 color: #1c1f24;
                 border: 1px solid #d6dbe6;
                 border-radius: 6px;
                 padding: 8px 10px;
                 margin-bottom: 6px;
-            }
-            QListWidget::item:hover {
+            }}
+            QListWidget::item:hover {{
                 background: #e6ebf5;
-            }
-            QDialogButtonBox QPushButton {
+            }}
+            QDialogButtonBox QPushButton {{
                 background: #2a2f3b;
                 color: #e8e8e8;
                 border: 1px solid #3a3f4a;
                 padding: 6px 14px;
                 border-radius: 6px;
-            }
-            QDialogButtonBox QPushButton:hover {
+            }}
+            QDialogButtonBox QPushButton:hover {{
                 background: #343b4b;
-            }
+            }}
             """
         )
 
@@ -863,6 +877,20 @@ class MapLabelEditDialog(QDialog):
         return section
 
     def _apply_styles(self) -> None:
+        MATH_PHYS_PATTERN = (
+            "data:image/svg+xml;base64,"
+            "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhl"
+            "aWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ry"
+            "b2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAg"
+            "ICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYw"
+            "IiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEw"
+            "IFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAi"
+            "Lz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0i"
+            "bm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0"
+            "aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJN"
+            "MCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
+        )
+
         self.setStyleSheet(
             f"""
             QDialog#MapLabelEditDialog {{
