@@ -567,6 +567,8 @@ class Marker:
     note_ids: List[int] = field(default_factory=list)
     object_ids: List[int] = field(default_factory=list)
     file_ids: List[int] = field(default_factory=list)
+    map_ids: List[int] = field(default_factory=list)
+    marker_ids: List[int] = field(default_factory=list)
     image_path: str = ""
 
 
@@ -621,11 +623,15 @@ class MapCanvas(QWidget):
         self._notes = []
         self._objects = []
         self._files = []
+        self._maps = []
+        self._marker_items = []
         self._tasks_by_id = {}
         self._projects_by_id = {}
         self._notes_by_id = {}
         self._objects_by_id = {}
         self._files_by_id = {}
+        self._maps_by_id = {}
+        self._marker_items_by_id = {}
         self._seed_markers()
 
     @staticmethod
@@ -651,17 +657,21 @@ class MapCanvas(QWidget):
     def markers(self) -> List[Marker]:
         return list(self._markers)
 
-    def set_attachment_sources(self, tasks, projects, notes, objects, files) -> None:
+    def set_attachment_sources(self, tasks, projects, notes, objects, files, maps, markers) -> None:
         self._tasks = list(tasks)
         self._projects = list(projects)
         self._notes = list(notes)
         self._objects = list(objects)
         self._files = list(files)
+        self._maps = list(maps)
+        self._marker_items = list(markers)
         self._tasks_by_id = {item.id: item for item in tasks}
         self._projects_by_id = {item.id: item for item in projects}
         self._notes_by_id = {item.id: item for item in notes}
         self._objects_by_id = {item.id: item for item in objects}
         self._files_by_id = {item.id: item for item in files}
+        self._maps_by_id = {item.id: item for item in maps}
+        self._marker_items_by_id = {item.id: item for item in markers}
 
     def _open_attachment_view(self, kind: str, item_id: int) -> None:
         sources = {
@@ -670,6 +680,8 @@ class MapCanvas(QWidget):
             "note": self._notes_by_id,
             "object": self._objects_by_id,
             "file": self._files_by_id,
+            "map": self._maps_by_id,
+            "marker": self._marker_items_by_id,
         }
         item = sources.get(kind, {}).get(item_id)
         if not item:
@@ -727,6 +739,16 @@ class MapCanvas(QWidget):
             add_row("Создан", item.created_at or "—")
             add_row("Обновлен", item.updated_at or "—")
             add_row("Описание", item.description or "—", wrap=True)
+        elif kind == "map":
+            dialog.setWindowTitle("Карта")
+            add_row("Название", item.title)
+            add_row("Проект", item.project or "—")
+            add_row("Описание", item.description or "—", wrap=True)
+        elif kind == "marker":
+            dialog.setWindowTitle("Метка карты")
+            map_title = self._maps_by_id.get(item.map_id).title if item.map_id in self._maps_by_id else "—"
+            add_row("Название", item.name)
+            add_row("Карта", map_title)
         elif kind == "file":
             dialog.setWindowTitle("Файл на карте")
             add_row("Название", item.name or "—")
@@ -1146,6 +1168,8 @@ class MapCanvas(QWidget):
                 marker.note_ids,
                 marker.object_ids,
                 marker.file_ids,
+                marker.map_ids,
+                marker.marker_ids,
                 marker.image_path,
             )
         )
@@ -1226,6 +1250,8 @@ class MapCanvas(QWidget):
                         marker.note_ids,
                         marker.object_ids,
                         marker.file_ids,
+                        marker.map_ids,
+                        marker.marker_ids,
                         marker.image_path,
                     )
                     self._set_marker(updated)
@@ -1247,6 +1273,8 @@ class MapCanvas(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.map_ids,
+                    marker.marker_ids,
                     marker.image_path,
                 )
                 self._set_marker(updated)
@@ -1279,6 +1307,8 @@ class MapCanvas(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.map_ids,
+                    marker.marker_ids,
                     marker.image_path,
                 )
                 self._set_marker(updated)
@@ -1349,6 +1379,8 @@ class MapCanvas(QWidget):
             [],
             [],
             [],
+            [],
+            [],
         )
         self._next_id += 1
         self._markers.append(marker)
@@ -1382,12 +1414,70 @@ class MapCanvas(QWidget):
         def file_label(item) -> str:
             return item.name or item.rel_path
 
+        def map_label(item) -> str:
+            return f"{item.title} · {item.project}" if item.project else item.title
+
+        def marker_label(item) -> str:
+            map_title = self._maps_by_id.get(item.map_id).title if item.map_id in self._maps_by_id else ""
+            return f"{item.name} · {map_title}" if map_title else item.name
+
         entity_sources = {
-            "task": MapLabelEntitySource("Задачи", self._tasks, task_label),
-            "project": MapLabelEntitySource("Проекты", self._projects, project_label),
-            "note": MapLabelEntitySource("Заметки", self._notes, note_label),
-            "object": MapLabelEntitySource("Объекты", self._objects, object_label),
-            "file": MapLabelEntitySource("Файлы", self._files, file_label),
+            "task": MapLabelEntitySource(
+                "Задачи",
+                self._tasks,
+                task_label,
+                "Привязать задачу...",
+                "fa5s.tasks",
+                "task",
+            ),
+            "project": MapLabelEntitySource(
+                "Проекты",
+                self._projects,
+                project_label,
+                "Привязать проект...",
+                "fa5s.folder-open",
+                "project",
+            ),
+            "note": MapLabelEntitySource(
+                "Заметки",
+                self._notes,
+                note_label,
+                "Привязать заметку...",
+                "fa5s.sticky-note",
+                "note",
+            ),
+            "object": MapLabelEntitySource(
+                "Объекты",
+                self._objects,
+                object_label,
+                "Привязать объект...",
+                "fa5s.cube",
+                "object",
+            ),
+            "file": MapLabelEntitySource(
+                "Файлы",
+                self._files,
+                file_label,
+                "Привязать файл...",
+                "fa5s.paperclip",
+                "file",
+            ),
+            "map": MapLabelEntitySource(
+                "Карты",
+                self._maps,
+                map_label,
+                "Привязать карту...",
+                "fa5s.map-marked-alt",
+                "map",
+            ),
+            "marker": MapLabelEntitySource(
+                "Метки",
+                self._marker_items,
+                marker_label,
+                "Привязать метку...",
+                "fa5s.map-pin",
+                "marker",
+            ),
         }
         type_suggestions = sorted({item.type for item in self._markers if item.type})
 
@@ -1614,6 +1704,8 @@ class MapCanvas(QWidget):
         note_link = attachment_label("note", marker.note_ids, self._notes_by_id)
         object_link = attachment_label("object", marker.object_ids, self._objects_by_id)
         file_link = attachment_label("file", marker.file_ids, self._files_by_id)
+        map_link = attachment_label("map", marker.map_ids, self._maps_by_id)
+        marker_link = attachment_label("marker", marker.marker_ids, self._marker_items_by_id)
 
         def add_link_row(label_text: str, widget: QLabel) -> None:
             label = QLabel(label_text)
@@ -1625,6 +1717,8 @@ class MapCanvas(QWidget):
         add_link_row("Заметки", note_link)
         add_link_row("Объекты", object_link)
         add_link_row("Файлы", file_link)
+        add_link_row("Карты", map_link)
+        add_link_row("Метки", marker_link)
 
         links_layout.addLayout(links_form)
 
@@ -1794,6 +1888,8 @@ class MapCanvas(QWidget):
                         marker.note_ids,
                         marker.object_ids,
                         marker.file_ids,
+                        marker.map_ids,
+                        marker.marker_ids,
                         marker.image_path,
                     )
                 )
@@ -1932,6 +2028,8 @@ class MapEditorWorkspace(QWidget):
         self.info_note = QLabel("-")
         self.info_object = QLabel("-")
         self.info_file = QLabel("-")
+        self.info_map = QLabel("-")
+        self.info_marker = QLabel("-")
         for label in [
             self.info_name,
             self.info_type,
@@ -1941,6 +2039,8 @@ class MapEditorWorkspace(QWidget):
             self.info_note,
             self.info_object,
             self.info_file,
+            self.info_map,
+            self.info_marker,
         ]:
             label.setObjectName("MapInfoValue")
 
@@ -1953,6 +2053,8 @@ class MapEditorWorkspace(QWidget):
         info_layout.addWidget(self.info_note)
         info_layout.addWidget(self.info_object)
         info_layout.addWidget(self.info_file)
+        info_layout.addWidget(self.info_map)
+        info_layout.addWidget(self.info_marker)
         info_layout.addStretch(1)
 
         root.addWidget(self.toolbar)
@@ -2039,6 +2141,8 @@ class MapEditorWorkspace(QWidget):
         self.info_note.setText(self._format_links("Заметки", marker.note_ids, self._notes_by_id))
         self.info_object.setText(self._format_links("Объекты", marker.object_ids, self._objects_by_id))
         self.info_file.setText(self._format_links("Файлы", marker.file_ids, self._files_by_id))
+        self.info_map.setText(self._format_links("Карты", marker.map_ids, self._maps_by_id))
+        self.info_marker.setText(self._format_links("Метки", marker.marker_ids, self._markers_by_id))
 
     def _load_attachment_sources(self) -> None:
         tasks = self._db.fetch_tasks()
@@ -2046,12 +2150,16 @@ class MapEditorWorkspace(QWidget):
         notes = self._db.fetch_notes()
         objects = self._db.fetch_objects()
         files = self._db.fetch_cloud_files()
+        maps = self._db.fetch_maps()
+        markers = self._db.fetch_map_markers()
         self._tasks_by_id = {task.id: task for task in tasks}
         self._projects_by_id = {project.id: project for project in projects}
         self._notes_by_id = {note.id: note for note in notes}
         self._objects_by_id = {item.id: item for item in objects}
         self._files_by_id = {item.id: item for item in files}
-        self.canvas.set_attachment_sources(tasks, projects, notes, objects, files)
+        self._maps_by_id = {item.id: item for item in maps}
+        self._markers_by_id = {item.id: item for item in markers}
+        self.canvas.set_attachment_sources(tasks, projects, notes, objects, files, maps, markers)
 
     def load_map(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
         self._current_map_id = map_id
@@ -2082,6 +2190,8 @@ class MapEditorWorkspace(QWidget):
                     marker.note_ids,
                     marker.object_ids,
                     marker.file_ids,
+                    marker.map_ids,
+                    marker.marker_ids,
                     marker.image_path,
                 )
             )
@@ -2113,6 +2223,8 @@ class MapEditorWorkspace(QWidget):
             note_ids=marker.note_ids,
             object_ids=marker.object_ids,
             file_ids=marker.file_ids,
+            map_ids=marker.map_ids,
+            marker_ids=marker.marker_ids,
             image_path=marker.image_path,
         )
 
