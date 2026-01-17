@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea
 )
 
-from mindnavigator.storage import get_database, normalize_priority, validate_time_text
+from mindnavigator.storage import CloudFileData, TaskAttachmentData, get_database, normalize_priority, validate_time_text
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
@@ -206,6 +206,127 @@ class TasksModel(QAbstractListModel):
         if role == Qt.DisplayRole:
             return r.title
         return None
+
+
+def collect_task_image_attachments(
+    attachments: List[TaskAttachmentData],
+    cloud_files_by_id: Dict[int, CloudFileData],
+) -> List[CloudFileData]:
+    images: List[CloudFileData] = []
+    for attachment in attachments:
+        if attachment.kind != "image":
+            continue
+        file_item = cloud_files_by_id.get(attachment.ref_id)
+        if file_item and file_item.is_image:
+            images.append(file_item)
+    return images
+
+
+class TaskImagePreviewDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        images: List[CloudFileData],
+        start_index: int,
+        cloud_root: Path,
+    ) -> None:
+        super().__init__(parent)
+        self._images = images
+        self._current_index = max(0, min(start_index, len(images) - 1))
+        self._cloud_root = cloud_root
+        self._pixmap_cache: Dict[str, QPixmap] = {}
+
+        self.setObjectName("TaskImagePreview")
+        self.setWindowTitle("Просмотр изображения")
+        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.image_label = QLabel()
+        self.image_label.setObjectName("TaskImagePreviewLabel")
+        self.image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.image_label, 1)
+
+        self.setStyleSheet(
+            """
+            QDialog#TaskImagePreview {
+                background: #0f1115;
+            }
+            QLabel#TaskImagePreviewLabel {
+                color: #9aa0a6;
+            }
+            """
+        )
+
+        self._update_image()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Left:
+            self._show_previous()
+            return
+        if event.key() == Qt.Key_Right:
+            self._show_next()
+            return
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_pixmap()
+
+    def _show_previous(self) -> None:
+        if not self._images:
+            return
+        self._current_index = max(0, self._current_index - 1)
+        self._update_image()
+
+    def _show_next(self) -> None:
+        if not self._images:
+            return
+        self._current_index = min(len(self._images) - 1, self._current_index + 1)
+        self._update_image()
+
+    def _update_image(self) -> None:
+        if not self._images:
+            self.setWindowTitle("Просмотр изображения")
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображения отсутствуют")
+            return
+
+        current = self._images[self._current_index]
+        self.setWindowTitle(f"{current.name} ({self._current_index + 1}/{len(self._images)})")
+        file_path = self._cloud_root / current.rel_path
+        if not file_path.is_file():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+
+        cache_key = current.rel_path
+        pixmap = self._pixmap_cache.get(cache_key)
+        if pixmap is None:
+            pixmap = QPixmap(str(file_path))
+            self._pixmap_cache[cache_key] = pixmap
+        self._update_pixmap(pixmap)
+
+    def _update_pixmap(self, pixmap: Optional[QPixmap] = None) -> None:
+        if pixmap is None:
+            current = self._images[self._current_index] if self._images else None
+            if not current:
+                return
+            pixmap = self._pixmap_cache.get(current.rel_path)
+        if not pixmap or pixmap.isNull():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+        target_size = self.image_label.size()
+        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled)
+        self.image_label.setText("")
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Задает флаги взаимодействия для строки."""
@@ -1138,47 +1259,20 @@ class TaskDetailsDialog(QDialog):
         if not cloud_root:
             QMessageBox.warning(self, "Изображение", "Папка облачного хранилища не настроена.")
             return
-        file_path = Path(cloud_root) / file_item.rel_path
-        if not file_path.is_file():
-            QMessageBox.warning(self, "Изображение", "Файл изображения недоступен.")
+        images = collect_task_image_attachments(self._attachments, self._cloud_files_by_id)
+        if not images:
+            QMessageBox.warning(self, "Изображение", "Привязанные изображения не найдены.")
             return
-        pixmap = QPixmap(str(file_path))
-        if pixmap.isNull():
-            QMessageBox.warning(self, "Изображение", "Не удалось открыть изображение.")
-            return
-        dialog = QDialog(self)
-        dialog.setObjectName("TaskImagePreview")
-        dialog.setWindowTitle(file_item.name)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        image_label = QLabel()
-        image_label.setPixmap(pixmap)
-        image_label.setAlignment(Qt.AlignCenter)
-        scroll.setWidget(image_label)
-        layout.addWidget(scroll)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(dialog.reject)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
-
-        dialog.setStyleSheet(f"""
-            QDialog#TaskImagePreview {{
-                {MATH_PHYS_BACKGROUND}
-            }}
-            QDialog#TaskImagePreview QScrollArea {{
-                background: #131417;
-                border: 1px solid #2a2b2f;
-            }}
-            QDialog#TaskImagePreview QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
-                border-radius: 6px;
-            }}
-        """)
+        try:
+            start_index = next(idx for idx, item in enumerate(images) if item.id == file_item.id)
+        except StopIteration:
+            start_index = 0
+        dialog = TaskImagePreviewDialog(
+            self,
+            images=images,
+            start_index=start_index,
+            cloud_root=Path(cloud_root),
+        )
         exec_with_overlay(dialog, self)
 
 
@@ -1798,47 +1892,20 @@ class TaskEditDialog(QDialog):
         if not cloud_root:
             QMessageBox.warning(self, "Изображение", "Папка облачного хранилища не настроена.")
             return
-        file_path = Path(cloud_root) / file_item.rel_path
-        if not file_path.is_file():
-            QMessageBox.warning(self, "Изображение", "Файл изображения недоступен.")
+        images = collect_task_image_attachments(self._attachments, self._cloud_files_by_id)
+        if not images:
+            QMessageBox.warning(self, "Изображение", "Привязанные изображения не найдены.")
             return
-        pixmap = QPixmap(str(file_path))
-        if pixmap.isNull():
-            QMessageBox.warning(self, "Изображение", "Не удалось открыть изображение.")
-            return
-        dialog = QDialog(self)
-        dialog.setObjectName("TaskImagePreview")
-        dialog.setWindowTitle(file_item.name)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        image_label = QLabel()
-        image_label.setPixmap(pixmap)
-        image_label.setAlignment(Qt.AlignCenter)
-        scroll.setWidget(image_label)
-        layout.addWidget(scroll)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(dialog.reject)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
-
-        dialog.setStyleSheet(f"""
-            QDialog#TaskImagePreview {{
-                {MATH_PHYS_BACKGROUND}
-            }}
-            QDialog#TaskImagePreview QScrollArea {{
-                background: #131417;
-                border: 1px solid #2a2b2f;
-            }}
-            QDialog#TaskImagePreview QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
-                border-radius: 6px;
-            }}
-        """)
+        try:
+            start_index = next(idx for idx, item in enumerate(images) if item.id == file_item.id)
+        except StopIteration:
+            start_index = 0
+        dialog = TaskImagePreviewDialog(
+            self,
+            images=images,
+            start_index=start_index,
+            cloud_root=Path(cloud_root),
+        )
         exec_with_overlay(dialog, self)
 
     def values(self):
