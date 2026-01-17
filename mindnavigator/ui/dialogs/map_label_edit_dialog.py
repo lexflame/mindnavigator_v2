@@ -777,13 +777,25 @@ class MapLabelEditDialog(QDialog):
                 lambda k=key, field=link_input: self._open_picker(k, field.search_input.text())
             )
 
-            labels = {source.label_fn(item): item.id for item in source.items}
-            self._link_title_maps[key] = labels
-            completer = QCompleter(list(labels.keys()), link_input.search_input)
-            completer.setCaseSensitivity(Qt.CaseInsensitive)
-            completer.setFilterMode(Qt.MatchContains)
-            completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
-            link_input.search_input.setCompleter(completer)
+            if key == "file":
+                link_input.search_input.setReadOnly(True)
+                link_input.search_input.setPlaceholderText("Выбрать файл…")
+                link_input.search_input.setCursor(Qt.PointingHandCursor)
+
+                def _open_file_dialog(event, k=key, field=link_input.search_input):
+                    if event.button() == Qt.LeftButton:
+                        self._open_picker(k)
+                    QLineEdit.mousePressEvent(field, event)
+
+                link_input.search_input.mousePressEvent = _open_file_dialog
+            else:
+                labels = {source.label_fn(item): item.id for item in source.items}
+                self._link_title_maps[key] = labels
+                completer = QCompleter(list(labels.keys()), link_input.search_input)
+                completer.setCaseSensitivity(Qt.CaseInsensitive)
+                completer.setFilterMode(Qt.MatchContains)
+                completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
+                link_input.search_input.setCompleter(completer)
 
             self._link_inputs[key] = link_input
             chips_label = QLabel(source.label)
@@ -1270,6 +1282,9 @@ class MapLabelEditDialog(QDialog):
         link_input = self._link_inputs.get(key)
         if not source or not link_input:
             return
+        if key == "file":
+            self._open_file_picker(source, link_input)
+            return
 
         def fetch_fn(search_query: str) -> list[ChipItem]:
             items = []
@@ -1296,3 +1311,24 @@ class MapLabelEditDialog(QDialog):
             link_input.add_items(to_add)
             link_input.clear_search()
             self._mark_dirty()
+
+    def _open_file_picker(self, source: MapLabelEntitySource, link_input: EntityLinksInput) -> None:
+        dialog = AttachFileSelectNav(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        rel_path = dialog.selected_rel_path()
+        if not rel_path:
+            return
+        normalized = rel_path.strip().strip("/")
+        matched = next(
+            (item for item in source.items if (item.rel_path or "").strip().strip("/") == normalized),
+            None,
+        )
+        if not matched:
+            QMessageBox.warning(self, "Файлы", "Файл не найден в базе.")
+            return
+        link_input.add_items(
+            [EntityLinkItem(matched.id, source.label_fn(matched), f"{source.item_prefix}:{matched.id}")]
+        )
+        link_input.clear_search()
+        self._mark_dirty()
