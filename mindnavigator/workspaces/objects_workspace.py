@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 
 DOC_EXTENSIONS = {".doc", ".docx", ".txt"}
@@ -231,15 +232,17 @@ class ObjectsModel(QAbstractListModel):
 
 
 class ObjectCardDelegate(QStyledItemDelegate):
-    CARD_H = 170
+    CARD_H = 180
     CARD_W = 240
 
-    C_BG = QColor("#171a20")
-    C_BORDER = QColor("#2f333b")
-    C_TEXT = QColor("#e6e6e6")
-    C_MUTED = QColor("#9aa0a6")
-    C_PILL_BG = QColor("#1f232a")
-    C_PILL_BORDER = QColor("#323741")
+    C_BG = QColor("#1b1f27")
+    C_BG_SELECTED = QColor("#232a35")
+    C_BORDER = QColor("#2f3745")
+    C_TEXT = QColor("#f0f3f7")
+    C_MUTED = QColor("#a2a9b6")
+    C_ACCENT = QColor("#4f6bff")
+    C_TAG_BG = QColor("#1f2733")
+    C_TAG_BORDER = QColor("#303a48")
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -262,12 +265,15 @@ class ObjectCardDelegate(QStyledItemDelegate):
         radius = 12
 
         painter.setRenderHint(QPainter.Antialiasing)
-        bg = QColor(self.C_BG)
-        if option.state & QStyle.State_Selected:
-            bg = QColor("#232833")
+        bg = self.C_BG_SELECTED if option.state & QStyle.State_Selected else self.C_BG
         painter.setBrush(bg)
         painter.setPen(self.C_BORDER)
         painter.drawRoundedRect(rect, radius, radius)
+
+        accent_rect = QRect(rect.x() + 4, rect.y() + 6, 5, rect.height() - 12)
+        painter.setBrush(self.C_ACCENT)
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(accent_rect, 3, 3)
 
         title = index.data(ObjectRoles.Title) or ""
         catalog = index.data(ObjectRoles.Catalog) or ""
@@ -300,6 +306,18 @@ class ObjectCardDelegate(QStyledItemDelegate):
         desc_rect = QRect(x, desc_y, w, rect.height() - 46)
         desc_text = description.strip() or "Описание пока не добавлено."
         painter.drawText(desc_rect, Qt.TextWordWrap, desc_text)
+
+        tag_text = status or object_type
+        if tag_text:
+            tag_metrics = QFontMetrics(self._font_meta)
+            tag_width = min(tag_metrics.horizontalAdvance(tag_text) + 16, w)
+            tag_rect = QRect(x, rect.bottom() - 28, tag_width, 18)
+            painter.setBrush(self.C_TAG_BG)
+            painter.setPen(self.C_TAG_BORDER)
+            painter.drawRoundedRect(tag_rect, 8, 8)
+            painter.setPen(self.C_MUTED)
+            painter.setFont(self._font_meta)
+            painter.drawText(tag_rect, Qt.AlignCenter, tag_text)
 
         painter.restore()
 
@@ -350,7 +368,7 @@ class ObjectEditDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog {
-                background: #171a20;
+                %s
                 color: #e6e6e6;
             }
             QLineEdit, QTextEdit {
@@ -367,7 +385,18 @@ class ObjectEditDialog(QDialog):
                 padding: 6px 12px;
                 color: #e6e6e6;
             }
+            QDialogButtonBox QPushButton {
+                background: #2a2f3b;
+                border: 1px solid #3a3f4a;
+                border-radius: 6px;
+                padding: 6px 14px;
+                color: #e6e6e6;
+            }
+            QDialogButtonBox QPushButton:hover {
+                background: #343b4b;
+            }
             """
+            % MATH_PHYS_BACKGROUND
         )
 
     def _fill(self, initial: ObjectRow) -> None:
@@ -431,7 +460,7 @@ class CloudDocPickerDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog {
-                background: #171a20;
+                %s
                 color: #e6e6e6;
             }
             QListWidget {
@@ -444,6 +473,7 @@ class CloudDocPickerDialog(QDialog):
                 background: #2d3440;
             }
             """
+            % MATH_PHYS_BACKGROUND
         )
 
     def _accept(self) -> None:
@@ -516,7 +546,7 @@ class CloudImagePickerDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog {
-                background: #171a20;
+                %s
                 color: #e6e6e6;
             }
             QListWidget {
@@ -529,6 +559,7 @@ class CloudImagePickerDialog(QDialog):
                 background: #2d3440;
             }
             """
+            % MATH_PHYS_BACKGROUND
         )
 
     def _accept(self) -> None:
@@ -554,6 +585,7 @@ class ObjectWorkspace(QWidget):
         self._refresh_catalogs()
 
     def _build_ui(self) -> None:
+        self.setObjectName("ObjectsRoot")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -562,6 +594,10 @@ class ObjectWorkspace(QWidget):
         title = QLabel("Объекты")
         title.setObjectName("ObjectsTitle")
         header.addWidget(title)
+
+        self.count_label = QLabel("0 объектов")
+        self.count_label.setObjectName("ObjectsCount")
+        header.addWidget(self.count_label)
 
         header.addStretch(1)
 
@@ -583,11 +619,21 @@ class ObjectWorkspace(QWidget):
         self.splitter = QSplitter()
         self.splitter.setObjectName("ObjectsSplitter")
 
+        self.catalog_panel = QWidget()
+        self.catalog_panel.setObjectName("ObjectsCatalogPanel")
+        catalog_layout = QVBoxLayout(self.catalog_panel)
+        catalog_layout.setContentsMargins(12, 12, 12, 12)
+        catalog_layout.setSpacing(8)
+
+        catalog_label = QLabel("Каталоги")
+        catalog_label.setObjectName("ObjectsCatalogTitle")
+        catalog_layout.addWidget(catalog_label)
+
         self.catalog_tree = QTreeWidget()
         self.catalog_tree.setObjectName("ObjectsCatalogs")
         self.catalog_tree.setHeaderHidden(True)
-        self.catalog_tree.setFixedWidth(220)
         self.catalog_tree.itemSelectionChanged.connect(self._on_catalog_selected)
+        catalog_layout.addWidget(self.catalog_tree, 1)
 
         self.model = ObjectsModel(self)
         self.card_list = QListView()
@@ -613,6 +659,9 @@ class ObjectWorkspace(QWidget):
 
         self.details_meta = QLabel("")
         self.details_meta.setObjectName("ObjectsDetailsMeta")
+
+        self.description_title = QLabel("Описание")
+        self.description_title.setObjectName("ObjectsSectionTitle")
 
         self.details_description = QLabel("")
         self.details_description.setWordWrap(True)
@@ -644,6 +693,9 @@ class ObjectWorkspace(QWidget):
         image_layout = QVBoxLayout(self.image_frame)
         image_layout.setContentsMargins(12, 12, 12, 12)
         image_layout.setSpacing(8)
+
+        self.gallery_title = QLabel("Галерея")
+        self.gallery_title.setObjectName("ObjectsSectionTitle")
 
         nav_row = QHBoxLayout()
         self.prev_button = QToolButton()
@@ -689,6 +741,7 @@ class ObjectWorkspace(QWidget):
         self.save_comment_button.setObjectName("ObjectsImageCommentButton")
         self.save_comment_button.clicked.connect(self._save_image_comment)
 
+        image_layout.addWidget(self.gallery_title)
         image_layout.addLayout(nav_row)
         image_layout.addWidget(self.thumbnail_list)
         image_layout.addWidget(self.image_label)
@@ -697,6 +750,7 @@ class ObjectWorkspace(QWidget):
 
         details_layout.addWidget(self.details_title)
         details_layout.addWidget(self.details_meta)
+        details_layout.addWidget(self.description_title)
         details_layout.addWidget(self.details_description)
         details_layout.addLayout(buttons_row)
         details_layout.addWidget(self.image_frame)
@@ -708,22 +762,35 @@ class ObjectWorkspace(QWidget):
         right_splitter.setStretchFactor(0, 3)
         right_splitter.setStretchFactor(1, 2)
 
-        self.splitter.addWidget(self.catalog_tree)
+        self.splitter.addWidget(self.catalog_panel)
         self.splitter.addWidget(right_splitter)
         self.splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self.splitter, 1)
 
+        self.model.modelReset.connect(self._update_count_label)
+        self.model.rowsInserted.connect(self._update_count_label)
+        self.model.rowsRemoved.connect(self._update_count_label)
         self._apply_styles()
+        self._update_count_label()
         self._update_action_state(False)
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
             """
+            QWidget#ObjectsRoot {
+                %s
+                color: #e6e6e6;
+            }
             QLabel#ObjectsTitle {
                 color: #e6e6e6;
                 font-size: 20px;
                 font-weight: 600;
+            }
+            QLabel#ObjectsCount {
+                color: #9aa3af;
+                font-size: 12px;
+                padding-left: 8px;
             }
             QLineEdit#ObjectsSearch {
                 background: #1f232a;
@@ -732,6 +799,19 @@ class ObjectWorkspace(QWidget):
                 padding: 6px 10px;
                 color: #e6e6e6;
                 min-width: 240px;
+            }
+            QWidget#ObjectsCatalogPanel {
+                background: rgba(20, 23, 30, 0.95);
+                border: 1px solid #2f333b;
+                border-radius: 12px;
+                min-width: 220px;
+                max-width: 260px;
+            }
+            QLabel#ObjectsCatalogTitle {
+                color: #cbd1db;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
             }
             QToolButton#ObjectsAddButton,
             QToolButton#ObjectsEditButton,
@@ -749,11 +829,10 @@ class ObjectWorkspace(QWidget):
                 border-color: #4b2b2b;
             }
             QTreeWidget#ObjectsCatalogs {
-                background: #171a20;
-                border: 1px solid #2f333b;
-                border-radius: 10px;
+                background: transparent;
+                border: none;
                 color: #e6e6e6;
-                padding: 6px;
+                padding: 0;
             }
             QTreeWidget#ObjectsCatalogs::item {
                 padding: 8px 6px;
@@ -763,12 +842,12 @@ class ObjectWorkspace(QWidget):
                 background: #2d3440;
             }
             QListView#ObjectsCards {
-                background: #14171c;
+                background: rgba(16, 19, 24, 0.92);
                 border: 1px solid #2f333b;
                 border-radius: 12px;
             }
             QWidget#ObjectsDetails {
-                background: #171a20;
+                background: rgba(20, 23, 30, 0.95);
                 border: 1px solid #2f333b;
                 border-radius: 12px;
             }
@@ -780,6 +859,14 @@ class ObjectWorkspace(QWidget):
             QLabel#ObjectsDetailsMeta {
                 color: #9aa0a6;
                 font-size: 11px;
+            }
+            QLabel#ObjectsSectionTitle {
+                color: #aeb6c3;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                padding-top: 6px;
             }
             QLabel#ObjectsDetailsDescription {
                 color: #d0d4da;
@@ -816,7 +903,15 @@ class ObjectWorkspace(QWidget):
                 color: #e6e6e6;
             }
             """
+            % MATH_PHYS_BACKGROUND
         )
+
+    def _update_count_label(self) -> None:
+        total = self.model.rowCount()
+        if total == 0:
+            self.count_label.setText("Нет объектов")
+        else:
+            self.count_label.setText(f"Найдено: {total}")
 
     def _refresh_catalogs(self) -> None:
         current = self.catalog_tree.currentItem()
@@ -888,10 +983,12 @@ class ObjectWorkspace(QWidget):
 
     def _on_object_selected(self, current: QModelIndex, _previous: QModelIndex) -> None:
         if not current.isValid():
+            self._current_object_id = None
             self._update_action_state(False)
             return
         obj = self.model.object_at(current.row())
         if not obj:
+            self._current_object_id = None
             self._update_action_state(False)
             return
         self._current_object_id = obj.id
@@ -974,6 +1071,7 @@ class ObjectWorkspace(QWidget):
         self._db.delete_object(obj.id)
         self.model.delete_object(obj.id)
         self._refresh_catalogs()
+        self._current_object_id = None
         self._update_action_state(False)
 
     def _attach_images(self) -> None:
