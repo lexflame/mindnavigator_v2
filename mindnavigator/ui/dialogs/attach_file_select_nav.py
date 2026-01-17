@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Dialog for selecting files from FileWorkspace navigation."""
 
 """Диалог выбора источника вложения файлов.
@@ -8,8 +10,6 @@
 Выходные данные:
     Выбранный тип источника вложения.
 """
-
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, List, Optional, Set

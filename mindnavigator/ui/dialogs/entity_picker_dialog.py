@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Reusable entity picker dialog."""
 
 """Диалог выбора сущностей с чипами.
@@ -9,7 +11,7 @@
     Итоговый набор выбранных сущностей.
 """
 
-from __future__ import annotations
+
 
 from dataclasses import dataclass
 from typing import Callable
