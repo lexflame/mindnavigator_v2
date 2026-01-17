@@ -26,7 +26,8 @@ from PySide6.QtWidgets import (
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
     QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
-    QListWidget, QListWidgetItem, QAbstractItemView
+    QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
+    QPushButton
 )
 
 from mindnavigator.storage import get_database
@@ -1149,6 +1150,14 @@ class MapCanvas(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
+            if event.modifiers() & Qt.ControlModifier:
+                world_pos = self._map_to_world(event.position())
+                marker = self._marker_at(world_pos)
+                if marker:
+                    self._selected = marker
+                    self.markerSelected.emit(marker)
+                    self._view_marker(marker)
+                return
             self._open_context_menu(event.pos())
             return
 
@@ -1396,33 +1405,131 @@ class MapCanvas(QWidget):
     def _view_marker(self, marker: Marker) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Метка на карте")
-        dialog.setObjectName("MarkerViewDialog")
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
+        dialog.setObjectName("MapLabelViewDialog")
+        dialog.resize(980, 680)
+        dialog.setMinimumSize(760, 520)
 
-        header = QHBoxLayout()
-        title_label = QLabel("Свойства метки")
-        title_label.setObjectName("MarkerViewTitle")
-        edit_btn = QToolButton()
-        edit_btn.setText("Редактировать")
+        root_layout = QVBoxLayout(dialog)
+        root_layout.setContentsMargins(12, 12, 12, 12)
+        root_layout.setSpacing(10)
+
+        header = QFrame()
+        header.setObjectName("MapLabelHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 10, 12, 10)
+        header_layout.setSpacing(12)
+
+        title = QLabel("Метка на карте")
+        title.setObjectName("MapLabelTitle")
+        header_layout.addWidget(title)
+        header_layout.addItem(QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+        edit_btn = QPushButton("Редактировать")
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda _checked=False: (dialog.accept(), self._edit_marker(marker)))
-        header.addWidget(title_label)
-        header.addStretch(1)
-        header.addWidget(edit_btn)
-        layout.addLayout(header)
 
-        form = QFormLayout()
+        close_btn = QToolButton()
+        close_btn.setObjectName("MapLabelClose")
+        close_btn.setText("✕")
+        close_btn.clicked.connect(dialog.reject)
 
-        name_label = QLabel(marker.name)
-        type_label = QLabel(marker.type or "—")
-        coords_label = QLabel(f"{marker.x:.0f}, {marker.y:.0f}")
-        size_label = QLabel(f"{marker.size:.1f}")
-        color_label = QLabel(marker.color.name())
-        desc_label = QLabel(marker.description or "—")
-        desc_label.setWordWrap(True)
-        props_label = QLabel(marker.properties or "—")
-        props_label.setWordWrap(True)
+        header_layout.addWidget(edit_btn)
+        header_layout.addWidget(close_btn)
+
+        body = QFrame()
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(14)
+
+        left_panel = QFrame()
+        left_panel.setObjectName("MapLabelCard")
+        left_panel.setFixedWidth(300)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(12)
+
+        color_title = QLabel("Цвет метки")
+        color_title.setObjectName("MapLabelSectionTitle")
+        color_preview = QLabel()
+        color_preview.setObjectName("MapLabelColorPreview")
+        color_preview.setFixedSize(28, 28)
+        color_preview.setStyleSheet(
+            f"background: {marker.color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
+        )
+        color_value = QLabel(marker.color.name())
+        color_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        color_row = QHBoxLayout()
+        color_row.addWidget(color_preview)
+        color_row.addWidget(color_value)
+        color_row.addStretch(1)
+
+        coords_title = QLabel("Координаты")
+        coords_title.setObjectName("MapLabelSectionTitle")
+        coords_value = QLabel(f"{marker.x:.0f}, {marker.y:.0f}")
+        coords_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        size_title = QLabel("Размер")
+        size_title.setObjectName("MapLabelSectionTitle")
+        size_value = QLabel(f"{marker.size:.1f}")
+        size_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        left_layout.addWidget(color_title)
+        left_layout.addLayout(color_row)
+        left_layout.addSpacing(6)
+        left_layout.addWidget(coords_title)
+        left_layout.addWidget(coords_value)
+        left_layout.addSpacing(6)
+        left_layout.addWidget(size_title)
+        left_layout.addWidget(size_value)
+        left_layout.addStretch(1)
+
+        right_panel = QFrame()
+        right_panel.setObjectName("MapLabelFormContainer")
+        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(16)
+
+        main_section = QFrame()
+        main_section.setObjectName("MapLabelSection")
+        main_layout = QVBoxLayout(main_section)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(10)
+        main_title = QLabel("Основное")
+        main_title.setObjectName("MapLabelSectionTitle")
+        main_layout.addWidget(main_title)
+
+        main_form = QFormLayout()
+        main_form.setSpacing(10)
+        main_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        main_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        name_label = QLabel("Название")
+        name_label.setObjectName("MapLabelFormLabel")
+        name_value = QLabel(marker.name)
+        name_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        type_label = QLabel("Тип")
+        type_label.setObjectName("MapLabelFormLabel")
+        type_value = QLabel(marker.type or "—")
+        type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        main_form.addRow(name_label, name_value)
+        main_form.addRow(type_label, type_value)
+        main_layout.addLayout(main_form)
+
+        links_section = QFrame()
+        links_section.setObjectName("MapLabelSection")
+        links_layout = QVBoxLayout(links_section)
+        links_layout.setContentsMargins(12, 12, 12, 12)
+        links_layout.setSpacing(10)
+        links_title = QLabel("Привязки")
+        links_title.setObjectName("MapLabelSectionTitle")
+        links_layout.addWidget(links_title)
+        links_form = QFormLayout()
+        links_form.setSpacing(10)
+        links_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         def handle_link(link: str) -> None:
             if ":" not in link:
@@ -1460,54 +1567,126 @@ class MapCanvas(QWidget):
         object_link = attachment_label("object", marker.object_ids, self._objects_by_id)
         file_link = attachment_label("file", marker.file_ids, self._files_by_id)
 
-        form.addRow("Название", name_label)
-        form.addRow("Тип", type_label)
-        form.addRow("Координаты", coords_label)
-        form.addRow("Размер", size_label)
-        form.addRow("Цвет", color_label)
-        form.addRow("Описание", desc_label)
-        form.addRow("Свойства", props_label)
-        form.addRow("Задачи", task_link)
-        form.addRow("Проекты", project_link)
-        form.addRow("Заметки", note_link)
-        form.addRow("Объекты", object_link)
-        form.addRow("Файлы", file_link)
-        layout.addLayout(form)
+        def add_link_row(label_text: str, widget: QLabel) -> None:
+            label = QLabel(label_text)
+            label.setObjectName("MapLabelFormLabel")
+            links_form.addRow(label, widget)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(dialog.reject)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
+        add_link_row("Задачи", task_link)
+        add_link_row("Проекты", project_link)
+        add_link_row("Заметки", note_link)
+        add_link_row("Объекты", object_link)
+        add_link_row("Файлы", file_link)
 
-        dialog.setStyleSheet(f"""
-            QDialog#MarkerViewDialog {{
+        links_layout.addLayout(links_form)
+
+        text_section = QFrame()
+        text_section.setObjectName("MapLabelSection")
+        text_layout = QVBoxLayout(text_section)
+        text_layout.setContentsMargins(12, 12, 12, 12)
+        text_layout.setSpacing(10)
+        text_title = QLabel("Текст")
+        text_title.setObjectName("MapLabelSectionTitle")
+        text_layout.addWidget(text_title)
+
+        desc_label = QLabel("Описание")
+        desc_label.setObjectName("MapLabelFieldLabel")
+        desc_value = QLabel(marker.description or "—")
+        desc_value.setWordWrap(True)
+        desc_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        props_wrap = QFrame()
+        props_wrap.setObjectName("MapLabelImportant")
+        props_layout = QVBoxLayout(props_wrap)
+        props_layout.setContentsMargins(10, 8, 10, 8)
+        props_layout.setSpacing(6)
+
+        props_header = QHBoxLayout()
+        props_icon = QLabel("⚑")
+        props_icon.setObjectName("MapLabelImportantIcon")
+        props_label = QLabel("Важные пометки")
+        props_label.setObjectName("MapLabelFieldLabel")
+        props_header.addWidget(props_icon)
+        props_header.addWidget(props_label)
+        props_header.addStretch(1)
+
+        props_value = QLabel(marker.properties or "—")
+        props_value.setWordWrap(True)
+        props_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        props_layout.addLayout(props_header)
+        props_layout.addWidget(props_value)
+
+        text_layout.addWidget(desc_label)
+        text_layout.addWidget(desc_value)
+        text_layout.addWidget(props_wrap)
+
+        right_layout.addWidget(main_section)
+        right_layout.addWidget(links_section)
+        right_layout.addWidget(text_section)
+        right_layout.addStretch(1)
+
+        body_layout.addWidget(left_panel, 0)
+        body_layout.addWidget(right_panel, 1)
+
+        root_layout.addWidget(header)
+        root_layout.addWidget(body, 1)
+
+        dialog.setStyleSheet(
+            f"""
+            QDialog#MapLabelViewDialog {{
                 {MATH_PHYS_BACKGROUND}
             }}
-            QDialog#MarkerViewDialog QLabel {{
-                color: #cfcfcf;
+            QFrame#MapLabelHeader {{
+                background: rgba(20, 22, 30, 0.92);
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
             }}
-            QDialog#MarkerViewDialog QLabel#MarkerViewTitle {{
-                color: #f2f2f2;
+            QLabel#MapLabelTitle {{
+                color: #f0f0f0;
+                font-size: 16px;
                 font-weight: 600;
             }}
-            QDialog#MarkerViewDialog QToolButton {{
+            QFrame#MapLabelCard, QFrame#MapLabelSection {{
+                background: rgba(22, 24, 32, 0.92);
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+            }}
+            QLabel#MapLabelSectionTitle {{
+                color: #d9d9d9;
+                font-weight: 600;
+            }}
+            QLabel#MapLabelFieldLabel {{
+                color: #b9bcc4;
+            }}
+            QLabel#MapLabelFormLabel {{
+                color: #b9bcc4;
+            }}
+            QToolButton, QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 6px 12px;
                 border-radius: 6px;
             }}
-            QDialog#MarkerViewDialog QToolButton:hover {{
+            QToolButton:hover, QPushButton:hover {{
                 background: #34363b;
             }}
-            QDialog#MarkerViewDialog QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
+            QToolButton#MapLabelClose {{
+                padding: 4px 8px;
+                min-width: 28px;
+            }}
+            QLabel#MapLabelColorPreview {{
+                border: 1px solid #2a2b2f;
                 border-radius: 6px;
             }}
-        """)
+            QFrame#MapLabelImportant {{
+                border-left: 3px solid #d59d35;
+                background: rgba(29, 31, 39, 0.85);
+                border-radius: 8px;
+            }}
+            """
+        )
         dialog.exec()
 
     def _open_context_menu(self, pos) -> None:
