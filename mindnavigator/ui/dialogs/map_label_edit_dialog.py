@@ -331,7 +331,7 @@ class EntityLinksInput(QWidget):
         while self.flow_layout.count():
             child = self.flow_layout.takeAt(0)
             widget = child.widget()
-            if widget and widget is not self.search_input:
+            if widget:
                 widget.deleteLater()
         for item in self._items:
             chip = LinkChip(item, self.flow_container)
