@@ -1457,6 +1457,7 @@ class MapCanvas(QWidget):
             f"background: {marker.color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
         )
         color_value = QLabel(marker.color.name())
+        color_value.setObjectName("MapLabelValue")
         color_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         color_row = QHBoxLayout()
@@ -1467,11 +1468,13 @@ class MapCanvas(QWidget):
         coords_title = QLabel("Координаты")
         coords_title.setObjectName("MapLabelSectionTitle")
         coords_value = QLabel(f"{marker.x:.0f}, {marker.y:.0f}")
+        coords_value.setObjectName("MapLabelValue")
         coords_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         size_title = QLabel("Размер")
         size_title.setObjectName("MapLabelSectionTitle")
         size_value = QLabel(f"{marker.size:.1f}")
+        size_value.setObjectName("MapLabelValue")
         size_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         left_layout.addWidget(color_title)
@@ -1508,11 +1511,13 @@ class MapCanvas(QWidget):
         name_label = QLabel("Название")
         name_label.setObjectName("MapLabelFormLabel")
         name_value = QLabel(marker.name)
+        name_value.setObjectName("MapLabelValue")
         name_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         type_label = QLabel("Тип")
         type_label.setObjectName("MapLabelFormLabel")
         type_value = QLabel(marker.type or "—")
+        type_value.setObjectName("MapLabelValue")
         type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         main_form.addRow(name_label, name_value)
@@ -1543,6 +1548,7 @@ class MapCanvas(QWidget):
 
         def attachment_label(kind: str, item_ids: List[int], source: dict) -> QLabel:
             label = QLabel()
+            label.setObjectName("MapLabelValue")
             label.setTextFormat(Qt.RichText)
             label.setTextInteractionFlags(Qt.TextBrowserInteraction)
             label.setOpenExternalLinks(False)
@@ -1592,6 +1598,7 @@ class MapCanvas(QWidget):
         desc_label = QLabel("Описание")
         desc_label.setObjectName("MapLabelFieldLabel")
         desc_value = QLabel(marker.description or "—")
+        desc_value.setObjectName("MapLabelValue")
         desc_value.setWordWrap(True)
         desc_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
@@ -1611,6 +1618,7 @@ class MapCanvas(QWidget):
         props_header.addStretch(1)
 
         props_value = QLabel(marker.properties or "—")
+        props_value.setObjectName("MapLabelValue")
         props_value.setWordWrap(True)
         props_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
@@ -1661,6 +1669,12 @@ class MapCanvas(QWidget):
             }}
             QLabel#MapLabelFormLabel {{
                 color: #b9bcc4;
+            }}
+            QLabel#MapLabelValue {{
+                color: #a8abb3;
+            }}
+            QLabel#MapLabelValue a {{
+                color: #a8abb3;
             }}
             QToolButton, QPushButton {{
                 background: #2a2b2f;
