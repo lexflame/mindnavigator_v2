@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
     QDialog,
-    QDialogButtonBox,
     QColorDialog,
     QFileDialog,
     QFormLayout,
@@ -21,9 +20,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLayout,
     QLineEdit,
-    QAbstractItemView,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
@@ -37,15 +33,10 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import get_database
 from mindnavigator.ui.dialogs.attach_file_select_nav import AttachFileSelectNav
+from mindnavigator.ui.dialogs.entity_picker_dialog import ChipItem, EntityPickerDialog
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 import qtawesome as qta
-
-
-@dataclass(frozen=True)
-class ChipItem:
-    id: int
-    title: str
 
 
 @dataclass(frozen=True)
@@ -354,136 +345,6 @@ class EntityLinksInput(QWidget):
 
     def _on_clear_requested(self) -> None:
         self.clearRequested.emit()
-
-
-class EntityPickerDialog(QDialog):
-    def __init__(
-        self,
-        entity_type: str,
-        fetch_fn: Callable[[str], list[ChipItem]],
-        selected_ids=None,
-        parent=None,
-        initial_query: str = "",
-        anchor_widget: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName("EntityPickerDialog")
-        self.setWindowTitle(f"Выбор: {entity_type}")
-        self.resize(520, 420)
-        self._fetch_fn = fetch_fn
-        self._selected_ids = set(selected_ids or [])
-        self._items: list[ChipItem] = []
-        self._anchor_widget = anchor_widget
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Поиск...")
-        self.search_input.textChanged.connect(self._reload)
-        if initial_query:
-            self.search_input.setText(initial_query)
-
-        self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
-        self.list_widget.setSpacing(6)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("Добавить")
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-
-        layout.addWidget(self.search_input)
-        layout.addWidget(self.list_widget, 1)
-        layout.addWidget(buttons)
-
-        self.setStyleSheet(
-            """
-            QDialog#EntityPickerDialog {
-                background: rgba(20, 22, 30, 0.92);
-                color: #e6e6e6;
-            }
-            QLineEdit {
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                border-radius: 6px;
-            }
-            QListWidget {
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                border-radius: 6px;
-            }
-            QListWidget::item {
-                padding: 8px 10px;
-                margin: 0px 6px;
-                background: #2a2f36;
-                color: #e6e6e6;
-                border-radius: 6px;
-            }
-            QListWidget::item:hover {
-                background: #333840;
-            }
-            QListWidget::item:checked {
-                background: #3b4a7a;
-            }
-            QListWidget::item:disabled {
-                background: transparent;
-                color: #8e919a;
-            }
-            QDialogButtonBox QPushButton {
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
-                border-radius: 6px;
-            }
-            QDialogButtonBox QPushButton:hover {
-                background: #34363b;
-            }
-            """
-        )
-
-        self._reload()
-
-    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
-        super().showEvent(event)
-        if not self._anchor_widget:
-            return
-        width = self._anchor_widget.width()
-        self.resize(width, self.height())
-        anchor_pos = self._anchor_widget.mapToGlobal(QPoint(0, self._anchor_widget.height()))
-        self.move(anchor_pos)
-
-    def selected_items(self) -> list[ChipItem]:
-        selected = []
-        for index in range(self.list_widget.count()):
-            item = self.list_widget.item(index)
-            data = item.data(Qt.UserRole)
-            if not data:
-                continue
-            if item.checkState() == Qt.Checked:
-                selected.append(data)
-        return selected
-
-    def _reload(self) -> None:
-        query = self.search_input.text().strip().lower()
-        self._items = self._fetch_fn(query)
-        self.list_widget.clear()
-        if not self._items:
-            empty = QListWidgetItem("— нет элементов —")
-            empty.setFlags(Qt.NoItemFlags)
-            self.list_widget.addItem(empty)
-            return
-        for chip in self._items:
-            entry = QListWidgetItem(chip.title)
-            entry.setData(Qt.UserRole, chip)
-            entry.setFlags(entry.flags() | Qt.ItemIsUserCheckable)
-            entry.setCheckState(Qt.Checked if chip.id in self._selected_ids else Qt.Unchecked)
-            self.list_widget.addItem(entry)
 
 
 class ImageDropLabel(QLabel):
