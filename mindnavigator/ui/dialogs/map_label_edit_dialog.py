@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
-    QScrollArea,
     QSizePolicy,
     QSpacerItem,
     QDoubleSpinBox,
@@ -508,13 +507,9 @@ class MapLabelEditDialog(QDialog):
         return panel
 
     def _build_right_panel(self, type_suggestions: list[str]) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setObjectName("MapLabelScroll")
-
         container = QFrame()
         container.setObjectName("MapLabelFormContainer")
-        container.setMaximumWidth(820)
+        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         form_layout = QVBoxLayout(container)
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setSpacing(16)
@@ -523,16 +518,7 @@ class MapLabelEditDialog(QDialog):
         form_layout.addWidget(self._build_section_links())
         form_layout.addWidget(self._build_section_text())
         form_layout.addStretch(1)
-
-        wrapper = QWidget()
-        wrapper_layout = QHBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.addStretch(1)
-        wrapper_layout.addWidget(container)
-        wrapper_layout.addStretch(1)
-
-        scroll.setWidget(wrapper)
-        return scroll
+        return container
 
     def _build_section_main(self, type_suggestions: list[str]) -> QWidget:
         section = QFrame()
@@ -593,10 +579,19 @@ class MapLabelEditDialog(QDialog):
         parent_widget = QWidget()
         parent_widget.setLayout(parent_row)
 
-        form.addRow("Название", self.name_edit)
-        form.addRow("Тип", self.type_combo)
-        form.addRow("Размер", size_widget)
-        form.addRow("Родительский каталог", parent_widget)
+        name_label = QLabel("Название")
+        name_label.setObjectName("MapLabelFormLabel")
+        type_label = QLabel("Тип")
+        type_label.setObjectName("MapLabelFormLabel")
+        size_label = QLabel("Размер")
+        size_label.setObjectName("MapLabelFormLabel")
+        parent_label = QLabel("Родительский каталог")
+        parent_label.setObjectName("MapLabelFormLabel")
+
+        form.addRow(name_label, self.name_edit)
+        form.addRow(type_label, self.type_combo)
+        form.addRow(size_label, size_widget)
+        form.addRow(parent_label, parent_widget)
 
         layout.addLayout(form)
         return section
@@ -621,7 +616,9 @@ class MapLabelEditDialog(QDialog):
             chips.addRequested.connect(lambda _checked=False, k=key: self._open_picker(k))
             chips.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
             self._chip_inputs[key] = chips
-            form.addRow(source.label, chips)
+            chips_label = QLabel(source.label)
+            chips_label.setObjectName("MapLabelFormLabel")
+            form.addRow(chips_label, chips)
 
         layout.addLayout(form)
         return section
@@ -705,7 +702,10 @@ class MapLabelEditDialog(QDialog):
                 font-weight: 600;
             }}
             QLabel#MapLabelFieldLabel {{
-                color: #cfcfcf;
+                color: #b9bcc4;
+            }}
+            QLabel#MapLabelFormLabel {{
+                color: #b9bcc4;
             }}
             QLabel#MapLabelHint {{
                 color: #8e919a;
@@ -741,13 +741,6 @@ class MapLabelEditDialog(QDialog):
             }}
             QSpinBox::up-button, QSpinBox::down-button {{
                 width: 14px;
-            }}
-            QScrollArea#MapLabelScroll {{
-                border: none;
-                background: transparent;
-            }}
-            QScrollArea#MapLabelScroll > QWidget > QWidget {{
-                background: transparent;
             }}
             QLabel#MapLabelColorPreview {{
                 border: 1px solid #2a2b2f;
