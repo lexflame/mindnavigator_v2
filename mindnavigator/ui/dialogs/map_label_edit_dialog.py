@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QIcon, QKeySequ
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
+    QAbstractItemView,
     QDialog,
     QColorDialog,
     QFileDialog,
@@ -382,7 +383,7 @@ class CompleterPopupSync(QObject):
         if not self._popup:
             return
         self._popup.setObjectName("CompleterPopup")
-        self._popup.setVerticalScrollMode(self._popup.ScrollPerPixel)
+        self._popup.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self._popup.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._popup.setTextElideMode(Qt.ElideRight)
         self._completer.setMaxVisibleItems(self._max_visible_items)
