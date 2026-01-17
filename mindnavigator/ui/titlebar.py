@@ -1,3 +1,12 @@
+"""Кастомный заголовок окна приложения.
+
+Входные данные:
+    События мыши и ссылки на родительское окно.
+
+Выходные данные:
+    Управление перемещением/размером окна и обработкой кнопок.
+"""
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton, QMainWindow
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QPoint
