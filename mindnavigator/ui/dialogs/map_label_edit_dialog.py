@@ -35,9 +35,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.storage import get_database
 from mindnavigator.ui.dialogs.attach_file_select_nav import AttachFileSelectNav
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+
+import qtawesome as qta
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,9 @@ class MapLabelEntitySource:
     label: str
     items: list
     label_fn: Callable[[object], str]
+    placeholder: str
+    icon_name: str
+    item_prefix: str
 
 
 class FlowLayout(QLayout):
@@ -152,6 +157,13 @@ class Chip(QWidget):
         return self._item
 
 
+@dataclass(frozen=True)
+class EntityLinkItem:
+    id: int
+    title: str
+    link: str
+
+
 class TagChipsInput(QWidget):
     itemsChanged = Signal(list)
     addRequested = Signal()
@@ -214,8 +226,145 @@ class TagChipsInput(QWidget):
         self.remove_item(item_id)
 
 
+class LinkChip(QWidget):
+    removeRequested = Signal(int)
+    linkActivated = Signal(str)
+
+    def __init__(self, item: EntityLinkItem, parent=None) -> None:
+        super().__init__(parent)
+        self._item = item
+        self.setObjectName("EntityChip")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 2, 6, 2)
+        layout.setSpacing(6)
+
+        self.label = QLabel(item.title)
+        self.label.setObjectName("EntityChipLabel")
+        self.label.setTextFormat(Qt.RichText)
+        self.label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.label.setOpenExternalLinks(False)
+        self.label.setText(f"<a href='{item.link}'>{item.title}</a>")
+        self.label.linkActivated.connect(self.linkActivated.emit)
+
+        remove_btn = QToolButton()
+        remove_btn.setObjectName("EntityChipRemove")
+        remove_btn.setText("✕")
+        remove_btn.setCursor(Qt.PointingHandCursor)
+        remove_btn.setAutoRaise(True)
+        remove_btn.clicked.connect(lambda: self.removeRequested.emit(item.id))
+
+        layout.addWidget(self.label)
+        layout.addWidget(remove_btn)
+
+    @property
+    def item(self) -> EntityLinkItem:
+        return self._item
+
+
+class EntityLinksInput(QWidget):
+    itemsChanged = Signal(list)
+    searchChanged = Signal(str)
+    clearRequested = Signal()
+    linkActivated = Signal(str)
+
+    def __init__(self, placeholder: str, icon_name: str, parent=None) -> None:
+        super().__init__(parent)
+        self._items: list[EntityLinkItem] = []
+
+        self.setObjectName("EntityLinksInput")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(8)
+
+        self.icon_label = QLabel()
+        self.icon_label.setObjectName("EntityLinksIcon")
+        icon = qta.icon(icon_name, color="#cfcfcf")
+        self.icon_label.setPixmap(icon.pixmap(18, 18))
+        self.icon_label.setFixedSize(20, 20)
+
+        self.flow_container = QWidget()
+        self.flow_container.setObjectName("EntityChipFlow")
+        self.flow_layout = FlowLayout(self.flow_container, spacing=6)
+        self.flow_container.setLayout(self.flow_layout)
+        self.flow_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("EntityLinksSearch")
+        self.search_input.setPlaceholderText(placeholder)
+        self.search_input.setClearButtonEnabled(False)
+        self.search_input.textChanged.connect(self.searchChanged.emit)
+
+        self.clear_button = QToolButton()
+        self.clear_button.setObjectName("EntityLinksClear")
+        self.clear_button.setIcon(qta.icon("fa5s.times", color="#cfcfcf"))
+        self.clear_button.setCursor(Qt.PointingHandCursor)
+        self.clear_button.setAutoRaise(True)
+        self.clear_button.clicked.connect(self._on_clear_requested)
+
+        layout.addWidget(self.icon_label, 0, Qt.AlignVCenter)
+        layout.addWidget(self.flow_container, 1)
+        layout.addWidget(self.clear_button, 0, Qt.AlignVCenter)
+
+    def set_items(self, items: Iterable[EntityLinkItem]) -> None:
+        self._items = list(items)
+        self._rebuild()
+
+    def items(self) -> list[EntityLinkItem]:
+        return list(self._items)
+
+    def add_items(self, items: Iterable[EntityLinkItem]) -> None:
+        existing = {item.id for item in self._items}
+        for item in items:
+            if item.id not in existing:
+                self._items.append(item)
+                existing.add(item.id)
+        self._rebuild()
+
+    def remove_item(self, item_id: int) -> None:
+        self._items = [item for item in self._items if item.id != item_id]
+        self._rebuild()
+
+    def clear_items(self) -> None:
+        if not self._items:
+            return
+        self._items = []
+        self._rebuild()
+
+    def clear_search(self) -> None:
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+
+    def _rebuild(self) -> None:
+        while self.flow_layout.count():
+            child = self.flow_layout.takeAt(0)
+            widget = child.widget()
+            if widget:
+                widget.deleteLater()
+        for item in self._items:
+            chip = LinkChip(item, self.flow_container)
+            chip.removeRequested.connect(self._on_chip_remove)
+            chip.linkActivated.connect(self.linkActivated.emit)
+            self.flow_layout.addWidget(chip)
+        self.flow_layout.addWidget(self.search_input)
+        self.itemsChanged.emit(self.items())
+
+    def _on_chip_remove(self, item_id: int) -> None:
+        self.remove_item(item_id)
+
+    def _on_clear_requested(self) -> None:
+        self.clearRequested.emit()
+
+
 class EntityPickerDialog(QDialog):
-    def __init__(self, entity_type: str, fetch_fn: Callable[[str], list[ChipItem]], selected_ids=None, parent=None) -> None:
+    def __init__(
+        self,
+        entity_type: str,
+        fetch_fn: Callable[[str], list[ChipItem]],
+        selected_ids=None,
+        parent=None,
+        initial_query: str = "",
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
         self.setWindowTitle(f"Выбор: {entity_type}")
@@ -231,6 +380,8 @@ class EntityPickerDialog(QDialog):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Поиск...")
         self.search_input.textChanged.connect(self._reload)
+        if initial_query:
+            self.search_input.setText(initial_query)
 
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
@@ -370,7 +521,8 @@ class MapLabelEditDialog(QDialog):
         self._image_icon: QIcon | None = None
         self._parent_path = ""
         self._size_range = size_range
-        self._chip_inputs: dict[str, TagChipsInput] = {}
+        self._link_inputs: dict[str, EntityLinksInput] = {}
+        self._link_title_maps: dict[str, dict[str, int]] = {}
         self._loading = True
 
         self.setWindowTitle("Метка на карте")
@@ -616,13 +768,27 @@ class MapLabelEditDialog(QDialog):
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         for key, source in self._entity_sources.items():
-            chips = TagChipsInput()
-            chips.addRequested.connect(lambda _checked=False, k=key: self._open_picker(k))
-            chips.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
-            self._chip_inputs[key] = chips
+            link_input = EntityLinksInput(source.placeholder, source.icon_name)
+            link_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            link_input.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
+            link_input.clearRequested.connect(lambda k=key: self._clear_links(k))
+            link_input.linkActivated.connect(self._open_link)
+            link_input.search_input.returnPressed.connect(
+                lambda k=key, field=link_input: self._open_picker(k, field.search_input.text())
+            )
+
+            labels = {source.label_fn(item): item.id for item in source.items}
+            self._link_title_maps[key] = labels
+            completer = QCompleter(list(labels.keys()), link_input.search_input)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchContains)
+            completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
+            link_input.search_input.setCompleter(completer)
+
+            self._link_inputs[key] = link_input
             chips_label = QLabel(source.label)
             chips_label.setObjectName("MapLabelFormLabel")
-            form.addRow(chips_label, chips)
+            form.addRow(chips_label, link_input)
 
         layout.addLayout(form)
         return section
@@ -788,6 +954,43 @@ class MapLabelEditDialog(QDialog):
                 min-width: 28px;
                 padding: 4px 8px;
             }}
+            QWidget#EntityLinksInput {{
+                background: #202127;
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+            }}
+            QWidget#EntityChipFlow {{
+                background: transparent;
+            }}
+            QWidget#EntityChip {{
+                background: #2a2f36;
+                border: 1px solid #3a3f46;
+                border-radius: 12px;
+            }}
+            QLabel#EntityChipLabel {{
+                color: #d7d7d7;
+            }}
+            QToolButton#EntityChipRemove {{
+                background: transparent;
+                border: none;
+                color: #b0b0b0;
+                padding: 0px;
+            }}
+            QToolButton#EntityChipRemove:hover {{
+                color: #f1c24d;
+            }}
+            QLineEdit#EntityLinksSearch {{
+                background: transparent;
+                border: none;
+                padding: 4px 2px;
+                color: #e6e6e6;
+                min-width: 160px;
+            }}
+            QToolButton#EntityLinksClear {{
+                background: transparent;
+                border: none;
+                padding: 2px;
+            }}
             """
         )
 
@@ -804,23 +1007,28 @@ class MapLabelEditDialog(QDialog):
         self.desc_edit.setPlainText(self._marker.description or "")
         self.important_edit.setPlainText(self._marker.properties or "")
 
-        self._set_chips("task", self._marker.task_ids)
-        self._set_chips("project", self._marker.project_ids)
-        self._set_chips("note", self._marker.note_ids)
-        self._set_chips("object", self._marker.object_ids)
-        self._set_chips("file", self._marker.file_ids)
+        self._set_links("task", self._marker.task_ids)
+        self._set_links("project", self._marker.project_ids)
+        self._set_links("note", self._marker.note_ids)
+        self._set_links("object", self._marker.object_ids)
+        self._set_links("file", self._marker.file_ids)
+        self._set_links("map", self._marker.map_ids)
+        self._set_links("marker", self._marker.marker_ids)
 
         self._update_counters()
         self._load_image_preview(self._marker.image_path)
 
-    def _set_chips(self, key: str, selected_ids: list[int]) -> None:
+    def _set_links(self, key: str, selected_ids: list[int]) -> None:
         source = self._entity_sources.get(key)
-        chips = self._chip_inputs.get(key)
-        if not source or not chips:
+        link_input = self._link_inputs.get(key)
+        if not source or not link_input:
             return
         lookup = {item.id: source.label_fn(item) for item in source.items}
-        items = [ChipItem(item_id, lookup.get(item_id, f"#{item_id}")) for item_id in selected_ids]
-        chips.set_items(items)
+        items = [
+            EntityLinkItem(item_id, lookup.get(item_id, f"#{item_id}"), f"{source.item_prefix}:{item_id}")
+            for item_id in selected_ids
+        ]
+        link_input.set_items(items)
 
     def _wire_dirty_tracking(self) -> None:
         self.name_edit.textChanged.connect(self._mark_dirty)
@@ -851,9 +1059,10 @@ class MapLabelEditDialog(QDialog):
             QMessageBox.warning(self, "Проверка", "Название метки не может быть пустым.")
             return
         marker = self._marker
+
         def chip_ids(key: str) -> list[int]:
-            chips = self._chip_inputs.get(key)
-            return [item.id for item in chips.items()] if chips else []
+            link_input = self._link_inputs.get(key)
+            return [item.id for item in link_input.items()] if link_input else []
 
         self._marker = marker.__class__(
             marker.id,
@@ -870,6 +1079,8 @@ class MapLabelEditDialog(QDialog):
             chip_ids("note"),
             chip_ids("object"),
             chip_ids("file"),
+            chip_ids("map"),
+            chip_ids("marker"),
             self._image_path,
         )
         self._dirty = False
@@ -1022,22 +1233,66 @@ class MapLabelEditDialog(QDialog):
         width = max(120, self.parent_path_edit.width() - 40)
         return metrics.elidedText(path, Qt.ElideMiddle, width)
 
-    def _open_picker(self, key: str) -> None:
+    def _clear_links(self, key: str) -> None:
+        link_input = self._link_inputs.get(key)
+        if not link_input:
+            return
+        link_input.clear_items()
+        link_input.clear_search()
+        self._mark_dirty()
+
+    def _add_link_from_title(self, key: str, title: str) -> None:
         source = self._entity_sources.get(key)
-        chips = self._chip_inputs.get(key)
-        if not source or not chips:
+        link_input = self._link_inputs.get(key)
+        if not source or not link_input:
+            return
+        item_id = self._link_title_maps.get(key, {}).get(title)
+        if item_id is None:
+            return
+        link_input.add_items([EntityLinkItem(item_id, title, f"{source.item_prefix}:{item_id}")])
+        link_input.clear_search()
+        self._mark_dirty()
+
+    def _open_link(self, link: str) -> None:
+        if ":" not in link:
+            return
+        kind, item_id = link.split(":", 1)
+        try:
+            parsed_id = int(item_id)
+        except ValueError:
+            return
+        parent = self.parent()
+        if parent and hasattr(parent, "_open_attachment_view"):
+            parent._open_attachment_view(kind, parsed_id)
+
+    def _open_picker(self, key: str, query: str = "") -> None:
+        source = self._entity_sources.get(key)
+        link_input = self._link_inputs.get(key)
+        if not source or not link_input:
             return
 
-        def fetch_fn(query: str) -> list[ChipItem]:
+        def fetch_fn(search_query: str) -> list[ChipItem]:
             items = []
+            normalized = search_query.strip().lower()
             for item in source.items:
                 title = source.label_fn(item)
-                if query and query not in title.lower():
+                if normalized and normalized not in title.lower():
                     continue
                 items.append(ChipItem(item.id, title))
             return items
 
-        dialog = EntityPickerDialog(source.label, fetch_fn, [item.id for item in chips.items()], self)
+        dialog = EntityPickerDialog(
+            source.label,
+            fetch_fn,
+            [item.id for item in link_input.items()],
+            self,
+            initial_query=query,
+        )
         if dialog.exec() == QDialog.Accepted:
-            chips.add_items(dialog.selected_items())
+            to_add = [
+                EntityLinkItem(item.id, item.title, f"{source.item_prefix}:{item.id}")
+                for item in dialog.selected_items()
+            ]
+            link_input.add_items(to_add)
+            link_input.clear_search()
             self._mark_dirty()
