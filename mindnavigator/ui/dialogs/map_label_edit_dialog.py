@@ -437,6 +437,8 @@ class MapLabelEditDialog(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
+        if not self.isMaximized():
+            self.showMaximized()
         self._fit_to_screen()
 
     def result_marker(self):
@@ -902,7 +904,7 @@ class MapLabelEditDialog(QDialog):
         if not screen:
             return
         available = screen.availableGeometry()
-        margin = 24
+        margin = 0 if self.windowState() & Qt.WindowMaximized else 24
         max_width = max(available.width() - margin, 320)
         max_height = max(available.height() - margin, 240)
         self.setMaximumSize(max_width, max_height)
