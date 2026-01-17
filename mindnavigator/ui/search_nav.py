@@ -1,3 +1,12 @@
+"""Панель поиска и фильтрации задач/объектов.
+
+Входные данные:
+    Текстовый запрос и события выбора результата.
+
+Выходные данные:
+    Сигналы активации результата поиска.
+"""
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem
 

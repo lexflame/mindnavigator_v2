@@ -1,3 +1,12 @@
+"""Левая панель навигации по разделам приложения.
+
+Входные данные:
+    События кликов пользователя и параметры родительского виджета.
+
+Выходные данные:
+    Обновление активного раздела и генерация сигналов.
+"""
+
 import qtawesome as qta
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QToolButton, QSizePolicy, QButtonGroup
 from PySide6.QtCore import Qt, QSize

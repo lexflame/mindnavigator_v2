@@ -1,3 +1,12 @@
+"""Навигация по проектам в боковой панели.
+
+Входные данные:
+    События выбора списка и фильтрации проектов.
+
+Выходные данные:
+    Сигналы изменения фильтра и выбранного проекта.
+"""
+
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
 
