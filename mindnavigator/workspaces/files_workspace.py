@@ -151,6 +151,23 @@ class CloudScanWorker(QObject):
         return mime.startswith("image/")
 
 
+class DatabaseReindexWorker(QObject):
+    error = Signal(str)
+    finished = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._db = Database(default_db_path())
+
+    def run(self) -> None:
+        try:
+            self._db.reindex()
+        except Exception as exc:  # noqa: BLE001 - отображаем ошибку в UI
+            self.error.emit(str(exc))
+            return
+        self.finished.emit()
+
+
 class ImagePreviewDialog(QDialog):
     def __init__(
         self,
@@ -298,6 +315,8 @@ class FileWorkspace(QWidget):
         self._db = get_database()
         self._scan_thread: Optional[QThread] = None
         self._scan_worker: Optional[CloudScanWorker] = None
+        self._reindex_thread: Optional[QThread] = None
+        self._reindex_worker: Optional[DatabaseReindexWorker] = None
         self._all_cloud_files: List[CloudFileData] = []
         self._cloud_files: List[CloudFileData] = []
         self._folder_index: Dict[str, Dict[str, object]] = {}
@@ -321,9 +340,13 @@ class FileWorkspace(QWidget):
         header = QHBoxLayout()
         header.setSpacing(12)
 
-        self.sync_button = QPushButton("Синхронизация")
+        self.sync_button = QPushButton("Ресинхронизация")
         self.sync_button.setObjectName("FilesSyncButton")
         self.sync_button.clicked.connect(self._start_sync)
+
+        self.reindex_button = QPushButton("Переиндексация")
+        self.reindex_button.setObjectName("FilesReindexButton")
+        self.reindex_button.clicked.connect(self._start_reindex)
 
         self.status_label = QLabel("Синхронизация не запускалась.")
         self.status_label.setObjectName("FilesSyncStatus")
@@ -347,6 +370,7 @@ class FileWorkspace(QWidget):
         mode_layout.addWidget(self.nav_mode_button)
 
         header.addWidget(self.sync_button, 0, Qt.AlignLeft)
+        header.addWidget(self.reindex_button, 0, Qt.AlignLeft)
         header.addWidget(self.status_label, 1, Qt.AlignLeft)
         header.addStretch(1)
         header.addLayout(mode_layout)
@@ -452,6 +476,23 @@ class FileWorkspace(QWidget):
             }
             QPushButton#FilesSyncButton:disabled {
                 background: #202225;
+                color: #6f7278;
+                border-color: #2b2d33;
+            }
+            QPushButton#FilesReindexButton {
+                background: #22252b;
+                border: 1px solid #333741;
+                border-radius: 6px;
+                padding: 6px 16px;
+                color: #d1d5db;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton#FilesReindexButton:hover {
+                background: #2c3139;
+            }
+            QPushButton#FilesReindexButton:disabled {
+                background: #1a1c20;
                 color: #6f7278;
                 border-color: #2b2d33;
             }
@@ -846,9 +887,12 @@ class FileWorkspace(QWidget):
 
         if self._scan_thread and self._scan_thread.isRunning():
             return
+        if self._reindex_thread and self._reindex_thread.isRunning():
+            return
 
         self.log_output.clear()
         self.sync_button.setDisabled(True)
+        self.reindex_button.setDisabled(True)
         self.status_label.setText("Подготовка к синхронизации...")
 
         self._scan_thread = QThread(self)
@@ -875,6 +919,7 @@ class FileWorkspace(QWidget):
 
     def _on_scan_finished(self, summary: ScanSummary) -> None:
         self.sync_button.setDisabled(False)
+        self.reindex_button.setDisabled(False)
         self._store_last_sync()
         self.status_label.setText(self._build_sync_status_text(summary))
         self._append_log(
@@ -888,6 +933,49 @@ class FileWorkspace(QWidget):
             self._scan_worker.deleteLater()
         self._scan_worker = None
         self._scan_thread = None
+
+    def _start_reindex(self) -> None:
+        if self._scan_thread and self._scan_thread.isRunning():
+            return
+        if self._reindex_thread and self._reindex_thread.isRunning():
+            return
+
+        self.sync_button.setDisabled(True)
+        self.reindex_button.setDisabled(True)
+        self.status_label.setText("Переиндексация базы данных...")
+        self._append_log("Запуск переиндексации базы данных.")
+
+        self._reindex_thread = QThread(self)
+        self._reindex_worker = DatabaseReindexWorker()
+        self._reindex_worker.moveToThread(self._reindex_thread)
+
+        self._reindex_thread.started.connect(self._reindex_worker.run)
+        self._reindex_worker.error.connect(self._on_reindex_error)
+        self._reindex_worker.finished.connect(self._on_reindex_finished)
+        self._reindex_worker.finished.connect(self._reindex_thread.quit)
+        self._reindex_thread.finished.connect(self._reindex_thread.deleteLater)
+        self._reindex_thread.finished.connect(self._cleanup_reindex_worker)
+
+        self._reindex_thread.start()
+
+    def _on_reindex_error(self, message: str) -> None:
+        self._append_log(f"Ошибка переиндексации: {message}")
+        self.status_label.setText("Переиндексация завершилась с ошибкой.")
+        self.sync_button.setDisabled(False)
+        self.reindex_button.setDisabled(False)
+
+    def _on_reindex_finished(self) -> None:
+        self._append_log("Переиндексация базы данных завершена.")
+        self.status_label.setText(self._build_sync_status_text())
+        self.sync_button.setDisabled(False)
+        self.reindex_button.setDisabled(False)
+        self._load_cloud_files()
+
+    def _cleanup_reindex_worker(self) -> None:
+        if self._reindex_worker:
+            self._reindex_worker.deleteLater()
+        self._reindex_worker = None
+        self._reindex_thread = None
 
     def _append_log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
