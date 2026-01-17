@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import get_database
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
 from mindnavigator.resources import resource_path
 
 
@@ -1367,196 +1368,29 @@ class MapCanvas(QWidget):
         def file_label(item) -> str:
             return item.name or item.rel_path
 
-        def build_checklist(items, selected_ids: List[int], label_builder) -> QListWidget:
-            widget = QListWidget()
-            widget.setSelectionMode(QAbstractItemView.NoSelection)
-            widget.setObjectName("MarkerAttachmentList")
-            if not items:
-                empty_item = QListWidgetItem("— нет доступных элементов —")
-                empty_item.setFlags(Qt.NoItemFlags)
-                widget.addItem(empty_item)
-                widget.setFixedHeight(46)
-                return widget
-            selected = set(selected_ids)
-            for item in items:
-                list_item = QListWidgetItem(label_builder(item))
-                list_item.setData(Qt.UserRole, item.id)
-                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-                list_item.setCheckState(Qt.Checked if item.id in selected else Qt.Unchecked)
-                widget.addItem(list_item)
-            widget.setMinimumHeight(120)
-            return widget
+        entity_sources = {
+            "task": MapLabelEntitySource("Задачи", self._tasks, task_label),
+            "project": MapLabelEntitySource("Проекты", self._projects, project_label),
+            "note": MapLabelEntitySource("Заметки", self._notes, note_label),
+            "object": MapLabelEntitySource("Объекты", self._objects, object_label),
+            "file": MapLabelEntitySource("Файлы", self._files, file_label),
+        }
+        type_suggestions = sorted({item.type for item in self._markers if item.type})
 
-        def collect_checked(list_widget: QListWidget) -> List[int]:
-            selected = []
-            for idx in range(list_widget.count()):
-                item = list_widget.item(idx)
-                item_id = item.data(Qt.UserRole)
-                if item_id is None:
-                    continue
-                if item.checkState() == Qt.Checked:
-                    selected.append(item_id)
-            return selected
+        dialog = MapLabelEditDialog(
+            marker,
+            entity_sources,
+            type_suggestions=type_suggestions,
+            mode="edit",
+            size_range=(self.MIN_MARKER_SIZE, self.MAX_MARKER_SIZE),
+            parent=self,
+        )
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Редактирование маркера")
-        dialog.setObjectName("MarkerEditDialog")
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
-        form = QFormLayout()
-
-        name_edit = QLineEdit(marker.name)
-        type_edit = QLineEdit(marker.type)
-        size_edit = QDoubleSpinBox()
-        size_edit.setRange(self.MIN_MARKER_SIZE, self.MAX_MARKER_SIZE)
-        size_edit.setDecimals(1)
-        size_edit.setSingleStep(0.5)
-        size_edit.setValue(marker.size)
-        resize_btn = QToolButton()
-        resize_btn.setText("Изменить размер")
-        resize_btn.setCursor(Qt.PointingHandCursor)
-        size_row = QHBoxLayout()
-        size_row.addWidget(size_edit)
-        size_row.addWidget(resize_btn)
-        size_row.addStretch(1)
-        size_holder = QWidget()
-        size_holder.setLayout(size_row)
-        task_list = build_checklist(self._tasks, marker.task_ids, task_label)
-        project_list = build_checklist(self._projects, marker.project_ids, project_label)
-        note_list = build_checklist(self._notes, marker.note_ids, note_label)
-        object_list = build_checklist(self._objects, marker.object_ids, object_label)
-        file_list = build_checklist(self._files, marker.file_ids, file_label)
-        color_btn = QToolButton()
-        color_btn.setText("Выбрать…")
-        color_btn.setCursor(Qt.PointingHandCursor)
-        color_preview = QLabel()
-        color_preview.setFixedSize(26, 26)
-        color_preview.setStyleSheet(f"background: {marker.color.name()}; border: 1px solid #2a2b2f; border-radius: 4px;")
-        color_row = QHBoxLayout()
-        color_row.addWidget(color_preview)
-        color_row.addWidget(color_btn)
-        color_row.addStretch(1)
-        color_holder = QWidget()
-        color_holder.setLayout(color_row)
-        selected_color = {"value": marker.color}
-
-        description_edit = QPlainTextEdit()
-        description_edit.setPlaceholderText("Описание метки…")
-        description_edit.setPlainText(marker.description)
-        description_edit.setFixedHeight(80)
-
-        properties_edit = QPlainTextEdit()
-        properties_edit.setPlaceholderText("Свойства, теги или заметки…")
-        properties_edit.setPlainText(marker.properties)
-        properties_edit.setFixedHeight(90)
-
-        def pick_color() -> None:
-            chosen = QColorDialog.getColor(selected_color["value"], dialog, "Цвет маркера")
-            if chosen.isValid():
-                selected_color["value"] = chosen
-                color_preview.setStyleSheet(f"background: {chosen.name()}; border: 1px solid #2a2b2f; border-radius: 4px;")
-
-        color_btn.clicked.connect(pick_color)
-        form.addRow("Название", name_edit)
-        form.addRow("Тип", type_edit)
-        form.addRow("Размер", size_holder)
-        form.addRow("Задачи", task_list)
-        form.addRow("Проекты", project_list)
-        form.addRow("Заметки", note_list)
-        form.addRow("Объекты", object_list)
-        form.addRow("Файлы", file_list)
-        form.addRow("Цвет", color_holder)
-        form.addRow("Описание", description_edit)
-        form.addRow("Свойства", properties_edit)
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        resize_requested = {"value": False}
-
-        def request_resize() -> None:
-            resize_requested["value"] = True
-            dialog.accept()
-
-        resize_btn.clicked.connect(request_resize)
-
-        dialog.setStyleSheet(f"""
-            QDialog#MarkerEditDialog {{
-                {MATH_PHYS_BACKGROUND}
-            }}
-            QDialog#MarkerEditDialog QLabel {{
-                color: #cfcfcf;
-            }}
-            QDialog#MarkerEditDialog QLineEdit {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                border-radius: 6px;
-            }}
-            QDialog#MarkerEditDialog QPlainTextEdit {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                border-radius: 6px;
-            }}
-            QDialog#MarkerEditDialog QDoubleSpinBox {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 4px 6px;
-                border-radius: 6px;
-            }}
-            QDialog#MarkerEditDialog QListWidget#MarkerAttachmentList {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                border-radius: 6px;
-            }}
-            QDialog#MarkerEditDialog QListWidget::item {{
-                padding: 4px 6px;
-            }}
-            QDialog#MarkerEditDialog QToolButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 10px;
-                border-radius: 6px;
-            }}
-            QDialog#MarkerEditDialog QToolButton:hover {{
-                background: #34363b;
-            }}
-            QDialog#MarkerEditDialog QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 6px 12px;
-                border-radius: 6px;
-            }}
-        """)
-
+        # Пример использования результата: dialog.result_marker(), dialog.image_path(), dialog.parent_path().
         if dialog.exec() == QDialog.Accepted:
-            updated = Marker(
-                marker.id,
-                name_edit.text().strip() or marker.name,
-                marker.x,
-                marker.y,
-                selected_color["value"],
-                type_edit.text().strip() or marker.type,
-                size_edit.value(),
-                description_edit.toPlainText().strip(),
-                properties_edit.toPlainText().strip(),
-                collect_checked(task_list),
-                collect_checked(project_list),
-                collect_checked(note_list),
-                collect_checked(object_list),
-                collect_checked(file_list),
-            )
+            updated = dialog.result_marker()
             self._set_marker(updated)
-            if resize_requested["value"]:
+            if dialog.resize_requested():
                 self._enable_resize_mode(updated.id)
 
     def _view_marker(self, marker: Marker) -> None:
