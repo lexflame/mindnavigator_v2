@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QAbstractItemView,
     QLabel,
     QLayout,
     QLineEdit,
@@ -124,6 +125,50 @@ class FlowLayout(QLayout):
             line_height = max(line_height, hint.height())
         return y + line_height - rect.y()
 
+
+class CompleterPopupSync(QObject):
+    def __init__(
+        self,
+        line_edit: QLineEdit,
+        completer: QCompleter,
+        max_visible_rows: int = 8,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._line_edit = line_edit
+        self._completer = completer
+        self._popup = completer.popup()
+        self._max_visible_rows = max(1, max_visible_rows)
+
+        self._popup.setObjectName("CompleterPopup")
+        self._popup.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._popup.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._line_edit.installEventFilter(self)
+        self._popup.installEventFilter(self)
+
+        self._sync_popup_width()
+        self._apply_popup_height()
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt API
+        if obj is self._line_edit and event.type() in (QEvent.Resize, QEvent.Move, QEvent.Show):
+            self._sync_popup_width()
+        if obj is self._popup and event.type() == QEvent.Show:
+            self._sync_popup_width()
+            self._apply_popup_height()
+        return super().eventFilter(obj, event)
+
+    def _sync_popup_width(self) -> None:
+        width = self._line_edit.width()
+        if width > 0:
+            self._popup.setFixedWidth(width)
+
+    def _apply_popup_height(self) -> None:
+        row_height = self._popup.sizeHintForRow(0)
+        if row_height <= 0:
+            row_height = self._popup.fontMetrics().height() + 10
+        frame = self._popup.frameWidth() * 2
+        max_height = row_height * self._max_visible_rows + frame
+        self._popup.setMaximumHeight(max_height)
 
 class Chip(QWidget):
     removeRequested = Signal(int)
@@ -418,6 +463,7 @@ class MapLabelEditDialog(QDialog):
         self._link_inputs: dict[str, EntityLinksInput] = {}
         self._link_title_maps: dict[str, dict[str, int]] = {}
         self._loading = True
+        self._completer_popups: list[CompleterPopupSync] = []
 
         self.setWindowTitle("Метка на карте")
         self.resize(1100, 760)
@@ -603,6 +649,7 @@ class MapLabelEditDialog(QDialog):
             completer = QCompleter(sorted({t for t in type_suggestions if t}), self)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
             self.type_combo.setCompleter(completer)
+            self._attach_completer_popup(self.type_combo.lineEdit(), completer)
 
         self.size_spin = QDoubleSpinBox()
         self.size_spin.setRange(*self._size_range)
@@ -696,6 +743,7 @@ class MapLabelEditDialog(QDialog):
                 completer.setFilterMode(Qt.MatchContains)
                 completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
                 link_input.search_input.setCompleter(completer)
+                self._attach_completer_popup(link_input.search_input, completer)
 
             self._link_inputs[key] = link_input
             chips_label = QLabel(source.label)
@@ -704,6 +752,11 @@ class MapLabelEditDialog(QDialog):
 
         layout.addLayout(form)
         return section
+
+    def _attach_completer_popup(self, line_edit: QLineEdit | None, completer: QCompleter | None) -> None:
+        if not line_edit or not completer:
+            return
+        self._completer_popups.append(CompleterPopupSync(line_edit, completer, parent=self))
 
     def _build_section_text(self) -> QWidget:
         section = QFrame()
@@ -902,6 +955,53 @@ class MapLabelEditDialog(QDialog):
                 background: transparent;
                 border: none;
                 padding: 2px;
+            }}
+            QListView#CompleterPopup, QListWidget#CompleterPopup {{
+                background: #1b1d24;
+                color: #e6e6e6;
+                border: 1px solid #2f3138;
+                border-radius: 8px;
+                padding: 4px;
+                outline: none;
+            }}
+            QListView#CompleterPopup::item, QListWidget#CompleterPopup::item {{
+                padding: 6px 10px;
+                border-radius: 6px;
+            }}
+            QListView#CompleterPopup::item:hover, QListWidget#CompleterPopup::item:hover {{
+                background: #2a2f36;
+            }}
+            QListView#CompleterPopup::item:selected, QListWidget#CompleterPopup::item:selected {{
+                background: #3b4a7a;
+                color: #f0f0f0;
+            }}
+            QListView#CompleterPopup QScrollBar:vertical,
+            QListWidget#CompleterPopup QScrollBar:vertical {{
+                background: transparent;
+                width: 6px;
+                margin: 4px 0;
+            }}
+            QListView#CompleterPopup QScrollBar::handle:vertical,
+            QListWidget#CompleterPopup QScrollBar::handle:vertical {{
+                background: #3a3f46;
+                border-radius: 3px;
+                min-height: 24px;
+            }}
+            QListView#CompleterPopup QScrollBar::handle:vertical:hover,
+            QListWidget#CompleterPopup QScrollBar::handle:vertical:hover {{
+                background: #4b5159;
+            }}
+            QListView#CompleterPopup QScrollBar::add-line:vertical,
+            QListView#CompleterPopup QScrollBar::sub-line:vertical,
+            QListWidget#CompleterPopup QScrollBar::add-line:vertical,
+            QListWidget#CompleterPopup QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QListView#CompleterPopup QScrollBar::add-page:vertical,
+            QListView#CompleterPopup QScrollBar::sub-page:vertical,
+            QListWidget#CompleterPopup QScrollBar::add-page:vertical,
+            QListWidget#CompleterPopup QScrollBar::sub-page:vertical {{
+                background: transparent;
             }}
             """
         )
