@@ -100,8 +100,8 @@ class EntityPickerDialog(QDialog):
             QListWidget::item {
                 padding: 8px 10px;
                 margin: 3px 0px;
-                background: #2a2f36;
-                color: #e6e6e6;
+                background: #000;
+                color: #ffffff;
                 border-radius: 6px;
             }
             QListWidget::item:hover {
