@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QPushButton
 )
 
-from mindnavigator.storage import get_database
+from mindnavigator.storage import CloudFileData, get_database
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
 from mindnavigator.resources import resource_path
@@ -572,6 +572,113 @@ class Marker:
     image_path: str = ""
 
 
+class MapImagePreviewDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        images: List[CloudFileData],
+        start_index: int,
+        cloud_root: Path,
+    ) -> None:
+        super().__init__(parent)
+        self._images = images
+        self._current_index = max(0, min(start_index, len(images) - 1))
+        self._cloud_root = cloud_root
+        self._pixmap_cache: Dict[str, QPixmap] = {}
+
+        self.setObjectName("MapImagePreview")
+        self.setWindowTitle("Просмотр изображения")
+        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.image_label = QLabel()
+        self.image_label.setObjectName("MapImagePreviewLabel")
+        self.image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.image_label, 1)
+
+        self.setStyleSheet(
+            """
+            QDialog#MapImagePreview {
+                background: #0f1115;
+            }
+            QLabel#MapImagePreviewLabel {
+                color: #9aa0a6;
+            }
+            """
+        )
+
+        self._update_image()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Left:
+            self._show_previous()
+            return
+        if event.key() == Qt.Key_Right:
+            self._show_next()
+            return
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_pixmap()
+
+    def _show_previous(self) -> None:
+        if not self._images:
+            return
+        self._current_index = max(0, self._current_index - 1)
+        self._update_image()
+
+    def _show_next(self) -> None:
+        if not self._images:
+            return
+        self._current_index = min(len(self._images) - 1, self._current_index + 1)
+        self._update_image()
+
+    def _update_image(self) -> None:
+        if not self._images:
+            self.setWindowTitle("Просмотр изображения")
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображения отсутствуют")
+            return
+
+        current = self._images[self._current_index]
+        self.setWindowTitle(f"{current.name} ({self._current_index + 1}/{len(self._images)})")
+        file_path = self._cloud_root / current.rel_path
+        if not file_path.is_file():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+
+        cache_key = current.rel_path
+        pixmap = self._pixmap_cache.get(cache_key)
+        if pixmap is None:
+            pixmap = QPixmap(str(file_path))
+            self._pixmap_cache[cache_key] = pixmap
+        self._update_pixmap(pixmap)
+
+    def _update_pixmap(self, pixmap: Optional[QPixmap] = None) -> None:
+        if pixmap is None:
+            current = self._images[self._current_index] if self._images else None
+            if not current:
+                return
+            pixmap = self._pixmap_cache.get(current.rel_path)
+        if not pixmap or pixmap.isNull():
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Изображение недоступно")
+            return
+        target_size = self.image_label.size()
+        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled)
+        self.image_label.setText("")
+
+
 class MapCanvas(QWidget):
     markerSelected = Signal(object)
     markerAdded = Signal(object)
@@ -673,6 +780,38 @@ class MapCanvas(QWidget):
         self._maps_by_id = {item.id: item for item in maps}
         self._marker_items_by_id = {item.id: item for item in markers}
 
+    def _collect_image_attachments(self, fallback_item: CloudFileData) -> List[CloudFileData]:
+        if self._selected:
+            images = [
+                self._files_by_id[file_id]
+                for file_id in self._selected.file_ids
+                if file_id in self._files_by_id and self._files_by_id[file_id].is_image
+            ]
+            if images:
+                return images
+        return [fallback_item] if fallback_item.is_image else []
+
+    def _open_image_attachment(self, file_item: CloudFileData) -> None:
+        cloud_root = get_database().get_setting("cloud_storage_path", default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "Изображение", "Папка облачного хранилища не настроена.")
+            return
+        images = self._collect_image_attachments(file_item)
+        if not images:
+            QMessageBox.warning(self, "Изображение", "Привязанные изображения не найдены.")
+            return
+        try:
+            start_index = next(idx for idx, item in enumerate(images) if item.id == file_item.id)
+        except StopIteration:
+            start_index = 0
+        dialog = MapImagePreviewDialog(
+            self,
+            images=images,
+            start_index=start_index,
+            cloud_root=Path(cloud_root),
+        )
+        dialog.exec()
+
     def _open_attachment_view(self, kind: str, item_id: int) -> None:
         sources = {
             "task": self._tasks_by_id,
@@ -751,6 +890,9 @@ class MapCanvas(QWidget):
             add_row("Карта", map_title)
         elif kind == "file":
             dialog.setWindowTitle("Файл на карте")
+            if item.is_image:
+                self._open_image_attachment(item)
+                return
             add_row("Название", item.name or "—")
             add_row("Путь", item.rel_path or "—", wrap=True)
             add_row("Описание", item.description or "—", wrap=True)
@@ -779,6 +921,7 @@ class MapCanvas(QWidget):
             }}
         """)
         dialog.exec()
+
 
     def set_tool(self, tool: MapTool) -> None:
         self._tool = tool
