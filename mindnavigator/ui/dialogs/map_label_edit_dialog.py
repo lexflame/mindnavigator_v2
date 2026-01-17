@@ -811,7 +811,7 @@ class MapLabelEditDialog(QDialog):
         self._set_chips("file", self._marker.file_ids)
 
         self._update_counters()
-        self._update_image_hint()
+        self._load_image_preview(self._marker.image_path)
 
     def _set_chips(self, key: str, selected_ids: list[int]) -> None:
         source = self._entity_sources.get(key)
@@ -870,6 +870,7 @@ class MapLabelEditDialog(QDialog):
             chip_ids("note"),
             chip_ids("object"),
             chip_ids("file"),
+            self._image_path,
         )
         self._dirty = False
         self.accept()
@@ -902,6 +903,39 @@ class MapLabelEditDialog(QDialog):
         self.color_preview.setStyleSheet(
             f"background: {color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
         )
+
+    def _load_image_preview(self, image_path: str) -> None:
+        self._image_path = (image_path or "").strip()
+        self._image_icon = None
+        pixmap = self._pixmap_from_image_path(self._image_path)
+        if pixmap is not None:
+            scaled = pixmap.scaled(
+                self.preview.size(),
+                Qt.KeepAspectRatioByExpanding,
+                Qt.SmoothTransformation,
+            )
+            self.preview.set_image(scaled)
+        else:
+            self.preview.set_image(None)
+        self._update_image_hint()
+
+    def _pixmap_from_image_path(self, image_path: str) -> QPixmap | None:
+        if not image_path:
+            return None
+        path = Path(image_path)
+        file_path = path if path.is_file() else None
+        if file_path is None:
+            cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
+            if cloud_root:
+                cloud_candidate = Path(cloud_root) / image_path
+                if cloud_candidate.is_file():
+                    file_path = cloud_candidate
+        if not file_path:
+            return None
+        pixmap = QPixmap(str(file_path))
+        if pixmap.isNull():
+            return None
+        return pixmap
 
     def _clear_image(self) -> None:
         self._image_path = ""
