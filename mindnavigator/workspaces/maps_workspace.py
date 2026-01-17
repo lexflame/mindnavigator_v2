@@ -589,7 +589,6 @@ class MapImagePreviewDialog(QDialog):
 
         self.setObjectName("MapImagePreview")
         self.setWindowTitle("Просмотр изображения")
-        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -611,6 +610,7 @@ class MapImagePreviewDialog(QDialog):
             """
         )
 
+        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
         self._update_image()
 
     def keyPressEvent(self, event) -> None:
@@ -627,7 +627,8 @@ class MapImagePreviewDialog(QDialog):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._update_pixmap()
+        if hasattr(self, "image_label"):
+            self._update_pixmap()
 
     def _show_previous(self) -> None:
         if not self._images:
