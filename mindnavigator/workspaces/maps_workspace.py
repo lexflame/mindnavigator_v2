@@ -1845,7 +1845,7 @@ class MapCanvas(QWidget):
                     links.append("не найдено")
                     continue
                 title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
-                links.append(f'<a href="{kind}:{item_id}">{title}</a>')
+                links.append(f'<a style="background:#CCC;border-radius:4px;" href="{kind}:{item_id}">{title}</a>')
             label.setText("<br>".join(links))
             label.linkActivated.connect(handle_link)
             return label
