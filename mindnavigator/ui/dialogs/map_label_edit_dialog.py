@@ -416,6 +416,20 @@ class EntityPickerDialog(QDialog):
             }
             QListWidget::item {
                 padding: 6px 8px;
+                margin: 4px 6px;
+                background: #f1f3f8;
+                color: #1f232b;
+                border-radius: 6px;
+            }
+            QListWidget::item:hover {
+                background: #e5e9f2;
+            }
+            QListWidget::item:checked {
+                background: #dde6ff;
+            }
+            QListWidget::item:disabled {
+                background: transparent;
+                color: #8e919a;
             }
             QDialogButtonBox QPushButton {
                 background: #2a2b2f;
