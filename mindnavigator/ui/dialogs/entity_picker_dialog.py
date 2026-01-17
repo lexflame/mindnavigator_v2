@@ -93,10 +93,11 @@ class EntityPickerDialog(QDialog):
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
+                padding: 0px;
             }
             QListWidget::item {
                 padding: 8px 10px;
-                margin: 0px 6px;
+                margin: 3px 0px;
                 background: #2a2f36;
                 color: #e6e6e6;
                 border-radius: 6px;
