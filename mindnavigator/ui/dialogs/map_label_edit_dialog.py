@@ -364,7 +364,6 @@ class EntityPickerDialog(QDialog):
         selected_ids=None,
         parent=None,
         initial_query: str = "",
-        anchor_widget: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
@@ -386,7 +385,6 @@ class EntityPickerDialog(QDialog):
 
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
-        self.list_widget.setSpacing(6)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Добавить")
@@ -397,74 +395,42 @@ class EntityPickerDialog(QDialog):
         layout.addWidget(self.list_widget, 1)
         layout.addWidget(buttons)
 
-        if anchor_widget is not None:
-            self._apply_anchor_geometry(anchor_widget)
-
-        MATH_PHYS_BACKGROUND = (
-            "data:image/svg+xml;base64,"
-            "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhl"
-            "aWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ry"
-            "b2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAg"
-            "ICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYw"
-            "IiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEw"
-            "IFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAi"
-            "Lz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0i"
-            "bm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0"
-            "aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJN"
-            "MCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
-        )
-
         self.setStyleSheet(
-            f"""
-            QDialog#EntityPickerDialog {{
-                {MATH_PHYS_BACKGROUND}
-                color: #e2e2e2;
-            }}
-            QLineEdit {{
-                background: rgba(28, 31, 38, 0.85);
-                color: #e8e8e8;
-                border: 1px solid #2e3137;
-                padding: 7px 10px;
+            """
+            QDialog#EntityPickerDialog {
+                background: #171a22;
+                color: #d8d8d8;
+            }
+            QLineEdit {
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
                 border-radius: 6px;
-            }}
-            QListWidget {{
-                background: rgba(24, 27, 34, 0.92);
-                color: #dfe2e7;
-                border: 1px solid #2e3137;
+            }
+            QListWidget {
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
                 border-radius: 6px;
-            }}
-            QListWidget::item {{
-                background: #f1f3f8;
-                color: #1c1f24;
-                border: 1px solid #d6dbe6;
+            }
+            QListWidget::item {
+                padding: 6px 8px;
+            }
+            QDialogButtonBox QPushButton {
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
                 border-radius: 6px;
-                padding: 8px 10px;
-                margin-bottom: 6px;
-            }}
-            QListWidget::item:hover {{
-                background: #e6ebf5;
-            }}
-            QDialogButtonBox QPushButton {{
-                background: #2a2f3b;
-                color: #e8e8e8;
-                border: 1px solid #3a3f4a;
-                padding: 6px 14px;
-                border-radius: 6px;
-            }}
-            QDialogButtonBox QPushButton:hover {{
-                background: #343b4b;
-            }}
+            }
+            QDialogButtonBox QPushButton:hover {
+                background: #34363b;
+            }
             """
         )
 
         self._reload()
-
-    def _apply_anchor_geometry(self, anchor_widget: QWidget) -> None:
-        anchor_width = anchor_widget.width()
-        if anchor_width > 0:
-            self.setFixedWidth(anchor_width)
-        global_pos = anchor_widget.mapToGlobal(QPoint(0, anchor_widget.height()))
-        self.move(global_pos)
 
     def selected_items(self) -> list[ChipItem]:
         selected = []
@@ -877,20 +843,6 @@ class MapLabelEditDialog(QDialog):
         return section
 
     def _apply_styles(self) -> None:
-        MATH_PHYS_PATTERN = (
-            "data:image/svg+xml;base64,"
-            "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMjAiIGhl"
-            "aWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgMjIwIDIyMCI+CiAgPGcgZmlsbD0ibm9uZSIgc3Ry"
-            "b2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDgiIHN0cm9rZS13aWR0aD0iMSI+CiAg"
-            "ICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSIyNiIvPgogICAgPGNpcmNsZSBjeD0iMTYw"
-            "IiBjeT0iMTUwIiByPSIzMiIvPgogICAgPHBhdGggZD0iTTAgMTEwIFEgMzUgODAgNzAgMTEw"
-            "IFQgMTQwIDExMCBUIDIyMCAxMTAiLz4KICAgIDxwYXRoIGQ9Ik0yMCAyMDAgTCAyMDAgMjAi"
-            "Lz4KICAgIDxwYXRoIGQ9Ik0zMCAyMCBMIDE5MCAxODAiLz4KICA8L2c+CiAgPGcgZmlsbD0i"
-            "bm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMDYiIHN0cm9rZS13aWR0"
-            "aD0iMSI+CiAgICA8cGF0aCBkPSJNMTEwIDAgTCAxMTAgMjIwIi8+CiAgICA8cGF0aCBkPSJN"
-            "MCAxMTAgTCAyMjAgMTEwIi8+CiAgPC9nPgo8L3N2Zz4="
-        )
-
         self.setStyleSheet(
             f"""
             QDialog#MapLabelEditDialog {{
@@ -1318,9 +1270,6 @@ class MapLabelEditDialog(QDialog):
         link_input = self._link_inputs.get(key)
         if not source or not link_input:
             return
-        if key == "file":
-            self._open_file_picker(source, link_input)
-            return
 
         def fetch_fn(search_query: str) -> list[ChipItem]:
             items = []
@@ -1338,7 +1287,6 @@ class MapLabelEditDialog(QDialog):
             [item.id for item in link_input.items()],
             self,
             initial_query=query,
-            anchor_widget=link_input,
         )
         if dialog.exec() == QDialog.Accepted:
             to_add = [
@@ -1348,19 +1296,3 @@ class MapLabelEditDialog(QDialog):
             link_input.add_items(to_add)
             link_input.clear_search()
             self._mark_dirty()
-
-    def _open_file_picker(self, source: MapLabelEntitySource, link_input: EntityLinksInput) -> None:
-        dialog = AttachFileSelectNav(self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        rel_path = dialog.selected_rel_path()
-        if not rel_path:
-            return
-        matched = next((item for item in source.items if item.rel_path == rel_path), None)
-        if not matched:
-            QMessageBox.warning(self, "Файлы", "Не удалось найти файл в базе.")
-            return
-        title = source.label_fn(matched)
-        link_input.add_items([EntityLinkItem(matched.id, title, f"{source.item_prefix}:{matched.id}")])
-        link_input.clear_search()
-        self._mark_dirty()
