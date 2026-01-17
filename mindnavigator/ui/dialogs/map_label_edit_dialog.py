@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -574,6 +574,10 @@ class MapLabelEditDialog(QDialog):
         QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_save)
         QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.reject)
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        self._fit_to_screen()
+
     def result_marker(self):
         return self._marker
 
@@ -1031,6 +1035,34 @@ class MapLabelEditDialog(QDialog):
             }}
             """
         )
+
+    def _fit_to_screen(self) -> None:
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if not screen:
+            return
+        available = screen.availableGeometry()
+        margin = 24
+        max_width = max(available.width() - margin, 320)
+        max_height = max(available.height() - margin, 240)
+        self.setMaximumSize(max_width, max_height)
+        if self.minimumWidth() > max_width or self.minimumHeight() > max_height:
+            self.setMinimumSize(
+                min(self.minimumWidth(), max_width),
+                min(self.minimumHeight(), max_height),
+            )
+        if self.width() > max_width or self.height() > max_height:
+            self.resize(min(self.width(), max_width), min(self.height(), max_height))
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        if frame.left() < available.left():
+            frame.moveLeft(available.left())
+        if frame.top() < available.top():
+            frame.moveTop(available.top())
+        if frame.right() > available.right():
+            frame.moveRight(available.right())
+        if frame.bottom() > available.bottom():
+            frame.moveBottom(available.bottom())
+        self.move(frame.topLeft())
 
     def _sync_from_marker(self) -> None:
         self.name_edit.setText(self._marker.name)
