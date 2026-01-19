@@ -622,6 +622,7 @@ class Marker:
     file_ids: List[int] = field(default_factory=list)
     map_ids: List[int] = field(default_factory=list)
     marker_ids: List[int] = field(default_factory=list)
+    parent_path: str = ""
     image_path: str = ""
 
 
@@ -1435,6 +1436,7 @@ class MapCanvas(QWidget):
                 marker.file_ids,
                 marker.map_ids,
                 marker.marker_ids,
+                marker.parent_path,
                 marker.image_path,
             )
         )
@@ -1526,6 +1528,7 @@ class MapCanvas(QWidget):
                         marker.file_ids,
                         marker.map_ids,
                         marker.marker_ids,
+                        marker.parent_path,
                         marker.image_path,
                     )
                     self._set_marker(updated)
@@ -1550,6 +1553,7 @@ class MapCanvas(QWidget):
                     marker.file_ids,
                     marker.map_ids,
                     marker.marker_ids,
+                    marker.parent_path,
                     marker.image_path,
                 )
                 self._set_marker(updated)
@@ -1586,6 +1590,7 @@ class MapCanvas(QWidget):
                     marker.file_ids,
                     marker.map_ids,
                     marker.marker_ids,
+                    marker.parent_path,
                     marker.image_path,
                 )
                 self._set_marker(updated)
@@ -1665,6 +1670,8 @@ class MapCanvas(QWidget):
             [],
             [],
             [],
+            "",
+            "",
         )
         self._next_id += 1
         self._markers.append(marker)
@@ -2205,6 +2212,7 @@ class MapCanvas(QWidget):
                         marker.file_ids,
                         marker.map_ids,
                         marker.marker_ids,
+                        marker.parent_path,
                         marker.image_path,
                     )
                 )
@@ -2608,6 +2616,7 @@ class MapEditorWorkspace(QWidget):
                     marker.file_ids,
                     marker.map_ids,
                     marker.marker_ids,
+                    marker.parent_path,
                     marker.image_path,
                 )
             )
@@ -2644,6 +2653,7 @@ class MapEditorWorkspace(QWidget):
             file_ids=marker.file_ids,
             map_ids=marker.map_ids,
             marker_ids=marker.marker_ids,
+            parent_path=marker.parent_path,
             image_path=marker.image_path,
         )
 

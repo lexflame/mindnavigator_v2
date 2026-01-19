@@ -1155,6 +1155,7 @@ class MapLabelEditDialog(QDialog):
         self._set_color(self._marker.color)
         self.desc_edit.setPlainText(self._marker.description or "")
         self.important_edit.setPlainText(self._marker.properties or "")
+        self._set_parent_path(self._marker.parent_path)
 
         self._set_links("task", self._marker.task_ids)
         self._set_links("project", self._marker.project_ids)
@@ -1237,6 +1238,7 @@ class MapLabelEditDialog(QDialog):
             chip_ids("file"),
             chip_ids("map"),
             chip_ids("marker"),
+            self._parent_path,
             self._image_path,
         )
         self._dirty = False
@@ -1391,11 +1393,20 @@ class MapLabelEditDialog(QDialog):
         # Выбираем родительский каталог для метки.
         path = QFileDialog.getExistingDirectory(self, "Выберите каталог")
         if path:
-            self._parent_path = path
-            display = self._elide_path(path)
-            self.parent_path_edit.setText(display)
-            self.parent_path_edit.setToolTip(path)
+            self._set_parent_path(path)
             self._mark_dirty()
+
+    def _set_parent_path(self, path: str) -> None:
+        # Обновляем отображение пути родительского каталога.
+        cleaned = (path or "").strip()
+        self._parent_path = cleaned
+        if cleaned:
+            display = self._elide_path(cleaned)
+            self.parent_path_edit.setText(display)
+            self.parent_path_edit.setToolTip(cleaned)
+        else:
+            self.parent_path_edit.setText("")
+            self.parent_path_edit.setToolTip("")
 
     def _elide_path(self, path: str) -> str:
         # Обрезаем длинный путь с помощью эллипсиса.
