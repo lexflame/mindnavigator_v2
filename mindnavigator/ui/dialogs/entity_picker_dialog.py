@@ -135,11 +135,15 @@ class EntityPickerDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
         if not self._anchor_widget:
+            self.search_input.setFocus(Qt.PopupFocusReason)
+            self.search_input.selectAll()
             return
         width = self._anchor_widget.width()
         self.setFixedWidth(width)
         anchor_pos = self._anchor_widget.mapToGlobal(QPoint(0, self._anchor_widget.height()))
         self.move(anchor_pos)
+        self.search_input.setFocus(Qt.PopupFocusReason)
+        self.search_input.selectAll()
 
     def selected_items(self) -> list[ChipItem]:
         selected = []
