@@ -342,11 +342,17 @@ class MainWindow(QMainWindow):
             }}
         """)
 
+    def _apply_nav_state_to_workspace(self, workspace: QWidget) -> None:
+        # Передаем активное состояние навигации в рабочие области.
+        if hasattr(workspace, "set_nav_collapsed_state"):
+            workspace.set_nav_collapsed_state(not self.nav_column.isVisible())
+
     def _set_nav_collapsed(self, collapsed: bool) -> None:
         # Скрываем/показываем колонку навигации и меняем подсказки.
         self.nav_column.setVisible(not collapsed)
         self.nav_toggle.setText("⟩" if collapsed else "⟨")
         self.nav_toggle.setToolTip("Развернуть навигацию" if collapsed else "Свернуть навигацию")
+        self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
 
     def _toggle_nav_column(self) -> None:
         # Переключаем состояние колонки навигации.
@@ -376,6 +382,7 @@ class MainWindow(QMainWindow):
         self.projects_nav.set_mode_title(mode_name)
         # Переключаем страницу в стеке.
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
+        self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
         # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()

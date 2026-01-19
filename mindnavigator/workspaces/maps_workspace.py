@@ -2271,7 +2271,10 @@ class MapEditorWorkspace(QWidget):
         self._objects_by_id = {}
         self._info_panel_was_visible = False
         self._fullscreen_active = False
+        self._nav_collapsed = False
         self._current_map_id: Optional[int] = None
+        self._info_panel_default_width = 220
+        self._info_panel_expanded_width = 260
 
         # Корневая компоновка редактора.
         root = QHBoxLayout(self)
@@ -2343,7 +2346,7 @@ class MapEditorWorkspace(QWidget):
         # Правая панель с краткой информацией по маркеру.
         self.info_panel = QFrame()
         self.info_panel.setObjectName("MapInfoPanel")
-        self.info_panel.setFixedWidth(220)
+        self.info_panel.setFixedWidth(self._info_panel_default_width)
         info_layout = QVBoxLayout(self.info_panel)
         info_layout.setContentsMargins(12, 12, 12, 12)
         info_layout.setSpacing(8)
@@ -2455,6 +2458,18 @@ class MapEditorWorkspace(QWidget):
             self.info_panel.hide()
         elif self._info_panel_was_visible:
             self.info_panel.show()
+
+    def set_nav_collapsed_state(self, collapsed: bool) -> None:
+        # Обновляем ширину инфо-панели при сворачивании навигации.
+        if self._nav_collapsed == collapsed:
+            return
+        self._nav_collapsed = collapsed
+        self._update_info_panel_width()
+
+    def _update_info_panel_width(self) -> None:
+        # Подстраиваем ширину панели в зависимости от состояния навигации.
+        width = self._info_panel_expanded_width if self._nav_collapsed else self._info_panel_default_width
+        self.info_panel.setFixedWidth(width)
 
     def _on_fullscreen_toggled(self, checked: bool) -> None:
         # Пробрасываем сигнал о полноэкранном режиме.
@@ -3218,6 +3233,10 @@ class MapsListWorkspace(QWidget):
         if enabled:
             self.marker_search_results.setVisible(False)
         self.editor_workspace.set_fullscreen_state(enabled)
+
+    def set_nav_collapsed_state(self, collapsed: bool) -> None:
+        # Обновляем параметры редактора карты при сворачивании навигации.
+        self.editor_workspace.set_nav_collapsed_state(collapsed)
 
     def _show_marker_search_results(self) -> None:
         # Показываем выпадающий список результатов.
