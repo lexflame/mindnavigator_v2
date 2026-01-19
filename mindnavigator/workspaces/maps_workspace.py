@@ -2374,14 +2374,14 @@ class MapEditorWorkspace(QWidget):
         self.info_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         info_body = QWidget()
+        info_body.setObjectName("FormBox")
         info_body_layout = QHBoxLayout(info_body)
-        info_body_layout.setObjectName("FormBox")
         info_body_layout.setContentsMargins(0, 0, 0, 0)
         info_body_layout.setSpacing(12)
 
         self.info_scroll.setStyleSheet(
             """
-            QHBoxLayout#FormBox {
+            QWidget#FormBox {
                 background: #24262c;
             }
             QScrollArea#MapInfoScroll {
