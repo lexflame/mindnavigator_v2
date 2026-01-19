@@ -2048,7 +2048,7 @@ class MapCanvas(QWidget):
         text_layout = QVBoxLayout(text_section)
         text_layout.setContentsMargins(12, 12, 12, 12)
         text_layout.setSpacing(10)
-        text_title = QLabel("Текст")
+        text_title = QLabel("Текст заметок")
         text_title.setObjectName("MapLabelSectionTitle")
         text_layout.addWidget(text_title)
 
@@ -2374,8 +2374,17 @@ class MapEditorWorkspace(QWidget):
 
         info_body = QWidget()
         info_body_layout = QHBoxLayout(info_body)
+        info_body_layout.setObjectName("FormBox")
         info_body_layout.setContentsMargins(0, 0, 0, 0)
         info_body_layout.setSpacing(12)
+
+        self.setStyleSheet(
+            """
+            QHBoxLayout#FormBox {
+                background: #0f1115;
+            }
+            """
+        )
 
         left_panel = QFrame()
         left_panel.setObjectName("MapInfoCard")
@@ -2516,11 +2525,11 @@ class MapEditorWorkspace(QWidget):
         text_layout.setContentsMargins(12, 12, 12, 12)
         text_layout.setSpacing(8)
 
-        text_title = QLabel("Текст")
+        text_title = QLabel("Пометки! - ВАЖНО")
         text_title.setObjectName("MapInfoSectionTitle")
         text_layout.addWidget(text_title)
 
-        desc_label = QLabel("Описание")
+        desc_label = QLabel("Текст пометок")
         desc_label.setObjectName("MapInfoFormLabel")
         self.info_description = QLabel("—")
         self.info_description.setObjectName("MapInfoText")
