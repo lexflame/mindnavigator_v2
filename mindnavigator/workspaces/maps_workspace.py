@@ -2273,6 +2273,7 @@ class MapEditorWorkspace(QWidget):
         self._fullscreen_active = False
         self._nav_collapsed = False
         self._current_map_id: Optional[int] = None
+        self._info_marker_id: Optional[int] = None
         self._info_panel_default_width = 220
         self._info_panel_expanded_width = 260
         self._info_panel_fullscreen_ratio = 0.35
@@ -2354,6 +2355,12 @@ class MapEditorWorkspace(QWidget):
 
         self.info_title = QLabel("Данные объекта")
         self.info_title.setObjectName("MapInfoTitle")
+        self.info_preview_title = QLabel("Превью")
+        self.info_preview_title.setObjectName("MapInfoSectionTitle")
+        self.info_preview = QLabel("Нет изображения")
+        self.info_preview.setObjectName("MapInfoPreview")
+        self.info_preview.setAlignment(Qt.AlignCenter)
+        self.info_preview.setFixedHeight(120)
         self.info_name = QLabel("-")
         self.info_type = QLabel("-")
         self.info_coords = QLabel("-")
@@ -2379,6 +2386,8 @@ class MapEditorWorkspace(QWidget):
             label.setObjectName("MapInfoValue")
 
         info_layout.addWidget(self.info_title)
+        info_layout.addWidget(self.info_preview_title)
+        info_layout.addWidget(self.info_preview)
         info_layout.addWidget(self.info_name)
         info_layout.addWidget(self.info_type)
         info_layout.addWidget(self.info_coords)
@@ -2442,9 +2451,22 @@ class MapEditorWorkspace(QWidget):
                 font-weight: 600;
             }
 
+            QLabel#MapInfoSectionTitle {
+                color: #d2d2d2;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
             QLabel#MapInfoValue {
                 color: #cfcfcf;
                 font-size: 12px;
+            }
+
+            QLabel#MapInfoPreview {
+                border: 1px dashed #3a3b40;
+                border-radius: 8px;
+                color: #8e919a;
+                background: #1b1d24;
             }
         """)
 
@@ -2476,6 +2498,10 @@ class MapEditorWorkspace(QWidget):
         else:
             width = self._info_panel_expanded_width if self._nav_collapsed else self._info_panel_default_width
         self.info_panel.setFixedWidth(width)
+        if self._info_marker_id is not None:
+            marker = self._markers_by_id.get(self._info_marker_id)
+            if marker:
+                self._update_info_preview(marker)
 
     def _on_fullscreen_toggled(self, checked: bool) -> None:
         # Пробрасываем сигнал о полноэкранном режиме.
@@ -2484,11 +2510,17 @@ class MapEditorWorkspace(QWidget):
     def _on_marker_selected(self, marker: Optional[Marker]) -> None:
         # Отображаем данные выбранного маркера в правой панели.
         if not marker:
+            self._info_marker_id = None
             self.info_panel.hide()
             return
         if self._fullscreen_active:
             self._update_info_panel_width()
         self.info_panel.show()
+        self._apply_marker_info(marker)
+
+    def _apply_marker_info(self, marker: Marker) -> None:
+        # Обновляем значения в инфо-панели.
+        self._info_marker_id = marker.id
         self.info_name.setText(f"Имя: {marker.name}")
         self.info_type.setText(f"Тип: {marker.type}")
         self.info_coords.setText(f"Координаты: {marker.x:.0f}, {marker.y:.0f}")
@@ -2499,6 +2531,24 @@ class MapEditorWorkspace(QWidget):
         self.info_file.setText(self._format_links("Файлы", marker.file_ids, self._files_by_id))
         self.info_map.setText(self._format_links("Карты", marker.map_ids, self._maps_by_id))
         self.info_marker.setText(self._format_links("Метки", marker.marker_ids, self._markers_by_id))
+        self._update_info_preview(marker)
+
+    def _update_info_preview(self, marker: Marker) -> None:
+        # Обновляем превью изображения маркера.
+        preview_width = max(self.info_panel.width() - 24, 1)
+        preview_height = max(self.info_preview.height(), 1)
+        preview_size = QSize(preview_width, preview_height)
+        pixmap = self._load_marker_preview(marker, preview_size)
+        if pixmap is not None:
+            self.info_preview.setPixmap(pixmap)
+            self.info_preview.setText("")
+        else:
+            self.info_preview.setPixmap(QPixmap())
+            if marker.image_path:
+                self.info_preview.setText("Изображение недоступно")
+            else:
+                self.info_preview.setText("Нет изображения")
+        self.info_preview.setToolTip(marker.image_path or "")
 
     def resizeEvent(self, event) -> None:
         # Подстраиваем ширину панели в полноэкранном режиме.
@@ -2605,6 +2655,8 @@ class MapEditorWorkspace(QWidget):
     def _on_marker_updated(self, marker: Marker) -> None:
         # Реакция на обновление маркера.
         self._sync_marker(marker)
+        if self._info_marker_id == marker.id:
+            self._apply_marker_info(marker)
         self.markersChanged.emit()
 
     def _on_marker_removed(self, marker_id: int) -> None:
