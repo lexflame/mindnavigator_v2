@@ -68,15 +68,19 @@ class MapRoles:
 
 class MapsModel(QAbstractListModel):
     def __init__(self, parent=None):
+        # Инициализируем модель списка карт.
         super().__init__(parent)
+        # Основные структуры для хранения исходных и отфильтрованных данных.
         self._items: List[MapRow] = []
         self._all_items: List[MapRow] = []
         self._search = ""
         self._project_filter: Optional[str] = None
         self._db = get_database()
+        # Загружаем данные при старте модели.
         self._load_maps()
 
     def _load_maps(self) -> None:
+        # Забираем карты из базы и сохраняем в локальный список.
         maps = self._db.fetch_maps()
         self._all_items = [
             MapRow(
@@ -90,14 +94,17 @@ class MapsModel(QAbstractListModel):
             )
             for item in maps
         ]
+        # Пересобираем список с учетом фильтров.
         self._rebuild()
 
     def rowCount(self, parent=QModelIndex()) -> int:
+        # Для дочерних индексов список не поддерживается.
         if parent.isValid():
             return 0
         return len(self._items)
 
     def data(self, index: QModelIndex, role: int):
+        # Возвращаем данные по ролям для списка.
         if not index.isValid():
             return None
         item = self._items[index.row()]
@@ -128,13 +135,16 @@ class MapsModel(QAbstractListModel):
         tiles_h: int,
         tiles_w: int,
     ) -> None:
+        # Нормализуем ввод и проверяем обязательные поля.
         title = (title or "").strip()
         if not title:
             return
         try:
+            # Создаем карту в базе.
             created = self._db.create_map(title, description, project, tiles_path, tiles_h, tiles_w)
         except ValueError:
             return
+        # Добавляем новую карту в локальный список и пересобираем фильтры.
         self._all_items.append(
             MapRow(
                 created.id,
@@ -158,13 +168,16 @@ class MapsModel(QAbstractListModel):
         tiles_h: int,
         tiles_w: int,
     ) -> None:
+        # Нормализуем название и валидируем ввод.
         title = (title or "").strip()
         if not title:
             return
         try:
+            # Обновляем запись в базе.
             updated_map = self._db.update_map(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
         except ValueError:
             return
+        # Пересоздаем список с обновленным элементом.
         updated = []
         for item in self._all_items:
             if item.id == map_id:
@@ -182,17 +195,21 @@ class MapsModel(QAbstractListModel):
             else:
                 updated.append(item)
         self._all_items = updated
+        # Перестраиваем отображаемый список.
         self._rebuild()
 
     def set_search(self, text: str) -> None:
+        # Обновляем строку поиска и фильтруем список.
         self._search = (text or "").strip().lower()
         self._rebuild()
 
     def set_project_filter(self, project: Optional[str]) -> None:
+        # Сохраняем фильтр по проекту и обновляем отображение.
         self._project_filter = project
         self._rebuild()
 
     def _rebuild(self) -> None:
+        # Применяем текущие фильтры поиска и проекта.
         search = self._search
         project = self._project_filter
         items = []
@@ -205,6 +222,7 @@ class MapsModel(QAbstractListModel):
                     continue
             items.append(item)
 
+        # Обновляем модель через reset, чтобы корректно перерисовать список.
         self.beginResetModel()
         self._items = items
         self.endResetModel()
@@ -227,7 +245,9 @@ class MapsItemDelegate(QStyledItemDelegate):
     C_BTN_TEXT = QColor("#e0e0e0")
 
     def __init__(self, parent=None):
+        # Инициализация делегата для отрисовки строк.
         super().__init__(parent)
+        # Настраиваем шрифты для отдельных блоков строки.
         self._font_title = QFont()
         self._font_title.setPointSize(10)
         self._font_title.setBold(True)
@@ -242,9 +262,11 @@ class MapsItemDelegate(QStyledItemDelegate):
         self._font_button.setPointSize(9)
         self._font_button.setBold(True)
 
+        # Загружаем иконку карты.
         self._icon_map = qta.icon("fa5s.map-marked-alt", color="#cfcfcf")
 
     def sizeHint(self, option, index):
+        # Высота строки зависит от длины описания.
         desc = index.data(MapRoles.Description) or ""
         layout = self._row_layout(option.rect)
         text_width = max(10, layout["text"].width())
@@ -260,6 +282,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         return QSize(option.rect.width(), max(self.ROW_H_MIN, total_height))
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
+        # Основная отрисовка карточки карты.
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
 
@@ -273,6 +296,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         painter.setPen(self.C_BORDER)
         painter.drawRoundedRect(r.adjusted(6, 4, -6, -4), 6, 6)
 
+        # Вычисляем layout и извлекаем данные.
         layout = self._row_layout(r)
         title = index.data(MapRoles.Title) or ""
         desc = index.data(MapRoles.Description) or ""
@@ -283,6 +307,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         icon_rect = layout["icon"]
         self._icon_map.paint(painter, icon_rect, Qt.AlignCenter)
 
+        # Рисуем заголовок и описание.
         painter.setPen(self.C_TEXT)
         painter.setFont(self._font_title)
         painter.drawText(layout["title"], Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, title)
@@ -292,6 +317,7 @@ class MapsItemDelegate(QStyledItemDelegate):
             painter.setFont(self._font_desc)
             painter.drawText(layout["desc"], Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, desc)
 
+        # Дополнительные блоки и кнопки.
         self._draw_pill(painter, layout["project"], project)
         self._draw_pill(painter, layout["tiles"], f"Тайлы: {tiles_w}×{tiles_h}")
         self._draw_button(painter, layout["edit_btn"], "Редактировать свойства")
@@ -300,6 +326,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _row_layout(self, r: QRect) -> dict:
+        # Рассчитываем положение и размеры всех блоков строки.
         left = r.left() + 14
         right = r.right() - 14
         top = r.top() + 10
@@ -329,6 +356,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         }
 
     def _draw_pill(self, painter: QPainter, rect: QRect, text: str) -> None:
+        # Рисуем "плашку" с текстом.
         painter.save()
         painter.setPen(self.C_PILL_BORDER)
         painter.setBrush(self.C_PILL)
@@ -339,6 +367,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _draw_button(self, painter: QPainter, rect: QRect, text: str) -> None:
+        # Рисуем псевдо-кнопку внутри делегата.
         painter.save()
         painter.setPen(self.C_BTN_BORDER)
         painter.setBrush(self.C_BTN)
@@ -354,6 +383,7 @@ class MapsListView(QListView):
     openRequested = Signal(QModelIndex)
 
     def mousePressEvent(self, event):
+        # Обрабатываем клики по кнопкам внутри делегата.
         index = self.indexAt(event.pos())
         if index.isValid():
             delegate = self.itemDelegate()
@@ -366,12 +396,15 @@ class MapsListView(QListView):
                 if layout["open_btn"].contains(event.pos()):
                     self.openRequested.emit(index)
                     return
+        # Передаем событие стандартной реализации.
         super().mousePressEvent(event)
 
 
 class MapEditDialog(QDialog):
     def __init__(self, map_row: MapRow, parent=None):
+        # Инициализируем диалог редактирования карты.
         super().__init__(parent)
+        # Базовые настройки диалога.
         self.setWindowTitle("Редактирование карты")
         self.setObjectName("MapEditDialog")
         self.setMinimumWidth(460)
@@ -379,14 +412,17 @@ class MapEditDialog(QDialog):
 
         self._db = get_database()
 
+        # Основная вертикальная компоновка.
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(14)
 
+        # Заголовок диалога.
         title_label = QLabel("Редактирование карты")
         title_label.setObjectName("DialogTitle")
         layout.addWidget(title_label)
 
+        # Форма с полями карты.
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.setFormAlignment(Qt.AlignTop)
@@ -429,6 +465,7 @@ class MapEditDialog(QDialog):
         self.tiles_h.setRange(1, 512)
         self.tiles_h.setValue(map_row.tiles_h)
 
+        # Блок выбора размера тайлов.
         tiles_block = QFrame()
         tiles_block.setObjectName("MapTilesBlock")
         tiles_layout = QHBoxLayout(tiles_block)
@@ -447,11 +484,13 @@ class MapEditDialog(QDialog):
 
         layout.addLayout(form)
 
+        # Кнопки сохранения/отмены.
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        # Стили диалога.
         self.setStyleSheet(f"""
             QDialog#MapEditDialog {{
                 {MATH_PHYS_BACKGROUND}
@@ -517,14 +556,17 @@ class MapEditDialog(QDialog):
         """)
 
     def _project_titles(self) -> List[str]:
+        # Список проектов для комбобокса.
         projects = get_database().fetch_projects()
         titles = sorted({p.title for p in projects})
         return titles or ["Без проекта"]
 
     def _cloud_storage_root(self) -> str:
+        # Корневая папка облачного хранилища.
         return self._db.get_setting("cloud_storage_path", default="")
 
     def _on_pick_tiles_path(self) -> None:
+        # Диалог выбора каталога с тайлами.
         current = self.tiles_path.text().strip()
         start_dir = current or self._cloud_storage_root() or str(Path.home())
         selected = QFileDialog.getExistingDirectory(
@@ -537,12 +579,14 @@ class MapEditDialog(QDialog):
         self.tiles_path.setText(selected)
 
     def _on_accept(self):
+        # Проверка обязательных полей перед сохранением.
         if not self.title_edit.text().strip():
             QMessageBox.warning(self, "Проверка", "Введите название карты.")
             return
         self.accept()
 
     def values(self) -> dict:
+        # Возвращаем значения формы в виде словаря.
         return {
             "title": self.title_edit.text().strip(),
             "description": self.description_edit.text().strip(),
@@ -590,7 +634,9 @@ class MapImagePreviewDialog(QDialog):
         start_index: int,
         cloud_root: Path,
     ) -> None:
+        # Инициализация окна предпросмотра изображений.
         super().__init__(parent)
+        # Данные изображений и кеш для быстрых переключений.
         self._images = images
         self._current_index = max(0, min(start_index, len(images) - 1))
         self._cloud_root = cloud_root
@@ -599,15 +645,18 @@ class MapImagePreviewDialog(QDialog):
         self.setObjectName("MapImagePreview")
         self.setWindowTitle("Просмотр изображения")
 
+        # Компоновка диалога.
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # Виджет предпросмотра.
         self.image_label = QLabel()
         self.image_label.setObjectName("MapImagePreviewLabel")
         self.image_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.image_label, 1)
 
+        # Стили диалога.
         self.setStyleSheet(
             """
             QDialog#MapImagePreview {
@@ -619,10 +668,12 @@ class MapImagePreviewDialog(QDialog):
             """
         )
 
+        # Открываем в полноэкранном режиме и показываем стартовое изображение.
         self.setWindowState(self.windowState() | Qt.WindowFullScreen)
         self._update_image()
 
     def keyPressEvent(self, event) -> None:
+        # Навигация по изображением стрелками и выход по Esc.
         if event.key() == Qt.Key_Left:
             self._show_previous()
             return
@@ -635,29 +686,34 @@ class MapImagePreviewDialog(QDialog):
         super().keyPressEvent(event)
 
     def resizeEvent(self, event) -> None:
+        # При изменении размеров пересчитываем масштаб.
         super().resizeEvent(event)
         if hasattr(self, "image_label"):
             self._update_pixmap()
 
     def _show_previous(self) -> None:
+        # Переход к предыдущему изображению.
         if not self._images:
             return
         self._current_index = max(0, self._current_index - 1)
         self._update_image()
 
     def _show_next(self) -> None:
+        # Переход к следующему изображению.
         if not self._images:
             return
         self._current_index = min(len(self._images) - 1, self._current_index + 1)
         self._update_image()
 
     def _update_image(self) -> None:
+        # Загружает текущий элемент и обновляет UI.
         if not self._images:
             self.setWindowTitle("Просмотр изображения")
             self.image_label.setPixmap(QPixmap())
             self.image_label.setText("Изображения отсутствуют")
             return
 
+        # Подготовка текущего изображения.
         current = self._images[self._current_index]
         self.setWindowTitle(f"{current.name} ({self._current_index + 1}/{len(self._images)})")
         file_path = self._cloud_root / current.rel_path
@@ -666,6 +722,7 @@ class MapImagePreviewDialog(QDialog):
             self.image_label.setText("Изображение недоступно")
             return
 
+        # Используем кеш, чтобы ускорить переключения.
         cache_key = current.rel_path
         pixmap = self._pixmap_cache.get(cache_key)
         if pixmap is None:
@@ -674,6 +731,7 @@ class MapImagePreviewDialog(QDialog):
         self._update_pixmap(pixmap)
 
     def _update_pixmap(self, pixmap: Optional[QPixmap] = None) -> None:
+        # Пересчитываем и применяем масштаб изображения.
         if pixmap is None:
             current = self._images[self._current_index] if self._images else None
             if not current:
@@ -704,7 +762,9 @@ class MapCanvas(QWidget):
     HANDLE_PIXEL_SIZE = 12.0
 
     def __init__(self, parent=None):
+        # Инициализация канвы карты.
         super().__init__(parent)
+        # Настройки взаимодействия и базовых параметров карты.
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
         self._scale = 1.0
@@ -749,10 +809,12 @@ class MapCanvas(QWidget):
         self._files_by_id = {}
         self._maps_by_id = {}
         self._marker_items_by_id = {}
+        # Инициализируем стартовый набор маркеров.
         self._seed_markers()
 
     @staticmethod
     def default_markers() -> List[Marker]:
+        # Базовые маркеры, используемые при первом открытии карты.
         return [
             Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", MapCanvas.DEFAULT_MARKER_SIZE, "Опорный пункт"),
             Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", MapCanvas.DEFAULT_MARKER_SIZE, "Контрольная точка"),
@@ -760,10 +822,12 @@ class MapCanvas(QWidget):
         ]
 
     def _seed_markers(self) -> None:
+        # Заполняем список маркеров значениями по умолчанию.
         self._markers = self.default_markers()
         self._next_id = max((m.id for m in self._markers), default=0) + 1
 
     def set_markers(self, markers: List[Marker]) -> None:
+        # Полностью заменяем список маркеров и сбрасываем выделение.
         self._markers = list(markers)
         self._selected = None
         self._resize_marker_id = None
@@ -772,9 +836,11 @@ class MapCanvas(QWidget):
         self.update()
 
     def markers(self) -> List[Marker]:
+        # Возвращаем копию списка маркеров.
         return list(self._markers)
 
     def set_attachment_sources(self, tasks, projects, notes, objects, files, maps, markers) -> None:
+        # Сохраняем источники данных и создаем словари быстрого доступа.
         self._tasks = list(tasks)
         self._projects = list(projects)
         self._notes = list(notes)
@@ -791,6 +857,7 @@ class MapCanvas(QWidget):
         self._marker_items_by_id = {item.id: item for item in markers}
 
     def _collect_image_attachments(self, fallback_item: CloudFileData) -> List[CloudFileData]:
+        # Собираем изображения из привязанных файлов или fallback.
         if self._selected:
             images = [
                 self._files_by_id[file_id]
@@ -802,6 +869,7 @@ class MapCanvas(QWidget):
         return [fallback_item] if fallback_item.is_image else []
 
     def _open_image_attachment(self, file_item: CloudFileData) -> None:
+        # Открываем диалог просмотра изображения для файлов/привязок.
         cloud_root = get_database().get_setting("cloud_storage_path", default="").strip()
         if not cloud_root:
             QMessageBox.warning(self, "Изображение", "Папка облачного хранилища не настроена.")
@@ -823,6 +891,7 @@ class MapCanvas(QWidget):
         dialog.exec()
 
     def _open_attachment_view(self, kind: str, item_id: int) -> None:
+        # Показываем диалог с данными привязанной сущности.
         sources = {
             "task": self._tasks_by_id,
             "project": self._projects_by_id,
@@ -837,6 +906,7 @@ class MapCanvas(QWidget):
             QMessageBox.warning(self, "Элемент не найден", "Не удалось найти выбранный элемент.")
             return
 
+        # Создаем диалог и формируем содержание.
         dialog = QDialog(self)
         dialog.setObjectName("MapAttachmentDialog")
         dialog.setWindowTitle("Просмотр вложения")
@@ -845,6 +915,7 @@ class MapCanvas(QWidget):
         form = QFormLayout()
 
         def add_row(label: str, value: str, wrap: bool = False) -> None:
+            # Упрощенный конструктор строк формы.
             value_label = QLabel(value or "—")
             if wrap:
                 value_label.setWordWrap(True)
@@ -901,6 +972,7 @@ class MapCanvas(QWidget):
         elif kind == "file":
             dialog.setWindowTitle("Файл на карте")
             if item.is_image:
+                # Для изображений используем полноэкранный просмотр.
                 self._open_image_attachment(item)
                 return
             add_row("Название", item.name or "—")
@@ -915,6 +987,7 @@ class MapCanvas(QWidget):
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
 
+        # Стилизация диалога.
         dialog.setStyleSheet(f"""
             QDialog#MapAttachmentDialog {{
                 {MATH_PHYS_BACKGROUND}
@@ -934,15 +1007,18 @@ class MapCanvas(QWidget):
 
 
     def set_tool(self, tool: MapTool) -> None:
+        # Переключаем активный инструмент на канве.
         self._tool = tool
         self._preview_pos = None
         self.update()
 
     def set_grid_enabled(self, enabled: bool) -> None:
+        # Включаем или выключаем сетку и перерисовываем.
         self._grid_enabled = enabled
         self.update()
 
     def set_tiles(self, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        # Обновляем параметры тайлов и перестраиваем карту.
         self._tiles_path = (tiles_path or "").strip()
         self._tiles_h = max(0, int(tiles_h or 0))
         self._tiles_w = max(0, int(tiles_w or 0))
@@ -951,12 +1027,14 @@ class MapCanvas(QWidget):
         self.update()
 
     def reset_view(self) -> None:
+        # Подгоняем масштаб под виджет и центрируем карту.
         fit_scale = self._fit_scale_to_view()
         self._min_scale = min(self._absolute_min_scale, fit_scale)
         self._scale = min(1.0, fit_scale) if fit_scale > 0 else 1.0
         self._offset = self._center_offset_for_scale(self._scale)
 
     def _content_bounds(self) -> QRectF:
+        # Возвращаем границы содержимого, которое нужно вписать.
         map_bounds = self._map_bounds()
         if not map_bounds.isNull():
             return map_bounds
@@ -965,6 +1043,7 @@ class MapCanvas(QWidget):
         return QRectF(0, 0, 1200, 800)
 
     def _fit_scale_to_view(self) -> float:
+        # Рассчитываем масштаб, при котором контент помещается в виджет.
         bounds = self._content_bounds()
         if bounds.isNull():
             return 1.0
@@ -976,21 +1055,25 @@ class MapCanvas(QWidget):
         return max(0.01, min(scale_x, scale_y))
 
     def _center_offset_for_scale(self, scale: float) -> QPointF:
+        # Вычисляем смещение, чтобы центр содержимого оказался в центре вида.
         bounds = self._content_bounds()
         center_world = bounds.center()
         view_center = QPointF(self.width() / 2, self.height() / 2)
         return view_center - center_world * scale
 
     def paintEvent(self, event):
+        # Отрисовка содержимого канвы.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         painter.fillRect(self.rect(), QColor("#1a1c20"))
 
+        # Применяем трансформации для масштаба и смещения.
         painter.save()
         painter.translate(self._offset)
         painter.scale(self._scale, self._scale)
 
+        # Основные слои: фон, сетка, маркеры, предпросмотр.
         self._draw_background(painter)
         if self._grid_enabled:
             self._draw_grid(painter)
@@ -1001,6 +1084,7 @@ class MapCanvas(QWidget):
         painter.restore()
 
     def resizeEvent(self, event):
+        # Сохраняем мировую точку центра и корректируем масштаб после ресайза.
         world_center = self._map_to_world(QPointF(self.width() / 2, self.height() / 2))
         super().resizeEvent(event)
         fit_scale = self._fit_scale_to_view()
@@ -1010,6 +1094,7 @@ class MapCanvas(QWidget):
         self._offset = QPointF(self.width() / 2, self.height() / 2) - world_center * self._scale
 
     def _draw_background(self, painter: QPainter) -> None:
+        # Отрисовываем загруженную карту или фон по умолчанию.
         if not self._map_pixmap.isNull():
             painter.setOpacity(1.0)
             painter.drawPixmap(QPointF(0, 0), self._map_pixmap)
@@ -1025,6 +1110,7 @@ class MapCanvas(QWidget):
         painter.setOpacity(1.0)
 
     def _draw_grid(self, painter: QPainter) -> None:
+        # Рисуем сетку поверх карты.
         spacing_x = max(1, self._tile_size.width())
         spacing_y = max(1, self._tile_size.height())
         rect = self._world_view_rect()
@@ -1043,11 +1129,13 @@ class MapCanvas(QWidget):
         pen.setWidthF(1.0 / self._scale)
         painter.setPen(pen)
 
+        # Основные линии сетки.
         for x in range(left, right + spacing_x, spacing_x):
             painter.drawLine(x, top, x, bottom)
         for y in range(top, bottom + spacing_y, spacing_y):
             painter.drawLine(left, y, right, y)
 
+        # Подписи координат.
         painter.setPen(self.GRID_TEXT)
         painter.setFont(QFont("Segoe UI", 8))
         for x in range(left, right + spacing_x, spacing_x):
@@ -1056,6 +1144,7 @@ class MapCanvas(QWidget):
             painter.drawText(QPointF(left + 4, y - 4), f"{y}")
 
     def _draw_markers(self, painter: QPainter) -> None:
+        # Рисуем все маркеры и рамку выделения.
         self._resize_handle_regions = {}
         for marker in self._markers:
             is_selected = self._selected and marker.id == self._selected.id
@@ -1073,10 +1162,12 @@ class MapCanvas(QWidget):
                 QPointF(marker.x + marker.size + 6.0, marker.y - (marker.size + 2.0)),
                 marker.name,
             )
+            # При активном режиме изменения размера рисуем ручки.
             if self._resize_marker_id == marker.id:
                 self._draw_resize_handles(painter, marker)
 
     def _draw_preview(self, painter: QPainter) -> None:
+        # Предпросмотр размещения нового маркера.
         if not self._preview_pos:
             return
         painter.setPen(QPen(QColor("#cfd8dc"), 1.0 / self._scale))
@@ -1084,19 +1175,23 @@ class MapCanvas(QWidget):
         painter.drawEllipse(self._preview_pos, self.DEFAULT_MARKER_SIZE, self.DEFAULT_MARKER_SIZE)
 
     def _world_view_rect(self) -> QRectF:
+        # Рассчитываем видимую область в мировых координатах.
         inv_scale = 1.0 / self._scale
         top_left = (QPointF(0, 0) - self._offset) * inv_scale
         bottom_right = (QPointF(self.width(), self.height()) - self._offset) * inv_scale
         return QRectF(top_left, bottom_right).normalized()
 
     def _map_to_world(self, pos: QPointF) -> QPointF:
+        # Перевод координат из экранных в мировые.
         pos_f = QPointF(pos)
         return (pos_f - self._offset) / self._scale
 
     def _map_from_world(self, pos: QPointF) -> QPointF:
+        # Перевод координат из мировых в экранные.
         return pos * self._scale + self._offset
 
     def _map_bounds(self) -> QRectF:
+        # Границы карты на основе размера тайлов.
         if self._tiles_w <= 0 or self._tiles_h <= 0:
             return QRectF()
         width = self._tile_size.width() * self._tiles_w
@@ -1104,6 +1199,7 @@ class MapCanvas(QWidget):
         return QRectF(0, 0, float(width), float(height))
 
     def _load_tiles(self) -> None:
+        # Загружаем тайлы карты и собираем единый QPixmap.
         self._map_pixmap = QPixmap()
         base = Path(self._tiles_path)
         tile_size = QSize(0, 0)
@@ -1123,6 +1219,7 @@ class MapCanvas(QWidget):
                 if tile_size.width() > 0:
                     break
         if tile_size.isEmpty():
+            # Если тайлы не найдены, используем размер по умолчанию.
             tile_size = QSize(80, 80)
         self._tile_size = tile_size
         map_width = tile_size.width() * self._tiles_w
@@ -1134,6 +1231,7 @@ class MapCanvas(QWidget):
         painter = QPainter(self._map_pixmap)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         if base and base.exists():
+            # Проходим по плиткам и рисуем их в общий холст.
             for row in range(1, self._tiles_h + 1):
                 for col in range(1, self._tiles_w + 1):
                     tile_path = base / f"{row}_{col}.png"
@@ -1150,6 +1248,7 @@ class MapCanvas(QWidget):
         painter.end()
 
     def _marker_at(self, world_pos: QPointF) -> Optional[Marker]:
+        # Проверяем попадание в маркер или его подпись.
         for marker in reversed(self._markers):
             dist = (QPointF(marker.x, marker.y) - world_pos)
             hit_radius = max(10.0, marker.size + 6.0)
@@ -1161,12 +1260,14 @@ class MapCanvas(QWidget):
         return None
 
     def _marker_by_id(self, marker_id: int) -> Optional[Marker]:
+        # Ищем маркер по идентификатору.
         for marker in self._markers:
             if marker.id == marker_id:
                 return marker
         return None
 
     def _set_marker(self, updated: Marker) -> None:
+        # Обновляем маркер в списке и уведомляем подписчиков.
         self._markers = [updated if m.id == updated.id else m for m in self._markers]
         self._selected = updated
         self.markerSelected.emit(updated)
@@ -1174,6 +1275,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def _draw_resize_handles(self, painter: QPainter, marker: Marker) -> None:
+        # Рисуем рамку выделения и ручки изменения размера.
         selection_rect = self._selection_rect(marker)
         handle_size = max(8.0 / self._scale, self.HANDLE_PIXEL_SIZE / self._scale)
         half = handle_size / 2
@@ -1211,9 +1313,11 @@ class MapCanvas(QWidget):
         painter.restore()
 
     def _marker_label_font_size(self, marker: Marker) -> float:
+        # Размер шрифта подписи зависит от размера маркера.
         return max(6.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE))
 
     def _marker_label_rect(self, marker: Marker) -> QRectF:
+        # Рассчитываем область, занимаемую подписью маркера.
         font = QFont("Segoe UI", self._marker_label_font_size(marker))
         metrics = QFontMetricsF(font)
         text = marker.name
@@ -1224,6 +1328,7 @@ class MapCanvas(QWidget):
         return QRectF(pos.x(), top, width, height)
 
     def _selection_rect(self, marker: Marker) -> QRectF:
+        # Возвращаем квадратную рамку выделения вокруг маркера и подписи.
         marker_rect = QRectF(
             marker.x - marker.size,
             marker.y - marker.size,
@@ -1239,12 +1344,14 @@ class MapCanvas(QWidget):
         return QRectF(center.x() - size / 2, center.y() - size / 2, size, size)
 
     def _resize_handle_at(self, world_pos: QPointF) -> Optional[str]:
+        # Определяем, в какую ручку попадает курсор.
         for direction, rect in self._resize_handle_regions.items():
             if rect.contains(world_pos):
                 return direction
         return None
 
     def _resize_handle_cursor(self, handle: str) -> Qt.CursorShape:
+        # Возвращаем курсор для конкретной ручки изменения размера.
         if handle in ("nw", "se"):
             return Qt.SizeFDiagCursor
         if handle in ("ne", "sw"):
@@ -1256,6 +1363,7 @@ class MapCanvas(QWidget):
         return Qt.SizeAllCursor
 
     def _resize_scale_delta(self, handle: str, delta: QPointF) -> float:
+        # Преобразуем смещение мыши в изменение масштаба маркера.
         dirs = {
             "n": (0, -1),
             "s": (0, 1),
@@ -1274,6 +1382,7 @@ class MapCanvas(QWidget):
         return delta.y() * dir_y
 
     def _enable_resize_mode(self, marker_id: int) -> None:
+        # Включаем режим изменения размера выбранного маркера.
         marker = self._marker_by_id(marker_id)
         if not marker:
             return
@@ -1285,6 +1394,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def _zoom_to_marker(self, marker: Marker) -> None:
+        # Приближаем камеру к выбранному маркеру.
         target_scale = min(self._max_scale, max(self._min_scale, self._scale * 1.4))
         view_center = QPointF(self.width() / 2, self.height() / 2)
         self._scale = target_scale
@@ -1292,6 +1402,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def focus_on_marker(self, marker: Marker, zoom_boost: float = 4.0) -> None:
+        # Центрируемся на маркере и увеличиваем масштаб.
         target_scale = min(self._max_scale, max(self._min_scale, self._scale + zoom_boost))
         view_center = QPointF(self.width() / 2, self.height() / 2)
         self._selected = marker
@@ -1302,6 +1413,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def _adjust_marker_size(self, marker: Marker, delta: float) -> None:
+        # Изменяем размер маркера в пределах допустимых значений.
         new_size = min(self.MAX_MARKER_SIZE, max(self.MIN_MARKER_SIZE, marker.size + delta))
         if new_size == marker.size:
             return
@@ -1328,8 +1440,10 @@ class MapCanvas(QWidget):
         )
 
     def mousePressEvent(self, event):
+        # Обработка кликов мыши на канве.
         if event.button() == Qt.RightButton:
             if event.modifiers() & Qt.ControlModifier:
+                # Ctrl + ПКМ — открыть карточку выбранного маркера.
                 world_pos = self._map_to_world(event.position())
                 marker = self._marker_at(world_pos)
                 if marker:
@@ -1337,10 +1451,12 @@ class MapCanvas(QWidget):
                     self.markerSelected.emit(marker)
                     self._view_marker(marker)
                 return
+            # Обычный ПКМ открывает контекстное меню.
             self._open_context_menu(event.pos())
             return
 
         if event.button() == Qt.LeftButton:
+            # ЛКМ — выбор, перемещение, добавление маркеров или панорамирование.
             world_pos = self._map_to_world(event.position())
             if self._resize_marker_id is not None:
                 handle = self._resize_handle_at(world_pos)
@@ -1352,6 +1468,7 @@ class MapCanvas(QWidget):
                         self._resize_start_rect = self._selection_rect(marker)
                         self._resize_start_marker_size = marker.size
                     return
+                # Если зажали рамку, включаем перемещение маркера.
                 marker = self._marker_by_id(self._resize_marker_id)
                 if marker and self._selection_rect(marker).contains(world_pos):
                     self._resize_dragging = True
@@ -1360,15 +1477,18 @@ class MapCanvas(QWidget):
                 self._resize_marker_id = None
                 self._active_resize_handle = None
             if self._tool == MapTool.ADD_MARKER:
+                # Добавляем новый маркер.
                 self._add_marker(world_pos)
                 return
             marker = self._marker_at(world_pos)
             if marker:
+                # Выделяем маркер и готовимся к перетаскиванию.
                 self._selected = marker
                 self.markerSelected.emit(marker)
                 self._dragging_marker_id = marker.id
                 self.update()
                 return
+            # Снимаем выделение и включаем панорамирование.
             self._selected = None
             self.markerSelected.emit(None)
             self._dragging_marker_id = None
@@ -1377,6 +1497,7 @@ class MapCanvas(QWidget):
             self.update()
 
     def mouseMoveEvent(self, event):
+        # Обработка движения мыши для ресайза, перетаскивания и панорамирования.
         if self._resize_marker_id is not None:
             world_pos = self._map_to_world(event.position())
             marker = self._marker_by_id(self._resize_marker_id)
@@ -1410,6 +1531,7 @@ class MapCanvas(QWidget):
                     self._set_marker(updated)
                     return
             if marker and self._resize_dragging:
+                # Перемещаем маркер в режиме изменения размера.
                 new_center = world_pos - self._resize_drag_offset
                 updated = Marker(
                     marker.id,
@@ -1433,6 +1555,7 @@ class MapCanvas(QWidget):
                 self._set_marker(updated)
                 return
             if marker:
+                # Обновляем курсор при наведении на ручки.
                 handle = self._resize_handle_at(world_pos)
                 if handle:
                     self.setCursor(self._resize_handle_cursor(handle))
@@ -1442,6 +1565,7 @@ class MapCanvas(QWidget):
                     return
             self.unsetCursor()
         if self._dragging_marker_id is not None and self._tool == MapTool.SELECT:
+            # Перетаскиваем выбранный маркер.
             world_pos = self._map_to_world(event.position())
             marker = self._marker_by_id(self._dragging_marker_id)
             if marker:
@@ -1467,16 +1591,19 @@ class MapCanvas(QWidget):
                 self._set_marker(updated)
                 return
         if self._panning:
+            # Панорамируем карту.
             delta = event.position() - self._last_pos
             self._offset += delta
             self._last_pos = event.position()
             self.update()
             return
         if self._tool == MapTool.ADD_MARKER:
+            # Обновляем предпросмотр при добавлении маркера.
             self._preview_pos = self._map_to_world(event.position())
             self.update()
 
     def mouseReleaseEvent(self, event):
+        # Сбрасываем состояния после отпускания кнопки мыши.
         if event.button() == Qt.LeftButton:
             self._panning = False
             self._dragging_marker_id = None
@@ -1484,6 +1611,7 @@ class MapCanvas(QWidget):
             self._resize_dragging = False
 
     def mouseDoubleClickEvent(self, event):
+        # Двойной клик по маркеру — фокусируем и увеличиваем.
         if event.button() == Qt.LeftButton:
             world_pos = self._map_to_world(event.position())
             marker = self._marker_at(world_pos)
@@ -1495,11 +1623,13 @@ class MapCanvas(QWidget):
         super().mouseDoubleClickEvent(event)
 
     def wheelEvent(self, event):
+        # Обрабатываем масштабирование и изменение размера маркера.
         if event.modifiers() & Qt.ControlModifier:
             cursor_pos = event.position()
             world_pos = self._map_to_world(cursor_pos)
             marker = self._marker_at(world_pos)
             if marker:
+                # Ctrl + колесо меняет размер маркера.
                 delta = 1.0 if event.angleDelta().y() > 0 else -1.0
                 self._adjust_marker_size(marker, delta)
                 return
@@ -1517,6 +1647,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def _add_marker(self, world_pos: QPointF) -> None:
+        # Создаем новый маркер с дефолтными параметрами.
         marker = Marker(
             self._next_id,
             f"Marker {self._next_id}",
@@ -1544,6 +1675,7 @@ class MapCanvas(QWidget):
         self.update()
 
     def _remove_marker(self, marker: Marker) -> None:
+        # Удаляем маркер и сбрасываем выделение при необходимости.
         self._markers = [m for m in self._markers if m.id != marker.id]
         self.markerRemoved.emit(marker.id)
         if self._selected and self._selected.id == marker.id:
@@ -1552,28 +1684,37 @@ class MapCanvas(QWidget):
         self.update()
 
     def _edit_marker(self, marker: Marker) -> None:
+        # Открываем диалог редактирования маркера.
         def task_label(item) -> str:
+            # Отображение задачи в списке.
             return f"{item.title} · {item.project_title}" if item.project_title else item.title
 
         def project_label(item) -> str:
+            # Отображение проекта в списке.
             return f"{item.title} · {item.area}" if item.area else item.title
 
         def note_label(item) -> str:
+            # Отображение заметки в списке.
             return f"{item.title} · {item.project}" if item.project else item.title
 
         def object_label(item) -> str:
+            # Отображение объекта в списке.
             return f"{item.title} · {item.catalog}" if item.catalog else item.title
 
         def file_label(item) -> str:
+            # Отображение файла в списке.
             return item.name or item.rel_path
 
         def map_label(item) -> str:
+            # Отображение карты в списке.
             return f"{item.title} · {item.project}" if item.project else item.title
 
         def marker_label(item) -> str:
+            # Отображение метки в списке.
             map_title = self._maps_by_id.get(item.map_id).title if item.map_id in self._maps_by_id else ""
             return f"{item.name} · {map_title}" if map_title else item.name
 
+        # Источники сущностей для привязок.
         entity_sources = {
             "task": MapLabelEntitySource(
                 "Задачи",
@@ -1634,6 +1775,7 @@ class MapCanvas(QWidget):
         }
         type_suggestions = sorted({item.type for item in self._markers if item.type})
 
+        # Создаем и показываем диалог редактирования.
         dialog = MapLabelEditDialog(
             marker,
             entity_sources,
@@ -1651,6 +1793,7 @@ class MapCanvas(QWidget):
                 self._enable_resize_mode(updated.id)
 
     def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
+        # Загружаем превью изображения маркера для карточки.
         image_path = (marker.image_path or "").strip()
         if not image_path:
             return None
@@ -1670,16 +1813,19 @@ class MapCanvas(QWidget):
         return pixmap.scaled(target, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
 
     def _view_marker(self, marker: Marker) -> None:
+        # Показываем окно просмотра данных маркера.
         dialog = QDialog(self)
         dialog.setWindowTitle("Метка на карте")
         dialog.setObjectName("MapLabelViewDialog")
         dialog.resize(980, 680)
         dialog.setMinimumSize(760, 520)
 
+        # Корневой layout диалога.
         root_layout = QVBoxLayout(dialog)
         root_layout.setContentsMargins(12, 12, 12, 12)
         root_layout.setSpacing(10)
 
+        # Заголовок с кнопками.
         header = QFrame()
         header.setObjectName("MapLabelHeader")
         header_layout = QHBoxLayout(header)
@@ -1703,6 +1849,7 @@ class MapCanvas(QWidget):
         header_layout.addWidget(edit_btn)
         header_layout.addWidget(close_btn)
 
+        # Основное тело диалога.
         body = QFrame()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -1772,6 +1919,7 @@ class MapCanvas(QWidget):
         left_layout.addWidget(size_value)
         left_layout.addStretch(1)
 
+        # Правая панель с подробностями и привязками.
         right_panel = QFrame()
         right_panel.setObjectName("MapLabelFormContainer")
         right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -1809,6 +1957,7 @@ class MapCanvas(QWidget):
         main_form.addRow(type_label, type_value)
         main_layout.addLayout(main_form)
 
+        # Секция привязок.
         links_section = QFrame()
         links_section.setObjectName("MapLabelSection")
         links_layout = QVBoxLayout(links_section)
@@ -1822,6 +1971,7 @@ class MapCanvas(QWidget):
         links_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         def handle_link(link: str) -> None:
+            # Обрабатываем клики по ссылкам привязок.
             if ":" not in link:
                 return
             kind, item_id = link.split(":", 1)
@@ -1832,6 +1982,7 @@ class MapCanvas(QWidget):
             self._open_attachment_view(kind, parsed_id)
 
         def attachment_label(kind: str, item_ids: List[int], source: dict) -> QLabel:
+            # Формируем HTML-ссылки для списка привязок.
             label = QLabel()
             label.setObjectName("MapLabelValue")
             label.setTextFormat(Qt.RichText)
@@ -1868,6 +2019,7 @@ class MapCanvas(QWidget):
         marker_link = attachment_label("marker", marker.marker_ids, self._marker_items_by_id)
 
         def add_link_row(label_text: str, widget: QLabel) -> None:
+            # Утилита для добавления строки формы.
             label = QLabel(label_text)
             label.setObjectName("MapLabelFormLabel")
             links_form.addRow(label, widget)
@@ -1882,6 +2034,7 @@ class MapCanvas(QWidget):
 
         links_layout.addLayout(links_form)
 
+        # Секция текстовых полей.
         text_section = QFrame()
         text_section.setObjectName("MapLabelSection")
         text_layout = QVBoxLayout(text_section)
@@ -1936,6 +2089,7 @@ class MapCanvas(QWidget):
         root_layout.addWidget(header)
         root_layout.addWidget(body, 1)
 
+        # Стили диалога просмотра.
         dialog.setStyleSheet(
             f"""
             QDialog#MapLabelViewDialog {{
@@ -2006,6 +2160,7 @@ class MapCanvas(QWidget):
         dialog.exec()
 
     def _open_context_menu(self, pos) -> None:
+        # Контекстное меню для быстрых действий с маркером.
         world_pos = self._map_to_world(pos)
         marker = self._marker_at(world_pos)
         menu = QMenu(self)
@@ -2069,15 +2224,19 @@ class MarkerSearchModel(QAbstractListModel):
     MarkerRole = Qt.UserRole + 1
 
     def __init__(self, parent=None):
+        # Инициализируем модель для поиска маркеров.
         super().__init__(parent)
+        # Список маркеров для поиска.
         self._items: List[Marker] = []
 
     def rowCount(self, parent=QModelIndex()) -> int:
+        # Количество строк зависит от списка маркеров.
         if parent.isValid():
             return 0
         return len(self._items)
 
     def data(self, index: QModelIndex, role: int):
+        # Возвращаем строку отображения и сам маркер.
         if not index.isValid():
             return None
         marker = self._items[index.row()]
@@ -2090,6 +2249,7 @@ class MarkerSearchModel(QAbstractListModel):
         return None
 
     def set_markers(self, markers: List[Marker]) -> None:
+        # Полностью обновляем модель списка маркеров.
         self.beginResetModel()
         self._items = list(markers)
         self.endResetModel()
@@ -2100,7 +2260,9 @@ class MapEditorWorkspace(QWidget):
     markersChanged = Signal()
 
     def __init__(self, parent=None):
+        # Инициализируем рабочую область редактора карты.
         super().__init__(parent)
+        # Основные параметры состояния редактора карты.
         self.setObjectName("MapEditorWorkspace")
         self._db = get_database()
         self._tasks_by_id = {}
@@ -2111,10 +2273,12 @@ class MapEditorWorkspace(QWidget):
         self._fullscreen_active = False
         self._current_map_id: Optional[int] = None
 
+        # Корневая компоновка редактора.
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        # Левая панель с инструментами.
         self.toolbar = QFrame()
         self.toolbar.setObjectName("MapToolbar")
         self.toolbar.setFixedWidth(54)
@@ -2127,6 +2291,7 @@ class MapEditorWorkspace(QWidget):
         self.tool_group.setExclusive(True)
 
         def tool_button(icon_name: str, tooltip: str, tool: Optional[MapTool]) -> QToolButton:
+            # Вспомогательная функция для создания кнопки инструмента.
             btn = QToolButton()
             btn.setIcon(qta.icon(icon_name, color="#d7d7d7"))
             btn.setIconSize(QSize(20, 20))
@@ -2138,6 +2303,7 @@ class MapEditorWorkspace(QWidget):
                 btn.clicked.connect(lambda checked=False, t=tool: self.canvas.set_tool(t))
             return btn
 
+        # Кнопки инструментов.
         self.btn_select = tool_button("fa5s.mouse-pointer", "Выбрать", MapTool.SELECT)
         self.btn_marker = tool_button("fa5s.map-marker-alt", "Добавить маркер", MapTool.ADD_MARKER)
         self.btn_region = tool_button("fa5s.draw-polygon", "Добавить регион", MapTool.ADD_REGION)
@@ -2154,6 +2320,7 @@ class MapEditorWorkspace(QWidget):
         self.btn_camera = tool_button("fa5s.camera", "Скриншот", None)
         self.btn_camera.setCheckable(False)
 
+        # Добавляем кнопки в тулбар.
         for btn in [
             self.btn_select,
             self.btn_marker,
@@ -2165,12 +2332,15 @@ class MapEditorWorkspace(QWidget):
         ]:
             toolbar_layout.addWidget(btn)
 
+        # Активируем инструмент выбора по умолчанию.
         self.btn_select.setChecked(True)
 
+        # Центральная канва карты.
         self.canvas = MapCanvas()
         self.canvas.setObjectName("MapCanvas")
         self._load_attachment_sources()
 
+        # Правая панель с краткой информацией по маркеру.
         self.info_panel = QFrame()
         self.info_panel.setObjectName("MapInfoPanel")
         self.info_panel.setFixedWidth(220)
@@ -2217,17 +2387,20 @@ class MapEditorWorkspace(QWidget):
         info_layout.addWidget(self.info_marker)
         info_layout.addStretch(1)
 
+        # Собираем основные панели.
         root.addWidget(self.toolbar)
         root.addWidget(self.canvas, 1)
         root.addWidget(self.info_panel)
 
         self.info_panel.hide()
 
+        # Подключаем сигналы от канвы.
         self.canvas.markerSelected.connect(self._on_marker_selected)
         self.canvas.markerAdded.connect(self._on_marker_added)
         self.canvas.markerUpdated.connect(self._on_marker_updated)
         self.canvas.markerRemoved.connect(self._on_marker_removed)
 
+        # Стили для редактора.
         self.setStyleSheet("""
             QWidget#MapEditorWorkspace {
                 background: #15171b;
@@ -2272,6 +2445,7 @@ class MapEditorWorkspace(QWidget):
         """)
 
     def set_fullscreen_state(self, enabled: bool) -> None:
+        # Синхронизируем кнопку и скрываем/показываем инфо-панель.
         self.btn_fullscreen.blockSignals(True)
         self.btn_fullscreen.setChecked(enabled)
         self.btn_fullscreen.blockSignals(False)
@@ -2283,9 +2457,11 @@ class MapEditorWorkspace(QWidget):
             self.info_panel.show()
 
     def _on_fullscreen_toggled(self, checked: bool) -> None:
+        # Пробрасываем сигнал о полноэкранном режиме.
         self.fullscreenToggled.emit(checked)
 
     def _on_marker_selected(self, marker: Optional[Marker]) -> None:
+        # Отображаем данные выбранного маркера в правой панели.
         if self._fullscreen_active:
             self.info_panel.hide()
             return
@@ -2305,6 +2481,7 @@ class MapEditorWorkspace(QWidget):
         self.info_marker.setText(self._format_links("Метки", marker.marker_ids, self._markers_by_id))
 
     def _load_attachment_sources(self) -> None:
+        # Загружаем источники данных из базы и передаем их канве.
         tasks = self._db.fetch_tasks()
         projects = self._db.fetch_projects()
         notes = self._db.fetch_notes()
@@ -2322,10 +2499,12 @@ class MapEditorWorkspace(QWidget):
         self.canvas.set_attachment_sources(tasks, projects, notes, objects, files, maps, markers)
 
     def load_map(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        # Загружаем карту и синхронизируем маркеры из базы.
         self._current_map_id = map_id
         self.canvas.set_tiles(tiles_path, tiles_h, tiles_w)
         markers = self._db.fetch_map_markers(map_id)
         if not markers:
+            # Если маркеров нет, создаем дефолтные.
             defaults = self.canvas.default_markers()
             self.canvas.set_markers(defaults)
             for marker in defaults:
@@ -2333,6 +2512,7 @@ class MapEditorWorkspace(QWidget):
             self.markersChanged.emit()
             return
         loaded = []
+        # Преобразуем записи базы в объекты Marker.
         for marker in markers:
             loaded.append(
                 Marker(
@@ -2359,12 +2539,15 @@ class MapEditorWorkspace(QWidget):
         self.markersChanged.emit()
 
     def markers(self) -> List[Marker]:
+        # Возвращаем текущие маркеры канвы.
         return self.canvas.markers()
 
     def focus_marker(self, marker: Marker, zoom_boost: float = 4.0) -> None:
+        # Делегируем фокусировку на канву.
         self.canvas.focus_on_marker(marker, zoom_boost=zoom_boost)
 
     def _sync_marker(self, marker: Marker) -> None:
+        # Сохраняем маркер в базе, если карта выбрана.
         if self._current_map_id is None:
             return
         self._db.upsert_map_marker(
@@ -2389,20 +2572,24 @@ class MapEditorWorkspace(QWidget):
         )
 
     def _on_marker_added(self, marker: Marker) -> None:
+        # Реакция на добавление маркера.
         self._sync_marker(marker)
         self.markersChanged.emit()
 
     def _on_marker_updated(self, marker: Marker) -> None:
+        # Реакция на обновление маркера.
         self._sync_marker(marker)
         self.markersChanged.emit()
 
     def _on_marker_removed(self, marker_id: int) -> None:
+        # Удаляем маркер из базы по идентификатору.
         if self._current_map_id is None:
             return
         self._db.delete_map_marker(marker_id)
         self.markersChanged.emit()
 
     def _format_links(self, label: str, item_ids: List[int], source: dict) -> str:
+        # Формируем текстовую строку с названиями привязанных сущностей.
         if not item_ids:
             return f"{label}: —"
         titles = []
@@ -2418,12 +2605,15 @@ class MapEditorWorkspace(QWidget):
 
 class MapsListWorkspace(QWidget):
     def __init__(self, parent=None):
+        # Инициализируем рабочую область списка карт.
         super().__init__(parent)
+        # Основные настройки рабочей области списка карт.
         self.setObjectName("MapsWorkspace")
 
         self._db = get_database()
         self._map_fullscreen_active = False
 
+        # Вертикальная компоновка всего экрана.
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
@@ -2431,11 +2621,13 @@ class MapsListWorkspace(QWidget):
         self.stack = QStackedWidget()
         root.addWidget(self.stack)
 
+        # Страница со списком карт.
         list_page = QWidget()
         list_layout = QVBoxLayout(list_page)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(10)
 
+        # Блок создания новой карты.
         create = QFrame()
         create.setObjectName("MapsCreateBar")
         create_layout = QHBoxLayout(create)
@@ -2460,6 +2652,7 @@ class MapsListWorkspace(QWidget):
         self.btn_tiles_path.setCursor(Qt.PointingHandCursor)
         self.btn_tiles_path.clicked.connect(self._on_pick_tiles_path)
 
+        # Блок выбора размеров тайлов.
         tiles_block = QFrame()
         tiles_block.setObjectName("MapsTilesBlock")
         tiles_layout = QHBoxLayout(tiles_block)
@@ -2499,6 +2692,7 @@ class MapsListWorkspace(QWidget):
 
         list_layout.addWidget(create)
 
+        # Верхняя панель фильтров.
         top = QFrame()
         top.setObjectName("MapsTopbar")
         top_layout = QHBoxLayout(top)
@@ -2509,6 +2703,7 @@ class MapsListWorkspace(QWidget):
         self.tabs_group.setExclusive(True)
 
         def tab_btn(text: str) -> QToolButton:
+            # Создает кнопку вкладки фильтра.
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
@@ -2541,6 +2736,7 @@ class MapsListWorkspace(QWidget):
 
         list_layout.addWidget(top)
 
+        # Список карт.
         self.list = MapsListView()
         self.list.setObjectName("MapsList")
         self.list.setUniformItemSizes(False)
@@ -2564,6 +2760,7 @@ class MapsListWorkspace(QWidget):
         self.new_title.returnPressed.connect(self._on_create_map)
         self.list.editRequested.connect(self._on_edit_map)
         self.list.openRequested.connect(self._on_open_map)
+        # Страница редактора карты.
         self.editor_workspace = MapEditorWorkspace()
         self.editor_workspace.fullscreenToggled.connect(self._on_map_fullscreen_toggled)
         self.editor_workspace.markersChanged.connect(self._refresh_marker_search)
@@ -2580,6 +2777,7 @@ class MapsListWorkspace(QWidget):
         self.map_title = QLabel("Редактор карты")
         self.map_title.setObjectName("MapEditorTitle")
         header_layout.addWidget(self.btn_back)
+        # Поиск по маркерам на карте.
         self.marker_search = QLineEdit()
         self.marker_search.setObjectName("MapMarkerSearch")
         self.marker_search.setPlaceholderText("Поиск меток…")
@@ -2587,6 +2785,7 @@ class MapsListWorkspace(QWidget):
         self.marker_search.setClearButtonEnabled(True)
         self.marker_search.installEventFilter(self)
 
+        # Выпадающий список результатов поиска.
         self.marker_search_results = QListView(self)
         self.marker_search_results.setObjectName("MapMarkerSearchResults")
         self.marker_search_results.setFixedWidth(260)
@@ -2622,6 +2821,7 @@ class MapsListWorkspace(QWidget):
         self.stack.addWidget(editor_page)
         self.stack.setCurrentWidget(list_page)
 
+        # Оверлей загрузки карты.
         self.loading_overlay = QFrame(self)
         self.loading_overlay.setObjectName("MapsLoadingOverlay")
         self.loading_overlay.setVisible(False)
@@ -2655,6 +2855,7 @@ class MapsListWorkspace(QWidget):
         overlay_layout.addWidget(overlay_card, alignment=Qt.AlignCenter)
         overlay_layout.addStretch(1)
 
+        # Стили рабочей области.
         self.setStyleSheet("""
             QWidget#MapsWorkspace { background: #16171a; }
 
@@ -2806,6 +3007,7 @@ class MapsListWorkspace(QWidget):
         """)
 
     def resizeEvent(self, event):
+        # Обновляем геометрию оверлея и позицию выпадающего списка.
         super().resizeEvent(event)
         if hasattr(self, "loading_overlay"):
             self.loading_overlay.setGeometry(self.rect())
@@ -2813,19 +3015,23 @@ class MapsListWorkspace(QWidget):
             self._position_marker_search_results()
 
     def _project_titles(self) -> List[str]:
+        # Получаем список названий проектов для фильтра.
         projects = get_database().fetch_projects()
         titles = sorted({p.title for p in projects})
         return titles
 
     def _refresh_projects(self) -> None:
+        # Обновляем список проектов в комбобоксе создания.
         self.new_project.clear()
         titles = self._project_titles()
         self.new_project.addItems(titles or ["Без проекта"])
 
     def _cloud_storage_root(self) -> str:
+        # Корневая папка облачного хранилища.
         return self._db.get_setting("cloud_storage_path", default="")
 
     def _on_pick_tiles_path(self) -> None:
+        # Открываем диалог выбора каталога тайлов.
         current = self.new_tiles_path.text().strip()
         start_dir = current or self._cloud_storage_root() or str(Path.home())
         selected = QFileDialog.getExistingDirectory(
@@ -2838,6 +3044,7 @@ class MapsListWorkspace(QWidget):
         self.new_tiles_path.setText(selected)
 
     def _on_tab_changed(self) -> None:
+        # Применяем фильтрацию по вкладкам.
         if self.tab_project.isChecked():
             current = self.filter_project.currentText()
             if current != "Все проекты":
@@ -2846,6 +3053,7 @@ class MapsListWorkspace(QWidget):
         self.model.set_project_filter(None)
 
     def _on_project_changed(self, text: str) -> None:
+        # Реагируем на смену проекта в фильтре.
         if self.tab_project.isChecked() and text != "Все проекты":
             self.model.set_project_filter(text)
         else:
@@ -2853,6 +3061,7 @@ class MapsListWorkspace(QWidget):
 
     def set_project_filter(self, project: Optional[str]) -> None:
         """Устанавливает фильтр карт из внешней навигации."""
+        # Синхронизируем фильтр и вкладки с внешним выбором.
         if project:
             self.tab_project.setChecked(True)
             idx = self.filter_project.findText(project)
@@ -2868,6 +3077,7 @@ class MapsListWorkspace(QWidget):
             self.model.set_project_filter(None)
 
     def _on_create_map(self) -> None:
+        # Создаем карту по введенным данным.
         self.model.add_map(
             self.new_title.text(),
             self.new_desc.text(),
@@ -2882,6 +3092,7 @@ class MapsListWorkspace(QWidget):
         self.new_title.setFocus()
 
     def _on_edit_map(self, index: QModelIndex) -> None:
+        # Открываем диалог редактирования выбранной карты.
         if not index.isValid():
             return
         map_row = MapRow(
@@ -2907,6 +3118,7 @@ class MapsListWorkspace(QWidget):
             )
 
     def _on_open_map(self, index: QModelIndex) -> None:
+        # Открываем редактор карты и запускаем загрузку.
         if not index.isValid():
             return
         map_id = index.data(MapRoles.Id)
@@ -2936,19 +3148,23 @@ class MapsListWorkspace(QWidget):
         )
 
     def _load_map_with_overlay(self, map_id: int, tiles_path: str, tiles_h: int, tiles_w: int) -> None:
+        # Загружаем карту и скрываем оверлей после подготовки.
         self.editor_workspace.load_map(map_id, tiles_path, tiles_h, tiles_w)
         QTimer.singleShot(0, self._hide_loading_overlay)
 
     def _show_loading_overlay(self) -> None:
+        # Показываем оверлей ожидания.
         self.loading_overlay.setGeometry(self.rect())
         self.loading_overlay.raise_()
         self.loading_overlay.setVisible(True)
         self.loading_overlay.repaint()
 
     def _hide_loading_overlay(self) -> None:
+        # Скрываем оверлей ожидания.
         self.loading_overlay.setVisible(False)
 
     def _on_marker_search_changed(self, text: str) -> None:
+        # Фильтруем маркеры по строке поиска.
         query = (text or "").strip()
         if not query:
             self.marker_search_model.set_markers([])
@@ -2962,11 +3178,13 @@ class MapsListWorkspace(QWidget):
             self.marker_search_results.setVisible(False)
 
     def _refresh_marker_search(self) -> None:
+        # Обновляем результаты поиска, если строка не пуста.
         text = self.marker_search.text()
         if text.strip():
             self._on_marker_search_changed(text)
 
     def _filter_markers(self, query: str) -> List[Marker]:
+        # Возвращаем список маркеров, соответствующих запросу.
         needle = query.lower()
         matches = []
         for marker in self.editor_workspace.markers():
@@ -2976,6 +3194,7 @@ class MapsListWorkspace(QWidget):
         return matches
 
     def _on_marker_search_selected(self, index: QModelIndex) -> None:
+        # Фокусируемся на выбранном маркере.
         marker = index.data(MarkerSearchModel.MarkerRole)
         if not marker:
             return
@@ -2983,6 +3202,7 @@ class MapsListWorkspace(QWidget):
         self.marker_search_results.setVisible(False)
 
     def _on_map_fullscreen_toggled(self, enabled: bool) -> None:
+        # Переключаем полноэкранный режим у окна или локально.
         window = self.window()
         if window and hasattr(window, "set_map_fullscreen"):
             window.set_map_fullscreen(enabled)
@@ -2990,6 +3210,7 @@ class MapsListWorkspace(QWidget):
             self.set_map_fullscreen_state(enabled)
 
     def set_map_fullscreen_state(self, enabled: bool) -> None:
+        # Сохраняем локальное состояние полноэкранного режима.
         if self._map_fullscreen_active == enabled:
             return
         self._map_fullscreen_active = enabled
@@ -2999,11 +3220,13 @@ class MapsListWorkspace(QWidget):
         self.editor_workspace.set_fullscreen_state(enabled)
 
     def _show_marker_search_results(self) -> None:
+        # Показываем выпадающий список результатов.
         self._position_marker_search_results()
         self.marker_search_results.setVisible(True)
         self.marker_search_results.raise_()
 
     def _position_marker_search_results(self) -> None:
+        # Позиционируем результаты под полем поиска.
         if not self.marker_search.isVisible():
             return
         self.marker_search_results.setFixedWidth(self.marker_search.width())
@@ -3011,10 +3234,12 @@ class MapsListWorkspace(QWidget):
         self.marker_search_results.move(global_pos)
 
     def _clear_marker_search(self) -> None:
+        # Очищаем строку поиска и скрываем результаты.
         self.marker_search.clear()
         self.marker_search_results.setVisible(False)
 
     def eventFilter(self, obj, event) -> bool:
+        # Обрабатываем Esc в поле поиска, чтобы скрыть результаты.
         if obj is self.marker_search and event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:
                 if self.marker_search.text().strip() or self.marker_search_results.isVisible():
