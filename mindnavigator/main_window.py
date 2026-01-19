@@ -60,20 +60,25 @@ class MainWindow(QMainWindow):
         """Инициализирует окно, компоненты интерфейса и обработчики."""
         super().__init__()
 
+        # Настраиваем базовые флаги окна и прозрачность.
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
 
+        # Включаем автозаливку, чтобы корректно рисовать фон.
         self.setAutoFillBackground(True)
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
+        # Определяем минимальные размеры и иконку приложения.
         self.setMinimumSize(1100, 700)
         self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
 
+        # Инициализируем состояние кастомного ресайза.
         self._resize_edge = ResizeEdge.NONE
         self._resizing = False
         self._press_global = QPoint()
         self._start_geom = QRect()
 
+        # Инициализируем состояние трея, полноэкранного режима карты и восстановления геометрии.
         self._restore_geom = QRect()
         self._tray_icon: QSystemTrayIcon | None = None
         self._was_maximized_before_minimize = False
@@ -81,20 +86,25 @@ class MainWindow(QMainWindow):
         self._map_fullscreen_active = False
         self._map_fullscreen_restore: dict[str, bool] = {}
 
+        # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
         self._wire_modes()
         self._init_tray()
 
+        # Включаем отслеживание мыши и фильтр событий для собственного ресайза.
         self.setMouseTracking(True)
         self.installEventFilter(self)
 
+        # Выставляем стартовый режим.
         self.set_mode(self.MODE_TASKS)
 
     def _init_tray(self):
         """Настраивает системный трей для сворачивания приложения."""
+        # Проверяем, доступен ли системный трей.
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
 
+        # Создаем иконку трея и контекстное меню.
         icon = QIcon(resource_path("assets/icon.ico"))
         self._tray_icon = QSystemTrayIcon(icon, self)
         self._tray_icon.setToolTip(APP_NAME)
@@ -103,33 +113,40 @@ class MainWindow(QMainWindow):
         action_show = menu.addAction("Показать")
         action_quit = menu.addAction("Выход")
 
+        # Связываем действия меню.
         action_show.triggered.connect(self._restore_from_tray)
         action_quit.triggered.connect(QApplication.instance().quit)
 
+        # Подключаем меню и обработчик кликов по иконке.
         self._tray_icon.setContextMenu(menu)
         self._tray_icon.activated.connect(self._on_tray_activated)
         self._tray_icon.show()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """Обрабатывает клики по иконке в трее."""
+        # На одиночный клик восстанавливаем окно.
         if reason == QSystemTrayIcon.Trigger:
             self._restore_from_tray()
 
     def _restore_from_tray(self):
         """Возвращает окно из трея."""
+        # Восстанавливаем режим отображения до сворачивания.
         if self.isHidden():
             if self._was_maximized_before_minimize:
                 self.showMaximized()
             else:
                 self.showNormal()
+        # Поднимаем окно поверх и синхронизируем состояние кнопки.
         self.raise_()
         self.activateWindow()
         self.title_bar.sync_max_button()
 
     def _minimize_to_tray(self):
         """Сворачивает окно в трей."""
+        # Если трей не создан, выходим без действий.
         if self._tray_icon is None:
             return
+        # Прячем окно и показываем уведомление.
         self.hide()
         self._tray_icon.showMessage(
             APP_NAME,
@@ -140,6 +157,7 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         """Создает и компонует основные виджеты окна."""
+        # Корневой контейнер окна.
         outer = QWidget(self)
         outer.setObjectName("OuterRoot")
         self.setCentralWidget(outer)
@@ -148,6 +166,7 @@ class MainWindow(QMainWindow):
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
 
+        # Контейнер под заголовок и тело.
         self.container = QWidget()
         self.container.setObjectName("Container")
         outer_layout.addWidget(self.container)
@@ -156,11 +175,13 @@ class MainWindow(QMainWindow):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
 
+        # Верхняя панель заголовка.
         self.title_bar = TitleBar(self)
         self._apply_titlebar_style()
 
         container_layout.addWidget(self.title_bar)
 
+        # Основное тело окна.
         body = QWidget()
         body.setObjectName("Body")
         container_layout.addWidget(body, 1)
@@ -169,15 +190,18 @@ class MainWindow(QMainWindow):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
 
+        # Левый rail с кнопками режимов.
         self.left_rail = LeftRail()
         body_layout.addWidget(self.left_rail)
 
+        # Контейнер кнопки сворачивания навигации.
         self.nav_toggle_container = QWidget()
         self.nav_toggle_container.setObjectName("NavToggleContainer")
         nav_toggle_layout = QVBoxLayout(self.nav_toggle_container)
         nav_toggle_layout.setContentsMargins(0, 0, 0, 0)
         nav_toggle_layout.setSpacing(0)
 
+        # Кнопка сворачивания/разворачивания.
         self.nav_toggle = QToolButton()
         self.nav_toggle.setObjectName("NavToggleButton")
         self.nav_toggle.setText("⟨")
@@ -190,6 +214,7 @@ class MainWindow(QMainWindow):
 
         body_layout.addWidget(self.nav_toggle_container)
 
+        # Колонка навигации и поиска.
         self.nav_column = QWidget()
         self.nav_column.setObjectName("NavColumn")
         nav_layout = QVBoxLayout(self.nav_column)
@@ -203,6 +228,7 @@ class MainWindow(QMainWindow):
 
         body_layout.addWidget(self.nav_column)
 
+        # Стек рабочих областей.
         self.workspace_stack = QStackedWidget()
         self.workspace_stack.setObjectName("WorkspaceStack")
         body_layout.addWidget(self.workspace_stack, 1)
@@ -216,6 +242,7 @@ class MainWindow(QMainWindow):
         self.page_objects = ObjectWorkspace()
         self.page_settings = SettingsWorkspace()
 
+        # Регистрируем страницы и сохраняем их индексы.
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
@@ -226,12 +253,15 @@ class MainWindow(QMainWindow):
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
+        # Подключаем сигналы от навигации и поиска.
         self.projects_nav.filter_changed.connect(self._on_nav_filter_changed)
         self.search_nav.resultActivated.connect(self._on_search_result_activated)
         self._current_mode = self.MODE_TASKS
 
+        # Кнопка сворачивания навигации.
         self.nav_toggle.clicked.connect(self._toggle_nav_column)
 
+        # Применяем стили и синхронизацию размеров.
         self._apply_root_style()
 
         self.projects_nav.update_width_for_window(self.width())
@@ -240,6 +270,7 @@ class MainWindow(QMainWindow):
 
     def _placeholder(self, title: str, subtitle: str) -> QWidget:
         """Возвращает временный экран-заглушку для неготовых режимов."""
+        # Заглушка для режимов без реализации.
         w = QWidget()
         w.setObjectName("Placeholder")
         l = QVBoxLayout(w)
@@ -258,6 +289,7 @@ class MainWindow(QMainWindow):
 
     def _apply_titlebar_style(self) -> None:
         """Применяет стили к заголовку окна."""
+        # Устанавливаем стили для заголовка и кнопок управления.
         self.title_bar.setStyleSheet(f"""
             QWidget#TitleBar {{
                 {TITLEBAR_BACKGROUND}
@@ -285,6 +317,7 @@ class MainWindow(QMainWindow):
 
     def _apply_root_style(self) -> None:
         """Применяет базовые стили к корневому контейнеру."""
+        # Прописываем стили для фона, контейнера и кнопки навигации.
         self.centralWidget().setStyleSheet(f"""
             QWidget#OuterRoot {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
@@ -310,15 +343,18 @@ class MainWindow(QMainWindow):
         """)
 
     def _set_nav_collapsed(self, collapsed: bool) -> None:
+        # Скрываем/показываем колонку навигации и меняем подсказки.
         self.nav_column.setVisible(not collapsed)
         self.nav_toggle.setText("⟩" if collapsed else "⟨")
         self.nav_toggle.setToolTip("Развернуть навигацию" if collapsed else "Свернуть навигацию")
 
     def _toggle_nav_column(self) -> None:
+        # Переключаем состояние колонки навигации.
         self._set_nav_collapsed(self.nav_column.isVisible())
 
     def _wire_modes(self):
         """Связывает кнопки левого меню с режимами рабочих областей."""
+        # Формируем соответствие кнопок и режимов.
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
@@ -328,15 +364,19 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_objects: self.MODE_OBJECTS,
             self.left_rail.btn_settings: self.MODE_SETTINGS,
         }
+        # Подключаем клики на кнопки к смене режима.
         for btn, mode in self._btn_to_mode.items():
             btn.clicked.connect(lambda checked=False, m=mode: self.set_mode(m))
 
     def set_mode(self, mode_name: str):
         """Переключает активную рабочую область и обновляет заголовки."""
+        # Обновляем заголовок окна и состояние навигации.
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_name}")
         self._current_mode = mode_name
         self.projects_nav.set_mode_title(mode_name)
+        # Переключаем страницу в стеке.
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
+        # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
         elif mode_name == self.MODE_PROJECTS:
@@ -344,12 +384,14 @@ class MainWindow(QMainWindow):
         elif mode_name == self.MODE_OBJECTS:
             self.page_objects.refresh_objects()
 
+        # Отмечаем выбранную кнопку в меню.
         for btn, m in self._btn_to_mode.items():
             if m == mode_name:
                 btn.setChecked(True)
                 break
 
     def _on_nav_filter_changed(self, kind: str, value: object) -> None:
+        # Определяем активный режим и прокидываем фильтры в соответствующий вид.
         mode = self._current_mode
         if mode == self.MODE_TASKS:
             if kind == "project":
@@ -399,6 +441,7 @@ class MainWindow(QMainWindow):
             return
 
     def _on_search_result_activated(self, payload: dict) -> None:
+        # По типу найденной сущности переключаем нужный режим.
         entity = payload.get("entity")
         if entity == "task":
             self.set_mode(self.MODE_TASKS)
@@ -415,12 +458,14 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
+        # Передаем событие базовому классу и обновляем ширину панелей.
         super().resizeEvent(event)
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
 
     def changeEvent(self, event):
         """Обрабатывает сворачивание окна для отправки в трей."""
+        # Отслеживаем сворачивание и отправляем окно в трей.
         super().changeEvent(event)
         if event.type() == QEvent.WindowStateChange and self.isMinimized():
             self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowMaximized)
@@ -428,10 +473,12 @@ class MainWindow(QMainWindow):
 
     def keyPressEvent(self, event):
         """Обрабатывает горячие клавиши окна."""
+        # Esc закрывает полноэкранный режим карты.
         if event.key() == Qt.Key_Escape and self._map_fullscreen_active:
             self.set_map_fullscreen(False)
             event.accept()
             return
+        # F11 переключает полноэкранный режим окна.
         if event.key() == Qt.Key_F11:
             if self.isFullScreen():
                 if self._was_maximized_before_fullscreen:
@@ -449,14 +496,17 @@ class MainWindow(QMainWindow):
     # ----- Snap / detach -----
     def _snap_to_screen_edges(self, global_pos: QPoint):
         """Прилипает окно к краям экрана и разворачивает при касании верхней границы."""
+        # В maximized режим прилипание не нужно.
         if self.isMaximized():
             return
 
+        # Получаем активный экран и доступную геометрию.
         screen = QApplication.screenAt(global_pos) or self.screen()
         geo = screen.availableGeometry()
         t = self.SNAP_THRESHOLD
         x, y = global_pos.x(), global_pos.y()
 
+        # Прикосновение к верхнему краю — разворачиваем окно.
         if abs(y - geo.top()) <= t:
             if self._restore_geom.isNull():
                 self._restore_geom = self.geometry()
@@ -464,11 +514,13 @@ class MainWindow(QMainWindow):
             self.title_bar.sync_max_button()
             return
 
+        # Прикосновение к левому краю — половинное окно слева.
         if abs(x - geo.left()) <= t:
             self.setGeometry(QRect(geo.left(), geo.top(), geo.width() // 2, geo.height()))
             self._restore_geom = self.geometry()
             return
 
+        # Прикосновение к правому краю — половинное окно справа.
         if abs(x - geo.right()) <= t:
             self.setGeometry(QRect(geo.left() + geo.width() // 2, geo.top(), geo.width() // 2, geo.height()))
             self._restore_geom = self.geometry()
@@ -476,17 +528,21 @@ class MainWindow(QMainWindow):
 
     def _begin_restore_on_drag(self, global_pos: QPoint):
         """Восстанавливает нормальный размер при перетаскивании из maximize."""
+        # Если не maximized, ничего не делаем.
         if not self.isMaximized():
             return
 
+        # Запоминаем геометрию окна до maximized.
         if self._restore_geom.isNull():
             self._restore_geom = self.normalGeometry()
 
+        # Рассчитываем относительную позицию курсора по экрану.
         screen = QApplication.screenAt(global_pos) or self.screen()
         avail = screen.availableGeometry()
         rel_x = (global_pos.x() - avail.left()) / max(1, avail.width())
         rel_x = min(max(rel_x, 0.05), 0.95)
 
+        # Восстанавливаем окно и пересчитываем геометрию под курсором.
         self.showNormal()
         self.title_bar.sync_max_button()
 
@@ -502,9 +558,11 @@ class MainWindow(QMainWindow):
     # ----- Resize -----
     def _hit_test_edges(self, pos: QPoint) -> ResizeEdge:
         """Определяет, за какой край окна отвечает текущая позиция мыши."""
+        # В maximized режиме ресайз отключен.
         if self.isMaximized():
             return ResizeEdge.NONE
 
+        # Определяем направление ресайза по координатам.
         x, y = pos.x(), pos.y()
         w, h = self.width(), self.height()
         m = self.RESIZE_MARGIN
@@ -524,6 +582,7 @@ class MainWindow(QMainWindow):
 
     def _cursor_for_edge(self, edge: ResizeEdge):
         """Возвращает подходящий курсор для выбранного края."""
+        # Подбираем курсор для направления ресайза.
         if edge in (ResizeEdge.LEFT, ResizeEdge.RIGHT):
             return Qt.SizeHorCursor
         if edge in (ResizeEdge.TOP, ResizeEdge.BOTTOM):
@@ -536,6 +595,7 @@ class MainWindow(QMainWindow):
 
     def _start_resize(self, edge: ResizeEdge, global_pos: QPoint):
         """Стартует операцию изменения размеров окна."""
+        # Сохраняем параметры старта ресайза.
         self._resizing = True
         self._resize_edge = edge
         self._press_global = global_pos
@@ -543,9 +603,11 @@ class MainWindow(QMainWindow):
 
     def _do_resize(self, global_pos: QPoint):
         """Выполняет изменение геометрии окна во время ресайза."""
+        # Если ресайз не активен, ничего не делаем.
         if not self._resizing or self._resize_edge == ResizeEdge.NONE:
             return
 
+        # Рассчитываем смещения курсора.
         dx = global_pos.x() - self._press_global.x()
         dy = global_pos.y() - self._press_global.y()
 
@@ -553,6 +615,7 @@ class MainWindow(QMainWindow):
         min_w = self.minimumWidth()
         min_h = self.minimumHeight()
 
+        # Обновляем границы в зависимости от направления ресайза.
         if self._resize_edge & ResizeEdge.LEFT:
             new_x = g.x() + dx
             new_w = g.width() - dx
@@ -577,16 +640,19 @@ class MainWindow(QMainWindow):
             if new_h >= min_h:
                 g.setHeight(new_h)
 
+        # Применяем новую геометрию и запоминаем ее.
         self.setGeometry(g)
         self._restore_geom = self.geometry()
 
     def _stop_resize(self):
         """Сбрасывает состояние изменения размеров."""
+        # Сбрасываем флаги ресайза.
         self._resizing = False
         self._resize_edge = ResizeEdge.NONE
 
     def eventFilter(self, obj, event):
         """Перехватывает события мыши для кастомного ресайза."""
+        # Обрабатываем события только для самого окна.
         if obj is self:
             # 🔥 В maximized полностью выключаем hit-test и дергание курсора
             if self.isMaximized():
@@ -598,10 +664,12 @@ class MainWindow(QMainWindow):
                 pos = event.position().toPoint()
                 global_pos = event.globalPosition().toPoint()
 
+                # Во время ресайза меняем геометрию.
                 if self._resizing:
                     self._do_resize(global_pos)
                     return True
 
+                # Обновляем курсор, если изменился край ресайза.
                 edge = self._hit_test_edges(pos)
                 if edge != self._resize_edge:
                     self._resize_edge = edge
@@ -613,17 +681,20 @@ class MainWindow(QMainWindow):
                     pos = event.position().toPoint()
                     edge = self._hit_test_edges(pos)
                     if edge != ResizeEdge.NONE:
+                        # Запускаем ресайз при нажатии на край.
                         self._start_resize(edge, event.globalPosition().toPoint())
                         return True
                 return False
 
             if event.type() == event.Type.MouseButtonRelease:
+                # Останавливаем ресайз по отпусканию.
                 if self._resizing:
                     self._stop_resize()
                     return True
                 return False
 
             if event.type() == event.Type.Leave:
+                # Возвращаем курсор, если не ресайзим.
                 if not self._resizing:
                     self.unsetCursor()
                 return False
@@ -631,10 +702,12 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def set_map_fullscreen(self, enabled: bool) -> None:
+        # Не выполняем действия, если состояние не изменилось.
         if self._map_fullscreen_active == enabled:
             return
         self._map_fullscreen_active = enabled
         if enabled:
+            # Запоминаем видимость панелей и скрываем их.
             self._map_fullscreen_restore = {
                 "title_bar": self.title_bar.isVisible(),
                 "left_rail": self.left_rail.isVisible(),
@@ -648,6 +721,7 @@ class MainWindow(QMainWindow):
             self.nav_column.setVisible(False)
             self.showFullScreen()
         else:
+            # Возвращаем видимость панелей и режим окна.
             self.title_bar.setVisible(self._map_fullscreen_restore.get("title_bar", True))
             self.left_rail.setVisible(self._map_fullscreen_restore.get("left_rail", True))
             self.nav_toggle_container.setVisible(self._map_fullscreen_restore.get("nav_toggle", True))
@@ -657,4 +731,5 @@ class MainWindow(QMainWindow):
             else:
                 self.showNormal()
             self.title_bar.sync_max_button()
+        # Сообщаем рабочей области о смене полноэкранного режима.
         self.page_maps.set_map_fullscreen_state(enabled)
