@@ -25,6 +25,7 @@ from PySide6.QtGui import (
     QFont,
     QFontMetrics,
     QFontMetricsF,
+    QPalette,
     QPixmap,
     QPen,
     QCursor,
@@ -36,7 +37,7 @@ from PySide6.QtWidgets import (
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
     QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
     QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
-    QPushButton
+    QPushButton, QScrollArea
 )
 
 from mindnavigator.storage import CloudFileData, get_database
@@ -2282,8 +2283,8 @@ class MapEditorWorkspace(QWidget):
         self._nav_collapsed = False
         self._current_map_id: Optional[int] = None
         self._info_marker_id: Optional[int] = None
-        self._info_panel_default_width = 220
-        self._info_panel_expanded_width = 260
+        self._info_panel_default_width = 520
+        self._info_panel_expanded_width = 600
         self._info_panel_fullscreen_ratio = 0.35
 
         # Корневая компоновка редактора.
@@ -2361,34 +2362,123 @@ class MapEditorWorkspace(QWidget):
         info_layout.setContentsMargins(10, 10, 10, 10)
         info_layout.setSpacing(0)
 
-        info_card = QFrame()
-        info_card.setObjectName("MapInfoCard")
-        info_card_layout = QVBoxLayout(info_card)
-        info_card_layout.setContentsMargins(12, 12, 12, 12)
-        info_card_layout.setSpacing(8)
-
         self.info_title = QLabel("Данные объекта")
         self.info_title.setObjectName("MapInfoTitle")
+        info_layout.addWidget(self.info_title)
+
+        self.info_scroll = QScrollArea()
+        self.info_scroll.setObjectName("MapInfoScroll")
+        self.info_scroll.setWidgetResizable(True)
+        self.info_scroll.setFrameShape(QFrame.NoFrame)
+        self.info_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        info_body = QWidget()
+        info_body_layout = QHBoxLayout(info_body)
+        info_body_layout.setContentsMargins(0, 0, 0, 0)
+        info_body_layout.setSpacing(12)
+
+        left_panel = QFrame()
+        left_panel.setObjectName("MapInfoCard")
+        left_panel.setFixedWidth(220)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(10)
+
         self.info_preview_title = QLabel("Превью")
         self.info_preview_title.setObjectName("MapInfoSectionTitle")
         self.info_preview = QLabel("Нет изображения")
         self.info_preview.setObjectName("MapInfoPreview")
         self.info_preview.setAlignment(Qt.AlignCenter)
-        self.info_preview.setFixedHeight(120)
-        self.info_name = QLabel("-")
-        self.info_type = QLabel("-")
-        self.info_coords = QLabel("-")
-        self.info_task = QLabel("-")
-        self.info_project = QLabel("-")
-        self.info_note = QLabel("-")
-        self.info_object = QLabel("-")
-        self.info_file = QLabel("-")
-        self.info_map = QLabel("-")
-        self.info_marker = QLabel("-")
+        self.info_preview.setFixedHeight(140)
+
+        self.info_color_title = QLabel("Цвет метки")
+        self.info_color_title.setObjectName("MapInfoSectionTitle")
+        self.info_color_preview = QLabel()
+        self.info_color_preview.setObjectName("MapInfoColorPreview")
+        self.info_color_preview.setFixedSize(28, 28)
+        self.info_color_value = QLabel("—")
+        self.info_color_value.setObjectName("MapInfoValue")
+
+        color_row = QHBoxLayout()
+        color_row.setSpacing(8)
+        color_row.addWidget(self.info_color_preview)
+        color_row.addWidget(self.info_color_value)
+        color_row.addStretch(1)
+
+        left_layout.addWidget(self.info_preview_title)
+        left_layout.addWidget(self.info_preview)
+        left_layout.addSpacing(6)
+        left_layout.addWidget(self.info_color_title)
+        left_layout.addLayout(color_row)
+        left_layout.addStretch(1)
+
+        right_panel = QFrame()
+        right_panel.setObjectName("MapInfoFormContainer")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(12)
+
+        main_section = QFrame()
+        main_section.setObjectName("MapInfoSection")
+        main_layout = QVBoxLayout(main_section)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(8)
+
+        main_title = QLabel("Основное")
+        main_title.setObjectName("MapInfoSectionTitle")
+        main_layout.addWidget(main_title)
+
+        main_form = QFormLayout()
+        main_form.setSpacing(8)
+        main_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.info_name = QLabel("—")
+        self.info_type = QLabel("—")
+        self.info_size = QLabel("—")
+        self.info_coords = QLabel("—")
+        self.info_parent = QLabel("—")
+        for label in [self.info_name, self.info_type, self.info_size, self.info_coords, self.info_parent]:
+            label.setObjectName("MapInfoValue")
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        name_label = QLabel("Название")
+        type_label = QLabel("Тип")
+        size_label = QLabel("Размер")
+        coords_label = QLabel("Координаты")
+        parent_label = QLabel("Родительский каталог")
+        for label in [name_label, type_label, size_label, coords_label, parent_label]:
+            label.setObjectName("MapInfoFormLabel")
+
+        main_form.addRow(name_label, self.info_name)
+        main_form.addRow(type_label, self.info_type)
+        main_form.addRow(size_label, self.info_size)
+        main_form.addRow(coords_label, self.info_coords)
+        main_form.addRow(parent_label, self.info_parent)
+        main_layout.addLayout(main_form)
+
+        links_section = QFrame()
+        links_section.setObjectName("MapInfoSection")
+        links_layout = QVBoxLayout(links_section)
+        links_layout.setContentsMargins(12, 12, 12, 12)
+        links_layout.setSpacing(8)
+
+        links_title = QLabel("Привязки")
+        links_title.setObjectName("MapInfoSectionTitle")
+        links_layout.addWidget(links_title)
+
+        links_form = QFormLayout()
+        links_form.setSpacing(8)
+        links_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        self.info_task = QLabel("—")
+        self.info_project = QLabel("—")
+        self.info_note = QLabel("—")
+        self.info_object = QLabel("—")
+        self.info_file = QLabel("—")
+        self.info_map = QLabel("—")
+        self.info_marker = QLabel("—")
         for label in [
-            self.info_name,
-            self.info_type,
-            self.info_coords,
             self.info_task,
             self.info_project,
             self.info_note,
@@ -2398,23 +2488,83 @@ class MapEditorWorkspace(QWidget):
             self.info_marker,
         ]:
             label.setObjectName("MapInfoValue")
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        info_card_layout.addWidget(self.info_title)
-        info_card_layout.addWidget(self.info_preview_title)
-        info_card_layout.addWidget(self.info_preview)
-        info_card_layout.addWidget(self.info_name)
-        info_card_layout.addWidget(self.info_type)
-        info_card_layout.addWidget(self.info_coords)
-        info_card_layout.addWidget(self.info_task)
-        info_card_layout.addWidget(self.info_project)
-        info_card_layout.addWidget(self.info_note)
-        info_card_layout.addWidget(self.info_object)
-        info_card_layout.addWidget(self.info_file)
-        info_card_layout.addWidget(self.info_map)
-        info_card_layout.addWidget(self.info_marker)
-        info_card_layout.addStretch(1)
+        task_label = QLabel("Задачи")
+        project_label = QLabel("Проекты")
+        note_label = QLabel("Заметки")
+        object_label = QLabel("Объекты")
+        file_label = QLabel("Файлы")
+        map_label = QLabel("Карты")
+        marker_label = QLabel("Метки")
+        for label in [task_label, project_label, note_label, object_label, file_label, map_label, marker_label]:
+            label.setObjectName("MapInfoFormLabel")
 
-        info_layout.addWidget(info_card)
+        links_form.addRow(task_label, self.info_task)
+        links_form.addRow(project_label, self.info_project)
+        links_form.addRow(note_label, self.info_note)
+        links_form.addRow(object_label, self.info_object)
+        links_form.addRow(file_label, self.info_file)
+        links_form.addRow(map_label, self.info_map)
+        links_form.addRow(marker_label, self.info_marker)
+        links_layout.addLayout(links_form)
+
+        text_section = QFrame()
+        text_section.setObjectName("MapInfoSection")
+        text_layout = QVBoxLayout(text_section)
+        text_layout.setContentsMargins(12, 12, 12, 12)
+        text_layout.setSpacing(8)
+
+        text_title = QLabel("Текст")
+        text_title.setObjectName("MapInfoSectionTitle")
+        text_layout.addWidget(text_title)
+
+        desc_label = QLabel("Описание")
+        desc_label.setObjectName("MapInfoFormLabel")
+        self.info_description = QLabel("—")
+        self.info_description.setObjectName("MapInfoText")
+        self.info_description.setWordWrap(True)
+        self.info_description.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        text_layout.addWidget(desc_label)
+        text_layout.addWidget(self.info_description)
+
+        important_wrap = QFrame()
+        important_wrap.setObjectName("MapInfoImportant")
+        important_layout = QVBoxLayout(important_wrap)
+        important_layout.setContentsMargins(10, 8, 10, 8)
+        important_layout.setSpacing(6)
+
+        important_header = QHBoxLayout()
+        important_icon = QLabel("⚑")
+        important_icon.setObjectName("MapInfoImportantIcon")
+        important_label = QLabel("Важные пометки")
+        important_label.setObjectName("MapInfoFormLabel")
+        important_header.addWidget(important_icon)
+        important_header.addWidget(important_label)
+        important_header.addStretch(1)
+
+        self.info_important = QLabel("—")
+        self.info_important.setObjectName("MapInfoText")
+        self.info_important.setWordWrap(True)
+        self.info_important.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        important_layout.addLayout(important_header)
+        important_layout.addWidget(self.info_important)
+
+        text_layout.addWidget(important_wrap)
+
+        right_layout.addWidget(main_section)
+        right_layout.addWidget(links_section)
+        right_layout.addWidget(text_section)
+        right_layout.addStretch(1)
+
+        info_body_layout.addWidget(left_panel)
+        info_body_layout.addWidget(right_panel, 1)
+
+        self.info_scroll.setWidget(info_body)
+        info_layout.addWidget(self.info_scroll)
 
         # Собираем основные панели.
         root.addWidget(self.toolbar)
@@ -2461,7 +2611,11 @@ class MapEditorWorkspace(QWidget):
                 border-left: 1px solid #2a2b2f;
             }
 
-            QFrame#MapInfoCard {
+            QScrollArea#MapInfoScroll {
+                background: transparent;
+            }
+
+            QFrame#MapInfoCard, QFrame#MapInfoSection {
                 background: rgba(22, 24, 32, 0.92);
                 border: 1px solid #2a2b2f;
                 border-radius: 10px;
@@ -2479,7 +2633,16 @@ class MapEditorWorkspace(QWidget):
                 font-weight: 600;
             }
 
+            QLabel#MapInfoFormLabel {
+                color: #b9bcc4;
+            }
+
             QLabel#MapInfoValue {
+                color: #a8abb3;
+                font-size: 12px;
+            }
+
+            QLabel#MapInfoText {
                 color: #a8abb3;
                 font-size: 12px;
             }
@@ -2489,6 +2652,21 @@ class MapEditorWorkspace(QWidget):
                 border-radius: 8px;
                 color: #8e919a;
                 background: #1b1d24;
+            }
+
+            QLabel#MapInfoColorPreview {
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }
+
+            QFrame#MapInfoImportant {
+                border-left: 3px solid #d59d35;
+                background: rgba(29, 31, 39, 0.85);
+                border-radius: 8px;
+            }
+
+            QLabel#MapInfoImportantIcon {
+                color: #d59d35;
             }
         """)
 
@@ -2543,23 +2721,33 @@ class MapEditorWorkspace(QWidget):
     def _apply_marker_info(self, marker: Marker) -> None:
         # Обновляем значения в инфо-панели.
         self._info_marker_id = marker.id
-        self.info_name.setText(f"Имя: {marker.name}")
-        self.info_type.setText(f"Тип: {marker.type}")
-        self.info_coords.setText(f"Координаты: {marker.x:.0f}, {marker.y:.0f}")
-        self.info_task.setText(self._format_links("Задачи", marker.task_ids, self._tasks_by_id))
-        self.info_project.setText(self._format_links("Проекты", marker.project_ids, self._projects_by_id))
-        self.info_note.setText(self._format_links("Заметки", marker.note_ids, self._notes_by_id))
-        self.info_object.setText(self._format_links("Объекты", marker.object_ids, self._objects_by_id))
-        self.info_file.setText(self._format_links("Файлы", marker.file_ids, self._files_by_id))
-        self.info_map.setText(self._format_links("Карты", marker.map_ids, self._maps_by_id))
-        self.info_marker.setText(self._format_links("Метки", marker.marker_ids, self._markers_by_id))
+        self.info_name.setText(self._format_value(marker.name))
+        self.info_type.setText(self._format_value(marker.type))
+        self.info_size.setText(f"{marker.size:.1f} px / ед.")
+        self.info_coords.setText(f"{marker.x:.0f}, {marker.y:.0f}")
+        self.info_parent.setText(self._format_value(marker.parent_path))
+        self.info_task.setText(self._format_links(marker.task_ids, self._tasks_by_id))
+        self.info_project.setText(self._format_links(marker.project_ids, self._projects_by_id))
+        self.info_note.setText(self._format_links(marker.note_ids, self._notes_by_id))
+        self.info_object.setText(self._format_links(marker.object_ids, self._objects_by_id))
+        self.info_file.setText(self._format_links(marker.file_ids, self._files_by_id))
+        self.info_map.setText(self._format_links(marker.map_ids, self._maps_by_id))
+        self.info_marker.setText(self._format_links(marker.marker_ids, self._markers_by_id))
+        self.info_description.setText(self._format_value(marker.description))
+        self.info_important.setText(self._format_value(marker.properties))
+        palette = self.info_color_preview.palette()
+        palette.setColor(QPalette.Window, marker.color)
+        self.info_color_preview.setPalette(palette)
+        self.info_color_preview.setAutoFillBackground(True)
+        self.info_color_value.setText(marker.color.name().upper())
         self._update_info_preview(marker)
 
     def _update_info_preview(self, marker: Marker) -> None:
         # Обновляем превью изображения маркера.
-        preview_width = max(self.info_panel.width() - 24, 1)
-        preview_height = max(self.info_preview.height(), 1)
-        preview_size = QSize(preview_width, preview_height)
+        preview_size = QSize(
+            max(self.info_preview.width(), 1),
+            max(self.info_preview.height(), 1),
+        )
         pixmap = self._load_marker_preview(marker, preview_size)
         if pixmap is not None:
             self.info_preview.setPixmap(pixmap)
@@ -2710,10 +2898,15 @@ class MapEditorWorkspace(QWidget):
         self._db.delete_map_marker(marker_id)
         self.markersChanged.emit()
 
-    def _format_links(self, label: str, item_ids: List[int], source: dict) -> str:
-        # Формируем текстовую строку с названиями привязанных сущностей.
+    def _format_value(self, value: str) -> str:
+        # Приводим значение к отображаемому виду.
+        text = (value or "").strip()
+        return text if text else "—"
+
+    def _format_links(self, item_ids: List[int], source: dict) -> str:
+        # Формируем строку с названиями привязанных сущностей.
         if not item_ids:
-            return f"{label}: —"
+            return "—"
         titles = []
         for item_id in item_ids:
             item = source.get(item_id)
@@ -2722,7 +2915,7 @@ class MapEditorWorkspace(QWidget):
                 continue
             title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
             titles.append(title)
-        return f"{label}: {', '.join(titles)}"
+        return ", ".join(titles)
 
 
 class MapsListWorkspace(QWidget):
