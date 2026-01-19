@@ -2985,6 +2985,10 @@ class MapEditorWorkspace(QWidget):
             return
         self._open_attachment_view(kind, parsed_id)
 
+    def _open_attachment_view(self, kind: str, item_id: int) -> None:
+        # Делегируем открытие вложения канве карты.
+        self.canvas._open_attachment_view(kind, item_id)
+
 
 class MapsListWorkspace(QWidget):
     def __init__(self, parent=None):
