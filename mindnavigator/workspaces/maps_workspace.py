@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
@@ -2505,6 +2506,10 @@ class MapEditorWorkspace(QWidget):
             label.setObjectName("MapInfoValue")
             label.setWordWrap(True)
             label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.info_file.setTextFormat(Qt.RichText)
+        self.info_file.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.info_file.setOpenExternalLinks(False)
+        self.info_file.linkActivated.connect(self._handle_info_link)
 
         task_label = QLabel("Задачи")
         project_label = QLabel("Проекты")
@@ -2751,7 +2756,7 @@ class MapEditorWorkspace(QWidget):
         self.info_project.setText(self._format_links(marker.project_ids, self._projects_by_id))
         self.info_note.setText(self._format_links(marker.note_ids, self._notes_by_id))
         self.info_object.setText(self._format_links(marker.object_ids, self._objects_by_id))
-        self.info_file.setText(self._format_links(marker.file_ids, self._files_by_id))
+        self.info_file.setText(self._format_file_links(marker.file_ids, self._files_by_id))
         self.info_map.setText(self._format_links(marker.map_ids, self._maps_by_id))
         self.info_marker.setText(self._format_links(marker.marker_ids, self._markers_by_id))
         self.info_description.setText(self._format_value(marker.description))
@@ -2948,6 +2953,37 @@ class MapEditorWorkspace(QWidget):
             title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
             titles.append(title)
         return ", ".join(titles)
+
+    def _format_file_links(self, item_ids: List[int], source: dict) -> str:
+        # Формируем кликабельные ссылки для изображений.
+        if not item_ids:
+            return "—"
+        parts = []
+        for item_id in item_ids:
+            item = source.get(item_id)
+            if not item:
+                parts.append("не найдено")
+                continue
+            title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+            safe_title = html.escape(title)
+            if getattr(item, "is_image", False):
+                parts.append(f'<a href="file:{item_id}">{safe_title}</a>')
+            else:
+                parts.append(safe_title)
+        return "<br>".join(parts)
+
+    def _handle_info_link(self, link: str) -> None:
+        # Обрабатываем клики по ссылкам файлов в панели данных.
+        if ":" not in link:
+            return
+        kind, item_id = link.split(":", 1)
+        if kind != "file":
+            return
+        try:
+            parsed_id = int(item_id)
+        except ValueError:
+            return
+        self._open_attachment_view(kind, parsed_id)
 
 
 class MapsListWorkspace(QWidget):
