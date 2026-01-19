@@ -298,6 +298,7 @@ class EntityLinksInput(QWidget):
     itemsChanged = Signal(list)
     searchChanged = Signal(str)
     clearRequested = Signal()
+    addRequested = Signal()
     linkActivated = Signal(str)
 
     def __init__(self, placeholder: str, icon_name: str, parent=None) -> None:
@@ -330,6 +331,15 @@ class EntityLinksInput(QWidget):
         self.search_input.setClearButtonEnabled(False)
         self.search_input.textChanged.connect(self.searchChanged.emit)
 
+        # Кнопка добавления.
+        self.add_button = QToolButton()
+        self.add_button.setObjectName("EntityLinksAdd")
+        self.add_button.setIcon(qta.icon("fa5s.plus", color="#cfcfcf"))
+        self.add_button.setCursor(Qt.PointingHandCursor)
+        self.add_button.setAutoRaise(True)
+        self.add_button.setToolTip("Добавить привязки")
+        self.add_button.clicked.connect(self.addRequested.emit)
+
         # Кнопка очистки.
         self.clear_button = QToolButton()
         self.clear_button.setObjectName("EntityLinksClear")
@@ -340,6 +350,7 @@ class EntityLinksInput(QWidget):
 
         layout.addWidget(self.icon_label, 0, Qt.AlignVCenter)
         layout.addWidget(self.flow_container, 1)
+        layout.addWidget(self.add_button, 0, Qt.AlignVCenter)
         layout.addWidget(self.clear_button, 0, Qt.AlignVCenter)
 
     def set_items(self, items: Iterable[EntityLinkItem]) -> None:
@@ -808,6 +819,7 @@ class MapLabelEditDialog(QDialog):
             link_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             link_input.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
             link_input.clearRequested.connect(lambda k=key: self._clear_links(k))
+            link_input.addRequested.connect(lambda k=key: self._open_picker(k))
             link_input.linkActivated.connect(self._open_link)
             link_input.search_input.returnPressed.connect(
                 lambda k=key, field=link_input: self._open_picker(k, field.search_input.text())
@@ -1041,6 +1053,11 @@ class MapLabelEditDialog(QDialog):
                 min-width: 160px;
             }}
             QToolButton#EntityLinksClear {{
+                background: transparent;
+                border: none;
+                padding: 2px;
+            }}
+            QToolButton#EntityLinksAdd {{
                 background: transparent;
                 border: none;
                 padding: 2px;
