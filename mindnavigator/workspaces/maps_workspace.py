@@ -2275,6 +2275,7 @@ class MapEditorWorkspace(QWidget):
         self._current_map_id: Optional[int] = None
         self._info_panel_default_width = 220
         self._info_panel_expanded_width = 260
+        self._info_panel_fullscreen_ratio = 0.35
 
         # Корневая компоновка редактора.
         root = QHBoxLayout(self)
@@ -2452,11 +2453,13 @@ class MapEditorWorkspace(QWidget):
         self.btn_fullscreen.blockSignals(True)
         self.btn_fullscreen.setChecked(enabled)
         self.btn_fullscreen.blockSignals(False)
+        if self._fullscreen_active == enabled:
+            return
         self._fullscreen_active = enabled
         if enabled:
             self._info_panel_was_visible = self.info_panel.isVisible()
-            self.info_panel.hide()
-        elif self._info_panel_was_visible:
+        self._update_info_panel_width()
+        if not enabled and self._info_panel_was_visible:
             self.info_panel.show()
 
     def set_nav_collapsed_state(self, collapsed: bool) -> None:
@@ -2468,7 +2471,10 @@ class MapEditorWorkspace(QWidget):
 
     def _update_info_panel_width(self) -> None:
         # Подстраиваем ширину панели в зависимости от состояния навигации.
-        width = self._info_panel_expanded_width if self._nav_collapsed else self._info_panel_default_width
+        if self._fullscreen_active:
+            width = max(int(self.width() * self._info_panel_fullscreen_ratio), 1)
+        else:
+            width = self._info_panel_expanded_width if self._nav_collapsed else self._info_panel_default_width
         self.info_panel.setFixedWidth(width)
 
     def _on_fullscreen_toggled(self, checked: bool) -> None:
@@ -2477,12 +2483,11 @@ class MapEditorWorkspace(QWidget):
 
     def _on_marker_selected(self, marker: Optional[Marker]) -> None:
         # Отображаем данные выбранного маркера в правой панели.
-        if self._fullscreen_active:
-            self.info_panel.hide()
-            return
         if not marker:
             self.info_panel.hide()
             return
+        if self._fullscreen_active:
+            self._update_info_panel_width()
         self.info_panel.show()
         self.info_name.setText(f"Имя: {marker.name}")
         self.info_type.setText(f"Тип: {marker.type}")
@@ -2494,6 +2499,12 @@ class MapEditorWorkspace(QWidget):
         self.info_file.setText(self._format_links("Файлы", marker.file_ids, self._files_by_id))
         self.info_map.setText(self._format_links("Карты", marker.map_ids, self._maps_by_id))
         self.info_marker.setText(self._format_links("Метки", marker.marker_ids, self._markers_by_id))
+
+    def resizeEvent(self, event) -> None:
+        # Подстраиваем ширину панели в полноэкранном режиме.
+        super().resizeEvent(event)
+        if self._fullscreen_active:
+            self._update_info_panel_width()
 
     def _load_attachment_sources(self) -> None:
         # Загружаем источники данных из базы и передаем их канве.
