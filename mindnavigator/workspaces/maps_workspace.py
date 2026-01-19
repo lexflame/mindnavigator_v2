@@ -2358,8 +2358,14 @@ class MapEditorWorkspace(QWidget):
         self.info_panel.setObjectName("MapInfoPanel")
         self.info_panel.setFixedWidth(self._info_panel_default_width)
         info_layout = QVBoxLayout(self.info_panel)
-        info_layout.setContentsMargins(12, 12, 12, 12)
-        info_layout.setSpacing(8)
+        info_layout.setContentsMargins(10, 10, 10, 10)
+        info_layout.setSpacing(0)
+
+        info_card = QFrame()
+        info_card.setObjectName("MapInfoCard")
+        info_card_layout = QVBoxLayout(info_card)
+        info_card_layout.setContentsMargins(12, 12, 12, 12)
+        info_card_layout.setSpacing(8)
 
         self.info_title = QLabel("Данные объекта")
         self.info_title.setObjectName("MapInfoTitle")
@@ -2393,20 +2399,22 @@ class MapEditorWorkspace(QWidget):
         ]:
             label.setObjectName("MapInfoValue")
 
-        info_layout.addWidget(self.info_title)
-        info_layout.addWidget(self.info_preview_title)
-        info_layout.addWidget(self.info_preview)
-        info_layout.addWidget(self.info_name)
-        info_layout.addWidget(self.info_type)
-        info_layout.addWidget(self.info_coords)
-        info_layout.addWidget(self.info_task)
-        info_layout.addWidget(self.info_project)
-        info_layout.addWidget(self.info_note)
-        info_layout.addWidget(self.info_object)
-        info_layout.addWidget(self.info_file)
-        info_layout.addWidget(self.info_map)
-        info_layout.addWidget(self.info_marker)
-        info_layout.addStretch(1)
+        info_card_layout.addWidget(self.info_title)
+        info_card_layout.addWidget(self.info_preview_title)
+        info_card_layout.addWidget(self.info_preview)
+        info_card_layout.addWidget(self.info_name)
+        info_card_layout.addWidget(self.info_type)
+        info_card_layout.addWidget(self.info_coords)
+        info_card_layout.addWidget(self.info_task)
+        info_card_layout.addWidget(self.info_project)
+        info_card_layout.addWidget(self.info_note)
+        info_card_layout.addWidget(self.info_object)
+        info_card_layout.addWidget(self.info_file)
+        info_card_layout.addWidget(self.info_map)
+        info_card_layout.addWidget(self.info_marker)
+        info_card_layout.addStretch(1)
+
+        info_layout.addWidget(info_card)
 
         # Собираем основные панели.
         root.addWidget(self.toolbar)
@@ -2449,24 +2457,30 @@ class MapEditorWorkspace(QWidget):
             }
 
             QFrame#MapInfoPanel {
-                background: rgba(26, 28, 32, 0.92);
+                background: rgba(20, 22, 30, 0.92);
                 border-left: 1px solid #2a2b2f;
             }
 
+            QFrame#MapInfoCard {
+                background: rgba(22, 24, 32, 0.92);
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+            }
+
             QLabel#MapInfoTitle {
-                color: #f2f2f2;
-                font-size: 14px;
+                color: #f0f0f0;
+                font-size: 15px;
                 font-weight: 600;
             }
 
             QLabel#MapInfoSectionTitle {
-                color: #d2d2d2;
+                color: #d9d9d9;
                 font-size: 12px;
                 font-weight: 600;
             }
 
             QLabel#MapInfoValue {
-                color: #cfcfcf;
+                color: #a8abb3;
                 font-size: 12px;
             }
 
