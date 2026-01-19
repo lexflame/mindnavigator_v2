@@ -849,6 +849,15 @@ class MapLabelEditDialog(QDialog):
                 link_input.search_input.setCompleter(completer)
                 self._register_completer_popup(link_input.search_input, completer)
 
+                def _open_picker_on_empty_click(event, field=link_input.search_input, button=link_input.add_button):
+                    # Открываем пикер кликом по пустому полю.
+                    if event.button() == Qt.LeftButton and not field.text().strip():
+                        button.click()
+                        return
+                    QLineEdit.mousePressEvent(field, event)
+
+                link_input.search_input.mousePressEvent = _open_picker_on_empty_click
+
             self._link_inputs[key] = link_input
             chips_label = QLabel(source.label)
             chips_label.setObjectName("MapLabelFormLabel")
