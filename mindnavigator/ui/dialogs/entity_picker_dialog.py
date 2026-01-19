@@ -48,18 +48,21 @@ class EntityPickerDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
         self.setWindowTitle(f"Выбор: {entity_type}")
-        self.resize(520, 420)
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.resize(320, 280)
         self._fetch_fn = fetch_fn
         self._selected_ids = set(selected_ids or [])
         self._items: list[ChipItem] = []
         self._anchor_widget = anchor_widget
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Поиск...")
+        self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._reload)
         if initial_query:
             self.search_input.setText(initial_query)
@@ -67,6 +70,8 @@ class EntityPickerDialog(QDialog):
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
         self.list_widget.setSpacing(6)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.list_widget.setFixedHeight(180)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Добавить")
@@ -80,32 +85,30 @@ class EntityPickerDialog(QDialog):
         self.setStyleSheet(
             """
             QDialog#EntityPickerDialog {
-                background: rgba(20, 22, 30, 0.92);
+                background: #1b1c1f;
                 color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
             }
             QLineEdit {
                 background: #202127;
-                color: #e6e6e6;
+                color: #cfcfcf;
                 border: 1px solid #2a2b2f;
                 padding: 6px 8px;
                 border-radius: 6px;
             }
             QListWidget {
-                background: #202127;
+                background: #1b1c1f;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
                 padding: 0px;
             }
             QListWidget::item {
-                padding: 8px 10px;
-                margin: 3px 0px;
-                background: #000;
-                color: #ffffff;
-                border-radius: 6px;
+                padding: 6px 8px;
             }
             QListWidget::item:hover {
-                background: #333840;
+                background: #2a2b2f;
             }
             QListWidget::item:checked {
                 background: #3b4a7a;
@@ -134,7 +137,7 @@ class EntityPickerDialog(QDialog):
         if not self._anchor_widget:
             return
         width = self._anchor_widget.width()
-        self.resize(width, self.height())
+        self.setFixedWidth(width)
         anchor_pos = self._anchor_widget.mapToGlobal(QPoint(0, self._anchor_widget.height()))
         self.move(anchor_pos)
 
