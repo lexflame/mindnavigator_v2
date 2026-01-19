@@ -2558,6 +2558,26 @@ class MapEditorWorkspace(QWidget):
                 self.info_preview.setText("Нет изображения")
         self.info_preview.setToolTip(marker.image_path or "")
 
+    def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
+        # Загружаем превью изображения маркера для инфо-панели.
+        image_path = (marker.image_path or "").strip()
+        if not image_path:
+            return None
+        path = Path(image_path)
+        file_path = path if path.is_file() else None
+        if file_path is None:
+            cloud_root = get_database().get_setting("cloud_storage_path", default="").strip()
+            if cloud_root:
+                candidate = Path(cloud_root) / image_path
+                if candidate.is_file():
+                    file_path = candidate
+        if not file_path:
+            return None
+        pixmap = QPixmap(str(file_path))
+        if pixmap.isNull():
+            return None
+        return pixmap.scaled(target, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
     def resizeEvent(self, event) -> None:
         # Подстраиваем ширину панели в полноэкранном режиме.
         super().resizeEvent(event)
