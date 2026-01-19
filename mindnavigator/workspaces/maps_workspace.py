@@ -2379,10 +2379,15 @@ class MapEditorWorkspace(QWidget):
         info_body_layout.setContentsMargins(0, 0, 0, 0)
         info_body_layout.setSpacing(12)
 
-        self.setStyleSheet(
+        self.info_scroll.setStyleSheet(
             """
             QHBoxLayout#FormBox {
-                background: #0f1115;
+                background: #24262c;
+            }
+            QScrollArea#MapInfoScroll {
+                background: #24262c;
+            }
+            QWidget {
             }
             """
         )
@@ -2622,7 +2627,7 @@ class MapEditorWorkspace(QWidget):
             }
 
             QScrollArea#MapInfoScroll {
-                background: transparent;
+                background: #24262c;
             }
 
             QFrame#MapInfoCard, QFrame#MapInfoSection {
