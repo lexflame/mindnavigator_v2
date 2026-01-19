@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
     QPushButton, QScrollArea
 )
+from shiboken6 import isValid
 
 from mindnavigator.storage import CloudFileData, get_database
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
@@ -2693,6 +2694,8 @@ class MapEditorWorkspace(QWidget):
 
     def _update_info_panel_width(self) -> None:
         # Подстраиваем ширину панели в зависимости от состояния навигации.
+        if not self._info_widgets_alive():
+            return
         if self._fullscreen_active:
             width = max(int(self.width() * self._info_panel_fullscreen_ratio), 1)
         else:
@@ -2709,6 +2712,8 @@ class MapEditorWorkspace(QWidget):
 
     def _on_marker_selected(self, marker: Optional[Marker]) -> None:
         # Отображаем данные выбранного маркера в правой панели.
+        if not self._info_widgets_alive():
+            return
         if not marker:
             self._info_marker_id = None
             self.info_panel.hide()
@@ -2720,6 +2725,8 @@ class MapEditorWorkspace(QWidget):
 
     def _apply_marker_info(self, marker: Marker) -> None:
         # Обновляем значения в инфо-панели.
+        if not self._info_widgets_alive():
+            return
         self._info_marker_id = marker.id
         self.info_name.setText(self._format_value(marker.name))
         self.info_type.setText(self._format_value(marker.type))
@@ -2742,8 +2749,19 @@ class MapEditorWorkspace(QWidget):
         self.info_color_value.setText(marker.color.name().upper())
         self._update_info_preview(marker)
 
+    def _info_widgets_alive(self) -> bool:
+        # Проверяем, что виджеты инфо-панели ещё существуют.
+        return bool(
+            isValid(self.info_panel)
+            and isValid(self.info_name)
+            and isValid(self.info_preview)
+            and isValid(self.info_color_preview)
+        )
+
     def _update_info_preview(self, marker: Marker) -> None:
         # Обновляем превью изображения маркера.
+        if not self._info_widgets_alive():
+            return
         preview_size = QSize(
             max(self.info_preview.width(), 1),
             max(self.info_preview.height(), 1),
