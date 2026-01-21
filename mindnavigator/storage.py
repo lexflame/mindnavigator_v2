@@ -501,7 +501,6 @@ class Database:
         self._conn.execute("DROP TABLE tasks_old;")
 
     def _rebuild_projects_table(self) -> None:
-        self._conn.execute("ALTER TABLE projects RENAME TO projects_old;")
         self._conn.execute(
             """
             CREATE TABLE projects (
@@ -514,14 +513,6 @@ class Database:
             );
             """
         )
-        self._conn.execute(
-            """
-            INSERT INTO projects (id, area, title, updated, priority, archived)
-            SELECT id, area, title, updated, priority, archived
-            FROM projects_old;
-            """
-        )
-        self._conn.execute("DROP TABLE projects_old;")
 
     def _ensure_priority_indexes(self) -> None:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
