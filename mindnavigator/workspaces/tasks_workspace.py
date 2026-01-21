@@ -2780,6 +2780,9 @@ class TasksWorkspace(BaseWorkspace):
         """Перезагружает список задач из базы."""
         self.model.refresh()
 
+    def on_enter(self) -> None:
+        super().on_enter()
+
     def apply_query(self, query: str) -> None:
         self.model.set_search(query)
 
