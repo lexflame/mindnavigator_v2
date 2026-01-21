@@ -1336,111 +1336,56 @@ class Database:
         )
         if self._task_project_fk_needs_repair():
             self._repair_task_project_fk()
-        try:
-            with self._conn:
-                self._conn.execute(
-                    """
-                    INSERT INTO map_markers (
-                        id,
-                        map_id,
-                        name,
-                        x,
-                        y,
-                        color,
-                        type,
-                        size,
-                        description,
-                        properties,
-                        task_ids,
-                        project_ids,
-                        note_ids,
-                        object_ids,
-                        file_ids,
-                        map_ids,
-                        marker_ids,
-                        parent_path,
-                        image_path,
-                        created_at,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        map_id = excluded.map_id,
-                        name = excluded.name,
-                        x = excluded.x,
-                        y = excluded.y,
-                        color = excluded.color,
-                        type = excluded.type,
-                        size = excluded.size,
-                        description = excluded.description,
-                        properties = excluded.properties,
-                        task_ids = excluded.task_ids,
-                        project_ids = excluded.project_ids,
-                        note_ids = excluded.note_ids,
-                        object_ids = excluded.object_ids,
-                        file_ids = excluded.file_ids,
-                        map_ids = excluded.map_ids,
-                        marker_ids = excluded.marker_ids,
-                        parent_path = excluded.parent_path,
-                        image_path = excluded.image_path,
-                        created_at = map_markers.created_at,
-                        updated_at = excluded.updated_at;
-                    """,
-                    payload,
-                )
-        except sqlite3.OperationalError as exc:
-            if "projects_old" not in str(exc):
-                raise
-            self._repair_task_project_fk()
-            with self._conn:
-                self._conn.execute(
-                    """
-                    INSERT INTO map_markers (
-                        id,
-                        map_id,
-                        name,
-                        x,
-                        y,
-                        color,
-                        type,
-                        size,
-                        description,
-                        properties,
-                        task_ids,
-                        project_ids,
-                        note_ids,
-                        object_ids,
-                        file_ids,
-                        map_ids,
-                        marker_ids,
-                        parent_path,
-                        image_path,
-                        created_at,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        map_id = excluded.map_id,
-                        name = excluded.name,
-                        x = excluded.x,
-                        y = excluded.y,
-                        color = excluded.color,
-                        type = excluded.type,
-                        size = excluded.size,
-                        description = excluded.description,
-                        properties = excluded.properties,
-                        task_ids = excluded.task_ids,
-                        project_ids = excluded.project_ids,
-                        note_ids = excluded.note_ids,
-                        object_ids = excluded.object_ids,
-                        file_ids = excluded.file_ids,
-                        map_ids = excluded.map_ids,
-                        marker_ids = excluded.marker_ids,
-                        parent_path = excluded.parent_path,
-                        image_path = excluded.image_path,
-                        created_at = map_markers.created_at,
-                        updated_at = excluded.updated_at;
-                    """,
-                    payload,
-                )
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO map_markers (
+                    id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    type,
+                    size,
+                    description,
+                    properties,
+                    task_ids,
+                    project_ids,
+                    note_ids,
+                    object_ids,
+                    file_ids,
+                    map_ids,
+                    marker_ids,
+                    parent_path,
+                    image_path,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    map_id = excluded.map_id,
+                    name = excluded.name,
+                    x = excluded.x,
+                    y = excluded.y,
+                    color = excluded.color,
+                    type = excluded.type,
+                    size = excluded.size,
+                    description = excluded.description,
+                    properties = excluded.properties,
+                    task_ids = excluded.task_ids,
+                    project_ids = excluded.project_ids,
+                    note_ids = excluded.note_ids,
+                    object_ids = excluded.object_ids,
+                    file_ids = excluded.file_ids,
+                    map_ids = excluded.map_ids,
+                    marker_ids = excluded.marker_ids,
+                    parent_path = excluded.parent_path,
+                    image_path = excluded.image_path,
+                    created_at = map_markers.created_at,
+                    updated_at = excluded.updated_at;
+                """,
+                payload,
+            )
         row = self._conn.execute(
             """
             SELECT
