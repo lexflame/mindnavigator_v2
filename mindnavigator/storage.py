@@ -420,9 +420,11 @@ class Database:
             return
         with self._conn:
             self._conn.execute("PRAGMA foreign_keys=OFF;")
+            projects_rebuilt = False
             if not self._priority_constraint_is_current("projects"):
                 self._rebuild_projects_table()
-            if not self._priority_constraint_is_current("tasks"):
+                projects_rebuilt = True
+            if projects_rebuilt or not self._priority_constraint_is_current("tasks"):
                 self._rebuild_tasks_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._ensure_priority_indexes()
