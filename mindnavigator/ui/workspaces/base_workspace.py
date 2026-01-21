@@ -166,9 +166,11 @@ class BaseWorkspace(QWidget):
     def save_state(self) -> None:
         settings = QSettings()
         settings.setValue(f"workspace/{self.workspace_id}/search_text", self._query)
+        tab_value = self._filters.get("tab")
+        filters_payload = {"tab": tab_value} if tab_value else {}
         settings.setValue(
             f"workspace/{self.workspace_id}/filters",
-            json.dumps(self._filters),
+            json.dumps(filters_payload),
         )
 
     def restore_state(self) -> None:
@@ -176,9 +178,11 @@ class BaseWorkspace(QWidget):
         search_text = settings.value(f"workspace/{self.workspace_id}/search_text", "", str)
         filters_json = settings.value(f"workspace/{self.workspace_id}/filters", "{}", str)
         try:
-            self._filters = json.loads(filters_json) if filters_json else {}
+            stored_filters = json.loads(filters_json) if filters_json else {}
         except json.JSONDecodeError:
-            self._filters = {}
+            stored_filters = {}
+        tab_value = stored_filters.get("tab") if isinstance(stored_filters, dict) else None
+        self._filters = {"tab": tab_value} if tab_value else {}
         self._query = search_text or ""
         self.search_input.setText(self._query)
 
