@@ -109,7 +109,7 @@ class TasksModel(QAbstractListModel):
         self._search = ""
         self._focus_day: Optional[date] = None
         self._project_filter_id: Optional[int] = None
-        self._sort_key = "date"  # date | title | priority
+        self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
         self._expanded_task_ids: set[int] = set()
