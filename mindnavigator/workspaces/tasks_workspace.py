@@ -2564,7 +2564,7 @@ class TasksWorkspace(BaseWorkspace):
         self.build_content()
 
         self._update_day_label()
-        self._apply_tab("all")
+        self._apply_tab("plan")
         self.update_action_states()
 
         self.setStyleSheet("""
@@ -2757,7 +2757,7 @@ class TasksWorkspace(BaseWorkspace):
         self.tab_today = tab_btn("Сегодня", "today")
         self.tab_done = tab_btn("Выполнено", "done")
         self.tab_deferred = tab_btn("Отложенные", "deferred")
-        self.tab_all.setChecked(True)
+        self.tab_plan.setChecked(True)
 
         self.btn_prev_day = QToolButton()
         self.btn_prev_day.setIcon(qta.icon("fa5s.chevron-left", color="#cfcfcf"))
@@ -2820,7 +2820,11 @@ class TasksWorkspace(BaseWorkspace):
         try:
             tab = filters.get("tab")
             if not tab:
-                tab = self._tab_from_mode(filters.get("mode"))
+                mode = filters.get("mode")
+                if mode:
+                    tab = self._tab_from_mode(mode)
+                else:
+                    tab = "plan"
             focus_day = filters.get("focus_day")
             project_id = filters.get("project_id")
             priority = filters.get("priority")
