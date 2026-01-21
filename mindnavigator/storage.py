@@ -388,6 +388,7 @@ class Database:
         self._ensure_marker_attachment_columns()
         self._ensure_marker_parent_path_column()
         self._ensure_marker_image_column()
+        self._ensure_map_marker_foreign_keys()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -460,6 +461,136 @@ class Database:
             self._rebuild_tasks_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._ensure_priority_indexes()
+
+    def _map_marker_fk_needs_repair(self) -> bool:
+        """Проверяет, что внешние ключи map_markers не ссылаются на отсутствующие таблицы."""
+        tables = {
+            row["name"]
+            for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        }
+        if "map_markers" not in tables:
+            return False
+        rows = self._conn.execute("PRAGMA foreign_key_list(map_markers);").fetchall()
+        if not rows:
+            return False
+        return any(row["table"] not in tables for row in rows)
+
+    def _ensure_map_marker_foreign_keys(self) -> None:
+        """Исправляет устаревшие внешние ключи map_markers, если таблица-источник отсутствует."""
+        if not self._map_marker_fk_needs_repair():
+            return
+        with self._conn:
+            self._conn.execute("PRAGMA foreign_keys=OFF;")
+            self._rebuild_map_markers_table()
+            self._conn.execute("PRAGMA foreign_keys=ON;")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
+
+    def _rebuild_map_markers_table(self) -> None:
+        columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE map_markers RENAME TO map_markers_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE map_markers (
+                id INTEGER PRIMARY KEY,
+                map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                color TEXT NOT NULL,
+                type TEXT NOT NULL,
+                size REAL NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                properties TEXT NOT NULL DEFAULT '',
+                task_ids TEXT NOT NULL DEFAULT '[]',
+                project_ids TEXT NOT NULL DEFAULT '[]',
+                note_ids TEXT NOT NULL DEFAULT '[]',
+                object_ids TEXT NOT NULL DEFAULT '[]',
+                file_ids TEXT NOT NULL DEFAULT '[]',
+                map_ids TEXT NOT NULL DEFAULT '[]',
+                marker_ids TEXT NOT NULL DEFAULT '[]',
+                parent_path TEXT NOT NULL DEFAULT '',
+                image_path TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        rows = self._conn.execute("SELECT * FROM map_markers_old;").fetchall()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        for row in rows:
+            row_keys = set(row.keys())
+
+            def _value(key: str, default):
+                if key in row_keys and row[key] is not None:
+                    return row[key]
+                return default
+
+            def _parse_ids(multi_key: str, single_key: str):
+                if multi_key in row_keys:
+                    value = row[multi_key] or "[]"
+                    try:
+                        return json.loads(value)
+                    except json.JSONDecodeError:
+                        return []
+                if single_key in row_keys:
+                    return [row[single_key]] if row[single_key] is not None else []
+                return []
+
+            payload = (
+                _value("id", None),
+                _value("map_id", 0),
+                _value("name", ""),
+                _value("x", 0.0),
+                _value("y", 0.0),
+                _value("color", "#4a90e2"),
+                _value("type", "blue"),
+                _value("size", 8.0),
+                _value("description", ""),
+                _value("properties", ""),
+                json.dumps(_parse_ids("task_ids", "task_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("project_ids", "project_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("note_ids", "note_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("object_ids", "object_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("file_ids", "file_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("map_ids", "map_ref_id"), ensure_ascii=False),
+                json.dumps(_parse_ids("marker_ids", "marker_ref_id"), ensure_ascii=False),
+                _value("parent_path", ""),
+                _value("image_path", ""),
+                _value("created_at", now),
+                _value("updated_at", now),
+            )
+            self._conn.execute(
+                """
+                INSERT INTO map_markers (
+                    id,
+                    map_id,
+                    name,
+                    x,
+                    y,
+                    color,
+                    type,
+                    size,
+                    description,
+                    properties,
+                    task_ids,
+                    project_ids,
+                    note_ids,
+                    object_ids,
+                    file_ids,
+                    map_ids,
+                    marker_ids,
+                    parent_path,
+                    image_path,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                payload,
+            )
+        self._conn.execute("DROP TABLE map_markers_old;")
 
     def _priority_constraint_is_current(self, table: str) -> bool:
         row = self._conn.execute(
