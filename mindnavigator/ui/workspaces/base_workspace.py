@@ -50,7 +50,7 @@ class BaseWorkspace(QWidget):
         header_row.setSpacing(8)
         self.title_label = QLabel(self.workspace_title)
         self.title_label.setObjectName("WorkspaceTitle")
-        header_row.addWidget(self.title_label)
+        # header_row.addWidget(self.title_label)
         header_row.addStretch(1)
         layout.addLayout(header_row)
 
