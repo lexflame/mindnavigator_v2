@@ -1467,6 +1467,7 @@ class Database:
         )
         if self._task_project_fk_needs_repair():
             self._repair_task_project_fk()
+        self._ensure_map_marker_foreign_keys()
         with self._conn:
             self._conn.execute(
                 """
