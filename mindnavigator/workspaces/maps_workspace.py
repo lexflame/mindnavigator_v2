@@ -2400,13 +2400,13 @@ class MapEditorWorkspace(QWidget):
         ]:
             toolbar_layout.addWidget(btn)
 
-        # Активируем инструмент выбора по умолчанию.
-        self._set_tool(MapTool.SELECT)
-
         # Центральная канва карты.
         self.canvas = MapCanvas()
         self.canvas.setObjectName("MapCanvas")
         self._load_attachment_sources()
+
+        # Активируем инструмент выбора по умолчанию.
+        self._set_tool(MapTool.SELECT)
 
         # Правая панель с краткой информацией по маркеру.
         self.info_panel = QFrame()
