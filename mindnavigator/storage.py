@@ -416,7 +416,11 @@ class Database:
 
     def _ensure_priority_values(self) -> None:
         """Обновляет ограничения приоритета до актуального списка значений."""
-        if self._priority_constraint_is_current("tasks") and self._priority_constraint_is_current("projects"):
+        if (
+            self._priority_constraint_is_current("tasks")
+            and self._priority_constraint_is_current("projects")
+            and not self._task_project_fk_needs_repair()
+        ):
             return
         with self._conn:
             self._conn.execute("PRAGMA foreign_keys=OFF;")
@@ -424,10 +428,18 @@ class Database:
             if not self._priority_constraint_is_current("projects"):
                 self._rebuild_projects_table()
                 projects_rebuilt = True
-            if projects_rebuilt or not self._priority_constraint_is_current("tasks"):
+            if projects_rebuilt or not self._priority_constraint_is_current("tasks") or self._task_project_fk_needs_repair():
                 self._rebuild_tasks_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._ensure_priority_indexes()
+
+    def _task_project_fk_needs_repair(self) -> bool:
+        """Проверяет, что project_id в tasks ссылается на таблицу projects."""
+        rows = self._conn.execute("PRAGMA foreign_key_list(tasks);").fetchall()
+        project_refs = [row for row in rows if row["from"] == "project_id"]
+        if not project_refs:
+            return True
+        return any(row["table"] != "projects" for row in project_refs)
 
     def _priority_constraint_is_current(self, table: str) -> bool:
         row = self._conn.execute(
