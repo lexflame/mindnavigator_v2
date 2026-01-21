@@ -378,11 +378,17 @@ class MainWindow(QMainWindow):
         """Переключает активную рабочую область и обновляет заголовки."""
         # Обновляем заголовок окна и состояние навигации.
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_name}")
+        previous_workspace = self.workspace_stack.currentWidget()
+        if previous_workspace is not None and hasattr(previous_workspace, "on_leave"):
+            previous_workspace.on_leave()
         self._current_mode = mode_name
         self.projects_nav.set_mode_title(mode_name)
         # Переключаем страницу в стеке.
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
         self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
+        current_workspace = self.workspace_stack.currentWidget()
+        if current_workspace is not None and hasattr(current_workspace, "on_enter"):
+            current_workspace.on_enter(None)
         # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
