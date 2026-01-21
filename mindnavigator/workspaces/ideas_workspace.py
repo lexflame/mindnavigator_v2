@@ -174,7 +174,7 @@ class IdeasDelegate(QStyledItemDelegate):
         painter.save()
         rect = option.rect.adjusted(10, 6, -10, -6)
         selected = option.state & QStyle.State_Selected
-        background = QColor("#35363c" if selected else "#2a2b2f")
+        background = QColor("#2f3036" if selected else "#1f2024")
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setBrush(background)
         painter.setPen(Qt.NoPen)
@@ -221,6 +221,8 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_project_id: Optional[int] = None
         self._dirty = False
         super().__init__(parent)
+        self.setObjectName("IdeasWorkspace")
+        self.search_input.setPlaceholderText("Поиск…")
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -259,6 +261,8 @@ class IdeasWorkspace(BaseWorkspace):
         self.list_view.setModel(IdeasListModel(self.list_view))
         self.list_view.setItemDelegate(IdeasDelegate(self.list_view))
         self.list_view.setSelectionMode(QListView.SingleSelection)
+        self.list_view.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         self.list_view.doubleClicked.connect(self._open_selected)
         self.list_view.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -268,6 +272,7 @@ class IdeasWorkspace(BaseWorkspace):
         splitter.addWidget(list_host)
 
         self.inspector_stack = QStackedWidget()
+        self.inspector_stack.setObjectName("IdeasInspectorStack")
         self.inspector_empty = QLabel("Выберите идею слева")
         self.inspector_empty.setObjectName("IdeasEmpty")
         self.inspector_empty.setAlignment(Qt.AlignCenter)
@@ -310,9 +315,11 @@ class IdeasWorkspace(BaseWorkspace):
         button_row.addStretch(1)
         self.save_button = QToolButton()
         self.save_button.setText("Сохранить")
+        self.save_button.setObjectName("IdeasSaveButton")
         self.save_button.clicked.connect(self._save_current)
         self.revert_button = QToolButton()
         self.revert_button.setText("Отменить")
+        self.revert_button.setObjectName("IdeasRevertButton")
         self.revert_button.clicked.connect(self._revert_current)
         button_row.addWidget(self.revert_button)
         button_row.addWidget(self.save_button)
@@ -339,15 +346,19 @@ class IdeasWorkspace(BaseWorkspace):
         transform_layout.setSpacing(8)
         self.transform_task_btn = QToolButton()
         self.transform_task_btn.setText("✅ Создать задачу")
+        self.transform_task_btn.setObjectName("IdeasTransformTask")
         self.transform_task_btn.clicked.connect(lambda: self._transform_idea("task"))
         self.transform_note_btn = QToolButton()
         self.transform_note_btn.setText("📝 Создать заметку")
+        self.transform_note_btn.setObjectName("IdeasTransformNote")
         self.transform_note_btn.clicked.connect(lambda: self._transform_idea("note"))
         self.transform_object_btn = QToolButton()
         self.transform_object_btn.setText("🧱 Создать объект")
+        self.transform_object_btn.setObjectName("IdeasTransformObject")
         self.transform_object_btn.clicked.connect(lambda: self._transform_idea("object"))
         self.transform_marker_btn = QToolButton()
         self.transform_marker_btn.setText("🗺️ Создать метку")
+        self.transform_marker_btn.setObjectName("IdeasTransformMarker")
         self.transform_marker_btn.clicked.connect(lambda: self._transform_idea("marker"))
         transform_layout.addWidget(self.transform_task_btn)
         transform_layout.addWidget(self.transform_note_btn)
@@ -370,6 +381,106 @@ class IdeasWorkspace(BaseWorkspace):
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
         self.value_input.valueChanged.connect(self._mark_dirty)
         self.effort_input.valueChanged.connect(self._mark_dirty)
+
+        self.setStyleSheet("""
+            QWidget#IdeasWorkspace { background: #16171a; }
+
+            QWidget#IdeasWorkspace QLabel {
+                color: #cfcfcf;
+            }
+
+            QWidget#IdeasWorkspace QWidget#WorkspaceToolbar,
+            QWidget#IdeasWorkspace QWidget#WorkspaceSearch,
+            QWidget#IdeasWorkspace QWidget#WorkspaceFilters {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+                padding: 6px;
+            }
+
+            QWidget#IdeasWorkspace QWidget#WorkspaceStatus {
+                color: #b8b8b8;
+            }
+
+            QWidget#IdeasWorkspace QToolButton {
+                color: #cfcfcf;
+                background: #2a2b2f;
+                border: 1px solid #3a3b40;
+                padding: 6px 10px;
+                border-radius: 6px;
+            }
+            QWidget#IdeasWorkspace QToolButton:hover {
+                background: #34363b;
+            }
+            QWidget#IdeasWorkspace QToolButton:disabled {
+                color: #6e6f75;
+                background: #1e1f23;
+                border-color: #2a2b2f;
+            }
+
+            QWidget#IdeasWorkspace QLineEdit,
+            QWidget#IdeasWorkspace QPlainTextEdit,
+            QWidget#IdeasWorkspace QComboBox,
+            QWidget#IdeasWorkspace QSpinBox {
+                background: #202127;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }
+
+            QWidget#IdeasWorkspace QLineEdit:focus,
+            QWidget#IdeasWorkspace QPlainTextEdit:focus,
+            QWidget#IdeasWorkspace QComboBox:focus,
+            QWidget#IdeasWorkspace QSpinBox:focus {
+                border-color: #3b3c43;
+            }
+
+            QWidget#IdeasWorkspace QCheckBox {
+                color: #cfcfcf;
+                padding: 2px 4px;
+            }
+
+            QListView#IdeasList {
+                background: #16171a;
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+                padding: 6px;
+            }
+
+            QStackedWidget#IdeasInspectorStack {
+                background: transparent;
+            }
+
+            QTabWidget#IdeasInspectorTabs::pane {
+                border: 1px solid #2a2b2f;
+                background: #1b1c1f;
+                border-radius: 10px;
+                padding: 6px;
+            }
+
+            QTabWidget#IdeasInspectorTabs QTabBar::tab {
+                background: #202127;
+                color: #cfcfcf;
+                padding: 6px 12px;
+                margin-right: 4px;
+                border-radius: 6px;
+            }
+            QTabWidget#IdeasInspectorTabs QTabBar::tab:selected {
+                background: #2a2b2f;
+            }
+
+            QWidget#IdeasWorkspace QListWidget {
+                background: #16171a;
+                border: 1px solid #2a2b2f;
+                border-radius: 8px;
+                padding: 6px;
+            }
+
+            QLabel#IdeasEmpty {
+                color: #8f9096;
+            }
+        """)
 
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)
