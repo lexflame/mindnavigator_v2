@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer, QSettings
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -16,21 +16,20 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import QSettings
-
 
 class BaseWorkspace(QWidget):
     """Base class for workspace panels."""
 
-    def __init__(self, workspace_id: str, workspace_title: str, parent: QWidget | None = None) -> None:
+    workspace_id: str = "base"
+    workspace_title: str = "Workspace"
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.workspace_id = workspace_id
-        self.workspace_title = workspace_title
         self._query = ""
         self._filters: dict[str, Any] = {}
         self._busy = False
         self._state_restored = False
-        self._actions: dict[str, QAction] = {}
+        self.actions: dict[str, QAction] = {}
 
         self._search_timer = QTimer(self)
         self._search_timer.setInterval(250)
@@ -38,8 +37,8 @@ class BaseWorkspace(QWidget):
         self._search_timer.timeout.connect(self._apply_search)
 
         self._build_ui()
-        self._actions = self.create_actions()
-        self.build_toolbar(self._actions)
+        self.actions = self.create_actions()
+        self.build_toolbar(self.actions)
         self.update_action_states()
 
     def _build_ui(self) -> None:
@@ -51,7 +50,7 @@ class BaseWorkspace(QWidget):
         header_row.setSpacing(8)
         self.title_label = QLabel(self.workspace_title)
         self.title_label.setObjectName("WorkspaceTitle")
-        header_row.addWidget(self.title_label)
+        # header_row.addWidget(self.title_label)
         header_row.addStretch(1)
         layout.addLayout(header_row)
 
@@ -89,6 +88,7 @@ class BaseWorkspace(QWidget):
         self.filter_layout.setContentsMargins(0, 0, 0, 0)
         self.filter_layout.setSpacing(6)
         self.filter_layout.addStretch(1)
+        self.filter_bar_layout = self.filter_layout
         layout.addWidget(self.filter_row)
 
         self.content_host = QWidget()
@@ -104,12 +104,7 @@ class BaseWorkspace(QWidget):
         layout.addWidget(self.status_row)
 
     def create_actions(self) -> dict[str, QAction]:
-        actions = {
-            "add": QAction("Add", self),
-            "edit": QAction("Edit", self),
-            "delete": QAction("Delete", self),
-        }
-        return actions
+        return {}
 
     def build_toolbar(self, actions: dict[str, QAction]) -> None:
         while self.toolbar_layout.count():
@@ -125,14 +120,18 @@ class BaseWorkspace(QWidget):
 
     def update_action_states(self) -> None:
         selection = self.get_selection()
-        has_selection = bool(selection)
-        for key in ("edit", "delete"):
-            action = self._actions.get(key)
-            if action is not None:
-                action.setEnabled(has_selection and not self._busy)
-        add_action = self._actions.get("add")
-        if add_action is not None:
-            add_action.setEnabled(not self._busy)
+        selection_list = selection if isinstance(selection, list) else ([] if selection is None else [selection])
+        has_selection = bool(selection_list)
+        selection_count = len(selection_list)
+        edit_action = self.actions.get("edit")
+        delete_action = self.actions.get("delete")
+        if edit_action is not None:
+            edit_action.setEnabled(has_selection and selection_count == 1 and not self._busy)
+        if delete_action is not None:
+            delete_action.setEnabled(has_selection and not self._busy)
+        for key, action in self.actions.items():
+            if key not in {"edit", "delete"}:
+                action.setEnabled(not self._busy)
 
     def get_selection(self) -> Any:
         return None
@@ -143,6 +142,7 @@ class BaseWorkspace(QWidget):
             self._search_timer.start()
 
     def _apply_search(self) -> None:
+        self._query = self.search_input.text()
         self.apply_query(self._query)
         self.save_state()
 
@@ -154,31 +154,44 @@ class BaseWorkspace(QWidget):
             self._filters.pop(key, None)
         else:
             self._filters[key] = value
-        self.apply_filters()
+        self.apply_filters(self.get_filters())
         self.save_state()
 
-    def apply_filters(self) -> None:
+    def apply_filters(self, filters: dict[str, Any]) -> None:
         """Override to apply filters to the workspace content."""
 
     def get_filters(self) -> dict[str, Any]:
         return dict(self._filters)
 
+    def set_content(self, widget: QWidget) -> None:
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.setParent(None)
+        self.content_layout.addWidget(widget, 1)
+
+    def _settings_key(self, suffix: str) -> str:
+        return f"workspace/{self.workspace_id}/{suffix}"
+
     def save_state(self) -> None:
         settings = QSettings()
-        settings.setValue(f"workspace/{self.workspace_id}/search_text", self._query)
+        settings.setValue(self._settings_key("search_text"), self._query)
+        filters_payload = self.get_filters()
         settings.setValue(
-            f"workspace/{self.workspace_id}/filters",
-            json.dumps(self._filters),
+            self._settings_key("filters"),
+            json.dumps(filters_payload),
         )
 
     def restore_state(self) -> None:
         settings = QSettings()
-        search_text = settings.value(f"workspace/{self.workspace_id}/search_text", "", str)
-        filters_json = settings.value(f"workspace/{self.workspace_id}/filters", "{}", str)
+        search_text = settings.value(self._settings_key("search_text"), "", str)
+        filters_json = settings.value(self._settings_key("filters"), "{}", str)
         try:
-            self._filters = json.loads(filters_json) if filters_json else {}
+            stored_filters = json.loads(filters_json) if filters_json else {}
         except json.JSONDecodeError:
-            self._filters = {}
+            stored_filters = {}
+        self._filters = stored_filters if isinstance(stored_filters, dict) else {}
         self._query = search_text or ""
         self.search_input.setText(self._query)
 
@@ -198,14 +211,20 @@ class BaseWorkspace(QWidget):
         self.status_row.setStyleSheet("")
 
     def set_error(self, text: str) -> None:
-        self.status_row.setText(text)
+        self.status_row.setText(f"Error: {text}")
         self.status_row.setProperty("error", True)
         self.status_row.setStyleSheet("color: #d76b6b;")
 
-    def on_enter(self) -> None:
+    def on_enter(self, context: dict | None = None) -> None:
         if not self._state_restored:
             self.restore_state()
             self._state_restored = True
         self.apply_query(self._query)
-        self.apply_filters()
+        self.apply_filters(self.get_filters())
         self.update_action_states()
+
+    def on_leave(self) -> None:
+        return None
+
+    def teardown(self) -> None:
+        return None
