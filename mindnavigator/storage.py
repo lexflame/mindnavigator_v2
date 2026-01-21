@@ -120,6 +120,33 @@ class NoteData:
 
 
 @dataclass(frozen=True)
+class IdeaData:
+    id: int
+    project_id: Optional[int]
+    title: str
+    summary: str
+    body_md: str
+    type: str
+    status: str
+    value_score: int
+    effort_score: int
+    source: str
+    created_at: datetime
+    updated_at: datetime
+    archived_at: Optional[datetime]
+    project_title: str = ""
+
+
+@dataclass(frozen=True)
+class IdeaRelationData:
+    id: int
+    idea_id: int
+    entity_type: str
+    entity_id: int
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class ObjectData:
     id: int
     title: str
@@ -307,6 +334,60 @@ class Database:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS ideas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                    title TEXT NOT NULL DEFAULT '',
+                    summary TEXT NOT NULL DEFAULT '',
+                    body_md TEXT NOT NULL DEFAULT '',
+                    type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('feature', 'story', 'art', 'research', 'tech', 'other')),
+                    status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'work', 'ripe', 'done', 'archived')),
+                    value_score INTEGER NOT NULL DEFAULT 3 CHECK (value_score BETWEEN 1 AND 5),
+                    effort_score INTEGER NOT NULL DEFAULT 3 CHECK (effort_score BETWEEN 1 AND 5),
+                    source TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    archived_at TEXT
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idea_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(idea_id, url)
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idea_tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                    tag_text TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(idea_id, tag_text)
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idea_relations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                    entity_type TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(idea_id, entity_type, entity_id)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS task_attachments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -376,6 +457,14 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_project_id ON ideas(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_type ON ideas(type);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_updated_at ON ideas(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_archived_at ON ideas(archived_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_links_idea_id ON idea_links(idea_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_tags_idea_id ON idea_tags(idea_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
@@ -1698,6 +1787,332 @@ class Database:
             attachment=bool(row["attachment"]) if row else False,
             locked=bool(row["locked"]) if row else False,
         )
+
+    def _fetch_project_title(self, project_id: Optional[int]) -> str:
+        if project_id is None:
+            return ""
+        row = self._conn.execute(
+            "SELECT title FROM projects WHERE id = ?;",
+            (project_id,),
+        ).fetchone()
+        return row["title"] if row else ""
+
+    def fetch_ideas(
+        self,
+        project_id: Optional[int] = None,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        idea_type: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        archived: bool = False,
+    ) -> List[IdeaData]:
+        """Возвращает список идей с учетом фильтров."""
+        conditions = []
+        params: list[object] = []
+        if project_id is not None:
+            conditions.append("ideas.project_id = ?")
+            params.append(project_id)
+        if search:
+            like = f"%{search.strip().lower()}%"
+            conditions.append("(lower(ideas.title) LIKE ? OR lower(ideas.body_md) LIKE ?)")
+            params.extend([like, like])
+        if status:
+            conditions.append("ideas.status = ?")
+            params.append(status)
+        if idea_type:
+            conditions.append("ideas.type = ?")
+            params.append(idea_type)
+        if archived:
+            conditions.append("ideas.archived_at IS NOT NULL")
+        else:
+            conditions.append("ideas.archived_at IS NULL")
+        if tags:
+            tag_list = [tag.strip() for tag in tags if tag.strip()]
+            if tag_list:
+                placeholders = ",".join("?" for _ in tag_list)
+                conditions.append(
+                    "EXISTS (SELECT 1 FROM idea_tags WHERE idea_tags.idea_id = ideas.id "
+                    f"AND idea_tags.tag_text IN ({placeholders}))"
+                )
+                params.extend(tag_list)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        rows = self._conn.execute(
+            f"""
+            SELECT
+                ideas.id,
+                ideas.project_id,
+                ideas.title,
+                ideas.summary,
+                ideas.body_md,
+                ideas.type,
+                ideas.status,
+                ideas.value_score,
+                ideas.effort_score,
+                ideas.source,
+                ideas.created_at,
+                ideas.updated_at,
+                ideas.archived_at,
+                projects.title AS project_title
+            FROM ideas
+            LEFT JOIN projects ON projects.id = ideas.project_id
+            {where}
+            ORDER BY ideas.updated_at DESC;
+            """,
+            params,
+        ).fetchall()
+        ideas: List[IdeaData] = []
+        for row in rows:
+            ideas.append(
+                IdeaData(
+                    id=row["id"],
+                    project_id=row["project_id"],
+                    title=row["title"] or "",
+                    summary=row["summary"] or "",
+                    body_md=row["body_md"] or "",
+                    type=row["type"],
+                    status=row["status"],
+                    value_score=row["value_score"],
+                    effort_score=row["effort_score"],
+                    source=row["source"] or "",
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                    archived_at=datetime.fromisoformat(row["archived_at"])
+                    if row["archived_at"]
+                    else None,
+                    project_title=row["project_title"] or "",
+                )
+            )
+        return ideas
+
+    def get_idea(self, idea_id: int) -> Optional[IdeaData]:
+        """Возвращает идею по ID."""
+        row = self._conn.execute(
+            """
+            SELECT
+                ideas.id,
+                ideas.project_id,
+                ideas.title,
+                ideas.summary,
+                ideas.body_md,
+                ideas.type,
+                ideas.status,
+                ideas.value_score,
+                ideas.effort_score,
+                ideas.source,
+                ideas.created_at,
+                ideas.updated_at,
+                ideas.archived_at,
+                projects.title AS project_title
+            FROM ideas
+            LEFT JOIN projects ON projects.id = ideas.project_id
+            WHERE ideas.id = ?;
+            """,
+            (idea_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return IdeaData(
+            id=row["id"],
+            project_id=row["project_id"],
+            title=row["title"] or "",
+            summary=row["summary"] or "",
+            body_md=row["body_md"] or "",
+            type=row["type"],
+            status=row["status"],
+            value_score=row["value_score"],
+            effort_score=row["effort_score"],
+            source=row["source"] or "",
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+            archived_at=datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None,
+            project_title=row["project_title"] or "",
+        )
+
+    def create_idea(
+        self,
+        title: str,
+        summary: str = "",
+        body_md: str = "",
+        idea_type: str = "other",
+        status: str = "inbox",
+        value_score: int = 3,
+        effort_score: int = 3,
+        project_id: Optional[int] = None,
+        source: str = "",
+    ) -> IdeaData:
+        """Создает идею в базе данных."""
+        title = (title or "").strip() or "Без названия"
+        summary = (summary or "").strip()
+        body_md = (body_md or "").strip()
+        idea_type = (idea_type or "other").strip() or "other"
+        status = (status or "inbox").strip() or "inbox"
+        value_score = int(value_score or 3)
+        effort_score = int(effort_score or 3)
+        source = (source or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO ideas (
+                    project_id, title, summary, body_md, type, status,
+                    value_score, effort_score, source, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    project_id,
+                    title,
+                    summary,
+                    body_md,
+                    idea_type,
+                    status,
+                    value_score,
+                    effort_score,
+                    source,
+                    now,
+                    now,
+                ),
+            )
+        return IdeaData(
+            id=cur.lastrowid,
+            project_id=project_id,
+            title=title,
+            summary=summary,
+            body_md=body_md,
+            type=idea_type,
+            status=status,
+            value_score=value_score,
+            effort_score=effort_score,
+            source=source,
+            created_at=datetime.fromisoformat(now),
+            updated_at=datetime.fromisoformat(now),
+            archived_at=None,
+            project_title=self._fetch_project_title(project_id),
+        )
+
+    def update_idea(
+        self,
+        idea_id: int,
+        title: str,
+        summary: str,
+        body_md: str,
+        idea_type: str,
+        status: str,
+        value_score: int,
+        effort_score: int,
+        project_id: Optional[int] = None,
+        source: str = "",
+    ) -> IdeaData:
+        """Обновляет идею."""
+        title = (title or "").strip() or "Без названия"
+        summary = (summary or "").strip()
+        body_md = (body_md or "").strip()
+        idea_type = (idea_type or "other").strip() or "other"
+        status = (status or "inbox").strip() or "inbox"
+        value_score = int(value_score or 3)
+        effort_score = int(effort_score or 3)
+        source = (source or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE ideas
+                SET project_id = ?, title = ?, summary = ?, body_md = ?, type = ?, status = ?,
+                    value_score = ?, effort_score = ?, source = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (
+                    project_id,
+                    title,
+                    summary,
+                    body_md,
+                    idea_type,
+                    status,
+                    value_score,
+                    effort_score,
+                    source,
+                    now,
+                    idea_id,
+                ),
+            )
+        meta_row = self._conn.execute(
+            "SELECT created_at, archived_at FROM ideas WHERE id = ?;",
+            (idea_id,),
+        ).fetchone()
+        created_at = (
+            datetime.fromisoformat(meta_row["created_at"])
+            if meta_row and meta_row["created_at"]
+            else datetime.fromisoformat(now)
+        )
+        archived_at = (
+            datetime.fromisoformat(meta_row["archived_at"])
+            if meta_row and meta_row["archived_at"]
+            else None
+        )
+        return IdeaData(
+            id=idea_id,
+            project_id=project_id,
+            title=title,
+            summary=summary,
+            body_md=body_md,
+            type=idea_type,
+            status=status,
+            value_score=value_score,
+            effort_score=effort_score,
+            source=source,
+            created_at=created_at,
+            updated_at=datetime.fromisoformat(now),
+            archived_at=archived_at,
+            project_title=self._fetch_project_title(project_id),
+        )
+
+    def set_idea_archived(self, idea_id: int, archived: bool) -> None:
+        """Архивирует или восстанавливает идею."""
+        archived_at = datetime.utcnow().isoformat(timespec="seconds") if archived else None
+        with self._conn:
+            self._conn.execute(
+                "UPDATE ideas SET archived_at = ?, updated_at = ? WHERE id = ?;",
+                (archived_at, datetime.utcnow().isoformat(timespec="seconds"), idea_id),
+            )
+
+    def delete_idea(self, idea_id: int) -> None:
+        """Удаляет идею."""
+        with self._conn:
+            self._conn.execute("DELETE FROM ideas WHERE id = ?;", (idea_id,))
+
+    def fetch_idea_relations(self, idea_id: int) -> List[IdeaRelationData]:
+        """Возвращает список связей идеи."""
+        rows = self._conn.execute(
+            """
+            SELECT id, idea_id, entity_type, entity_id, created_at
+            FROM idea_relations
+            WHERE idea_id = ?
+            ORDER BY created_at DESC;
+            """,
+            (idea_id,),
+        ).fetchall()
+        return [
+            IdeaRelationData(
+                id=row["id"],
+                idea_id=row["idea_id"],
+                entity_type=row["entity_type"],
+                entity_id=row["entity_id"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
+        """Создает связь идеи с сущностью."""
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO idea_relations (idea_id, entity_type, entity_id, created_at)
+                VALUES (?, ?, ?, ?);
+                """,
+                (idea_id, entity_type, entity_id, now),
+            )
 
     def toggle_note_favorite(self, note_id: int) -> NoteData:
         """Переключает избранное у заметки."""
