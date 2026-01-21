@@ -14,13 +14,12 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QFontMetrics, QGuiApplication, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
     QAbstractItemView,
     QDialog,
-    QColorDialog,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -40,6 +39,13 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.marker_types import (
+    marker_type_by_key,
+    marker_type_for_color,
+    marker_type_icon,
+    marker_type_options,
+    marker_type_pixmap,
+)
 from mindnavigator.ui.dialogs.attach_file_select_nav import AttachFileSelectNav
 from mindnavigator.ui.dialogs.entity_picker_dialog import ChipItem, EntityPickerDialog
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
@@ -542,6 +548,7 @@ class MapLabelEditDialog(QDialog):
         self._image_icon: QIcon | None = None
         self._parent_path = ""
         self._size_range = size_range
+        self._marker_type_options = marker_type_options()
         self._link_inputs: dict[str, EntityLinksInput] = {}
         self._link_title_maps: dict[str, dict[str, int]] = {}
         self._popup_syncs: list[CompleterPopupSync] = []
@@ -651,7 +658,7 @@ class MapLabelEditDialog(QDialog):
         return body
 
     def _build_left_panel(self) -> QWidget:
-        # Левая панель с превью изображения и выбором цвета.
+        # Левая панель с превью изображения и выбором типа маркера.
         panel = QFrame()
         panel.setObjectName("MapLabelCard")
         panel.setFixedWidth(300)
@@ -679,27 +686,30 @@ class MapLabelEditDialog(QDialog):
         self.image_hint = QLabel("Нет изображения")
         self.image_hint.setObjectName("MapLabelHint")
 
-        color_label = QLabel("Цвет метки")
-        color_label.setObjectName("MapLabelSectionTitle")
-        self.color_preview = QLabel()
-        self.color_preview.setObjectName("MapLabelColorPreview")
-        self.color_preview.setFixedSize(28, 28)
-        self.color_button = QToolButton()
-        self.color_button.setText("Выбрать…")
-        self.color_button.clicked.connect(self._pick_color)
+        marker_type_label = QLabel("Тип метки")
+        marker_type_label.setObjectName("MapLabelSectionTitle")
+        self.marker_type_preview = QLabel()
+        self.marker_type_preview.setObjectName("MapLabelMarkerPreview")
+        self.marker_type_preview.setFixedSize(36, 36)
+        self.marker_type_preview.setAlignment(Qt.AlignCenter)
+        self.marker_type_combo = QComboBox()
+        self.marker_type_combo.setObjectName("MapLabelMarkerType")
+        self.marker_type_combo.setIconSize(QSize(20, 20))
+        for option in self._marker_type_options:
+            self.marker_type_combo.addItem(marker_type_icon(option), option.label, option.key)
+        self.marker_type_combo.currentIndexChanged.connect(self._on_marker_type_changed)
 
-        color_row = QHBoxLayout()
-        color_row.addWidget(self.color_preview)
-        color_row.addWidget(self.color_button)
-        color_row.addStretch(1)
+        marker_type_row = QHBoxLayout()
+        marker_type_row.addWidget(self.marker_type_preview)
+        marker_type_row.addWidget(self.marker_type_combo, 1)
 
         panel_layout.addWidget(preview_label)
         panel_layout.addWidget(self.preview)
         panel_layout.addLayout(preview_btn_row)
         panel_layout.addWidget(self.image_hint)
         panel_layout.addSpacing(6)
-        panel_layout.addWidget(color_label)
-        panel_layout.addLayout(color_row)
+        panel_layout.addWidget(marker_type_label)
+        panel_layout.addLayout(marker_type_row)
         panel_layout.addStretch(1)
         return panel
 
@@ -987,7 +997,7 @@ class MapLabelEditDialog(QDialog):
             QSpinBox::up-button, QSpinBox::down-button {{
                 width: 14px;
             }}
-            QLabel#MapLabelColorPreview {{
+            QLabel#MapLabelMarkerPreview {{
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
             }}
@@ -1161,7 +1171,11 @@ class MapLabelEditDialog(QDialog):
             else:
                 self.type_combo.setCurrentText(self._marker.type)
         self.size_spin.setValue(float(self._marker.size))
-        self._set_color(self._marker.color)
+        marker_type = marker_type_for_color(self._marker.color)
+        type_index = self.marker_type_combo.findData(marker_type.key)
+        if type_index >= 0:
+            self.marker_type_combo.setCurrentIndex(type_index)
+        self._set_marker_type(marker_type)
         self.desc_edit.setPlainText(self._marker.description or "")
         self.important_edit.setPlainText(self._marker.properties or "")
         self._set_parent_path(self._marker.parent_path)
@@ -1253,6 +1267,25 @@ class MapLabelEditDialog(QDialog):
         self._dirty = False
         self.accept()
 
+    def _on_marker_type_changed(self, _index: int) -> None:
+        # Обновляем тип маркера по выбору пользователя.
+        key = self.marker_type_combo.currentData()
+        self._set_marker_type(marker_type_by_key(key), mark_dirty=True)
+
+    def _set_marker_type(self, option, mark_dirty: bool = False) -> None:
+        # Применяем выбранный тип маркера к превью и цвету.
+        self._selected_color = option.color
+        pixmap = marker_type_pixmap(option, self.marker_type_preview.size())
+        if pixmap is not None:
+            self.marker_type_preview.setPixmap(pixmap)
+            self.marker_type_preview.setText("")
+        else:
+            self.marker_type_preview.setPixmap(QPixmap())
+            self.marker_type_preview.setText(option.label)
+        self.marker_type_preview.setToolTip(option.label)
+        if mark_dirty:
+            self._mark_dirty()
+
     def reject(self) -> None:
         # Подтверждение выхода при несохраненных изменениях.
         if self._dirty:
@@ -1271,20 +1304,6 @@ class MapLabelEditDialog(QDialog):
         # Запрашиваем режим изменения размера и сохраняем.
         self._resize_requested = True
         self._on_save()
-
-    def _pick_color(self) -> None:
-        # Открываем диалог выбора цвета.
-        color = QColorDialog.getColor(self._selected_color, self, "Цвет метки")
-        if color.isValid():
-            self._set_color(color)
-            self._mark_dirty()
-
-    def _set_color(self, color: QColor) -> None:
-        # Применяем выбранный цвет к превью.
-        self._selected_color = color
-        self.color_preview.setStyleSheet(
-            f"background: {color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
-        )
 
     def _load_image_preview(self, image_path: str) -> None:
         # Загружаем превью изображения по пути.
