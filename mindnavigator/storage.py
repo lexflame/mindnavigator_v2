@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-PRIORITIES = ("Low", "Medium", "High")
+PRIORITIES = ("Low", "Medium", "High", "Отложенная")
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
 
@@ -172,7 +172,7 @@ def normalize_priority(priority: str) -> str:
     """Нормализует и проверяет значение приоритета."""
     priority = (priority or "").strip() or "Medium"
     if priority not in PRIORITIES:
-        raise ValueError("Приоритет должен быть Low, Medium или High.")
+        raise ValueError("Приоритет должен быть Low, Medium, High или Отложенная.")
     return priority
 
 
@@ -226,7 +226,7 @@ class Database:
                     description TEXT NOT NULL DEFAULT '',
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
@@ -242,7 +242,7 @@ class Database:
                     area TEXT NOT NULL,
                     title TEXT NOT NULL,
                     updated TEXT NOT NULL,
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
                 );
                 """
@@ -383,6 +383,7 @@ class Database:
         self._ensure_task_project_column()
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
+        self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_marker_attachment_columns()
         self._ensure_marker_parent_path_column()
@@ -412,6 +413,88 @@ class Database:
         if "parent_id" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id);")
+
+    def _ensure_priority_values(self) -> None:
+        """Обновляет ограничения приоритета до актуального списка значений."""
+        if self._priority_constraint_is_current("tasks") and self._priority_constraint_is_current("projects"):
+            return
+        with self._conn:
+            self._conn.execute("PRAGMA foreign_keys=OFF;")
+            if not self._priority_constraint_is_current("projects"):
+                self._rebuild_projects_table()
+            if not self._priority_constraint_is_current("tasks"):
+                self._rebuild_tasks_table()
+            self._conn.execute("PRAGMA foreign_keys=ON;")
+            self._ensure_priority_indexes()
+
+    def _priority_constraint_is_current(self, table: str) -> bool:
+        row = self._conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?;",
+            (table,),
+        ).fetchone()
+        if not row:
+            return True
+        return "Отложенная" in (row["sql"] or "")
+
+    def _rebuild_tasks_table(self) -> None:
+        self._conn.execute("ALTER TABLE tasks RENAME TO tasks_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+                project_id INTEGER REFERENCES projects(id),
+                parent_id INTEGER REFERENCES tasks(id),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            INSERT INTO tasks (
+                id, title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at
+            )
+            SELECT id, title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at
+            FROM tasks_old;
+            """
+        )
+        self._conn.execute("DROP TABLE tasks_old;")
+
+    def _rebuild_projects_table(self) -> None:
+        self._conn.execute("ALTER TABLE projects RENAME TO projects_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            INSERT INTO projects (id, area, title, updated, priority, archived)
+            SELECT id, area, title, updated, priority, archived
+            FROM projects_old;
+            """
+        )
+        self._conn.execute("DROP TABLE projects_old;")
+
+    def _ensure_priority_indexes(self) -> None:
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
 
     def _ensure_map_tiles_path_column(self) -> None:
         """Добавляет колонку tiles_path, если она отсутствует."""
