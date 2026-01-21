@@ -26,7 +26,6 @@ from PySide6.QtGui import (
     QFont,
     QFontMetrics,
     QFontMetricsF,
-    QPalette,
     QPixmap,
     QPen,
     QCursor,
@@ -36,13 +35,20 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
+    QFileDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
     QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
     QPushButton, QScrollArea
 )
 from shiboken6 import isValid
 
 from mindnavigator.storage import CloudFileData, get_database
+from mindnavigator.marker_types import (
+    default_marker_type,
+    marker_type_for_color,
+    marker_type_icon,
+    marker_type_options,
+    marker_type_pixmap,
+)
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
 from mindnavigator.resources import resource_path
@@ -813,16 +819,21 @@ class MapCanvas(QWidget):
         self._files_by_id = {}
         self._maps_by_id = {}
         self._marker_items_by_id = {}
+        self._marker_icon_cache: Dict[tuple[str, int], QPixmap] = {}
         # Инициализируем стартовый набор маркеров.
         self._seed_markers()
 
     @staticmethod
     def default_markers() -> List[Marker]:
         # Базовые маркеры, используемые при первом открытии карты.
+        marker_types = marker_type_options()
+        blue = marker_types[0]
+        green = marker_types[1]
+        orange = marker_types[2]
         return [
-            Marker(1, "Outpost", 320, 240, QColor("#57c7ff"), "Base", MapCanvas.DEFAULT_MARKER_SIZE, "Опорный пункт"),
-            Marker(2, "Echo", 520, 360, QColor("#8be26f"), "Point", MapCanvas.DEFAULT_MARKER_SIZE, "Контрольная точка"),
-            Marker(3, "Delta", 220, 420, QColor("#f2a05d"), "Risk", MapCanvas.DEFAULT_MARKER_SIZE, "Зона риска"),
+            Marker(1, "Outpost", 320, 240, blue.color, "Base", MapCanvas.DEFAULT_MARKER_SIZE, "Опорный пункт"),
+            Marker(2, "Echo", 520, 360, green.color, "Point", MapCanvas.DEFAULT_MARKER_SIZE, "Контрольная точка"),
+            Marker(3, "Delta", 220, 420, orange.color, "Risk", MapCanvas.DEFAULT_MARKER_SIZE, "Зона риска"),
         ]
 
     def _seed_markers(self) -> None:
@@ -1016,6 +1027,10 @@ class MapCanvas(QWidget):
         self._preview_pos = None
         self.update()
 
+    def tool(self) -> MapTool:
+        # Текущий активный инструмент.
+        return self._tool
+
     def set_grid_enabled(self, enabled: bool) -> None:
         # Включаем или выключаем сетку и перерисовываем.
         self._grid_enabled = enabled
@@ -1147,15 +1162,34 @@ class MapCanvas(QWidget):
         for y in range(top, bottom + spacing_y, spacing_y):
             painter.drawText(QPointF(left + 4, y - 4), f"{y}")
 
+    def _marker_icon_pixmap(self, marker: Marker, size: int) -> QPixmap | None:
+        # Получаем иконку маркера с учетом выбранного типа.
+        option = marker_type_for_color(marker.color)
+        cache_key = (option.key, size)
+        cached = self._marker_icon_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        pixmap = marker_type_pixmap(option, QSize(size, size))
+        if pixmap is None:
+            return None
+        self._marker_icon_cache[cache_key] = pixmap
+        return pixmap
+
     def _draw_markers(self, painter: QPainter) -> None:
         # Рисуем все маркеры и рамку выделения.
         self._resize_handle_regions = {}
         for marker in self._markers:
             is_selected = self._selected and marker.id == self._selected.id
             radius = marker.size + (2.0 if is_selected else 0.0)
-            painter.setBrush(marker.color)
-            painter.setPen(QPen(QColor("#111111"), max(1.0, 1.0 / self._scale)))
-            painter.drawEllipse(QPointF(marker.x, marker.y), radius, radius)
+            icon_size = max(12, int(marker.size * 2))
+            icon_pixmap = self._marker_icon_pixmap(marker, icon_size)
+            if icon_pixmap is not None:
+                top_left = QPointF(marker.x - icon_size / 2, marker.y - icon_size / 2)
+                painter.drawPixmap(top_left, icon_pixmap)
+            else:
+                painter.setBrush(marker.color)
+                painter.setPen(QPen(QColor("#111111"), max(1.0, 1.0 / self._scale)))
+                painter.drawEllipse(QPointF(marker.x, marker.y), radius, radius)
             if is_selected:
                 painter.setBrush(Qt.NoBrush)
                 painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.4 / self._scale)))
@@ -1656,12 +1690,13 @@ class MapCanvas(QWidget):
 
     def _add_marker(self, world_pos: QPointF) -> None:
         # Создаем новый маркер с дефолтными параметрами.
+        default_type = default_marker_type()
         marker = Marker(
             self._next_id,
             f"Marker {self._next_id}",
             float(world_pos.x()),
             float(world_pos.y()),
-            QColor("#8be26f"),
+            default_type.color,
             "Point",
             self.DEFAULT_MARKER_SIZE,
             "",
@@ -1888,22 +1923,29 @@ class MapCanvas(QWidget):
         if marker.image_path:
             preview_label.setToolTip(marker.image_path)
 
-        color_title = QLabel("Цвет метки")
-        color_title.setObjectName("MapLabelSectionTitle")
-        color_preview = QLabel()
-        color_preview.setObjectName("MapLabelColorPreview")
-        color_preview.setFixedSize(28, 28)
-        color_preview.setStyleSheet(
-            f"background: {marker.color.name()}; border: 1px solid #2a2b2f; border-radius: 6px;"
-        )
-        color_value = QLabel(marker.color.name())
-        color_value.setObjectName("MapLabelValue")
-        color_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        marker_type_title = QLabel("Тип метки")
+        marker_type_title.setObjectName("MapLabelSectionTitle")
+        marker_type_preview = QLabel()
+        marker_type_preview.setObjectName("MapLabelMarkerPreview")
+        marker_type_preview.setFixedSize(28, 28)
+        marker_type_preview.setAlignment(Qt.AlignCenter)
+        marker_type_value = QLabel()
+        marker_type_value.setObjectName("MapLabelValue")
+        marker_type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        marker_type = marker_type_for_color(marker.color)
+        marker_type_value.setText(marker_type.label)
+        marker_type_icon_pixmap = marker_type_pixmap(marker_type, marker_type_preview.size())
+        if marker_type_icon_pixmap is not None:
+            marker_type_preview.setPixmap(marker_type_icon_pixmap)
+            marker_type_preview.setText("")
+        else:
+            marker_type_preview.setPixmap(QPixmap())
+            marker_type_preview.setText(marker_type.label)
 
-        color_row = QHBoxLayout()
-        color_row.addWidget(color_preview)
-        color_row.addWidget(color_value)
-        color_row.addStretch(1)
+        marker_type_row = QHBoxLayout()
+        marker_type_row.addWidget(marker_type_preview)
+        marker_type_row.addWidget(marker_type_value)
+        marker_type_row.addStretch(1)
 
         coords_title = QLabel("Координаты")
         coords_title.setObjectName("MapLabelSectionTitle")
@@ -1919,8 +1961,8 @@ class MapCanvas(QWidget):
 
         left_layout.addWidget(preview_title)
         left_layout.addWidget(preview_label)
-        left_layout.addWidget(color_title)
-        left_layout.addLayout(color_row)
+        left_layout.addWidget(marker_type_title)
+        left_layout.addLayout(marker_type_row)
         left_layout.addSpacing(6)
         left_layout.addWidget(coords_title)
         left_layout.addWidget(coords_value)
@@ -2156,7 +2198,7 @@ class MapCanvas(QWidget):
                 padding: 4px 8px;
                 min-width: 28px;
             }}
-            QLabel#MapLabelColorPreview {{
+            QLabel#MapLabelMarkerPreview {{
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
             }}
@@ -2176,14 +2218,18 @@ class MapCanvas(QWidget):
         menu = QMenu(self)
         act_add = menu.addAction("Добавить маркер")
         act_view = menu.addAction("Просмотреть метку")
-        act_color = menu.addAction("Выбрать цвет")
+        type_menu = menu.addMenu("Тип маркера")
+        type_actions = {}
+        for option in marker_type_options():
+            action = type_menu.addAction(marker_type_icon(option), option.label)
+            type_actions[action] = option
         act_bigger = menu.addAction("Увеличить маркер")
         act_smaller = menu.addAction("Уменьшить маркер")
         act_resize = menu.addAction("Изменить размер")
         act_edit = menu.addAction("Редактировать маркер")
         act_delete = menu.addAction("Удалить маркер")
         act_view.setEnabled(marker is not None)
-        act_color.setEnabled(marker is not None)
+        type_menu.setEnabled(marker is not None)
         act_bigger.setEnabled(marker is not None)
         act_smaller.setEnabled(marker is not None)
         act_resize.setEnabled(marker is not None)
@@ -2194,31 +2240,30 @@ class MapCanvas(QWidget):
             self._add_marker(world_pos)
         elif chosen == act_view and marker:
             self._view_marker(marker)
-        elif chosen == act_color and marker:
-            color = QColorDialog.getColor(marker.color, self, "Цвет маркера")
-            if color.isValid():
-                self._set_marker(
-                    Marker(
-                        marker.id,
-                        marker.name,
-                        marker.x,
-                        marker.y,
-                        color,
-                        marker.type,
-                        marker.size,
-                        marker.description,
-                        marker.properties,
-                        marker.task_ids,
-                        marker.project_ids,
-                        marker.note_ids,
-                        marker.object_ids,
-                        marker.file_ids,
-                        marker.map_ids,
-                        marker.marker_ids,
-                        marker.parent_path,
-                        marker.image_path,
-                    )
+        elif chosen in type_actions and marker:
+            option = type_actions[chosen]
+            self._set_marker(
+                Marker(
+                    marker.id,
+                    marker.name,
+                    marker.x,
+                    marker.y,
+                    option.color,
+                    marker.type,
+                    marker.size,
+                    marker.description,
+                    marker.properties,
+                    marker.task_ids,
+                    marker.project_ids,
+                    marker.note_ids,
+                    marker.object_ids,
+                    marker.file_ids,
+                    marker.map_ids,
+                    marker.marker_ids,
+                    marker.parent_path,
+                    marker.image_path,
                 )
+            )
         elif chosen == act_bigger and marker:
             self._adjust_marker_size(marker, 1.5)
         elif chosen == act_smaller and marker:
@@ -2316,7 +2361,7 @@ class MapEditorWorkspace(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             if tool is not None:
                 self.tool_group.addButton(btn)
-                btn.clicked.connect(lambda checked=False, t=tool: self.canvas.set_tool(t))
+                btn.clicked.connect(lambda checked=False, t=tool: self._set_tool(t))
             return btn
 
         # Кнопки инструментов.
@@ -2336,6 +2381,13 @@ class MapEditorWorkspace(QWidget):
         self.btn_camera = tool_button("fa5s.camera", "Скриншот", None)
         self.btn_camera.setCheckable(False)
 
+        self._tool_buttons = {
+            MapTool.SELECT: self.btn_select,
+            MapTool.ADD_MARKER: self.btn_marker,
+            MapTool.ADD_REGION: self.btn_region,
+            MapTool.MEASURE: self.btn_measure,
+        }
+
         # Добавляем кнопки в тулбар.
         for btn in [
             self.btn_select,
@@ -2349,7 +2401,7 @@ class MapEditorWorkspace(QWidget):
             toolbar_layout.addWidget(btn)
 
         # Активируем инструмент выбора по умолчанию.
-        self.btn_select.setChecked(True)
+        self._set_tool(MapTool.SELECT)
 
         # Центральная канва карты.
         self.canvas = MapCanvas()
@@ -2407,25 +2459,26 @@ class MapEditorWorkspace(QWidget):
         self.info_preview.setAlignment(Qt.AlignCenter)
         self.info_preview.setFixedHeight(140)
 
-        self.info_color_title = QLabel("Цвет метки")
-        self.info_color_title.setObjectName("MapInfoSectionTitle")
-        self.info_color_preview = QLabel()
-        self.info_color_preview.setObjectName("MapInfoColorPreview")
-        self.info_color_preview.setFixedSize(28, 28)
-        self.info_color_value = QLabel("—")
-        self.info_color_value.setObjectName("MapInfoValue")
+        self.info_marker_type_title = QLabel("Тип метки")
+        self.info_marker_type_title.setObjectName("MapInfoSectionTitle")
+        self.info_marker_type_preview = QLabel()
+        self.info_marker_type_preview.setObjectName("MapInfoMarkerPreview")
+        self.info_marker_type_preview.setFixedSize(28, 28)
+        self.info_marker_type_preview.setAlignment(Qt.AlignCenter)
+        self.info_marker_type_value = QLabel("—")
+        self.info_marker_type_value.setObjectName("MapInfoValue")
 
-        color_row = QHBoxLayout()
-        color_row.setSpacing(8)
-        color_row.addWidget(self.info_color_preview)
-        color_row.addWidget(self.info_color_value)
-        color_row.addStretch(1)
+        marker_type_row = QHBoxLayout()
+        marker_type_row.setSpacing(8)
+        marker_type_row.addWidget(self.info_marker_type_preview)
+        marker_type_row.addWidget(self.info_marker_type_value)
+        marker_type_row.addStretch(1)
 
         left_layout.addWidget(self.info_preview_title)
         left_layout.addWidget(self.info_preview)
         left_layout.addSpacing(6)
-        left_layout.addWidget(self.info_color_title)
-        left_layout.addLayout(color_row)
+        left_layout.addWidget(self.info_marker_type_title)
+        left_layout.addLayout(marker_type_row)
         left_layout.addStretch(1)
 
         right_panel = QFrame()
@@ -2674,7 +2727,7 @@ class MapEditorWorkspace(QWidget):
                 background: #1b1d24;
             }
 
-            QLabel#MapInfoColorPreview {
+            QLabel#MapInfoMarkerPreview {
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
             }
@@ -2689,6 +2742,13 @@ class MapEditorWorkspace(QWidget):
                 color: #d59d35;
             }
         """)
+
+    def _set_tool(self, tool: MapTool) -> None:
+        # Активируем инструмент и обновляем состояние кнопок.
+        button = self._tool_buttons.get(tool)
+        if button is not None:
+            button.setChecked(True)
+        self.canvas.set_tool(tool)
 
     def set_fullscreen_state(self, enabled: bool) -> None:
         # Синхронизируем кнопку и скрываем/показываем инфо-панель.
@@ -2761,12 +2821,21 @@ class MapEditorWorkspace(QWidget):
         self.info_marker.setText(self._format_links(marker.marker_ids, self._markers_by_id))
         self.info_description.setText(self._format_value(marker.description))
         self.info_important.setText(self._format_value(marker.properties))
-        palette = self.info_color_preview.palette()
-        palette.setColor(QPalette.Window, marker.color)
-        self.info_color_preview.setPalette(palette)
-        self.info_color_preview.setAutoFillBackground(True)
-        self.info_color_value.setText(marker.color.name().upper())
+        self._apply_marker_type_info(marker)
         self._update_info_preview(marker)
+
+    def _apply_marker_type_info(self, marker: Marker) -> None:
+        # Обновляем данные по типу маркера в инфо-панели.
+        option = marker_type_for_color(marker.color)
+        self.info_marker_type_value.setText(option.label)
+        pixmap = marker_type_pixmap(option, self.info_marker_type_preview.size())
+        if pixmap is not None:
+            self.info_marker_type_preview.setPixmap(pixmap)
+            self.info_marker_type_preview.setText("")
+        else:
+            self.info_marker_type_preview.setPixmap(QPixmap())
+            self.info_marker_type_preview.setText(option.label)
+        self.info_marker_type_preview.setToolTip(option.label)
 
     def _info_widgets_alive(self) -> bool:
         # Проверяем, что виджеты инфо-панели ещё существуют.
@@ -2774,7 +2843,7 @@ class MapEditorWorkspace(QWidget):
             isValid(self.info_panel)
             and isValid(self.info_name)
             and isValid(self.info_preview)
-            and isValid(self.info_color_preview)
+            and isValid(self.info_marker_type_preview)
         )
 
     def _update_info_preview(self, marker: Marker) -> None:
@@ -2920,6 +2989,8 @@ class MapEditorWorkspace(QWidget):
         # Реакция на добавление маркера.
         self._sync_marker(marker)
         self.markersChanged.emit()
+        if self.canvas.tool() == MapTool.ADD_MARKER:
+            self._set_tool(MapTool.SELECT)
 
     def _on_marker_updated(self, marker: Marker) -> None:
         # Реакция на обновление маркера.
