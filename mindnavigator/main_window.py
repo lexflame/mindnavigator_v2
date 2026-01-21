@@ -36,6 +36,7 @@ from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
 from .workspaces.files_workspace import FileWorkspace
 from .workspaces.objects_workspace import ObjectWorkspace
+from .workspaces.ideas_workspace import IdeasWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
 
     MODE_PROJECTS = "Проекты"
     MODE_TASKS = "Задачи"
+    MODE_IDEAS = "Идеи"
     MODE_MAPS = "Карты"
     MODE_NOTES = "Заметки"
     MODE_FILES = "Файлы"
@@ -236,6 +238,7 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_projects = ProjectsWorkspace()
+        self.page_ideas = IdeasWorkspace()
         self.page_maps = MapsListWorkspace()
         self.page_notes = NoteWorkspace()
         self.page_files = FileWorkspace()
@@ -246,6 +249,7 @@ class MainWindow(QMainWindow):
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
+            self.MODE_IDEAS: self.workspace_stack.addWidget(self.page_ideas),
             self.MODE_MAPS: self.workspace_stack.addWidget(self.page_maps),
             self.MODE_NOTES: self.workspace_stack.addWidget(self.page_notes),
             self.MODE_FILES: self.workspace_stack.addWidget(self.page_files),
@@ -364,6 +368,7 @@ class MainWindow(QMainWindow):
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
+            self.left_rail.btn_ideas: self.MODE_IDEAS,
             self.left_rail.btn_maps: self.MODE_MAPS,
             self.left_rail.btn_notes: self.MODE_NOTES,
             self.left_rail.btn_files: self.MODE_FILES,
@@ -392,6 +397,8 @@ class MainWindow(QMainWindow):
         # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
+        elif mode_name == self.MODE_IDEAS:
+            self.page_ideas.refresh()
         elif mode_name == self.MODE_PROJECTS:
             self.page_projects.refresh_projects()
         elif mode_name == self.MODE_OBJECTS:
