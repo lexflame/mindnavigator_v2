@@ -325,7 +325,12 @@ class ProjectsModel(QAbstractListModel):
 
             projects.append(it)
 
-        projects.sort(key=lambda x: (x.area.lower(), x.title.lower(), x.id))
+        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+
+        def priority_key(priority: str) -> int:
+            return priority_order[normalize_priority(priority)]
+
+        projects.sort(key=lambda x: (x.area.lower(), priority_key(x.priority), x.title.lower(), x.id))
 
         new_rows: List[Row] = []
         cur: Optional[str] = None
