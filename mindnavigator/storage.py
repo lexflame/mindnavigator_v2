@@ -1343,6 +1343,8 @@ class Database:
             now,
             now,
         )
+        if self._task_project_fk_needs_repair():
+            self._repair_task_project_fk()
         try:
             with self._conn:
                 self._conn.execute(
