@@ -17,7 +17,7 @@ from typing import Dict, List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
@@ -105,10 +105,11 @@ class TasksModel(QAbstractListModel):
         self._rows: List[Row] = []
         self._task_depths: dict[int, int] = {}
         self._task_children: dict[int, List[TaskRow]] = {}
-        self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено
+        self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено | Отложенные
         self._search = ""
         self._focus_day: Optional[date] = None
         self._project_filter_id: Optional[int] = None
+        self._priority_filter: Optional[str] = None
         self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
@@ -257,6 +258,11 @@ class TasksModel(QAbstractListModel):
     def set_project_filter(self, project_id: Optional[int]):
         """Устанавливает фильтр по проекту."""
         self._project_filter_id = project_id
+        self._rebuild()
+
+    def set_priority_filter(self, priority: Optional[str]):
+        """Устанавливает фильтр по приоритету."""
+        self._priority_filter = priority
         self._rebuild()
 
     def add_task(self, title: str, day: date, time_text: str, priority: str):
@@ -545,19 +551,33 @@ class TasksModel(QAbstractListModel):
             if self._project_filter_id is not None and it.project_id != self._project_filter_id:
                 continue
 
+            if self._priority_filter is not None and it.priority != self._priority_filter:
+                continue
+
             if self._filter_mode == "Сегодня":
                 if not is_today(it.day):
                     continue
                 if it.done:
                     continue
+                if it.priority == "Отложенная":
+                    continue
             elif self._filter_mode == "Все":
                 if it.done:
+                    continue
+                if it.priority == "Отложенная":
                     continue
             elif self._filter_mode == "Выполнено":
                 if not it.done:
                     continue
+                if it.priority == "Отложенная":
+                    continue
             elif self._filter_mode == "План":
                 if it.done:
+                    continue
+                if it.priority == "Отложенная":
+                    continue
+            elif self._filter_mode == "Отложенные":
+                if it.priority != "Отложенная":
                     continue
 
             base_tasks.append(it)
@@ -571,14 +591,15 @@ class TasksModel(QAbstractListModel):
             except Exception:
                 return datetime.min.time()
 
-        priority_order = {"high": 0, "medium": 1, "low": 2}
+        priority_order = {"high": 0, "medium": 1, "low": 2, "отложенная": 3}
 
         def sort_key(task: TaskRow):
-            if self._filter_mode == "Все":
-                if self._sort_key == "title":
-                    return (task.title.lower(), task.day, time_key(task.time_text), task.id)
-                if self._sort_key == "priority":
-                    return (priority_order.get(task.priority.lower(), 3), task.day, time_key(task.time_text), task.id)
+            if self._sort_key == "title":
+                return (task.title.lower(), task.day, time_key(task.time_text), task.id)
+            if self._sort_key == "priority":
+                if self._filter_mode == "Все":
+                    return (priority_order.get(task.priority.lower(), 4), task.day, time_key(task.time_text), task.id)
+                return (task.day, priority_order.get(task.priority.lower(), 4), time_key(task.time_text), task.id)
             return (task.day, time_key(task.time_text), task.id)
 
         task_ids = {t.id for t in base_tasks}
@@ -1365,7 +1386,7 @@ class TaskEditDialog(QDialog):
         time_block_layout.addWidget(self.time_edit)
 
         self.priority_edit = QComboBox()
-        self.priority_edit.addItems(["Low", "Medium", "High"])
+        self.priority_edit.addItems(["Low", "Medium", "High", "Отложенная"])
         self.priority_edit.setCurrentText(task.priority or "Medium")
 
         self.done_edit = QCheckBox("Выполнено")
@@ -1959,6 +1980,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     C_HIGH = QColor("#d94f4f")
     C_MED = QColor("#d0a93e")
     C_LOW = QColor("#4caf50")
+    C_DEFER = QColor("#6f7a87")
 
     def __init__(self, parent=None):
         """Инициализирует делегат отрисовки строк задач."""
@@ -2459,6 +2481,8 @@ class TasksItemDelegate(QStyledItemDelegate):
             return self.C_HIGH
         if p == "low":
             return self.C_LOW
+        if p == "отложенная":
+            return self.C_DEFER
         return self.C_MED
 
     def _is_overdue(self, d: date, done: bool) -> bool:
@@ -2532,7 +2556,7 @@ class TasksWorkspace(BaseWorkspace):
         """Создает интерфейс рабочей области задач."""
         self._focus_day = date.today()
         self._applying_filters = False
-        super().__init__(self.workspace_id, self.workspace_title, parent)
+        super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
 
@@ -2620,17 +2644,6 @@ class TasksWorkspace(BaseWorkspace):
             }
         """)
 
-    def create_actions(self) -> dict[str, QAction]:
-        actions = {
-            "add": QAction("Создать", self),
-            "edit": QAction("Редактировать", self),
-            "delete": QAction("Удалить", self),
-        }
-        actions["add"].triggered.connect(self._on_create_task)
-        actions["edit"].triggered.connect(self._edit_selected_task)
-        actions["delete"].triggered.connect(self._delete_selected_task)
-        return actions
-
     def build_content(self) -> None:
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -2677,7 +2690,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.new_priority = QComboBox()
         self.new_priority.setFixedWidth(110)
-        self.new_priority.addItems(["Low", "Medium", "High"])
+        self.new_priority.addItems(["Low", "Medium", "High", "Отложенная"])
         self.new_priority.setCurrentText("Medium")
 
         self.btn_add = QToolButton()
@@ -2716,7 +2729,7 @@ class TasksWorkspace(BaseWorkspace):
         self.model.modelReset.connect(self.update_action_states)
         self.model.layoutChanged.connect(self.update_action_states)
 
-        self.content_layout.addWidget(content, 1)
+        self.set_content(content)
 
     def _build_filters(self) -> None:
         while self.filter_layout.count():
@@ -2740,8 +2753,10 @@ class TasksWorkspace(BaseWorkspace):
             return b
 
         self.tab_all = tab_btn("Все", "all")
+        self.tab_plan = tab_btn("План", "plan")
         self.tab_today = tab_btn("Сегодня", "today")
         self.tab_done = tab_btn("Выполнено", "done")
+        self.tab_deferred = tab_btn("Отложенные", "deferred")
         self.tab_all.setChecked(True)
 
         self.btn_prev_day = QToolButton()
@@ -2758,12 +2773,14 @@ class TasksWorkspace(BaseWorkspace):
         self.lbl_day.setObjectName("TasksDayLabel")
 
         self.cmb_priority = QComboBox()
-        self.cmb_priority.addItems(["Любой", "Low", "Medium", "High"])
+        self.cmb_priority.addItems(["Любой", "Low", "Medium", "High", "Отложенная"])
         self.cmb_priority.setFixedWidth(110)
 
         self.filter_layout.addWidget(self.tab_all)
+        self.filter_layout.addWidget(self.tab_plan)
         self.filter_layout.addWidget(self.tab_today)
         self.filter_layout.addWidget(self.tab_done)
+        self.filter_layout.addWidget(self.tab_deferred)
         self.filter_layout.addSpacing(12)
         self.filter_layout.addWidget(self.btn_prev_day)
         self.filter_layout.addWidget(self.lbl_day)
@@ -2771,10 +2788,22 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addSpacing(12)
         self.filter_layout.addWidget(self.cmb_priority)
         self.filter_layout.addStretch(1)
+        self._relocate_search()
 
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
         self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
+
+    def _relocate_search(self) -> None:
+        """Перемещает строку поиска в панель фильтров."""
+        self.search_row.setVisible(False)
+        search_layout = self.search_row.layout()
+        if search_layout is not None:
+            search_layout.removeWidget(self.search_input)
+            search_layout.removeWidget(self.clear_button)
+        self.search_input.setFixedWidth(260)
+        self.filter_layout.addWidget(self.search_input)
+        self.filter_layout.addWidget(self.clear_button)
 
     def refresh(self) -> None:
         """Перезагружает список задач из базы."""
@@ -2786,9 +2815,7 @@ class TasksWorkspace(BaseWorkspace):
     def apply_query(self, query: str) -> None:
         self.model.set_search(query)
 
-    def apply_filters(self, filters: Optional[Dict[str, object]] = None) -> None:
-        if filters is None:
-            filters = self.get_filters()
+    def apply_filters(self, filters: Dict[str, object]) -> None:
         self._applying_filters = True
         try:
             tab = filters.get("tab")
@@ -2806,6 +2833,7 @@ class TasksWorkspace(BaseWorkspace):
                 self._focus_day = focus_day
             self._apply_tab(tab, focus_day=focus_day)
             self.model.set_project_filter(project_id)
+            self.model.set_priority_filter(priority if isinstance(priority, str) else None)
             if priority:
                 self.cmb_priority.setCurrentText(priority)
             else:
@@ -2813,13 +2841,14 @@ class TasksWorkspace(BaseWorkspace):
         finally:
             self._applying_filters = False
 
-    def get_selection(self) -> Optional[TaskRow]:
+    def get_selection(self) -> List[TaskRow]:
         index = self._selected_task_index()
         if index is None:
-            return None
+            return []
         if hasattr(self.model, "task_at_row"):
-            return self.model.task_at_row(index.row())
-        return None
+            task = self.model.task_at_row(index.row())
+            return [task] if task else []
+        return []
 
     def _selected_task_index(self) -> Optional[QModelIndex]:
         if not hasattr(self, "list"):
@@ -2918,6 +2947,10 @@ class TasksWorkspace(BaseWorkspace):
             return "today"
         if mode == "Выполнено":
             return "done"
+        if mode == "План":
+            return "plan"
+        if mode == "Отложенные":
+            return "deferred"
         return "all"
 
     def _apply_tab(self, tab: Optional[str], focus_day: Optional[date] = None) -> None:
@@ -2925,6 +2958,10 @@ class TasksWorkspace(BaseWorkspace):
             self._apply_mode("Сегодня")
         elif tab == "done":
             self._apply_mode("Выполнено")
+        elif tab == "plan":
+            self._apply_mode("План")
+        elif tab == "deferred":
+            self._apply_mode("Отложенные")
         else:
             self._apply_mode("Все", focus_day=focus_day)
 
@@ -2946,6 +2983,12 @@ class TasksWorkspace(BaseWorkspace):
             self._set_drag_drop_state(True)
             if hasattr(self, "tab_plan"):
                 self.tab_plan.setChecked(True)
+        elif mode == "Отложенные":
+            self.model.set_filter_mode("Отложенные")
+            self.model.set_focus_day(None)
+            self._set_drag_drop_state(False)
+            if hasattr(self, "tab_deferred"):
+                self.tab_deferred.setChecked(True)
         else:
             self.model.set_filter_mode("Все")
             if focus_day is not None:
@@ -2965,7 +3008,9 @@ class TasksWorkspace(BaseWorkspace):
     def _on_priority_filter_changed(self, value: str) -> None:
         if self._applying_filters:
             return
-        self._remember_filter("priority", None if value == "Любой" else value)
+        priority = None if value == "Любой" else value
+        self._remember_filter("priority", priority)
+        self.model.set_priority_filter(priority)
 
     def _set_drag_drop_state(self, enabled: bool):
         """Включает или выключает drag and drop списка."""

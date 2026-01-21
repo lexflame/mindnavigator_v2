@@ -325,7 +325,7 @@ class ProjectsModel(QAbstractListModel):
 
             projects.append(it)
 
-        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
 
         def priority_key(priority: str) -> int:
             return priority_order[normalize_priority(priority)]
@@ -360,6 +360,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
     C_HIGH = QColor("#d94f4f")
     C_MED = QColor("#d0a93e")
     C_LOW = QColor("#4caf50")
+    C_DEFER = QColor("#6f7a87")
 
     def __init__(self, parent=None):
         """Инициализирует делегат отрисовки проектов."""
@@ -721,6 +722,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             return self.C_HIGH
         if p == "low":
             return self.C_LOW
+        if p == "отложенная":
+            return self.C_DEFER
         return self.C_MED
 
 
