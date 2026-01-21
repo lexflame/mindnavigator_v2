@@ -2540,7 +2540,7 @@ class TasksWorkspace(BaseWorkspace):
         self.build_content()
 
         self._update_day_label()
-        self._on_tab_changed()
+        self._apply_tab("all")
         self.update_action_states()
 
         self.setStyleSheet("""
@@ -2728,20 +2728,21 @@ class TasksWorkspace(BaseWorkspace):
         self.tabs_group = QButtonGroup(self)
         self.tabs_group.setExclusive(True)
 
-        def tab_btn(text: str) -> QToolButton:
+        def tab_btn(text: str, tab_value: str) -> QToolButton:
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
             b.setAutoRaise(True)
+            b.setProperty("tab", tab_value)
             self.tabs_group.addButton(b)
+            b.clicked.connect(lambda checked=False, value=tab_value: self.set_filter("tab", value))
             return b
 
-        self.tab_all = tab_btn("Все")
-        self.tab_plan = tab_btn("План")
-        self.tab_today = tab_btn("Сегодня")
-        self.tab_done = tab_btn("Выполнено")
-        self.tab_plan.setChecked(True)
+        self.tab_all = tab_btn("Все", "all")
+        self.tab_today = tab_btn("Сегодня", "today")
+        self.tab_done = tab_btn("Выполнено", "done")
+        self.tab_all.setChecked(True)
 
         self.btn_prev_day = QToolButton()
         self.btn_prev_day.setIcon(qta.icon("fa5s.chevron-left", color="#cfcfcf"))
@@ -2761,7 +2762,6 @@ class TasksWorkspace(BaseWorkspace):
         self.cmb_priority.setFixedWidth(110)
 
         self.filter_layout.addWidget(self.tab_all)
-        self.filter_layout.addWidget(self.tab_plan)
         self.filter_layout.addWidget(self.tab_today)
         self.filter_layout.addWidget(self.tab_done)
         self.filter_layout.addSpacing(12)
@@ -2771,9 +2771,6 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addSpacing(12)
         self.filter_layout.addWidget(self.cmb_priority)
         self.filter_layout.addStretch(1)
-
-        for b in self.tabs_group.buttons():
-            b.clicked.connect(self._on_tab_changed)
 
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
@@ -2791,7 +2788,9 @@ class TasksWorkspace(BaseWorkspace):
             filters = self.get_filters()
         self._applying_filters = True
         try:
-            mode = filters.get("mode", "План")
+            tab = filters.get("tab")
+            if not tab:
+                tab = self._tab_from_mode(filters.get("mode"))
             focus_day = filters.get("focus_day")
             project_id = filters.get("project_id")
             priority = filters.get("priority")
@@ -2802,7 +2801,7 @@ class TasksWorkspace(BaseWorkspace):
                     focus_day = None
             if isinstance(focus_day, date):
                 self._focus_day = focus_day
-            self._apply_mode(mode)
+            self._apply_tab(tab, focus_day=focus_day)
             self.model.set_project_filter(project_id)
             if priority:
                 self.cmb_priority.setCurrentText(priority)
@@ -2853,36 +2852,15 @@ class TasksWorkspace(BaseWorkspace):
         if hasattr(model, "delete_task_by_row"):
             model.delete_task_by_row(index.row())
 
-    def _on_tab_changed(self):
-        """Обрабатывает переключение вкладок фильтра."""
-        if self.tab_today.isChecked():
-            self._apply_mode("Сегодня")
-        elif self.tab_done.isChecked():
-            self._apply_mode("Выполнено")
-        elif self.tab_plan.isChecked():
-            self._apply_mode("План")
-        else:
-            self._apply_mode("Все")
-
-        if not self._applying_filters:
-            mode = self._current_mode()
-            self._remember_filter("mode", mode)
-            focus_day_value = None
-            if mode in ("Все", "Сегодня"):
-                focus_day_value = self._focus_day.isoformat()
-            self._remember_filter("focus_day", focus_day_value)
-
     def _shift_day(self, delta: int):
         """Сдвигает фокусную дату на указанное число дней."""
         self._focus_day = self._focus_day + timedelta(days=delta)
         self._update_day_label()
-
-        self.tab_today.setChecked(False)
-        self.tab_all.setChecked(True)
-        self._apply_mode("Все", focus_day=self._focus_day)
         if not self._applying_filters:
-            self._remember_filter("mode", "Все")
-            self._remember_filter("focus_day", self._focus_day.isoformat())
+            self._filters["focus_day"] = self._focus_day.isoformat()
+            self.set_filter("tab", "all")
+        else:
+            self._apply_tab("all", focus_day=self._focus_day)
 
     def _update_day_label(self):
         """Обновляет подпись текущего дня."""
@@ -2932,14 +2910,20 @@ class TasksWorkspace(BaseWorkspace):
         """Перезагружает список задач из базы."""
         self.model.refresh()
 
-    def _current_mode(self) -> str:
-        if self.tab_today.isChecked():
-            return "Сегодня"
-        if self.tab_done.isChecked():
-            return "Выполнено"
-        if self.tab_plan.isChecked():
-            return "План"
-        return "Все"
+    def _tab_from_mode(self, mode: Optional[str]) -> str:
+        if mode == "Сегодня":
+            return "today"
+        if mode == "Выполнено":
+            return "done"
+        return "all"
+
+    def _apply_tab(self, tab: Optional[str], focus_day: Optional[date] = None) -> None:
+        if tab == "today":
+            self._apply_mode("Сегодня")
+        elif tab == "done":
+            self._apply_mode("Выполнено")
+        else:
+            self._apply_mode("Все", focus_day=focus_day)
 
     def _apply_mode(self, mode: str, focus_day: Optional[date] = None) -> None:
         if mode == "Сегодня":
@@ -2957,7 +2941,8 @@ class TasksWorkspace(BaseWorkspace):
             self.model.set_filter_mode("План")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(True)
-            self.tab_plan.setChecked(True)
+            if hasattr(self, "tab_plan"):
+                self.tab_plan.setChecked(True)
         else:
             self.model.set_filter_mode("Все")
             if focus_day is not None:
