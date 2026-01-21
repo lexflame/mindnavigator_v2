@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-PRIORITIES = ("Low", "Medium", "High")
+PRIORITIES = ("Low", "Medium", "High", "Отложенная")
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
 
@@ -172,7 +172,7 @@ def normalize_priority(priority: str) -> str:
     """Нормализует и проверяет значение приоритета."""
     priority = (priority or "").strip() or "Medium"
     if priority not in PRIORITIES:
-        raise ValueError("Приоритет должен быть Low, Medium или High.")
+        raise ValueError("Приоритет должен быть Low, Medium, High или Отложенная.")
     return priority
 
 
@@ -226,7 +226,7 @@ class Database:
                     description TEXT NOT NULL DEFAULT '',
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
@@ -242,7 +242,7 @@ class Database:
                     area TEXT NOT NULL,
                     title TEXT NOT NULL,
                     updated TEXT NOT NULL,
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
                 );
                 """
