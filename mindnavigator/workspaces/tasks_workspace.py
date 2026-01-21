@@ -17,7 +17,7 @@ from typing import Dict, List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
+from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from mindnavigator.storage import CloudFileData, TaskAttachmentData, get_database, normalize_priority, validate_time_text
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _PARENT_UNSET = object()
@@ -2521,17 +2522,120 @@ class TasksItemDelegate(QStyledItemDelegate):
         }
 
 
-class TasksWorkspace(QWidget):
+class TasksWorkspace(BaseWorkspace):
     """Рабочая область задач: панель управления и список с группировкой."""
+
+    workspace_id = "tasks"
+    workspace_title = "Задачи"
 
     def __init__(self, parent=None):
         """Создает интерфейс рабочей области задач."""
-        super().__init__(parent)
+        self._focus_day = date.today()
+        self._applying_filters = False
+        super().__init__(self.workspace_id, self.workspace_title, parent)
         self.setObjectName("TasksWorkspace")
+        self.search_input.setPlaceholderText("Поиск…")
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(10)
+        self._build_filters()
+        self.build_content()
+
+        self._update_day_label()
+        self._on_tab_changed()
+        self.update_action_states()
+
+        self.setStyleSheet("""
+            QWidget#TasksWorkspace { background: #16171a; }
+
+
+            QFrame#TasksCreateBar {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+            }
+
+            QFrame#TasksCreateBar QLineEdit {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QComboBox {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                padding: 4px 6px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {
+                background: #131417;
+                border: 1px solid #2a2b2f;
+                border-radius: 8px;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QDateEdit,
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {
+                background: transparent;
+                border: none;
+                padding: 4px 6px;
+                color: #e6e6e6;
+            }
+
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {
+                color: #cfcfcf;
+                padding: 0 6px;
+            }
+
+            QFrame#TasksCreateBar QToolButton {
+                background: #2a2b2f;
+                border: 1px solid #3a3b40;
+                padding: 6px 10px;
+                border-radius: 6px;
+            }
+            QFrame#TasksCreateBar QToolButton:hover { background: #34363b; }
+
+            QToolButton {
+                color: #cfcfcf;
+                border: none;
+                padding: 6px 8px;
+            }
+            QToolButton:checked {
+                background: #2a2b2f;
+            }
+
+            QLabel#TasksDayLabel {
+                color: #cfcfcf;
+                padding: 0px 6px;
+            }
+
+            QComboBox, QLineEdit {
+                background: #202127;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                padding: 6px 8px;
+            }
+
+            QListView#TasksList {
+                background: #16171a;
+                border: 1px solid #2a2b2f;
+            }
+        """)
+
+    def create_actions(self) -> dict[str, QAction]:
+        actions = {
+            "add": QAction("Создать", self),
+            "edit": QAction("Редактировать", self),
+            "delete": QAction("Удалить", self),
+        }
+        actions["add"].triggered.connect(self._on_create_task)
+        actions["edit"].triggered.connect(self._edit_selected_task)
+        actions["delete"].triggered.connect(self._delete_selected_task)
+        return actions
+
+    def build_content(self) -> None:
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
 
         create = QFrame()
         create.setObjectName("TasksCreateBar")
@@ -2585,13 +2689,41 @@ class TasksWorkspace(QWidget):
         create_layout.addWidget(self.new_priority)
         create_layout.addWidget(self.btn_add)
 
-        root.addWidget(create)
+        content_layout.addWidget(create)
 
-        top = QFrame()
-        top.setObjectName("TasksTopbar")
-        top_layout = QHBoxLayout(top)
-        top_layout.setContentsMargins(10, 8, 10, 8)
-        top_layout.setSpacing(8)
+        self.list = QListView()
+        self.list.setObjectName("TasksList")
+        self.list.setUniformItemSizes(False)
+        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
+        content_layout.addWidget(self.list, 1)
+
+        self.model = TasksModel(self)
+        self.list.setModel(self.model)
+
+        self.delegate = TasksItemDelegate(self.list)
+        self.list.setItemDelegate(self.delegate)
+
+        self.btn_add.clicked.connect(self._on_create_task)
+        self.new_title.returnPressed.connect(self._on_create_task)
+        self.list.doubleClicked.connect(self._on_task_double_clicked)
+
+        selection_model = self.list.selectionModel()
+        selection_model.selectionChanged.connect(lambda *_: self.update_action_states())
+        selection_model.currentChanged.connect(lambda *_: self.update_action_states())
+        self.model.modelReset.connect(self.update_action_states)
+        self.model.layoutChanged.connect(self.update_action_states)
+
+        self.content_layout.addWidget(content, 1)
+
+    def _build_filters(self) -> None:
+        while self.filter_layout.count():
+            item = self.filter_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
         self.tabs_group = QButtonGroup(self)
         self.tabs_group.setExclusive(True)
@@ -2611,13 +2743,6 @@ class TasksWorkspace(QWidget):
         self.tab_done = tab_btn("Выполнено")
         self.tab_plan.setChecked(True)
 
-        top_layout.addWidget(self.tab_all)
-        top_layout.addWidget(self.tab_plan)
-        top_layout.addWidget(self.tab_today)
-        top_layout.addWidget(self.tab_done)
-
-        top_layout.addSpacing(12)
-
         self.btn_prev_day = QToolButton()
         self.btn_prev_day.setIcon(qta.icon("fa5s.chevron-left", color="#cfcfcf"))
         self.btn_prev_day.setCursor(Qt.PointingHandCursor)
@@ -2631,154 +2756,121 @@ class TasksWorkspace(QWidget):
         self.lbl_day = QLabel()
         self.lbl_day.setObjectName("TasksDayLabel")
 
-        top_layout.addWidget(self.btn_prev_day)
-        top_layout.addWidget(self.lbl_day)
-        top_layout.addWidget(self.btn_next_day)
-
-        top_layout.addSpacing(12)
-
         self.cmb_priority = QComboBox()
         self.cmb_priority.addItems(["Любой", "Low", "Medium", "High"])
         self.cmb_priority.setFixedWidth(110)
 
-        top_layout.addStretch(1)
-
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Поиск…")
-        self.search.setFixedWidth(260)
-        top_layout.addWidget(self.search)
-
-        root.addWidget(top)
-
-        self.list = QListView()
-        self.list.setObjectName("TasksList")
-        self.list.setUniformItemSizes(False)
-        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SingleSelection)
-        self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
-        root.addWidget(self.list, 1)
-
-        self._focus_day = date.today()
-        self.model = TasksModel(self)
-        self.list.setModel(self.model)
-
-        self.delegate = TasksItemDelegate(self.list)
-        self.list.setItemDelegate(self.delegate)
+        self.filter_layout.addWidget(self.tab_all)
+        self.filter_layout.addWidget(self.tab_plan)
+        self.filter_layout.addWidget(self.tab_today)
+        self.filter_layout.addWidget(self.tab_done)
+        self.filter_layout.addSpacing(12)
+        self.filter_layout.addWidget(self.btn_prev_day)
+        self.filter_layout.addWidget(self.lbl_day)
+        self.filter_layout.addWidget(self.btn_next_day)
+        self.filter_layout.addSpacing(12)
+        self.filter_layout.addWidget(self.cmb_priority)
+        self.filter_layout.addStretch(1)
 
         for b in self.tabs_group.buttons():
             b.clicked.connect(self._on_tab_changed)
 
-        self.search.textChanged.connect(self.model.set_search)
-        self.btn_add.clicked.connect(self._on_create_task)
-        self.new_title.returnPressed.connect(self._on_create_task)
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
-        self.list.doubleClicked.connect(self._on_task_double_clicked)
+        self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
 
-        self._update_day_label()
-        self._on_tab_changed()
+    def refresh(self) -> None:
+        """Перезагружает список задач из базы."""
+        self.model.refresh()
 
-        self.setStyleSheet("""
-            QWidget#TasksWorkspace { background: #16171a; }
+    def apply_query(self, query: str) -> None:
+        self.model.set_search(query)
 
+    def apply_filters(self, filters: Optional[Dict[str, object]] = None) -> None:
+        if filters is None:
+            filters = self.get_filters()
+        self._applying_filters = True
+        try:
+            mode = filters.get("mode", "План")
+            focus_day = filters.get("focus_day")
+            project_id = filters.get("project_id")
+            priority = filters.get("priority")
+            if isinstance(focus_day, str):
+                try:
+                    focus_day = date.fromisoformat(focus_day)
+                except ValueError:
+                    focus_day = None
+            if isinstance(focus_day, date):
+                self._focus_day = focus_day
+            self._apply_mode(mode)
+            self.model.set_project_filter(project_id)
+            if priority:
+                self.cmb_priority.setCurrentText(priority)
+            else:
+                self.cmb_priority.setCurrentText("Любой")
+        finally:
+            self._applying_filters = False
 
-            QFrame#TasksCreateBar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
+    def get_selection(self) -> Optional[TaskRow]:
+        index = self._selected_task_index()
+        if index is None:
+            return None
+        if hasattr(self.model, "task_at_row"):
+            return self.model.task_at_row(index.row())
+        return None
 
-            QFrame#TasksCreateBar QLineEdit {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                color: #e6e6e6;
-            }
+    def _selected_task_index(self) -> Optional[QModelIndex]:
+        if not hasattr(self, "list"):
+            return None
+        index = self.list.currentIndex()
+        if not index.isValid():
+            return None
+        if index.data(TaskRoles.RowType) != "task":
+            return None
+        return index
 
-            QFrame#TasksCreateBar QComboBox {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                padding: 4px 6px;
-                color: #e6e6e6;
-            }
+    def _edit_selected_task(self) -> None:
+        index = self._selected_task_index()
+        if index is None:
+            return
+        self.delegate._edit_task(index)
 
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                border-radius: 8px;
-            }
-
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QDateEdit,
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {
-                background: transparent;
-                border: none;
-                padding: 4px 6px;
-                color: #e6e6e6;
-            }
-
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {
-                color: #cfcfcf;
-                padding: 0 6px;
-            }
-
-            QFrame#TasksCreateBar QToolButton {
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
-                padding: 6px 10px;
-                border-radius: 6px;
-            }
-            QFrame#TasksCreateBar QToolButton:hover { background: #34363b; }
-
-            QFrame#TasksTopbar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
-
-            QToolButton {
-                color: #cfcfcf;
-                border: none;
-                padding: 6px 8px;
-            }
-            QToolButton:checked {
-                background: #2a2b2f;
-            }
-
-            QLabel#TasksDayLabel {
-                color: #cfcfcf;
-                padding: 0px 6px;
-            }
-
-            QComboBox, QLineEdit {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-            }
-
-            QListView#TasksList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
-            }
-        """)
+    def _delete_selected_task(self) -> None:
+        index = self._selected_task_index()
+        if index is None:
+            return
+        title = index.data(TaskRoles.Title) or "задачу"
+        dialog = ConfirmDialog(
+            "Удалить задачу",
+            f"Удалить задачу:\n«{title}» ?",
+            parent=self,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
+        )
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+            return
+        model = index.model()
+        if hasattr(model, "delete_task_by_row"):
+            model.delete_task_by_row(index.row())
 
     def _on_tab_changed(self):
         """Обрабатывает переключение вкладок фильтра."""
         if self.tab_today.isChecked():
-            self.model.set_filter_mode("Сегодня")
-            self.model.set_focus_day(date.today())
-            self._set_drag_drop_state(False)
+            self._apply_mode("Сегодня")
         elif self.tab_done.isChecked():
-            self.model.set_filter_mode("Выполнено")
-            self.model.set_focus_day(None)
-            self._set_drag_drop_state(False)
+            self._apply_mode("Выполнено")
         elif self.tab_plan.isChecked():
-            self.model.set_filter_mode("План")
-            self.model.set_focus_day(None)
-            self._set_drag_drop_state(True)
+            self._apply_mode("План")
         else:
-            self.model.set_filter_mode("Все")
-            self.model.set_focus_day(None)
-            self._set_drag_drop_state(False)
+            self._apply_mode("Все")
+
+        if not self._applying_filters:
+            mode = self._current_mode()
+            self._remember_filter("mode", mode)
+            focus_day_value = None
+            if mode in ("Все", "Сегодня"):
+                focus_day_value = self._focus_day.isoformat()
+            self._remember_filter("focus_day", focus_day_value)
 
     def _shift_day(self, delta: int):
         """Сдвигает фокусную дату на указанное число дней."""
@@ -2787,9 +2879,10 @@ class TasksWorkspace(QWidget):
 
         self.tab_today.setChecked(False)
         self.tab_all.setChecked(True)
-        self.model.set_filter_mode("Все")
-        self.model.set_focus_day(self._focus_day)
-        self._set_drag_drop_state(False)
+        self._apply_mode("Все", focus_day=self._focus_day)
+        if not self._applying_filters:
+            self._remember_filter("mode", "Все")
+            self._remember_filter("focus_day", self._focus_day.isoformat())
 
     def _update_day_label(self):
         """Обновляет подпись текущего дня."""
@@ -2829,11 +2922,62 @@ class TasksWorkspace(QWidget):
 
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
+        if self._applying_filters:
+            self.model.set_project_filter(project_id)
+            return
+        self._remember_filter("project_id", project_id)
         self.model.set_project_filter(project_id)
 
     def refresh_tasks(self) -> None:
         """Перезагружает список задач из базы."""
         self.model.refresh()
+
+    def _current_mode(self) -> str:
+        if self.tab_today.isChecked():
+            return "Сегодня"
+        if self.tab_done.isChecked():
+            return "Выполнено"
+        if self.tab_plan.isChecked():
+            return "План"
+        return "Все"
+
+    def _apply_mode(self, mode: str, focus_day: Optional[date] = None) -> None:
+        if mode == "Сегодня":
+            self.model.set_filter_mode("Сегодня")
+            self._focus_day = date.today()
+            self.model.set_focus_day(self._focus_day)
+            self._set_drag_drop_state(False)
+            self.tab_today.setChecked(True)
+        elif mode == "Выполнено":
+            self.model.set_filter_mode("Выполнено")
+            self.model.set_focus_day(None)
+            self._set_drag_drop_state(False)
+            self.tab_done.setChecked(True)
+        elif mode == "План":
+            self.model.set_filter_mode("План")
+            self.model.set_focus_day(None)
+            self._set_drag_drop_state(True)
+            self.tab_plan.setChecked(True)
+        else:
+            self.model.set_filter_mode("Все")
+            if focus_day is not None:
+                self._focus_day = focus_day
+            self.model.set_focus_day(self._focus_day)
+            self._set_drag_drop_state(False)
+            self.tab_all.setChecked(True)
+        self._update_day_label()
+
+    def _remember_filter(self, key: str, value: Optional[object]) -> None:
+        if value is None:
+            self._filters.pop(key, None)
+        else:
+            self._filters[key] = value
+        self.save_state()
+
+    def _on_priority_filter_changed(self, value: str) -> None:
+        if self._applying_filters:
+            return
+        self._remember_filter("priority", None if value == "Любой" else value)
 
     def _set_drag_drop_state(self, enabled: bool):
         """Включает или выключает drag and drop списка."""
