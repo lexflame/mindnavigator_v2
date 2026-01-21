@@ -202,7 +202,7 @@ class BaseWorkspace(QWidget):
         self.status_row.setProperty("error", True)
         self.status_row.setStyleSheet("color: #d76b6b;")
 
-    def on_enter(self, event: object | None = None) -> None:
+    def on_enter(self) -> None:
         if not self._state_restored:
             self.restore_state()
             self._state_restored = True
