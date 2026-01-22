@@ -115,6 +115,7 @@ class TasksModel(QAbstractListModel):
         self._drag_enabled = False
         self._expanded_task_ids: set[int] = set()
         self._collapsed_subtask_ids: set[int] = set()
+        self._subtask_state_initialized: set[int] = set()
         self._reload_from_db()
 
     def _reload_from_db(self):
@@ -148,6 +149,7 @@ class TasksModel(QAbstractListModel):
         task_ids = {it.id for it in self._all_rows if isinstance(it, TaskRow)}
         self._expanded_task_ids &= task_ids
         self._collapsed_subtask_ids &= task_ids
+        self._subtask_state_initialized &= task_ids
 
     def rowCount(self, parent=QModelIndex()) -> int:
         """Возвращает количество строк с учетом фильтрации."""
@@ -607,6 +609,12 @@ class TasksModel(QAbstractListModel):
         for task in base_tasks:
             parent_id = task.parent_id if task.parent_id in task_ids else None
             children_map.setdefault(parent_id, []).append(task)
+        for parent_id, children in children_map.items():
+            if parent_id is None or not children:
+                continue
+            if parent_id not in self._subtask_state_initialized:
+                self._collapsed_subtask_ids.add(parent_id)
+                self._subtask_state_initialized.add(parent_id)
 
         include_cache: dict[int, bool] = {}
 
