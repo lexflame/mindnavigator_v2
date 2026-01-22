@@ -338,6 +338,14 @@ class TasksModel(QAbstractListModel):
             project_id=project_id,
             parent_id=r.parent_id,
         )
+        priority_changed = r.priority != updated.priority
+        cascade_needed = (
+            (r.priority == "Отложенная" and updated.priority != "Отложенная")
+            or (r.priority != "Отложенная" and updated.priority == "Отложенная")
+        )
+        if priority_changed and cascade_needed:
+            self._reload_from_db()
+            return
 
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -923,8 +931,8 @@ class TaskDetailsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Подробности задачи")
         self.setObjectName("TaskDetailsDialog")
-        self.setMinimumWidth(640)
-        self.setMinimumHeight(560)
+        self.setMinimumWidth(760)
+        self.setMinimumHeight(680)
 
         self._db = get_database()
         self._task = task
@@ -936,8 +944,8 @@ class TaskDetailsDialog(QDialog):
         self._cloud_files_by_id = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(16)
 
         header = QHBoxLayout()
         title_label = QLabel(task.title)
@@ -949,18 +957,19 @@ class TaskDetailsDialog(QDialog):
         layout.addLayout(header)
 
         scroll = QScrollArea()
+        scroll.setObjectName("TaskDetailsScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         content = QFrame()
         content.setObjectName("TaskDetailsContent")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(14)
 
         desc_block = QFrame()
         desc_block.setObjectName("TaskDetailsDescription")
         desc_layout = QVBoxLayout(desc_block)
-        desc_layout.setContentsMargins(12, 10, 12, 10)
+        desc_layout.setContentsMargins(14, 12, 14, 12)
         desc_title = QLabel("Описание")
         desc_title.setObjectName("TaskDetailsSectionTitle")
         desc_text = QLabel(task.description or "—")
@@ -973,7 +982,7 @@ class TaskDetailsDialog(QDialog):
         props_block = QFrame()
         props_block.setObjectName("TaskDetailsProps")
         props_layout = QVBoxLayout(props_block)
-        props_layout.setContentsMargins(12, 10, 12, 10)
+        props_layout.setContentsMargins(14, 12, 14, 12)
         props_title = QLabel("Свойства")
         props_title.setObjectName("TaskDetailsSectionTitle")
         props_layout.addWidget(props_title)
@@ -1005,8 +1014,8 @@ class TaskDetailsDialog(QDialog):
         attachments_block = QFrame()
         attachments_block.setObjectName("TaskDetailsAttachments")
         attachments_layout = QVBoxLayout(attachments_block)
-        attachments_layout.setContentsMargins(12, 10, 12, 10)
-        attachments_layout.setSpacing(8)
+        attachments_layout.setContentsMargins(14, 12, 14, 12)
+        attachments_layout.setSpacing(10)
 
         attachments_title = QLabel("Вложения")
         attachments_title.setObjectName("TaskDetailsSectionTitle")
@@ -1031,32 +1040,43 @@ class TaskDetailsDialog(QDialog):
         self.setStyleSheet(f"""
             QDialog#TaskDetailsDialog {{
                 {MATH_PHYS_BACKGROUND}
+                border: 1px solid #25272c;
+                border-radius: 12px;
             }}
             QDialog#TaskDetailsDialog QLabel {{
                 color: #cfcfcf;
             }}
             QLabel#TaskDetailsTitle {{
                 color: #f2f2f2;
-                font-size: 20px;
+                font-size: 22px;
                 font-weight: 600;
             }}
             QLabel#TaskDetailsStatus {{
                 background: #202127;
                 border: 1px solid #2a2b2f;
-                border-radius: 10px;
-                padding: 4px 10px;
+                border-radius: 12px;
+                padding: 6px 12px;
                 color: #d8d8d8;
             }}
             QLabel#TaskDetailsSectionTitle {{
                 color: #f2f2f2;
                 font-weight: 600;
             }}
+            QScrollArea#TaskDetailsScroll {{
+                background: transparent;
+            }}
+            QScrollArea#TaskDetailsScroll QWidget {{
+                background: transparent;
+            }}
+            QFrame#TaskDetailsContent {{
+                background: transparent;
+            }}
             QFrame#TaskDetailsDescription,
             QFrame#TaskDetailsProps,
             QFrame#TaskDetailsAttachments {{
                 background: #1c1d22;
                 border: 1px solid #2a2b2f;
-                border-radius: 8px;
+                border-radius: 10px;
             }}
             QFrame#TaskDetailsAttachments QFrame#TaskAttachmentRow {{
                 background: #202127;
@@ -1074,7 +1094,10 @@ class TaskDetailsDialog(QDialog):
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
-                border-radius: 6px;
+                border-radius: 8px;
+            }}
+            QDialog#TaskDetailsDialog QDialogButtonBox QPushButton:hover {{
+                background: #34363b;
             }}
         """)
 
@@ -1348,6 +1371,15 @@ class TaskEditDialog(QDialog):
         self.project_edit = QComboBox()
         self.project_edit.addItem("Без проекта", None)
         projects = get_database().fetch_projects()
+        priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
+        projects.sort(
+            key=lambda project: (
+                project.area.lower(),
+                priority_order.get(normalize_priority(project.priority), 4),
+                project.title.lower(),
+                project.id,
+            )
+        )
         for project in projects:
             if project.archived:
                 continue
@@ -2729,7 +2761,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.btn_add.clicked.connect(self._on_create_task)
         self.new_title.returnPressed.connect(self._on_create_task)
-        self.list.doubleClicked.connect(self._on_task_double_clicked)
+        self.list.viewport().installEventFilter(self)
 
         selection_model = self.list.selectionModel()
         selection_model.selectionChanged.connect(lambda *_: self.update_action_states())
@@ -2934,13 +2966,23 @@ class TasksWorkspace(BaseWorkspace):
         self.new_title.clear()
         self.new_title.setFocus()
 
-    def _on_task_double_clicked(self, index: QModelIndex):
-        """Раскрывает или сворачивает задачу по двойному клику."""
-        if not index.isValid():
-            return
-        if index.data(TaskRoles.RowType) != "task":
-            return
-        self.model.toggle_expanded_by_row(index.row())
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:
+            if event.button() == Qt.LeftButton:
+                pos = event.position().toPoint()
+                index = self.list.indexAt(pos)
+                if not index.isValid() or index.data(TaskRoles.RowType) != "task":
+                    return False
+                rect = self.list.visualRect(index)
+                depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
+                has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+                layout = self.delegate._row_layout(rect, depth, has_subtasks)
+                if layout["doc"].contains(pos):
+                    self.delegate._open_task_view(index)
+                else:
+                    self.model.toggle_expanded_by_row(index.row())
+                return True
+        return super().eventFilter(obj, event)
 
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
