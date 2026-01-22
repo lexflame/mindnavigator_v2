@@ -1959,7 +1959,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
     TIME_W = 140
-    PROJECT_W = 130
+    PROJECT_W = 230
     TEXT_VPAD = 8
     TEXT_GAP = 6
     ROW_H_EXPANDED_MIN = 82
