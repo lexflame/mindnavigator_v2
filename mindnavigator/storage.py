@@ -1102,6 +1102,11 @@ class Database:
         parent_id: Optional[int] = None,
     ) -> TaskData:
         """Обновляет задачу."""
+        prev_row = self._conn.execute(
+            "SELECT priority FROM tasks WHERE id = ?;",
+            (task_id,),
+        ).fetchone()
+        prev_priority = prev_row["priority"] if prev_row else priority
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
@@ -1119,6 +1124,26 @@ class Database:
                 """,
                 (title, description, day.isoformat(), time_text, priority, int(done), project_id, parent_id, now, task_id),
             )
+            cascade_priority = None
+            if priority == "Отложенная" and prev_priority != "Отложенная":
+                cascade_priority = priority
+            elif prev_priority == "Отложенная" and priority != "Отложенная":
+                cascade_priority = priority
+            if cascade_priority is not None:
+                self._conn.execute(
+                    """
+                    WITH RECURSIVE descendants(id) AS (
+                        SELECT id FROM tasks WHERE parent_id = ?
+                        UNION ALL
+                        SELECT t.id FROM tasks t
+                        JOIN descendants d ON t.parent_id = d.id
+                    )
+                    UPDATE tasks
+                    SET priority = ?, updated_at = ?
+                    WHERE id IN (SELECT id FROM descendants);
+                    """,
+                    (task_id, cascade_priority, now),
+                )
         project_title = ""
         project_area = ""
         if project_id is not None:
