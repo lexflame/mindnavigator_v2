@@ -10,7 +10,7 @@
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
 
-from mindnavigator.storage import get_database, ProjectData
+from mindnavigator.storage import get_database, normalize_priority, ProjectData
 
 
 class ProjectsNav(QWidget):
@@ -204,7 +204,13 @@ class ProjectsNav(QWidget):
         return f"{project.area} · {project.title}{suffix}"
 
     def _project_entries(self) -> list[dict]:
-        projects = sorted(get_database().fetch_projects(), key=lambda p: (p.area.lower(), p.title.lower()))
+        priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
+
+        def project_key(project: ProjectData) -> tuple:
+            priority = normalize_priority(project.priority)
+            return (project.area.lower(), priority_order.get(priority, 4), project.title.lower(), project.id)
+
+        projects = sorted(get_database().fetch_projects(), key=project_key)
         entries = []
         for project in projects:
             entries.append(
