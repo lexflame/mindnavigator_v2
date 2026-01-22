@@ -478,6 +478,7 @@ class Database:
         self._ensure_marker_parent_path_column()
         self._ensure_marker_image_column()
         self._ensure_map_marker_foreign_keys()
+        self._ensure_task_attachment_foreign_keys()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -573,6 +574,29 @@ class Database:
             self._rebuild_map_markers_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
+
+    def _task_attachment_fk_needs_repair(self) -> bool:
+        """Проверяет, что внешние ключи task_attachments ссылаются на tasks."""
+        tables = {
+            row["name"]
+            for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        }
+        if "task_attachments" not in tables:
+            return False
+        rows = self._conn.execute("PRAGMA foreign_key_list(task_attachments);").fetchall()
+        if not rows:
+            return False
+        return any(row["table"] not in tables or row["table"] != "tasks" for row in rows)
+
+    def _ensure_task_attachment_foreign_keys(self) -> None:
+        """Исправляет устаревшие внешние ключи task_attachments, если таблица-источник отсутствует."""
+        if not self._task_attachment_fk_needs_repair():
+            return
+        with self._conn:
+            self._conn.execute("PRAGMA foreign_keys=OFF;")
+            self._rebuild_task_attachments_table()
+            self._conn.execute("PRAGMA foreign_keys=ON;")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
 
     def _rebuild_map_markers_table(self) -> None:
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
@@ -719,6 +743,7 @@ class Database:
             """
         )
         self._conn.execute("DROP TABLE tasks_old;")
+        self._rebuild_task_attachments_table()
 
     def _rebuild_projects_table(self) -> None:
         self._conn.execute(
@@ -738,8 +763,38 @@ class Database:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
-        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
-        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
+
+    def _rebuild_task_attachments_table(self) -> None:
+        columns = self._conn.execute("PRAGMA table_info(task_attachments);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE task_attachments RENAME TO task_attachments_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE task_attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                ref_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(task_id, kind, ref_id)
+            );
+            """
+        )
+        rows = self._conn.execute(
+            "SELECT id, task_id, kind, ref_id, created_at FROM task_attachments_old;"
+        ).fetchall()
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO task_attachments (id, task_id, kind, ref_id, created_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (row["id"], row["task_id"], row["kind"], row["ref_id"], row["created_at"]),
+            )
+        self._conn.execute("DROP TABLE task_attachments_old;")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
 
     def _ensure_map_tiles_path_column(self) -> None:
         """Добавляет колонку tiles_path, если она отсутствует."""
