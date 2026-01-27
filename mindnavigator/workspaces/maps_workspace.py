@@ -758,6 +758,7 @@ class MapImagePreviewDialog(QDialog):
 
 
 class MapCanvas(QWidget):
+    # Класс отрисовки маркеров на карте
     markerSelected = Signal(object)
     markerAdded = Signal(object)
     markerRemoved = Signal(int)
@@ -765,8 +766,9 @@ class MapCanvas(QWidget):
 
     GRID_COLOR = QColor(70, 74, 82, 120)
     GRID_TEXT = QColor(150, 155, 160, 180)
-    DEFAULT_MARKER_SIZE = 8.0
-    MIN_MARKER_SIZE = 2.0
+    CREATE_DEFAULT_MARKER_SIZE = 60.0 # Изначальный размер маркера при создании
+    DEFAULT_MARKER_SIZE = 8.0 
+    MIN_MARKER_SIZE = 10.0
     MAX_MARKER_SIZE = 240.0
     RESIZE_FRAME_PADDING = 8.0
     HANDLE_PIXEL_SIZE = 12.0
@@ -1210,7 +1212,7 @@ class MapCanvas(QWidget):
             return
         painter.setPen(QPen(QColor("#cfd8dc"), 1.0 / self._scale))
         painter.setBrush(QColor(200, 200, 200, 60))
-        painter.drawEllipse(self._preview_pos, self.DEFAULT_MARKER_SIZE, self.DEFAULT_MARKER_SIZE)
+        painter.drawEllipse(self._preview_pos, self.CREATE_DEFAULT_MARKER_SIZE, self.CREATE_DEFAULT_MARKER_SIZE)
 
     def _world_view_rect(self) -> QRectF:
         # Рассчитываем видимую область в мировых координатах.
@@ -1698,7 +1700,7 @@ class MapCanvas(QWidget):
             float(world_pos.y()),
             default_type.color,
             "Point",
-            self.DEFAULT_MARKER_SIZE,
+            self.CREATE_DEFAULT_MARKER_SIZE,
             "",
             "",
             [],
