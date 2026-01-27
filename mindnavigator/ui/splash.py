@@ -7,9 +7,9 @@
     Виджет заставки и обновлённые статусы загрузки.
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication, QGraphicsOpacityEffect
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 
 from ..resources import resource_path
 
@@ -24,6 +24,14 @@ class SplashWidget(QWidget):
 
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setFixedSize(w, h)
+
+        # Эффект прозрачности
+        self.opacity_effect = QGraphicsOpacityEffect()
+        self.setGraphicsEffect(self.opacity_effect)
+        # Анимация прозрачности
+        self.animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.animation.setDuration(500)  # длительность анимации в мс
+        self.animation.setEasingCurve(QEasingCurve.OutQuad)  # плавный спад
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -63,6 +71,25 @@ class SplashWidget(QWidget):
                 padding-left: 2px;
             }
         """)
+
+    def fade_in(self):
+        """Плавно показать заставку (от 0 до 1)."""
+        self.animation.stop()
+        self.animation.setStartValue(0.0)
+        self.animation.setEndValue(1.0)
+        self.animation.start()
+
+    def fade_out(self, on_finished=None):
+        """
+        Плавно скрыть заставку (от 1 до 0).
+        on_finished: коллбэк, который вызовется после завершения анимации.
+        """
+        self.animation.stop()
+        self.animation.setStartValue(1.0)
+        self.animation.setEndValue(0.0)
+        if on_finished:
+            self.animation.finished.connect(on_finished)
+        self.animation.start()
 
     def center_on_screen(self):
         """Центрирует заставку на активном экране."""

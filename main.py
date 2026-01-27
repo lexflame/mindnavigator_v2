@@ -63,27 +63,45 @@ def main() -> None:
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
     app.setQuitOnLastWindowClosed(False)
-
     app.setStyleSheet(APP_STYLESHEET)
     _connect_shutdown_handlers(app)
+
 
     # Показываем заставку
     splash = show_splash(app, resource_path("assets/splash.jpg"))
     splash.set_status("Инициализация интерфейса…")
+    splash.hide()
+
+    splash.fade_in()
 
     # Создаём главное окно
     window = MainWindow()
 
-    # Этапы загрузки с задержками
+    # Этапы загрузки (без задержек — они будут накапливаться)
     startup_steps = [
-        (150, "Подготовка модулей…"),
-        (300, "Загрузка проекта…"),
-        (450, "Проверка хранилища…"),
-        (600, "Готово."),
+        "Подготовка модулей…",
+        "Загрузка проекта…",
+        "Проверка хранилища…",
+        "Готово."
     ]
 
-    for delay_ms, status_text in startup_steps:
-        QTimer.singleShot(delay_ms, partial(splash.set_status, status_text))
+    def show_next_status(step_index: int) -> None:
+        if step_index >= len(startup_steps):
+            finish_startup()
+            return
+
+        status_text = startup_steps[step_index]
+        splash.set_status(status_text)
+
+        # Планируем следующий статус (или завершение)
+        next_index = step_index + 1
+        if next_index < len(startup_steps):
+            # Задержка между шагами (можно сделать переменной)
+            delay_ms = 150 if step_index == 0 else 300
+            QTimer.singleShot(delay_ms, lambda: show_next_status(next_index))
+        else:
+            # Последний статус — ждём немного перед завершением
+            QTimer.singleShot(400, lambda: show_next_status(next_index))
 
     def finish_startup() -> None:
         """Завершает стартовый процесс: показывает главное окно и закрывает заставку.
@@ -95,14 +113,15 @@ def main() -> None:
             None. Выполняет показ окна и закрытие заставки.
         """
         window.show()
-        # Используем один таймер для последовательных действий
         QTimer.singleShot(0, lambda: (
             window.showMaximized(),
             window.title_bar.sync_max_button()
         ))
         splash.close()
 
-    finish_startup()
+    # Запускаем первый статус
+    show_next_status(0)
+
     sys.exit(app.exec())
 
 
