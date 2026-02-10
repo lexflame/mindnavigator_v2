@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "id": "task.create",
+      "title": "Create task",
+      "description": "Create a new task in the Tasks workspace.",
+      "default_sequence": "Ctrl+T",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "app.tray.minimize",
+      "title": "Minimize to tray",
+      "description": "Hide the main window and keep the app in the system tray.",
+      "default_sequence": "Ctrl+X",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "app.tray.restore",
+      "title": "Restore from tray",
+      "description": "Restore the main window from the system tray.",
+      "default_sequence": "Ctrl+Shift+X",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": true
+    },
+    {
+      "id": "nav.workspace.next",
+      "title": "Next workspace",
+      "description": "Cycle to the next workspace/mode.",
+      "default_sequence": "Ctrl+Tab",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "nav.workspace.prev",
+      "title": "Previous workspace",
+      "description": "Cycle to the previous workspace/mode.",
+      "default_sequence": "Ctrl+Shift+Tab",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "nav.sheet.next",
+      "title": "Next entity sheet",
+      "description": "Cycle to the next entity sheet/tab inside current workspace.",
+      "default_sequence": "Ctrl+Q",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "nav.sheet.prev",
+      "title": "Previous entity sheet",
+      "description": "Cycle to the previous entity sheet/tab inside current workspace.",
+      "default_sequence": "Ctrl+Shift+Q",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "ui.command_palette",
+      "title": "Command palette",
+      "description": "Open command palette for searching and executing commands.",
+      "default_sequence": "Ctrl+P",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": true
+    },
+    {
+      "id": "ui.settings.open",
+      "title": "Open settings",
+      "description": "Open application settings.",
+      "default_sequence": "Ctrl+,",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": false
+    },
+    {
+      "id": "ui.hotkeys.help",
+      "title": "Hotkeys help",
+      "description": "Show the hotkeys help overlay for current context.",
+      "default_sequence": "F1",
+      "contexts": ["Global"],
+      "allow_in_text_inputs": true
+    }
+  ]
+}
