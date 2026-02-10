@@ -49,7 +49,7 @@ class HotkeyEventFilter(QObject):
         key = event.key()
         if key in {Qt.Key_unknown, Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta}:
             return ""
-        seq = QKeySequence(int(event.modifiers()) | key).toString(QKeySequence.NativeText)
+        seq = QKeySequence(event.keyCombination()).toString(QKeySequence.NativeText)
         return normalize_sequence(seq)
 
 
