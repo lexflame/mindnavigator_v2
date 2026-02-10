@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
     QMenu,
+    QMessageBox,
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QPoint, QRect, QEvent
+from pathlib import Path
 
 from .windowing import ResizeEdge
 from .ui.titlebar import TitleBar
@@ -39,6 +41,7 @@ from .workspaces.objects_workspace import ObjectWorkspace
 from .workspaces.ideas_workspace import IdeasWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
+from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
 
 from .ui.styles import MATH_PHYS_PATTERN, TITLEBAR_BACKGROUND
 
@@ -92,6 +95,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._wire_modes()
         self._init_tray()
+        self._init_hotkeys()
 
         # Включаем отслеживание мыши и фильтр событий для собственного ресайза.
         self.setMouseTracking(True)
@@ -156,6 +160,88 @@ class MainWindow(QMainWindow):
             QSystemTrayIcon.Information,
             2000,
         )
+
+    def _hotkey_defaults_path(self) -> Path:
+        return Path(__file__).resolve().parents[1] / "defaults" / "hotkeys.default.json"
+
+    def _hotkey_overrides_path(self) -> Path:
+        return Path.home() / ".mindnavigator" / "hotkeys.overrides.json"
+
+    def _init_hotkeys(self) -> None:
+        commands = load_commands_from_json(self._hotkey_defaults_path())
+        self.hotkeys = HotkeyManager(commands)
+        self.hotkey_store = HotkeyOverridesStore(self._hotkey_overrides_path())
+        self.hotkey_store.apply(self.hotkeys)
+        self._hotkey_callbacks = {
+            "task.create": self._hotkey_create_task,
+            "app.tray.minimize": self._minimize_to_tray,
+            "app.tray.restore": self._restore_from_tray,
+            "nav.workspace.next": lambda: self._cycle_workspace(+1),
+            "nav.workspace.prev": lambda: self._cycle_workspace(-1),
+            "nav.sheet.next": lambda: self._cycle_entity_sheet(+1),
+            "nav.sheet.prev": lambda: self._cycle_entity_sheet(-1),
+            "ui.command_palette": self._show_command_palette,
+            "ui.settings.open": lambda: self.set_mode(self.MODE_SETTINGS),
+            "ui.hotkeys.help": self._show_hotkeys_help,
+        }
+        self._hotkey_filter = HotkeyEventFilter(self.hotkeys, self._resolve_hotkey_callback, self)
+        QApplication.instance().installEventFilter(self._hotkey_filter)
+        self._update_hotkey_contexts()
+
+    def _resolve_hotkey_callback(self, command_id: str):
+        return self._hotkey_callbacks.get(command_id)
+
+    def _update_hotkey_contexts(self) -> None:
+        contexts = ["Global", f"Workspace:{self._workspace_context_name()}"]
+        if QApplication.activeModalWidget() is not None:
+            contexts.append("ModalOnly")
+        self.hotkeys.set_active_contexts(contexts)
+
+    def _workspace_context_name(self) -> str:
+        mapping = {
+            self.MODE_TASKS: "Tasks",
+            self.MODE_PROJECTS: "Projects",
+            self.MODE_IDEAS: "Ideas",
+            self.MODE_MAPS: "Maps",
+            self.MODE_NOTES: "Notes",
+            self.MODE_FILES: "Files",
+            self.MODE_OBJECTS: "Objects",
+            self.MODE_SETTINGS: "Settings",
+        }
+        return mapping.get(self._current_mode, "Tasks")
+
+    def _cycle_workspace(self, direction: int) -> None:
+        modes = list(self._page_index.keys())
+        current_idx = modes.index(self._current_mode)
+        next_idx = (current_idx + direction) % len(modes)
+        self.set_mode(modes[next_idx])
+
+    def _cycle_entity_sheet(self, direction: int) -> None:
+        workspace = self.workspace_stack.currentWidget()
+        if workspace is None:
+            return
+        if direction > 0 and hasattr(workspace, "_show_next"):
+            workspace._show_next()
+        elif direction < 0 and hasattr(workspace, "_show_previous"):
+            workspace._show_previous()
+
+    def _hotkey_create_task(self) -> None:
+        self.set_mode(self.MODE_TASKS)
+        if hasattr(self.page_tasks, "new_title"):
+            self.page_tasks.new_title.setFocus()
+
+    def _show_hotkeys_help(self) -> None:
+        self._update_hotkey_contexts()
+        lines = []
+        for command, binding in self.hotkeys.get_active_hotkeys():
+            lines.append(f"{binding.sequence} — {command.title}")
+        QMessageBox.information(self, "Горячие клавиши", "\n".join(lines) or "Нет доступных горячих клавиш")
+
+    def _show_command_palette(self) -> None:
+        self._update_hotkey_contexts()
+        commands = sorted(self.hotkeys.get_active_hotkeys(), key=lambda item: item[0].title.lower())
+        lines = [f"{command.title} ({binding.sequence})" for command, binding in commands]
+        QMessageBox.information(self, "Command Palette", "\n".join(lines) or "Нет доступных команд")
 
     def _build_ui(self):
         """Создает и компонует основные виджеты окна."""
@@ -410,6 +496,8 @@ class MainWindow(QMainWindow):
                 btn.setChecked(True)
                 break
 
+        self._update_hotkey_contexts()
+
     def _on_nav_filter_changed(self, kind: str, value: object) -> None:
         # Определяем активный режим и прокидываем фильтры в соответствующий вид.
         mode = self._current_mode
@@ -482,6 +570,11 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
+
+    def closeEvent(self, event):
+        if hasattr(self, "hotkey_store") and hasattr(self, "hotkeys"):
+            self.hotkey_store.save(self.hotkeys)
+        super().closeEvent(event)
 
     def changeEvent(self, event):
         """Обрабатывает сворачивание окна для отправки в трей."""
