@@ -18,7 +18,7 @@
 | Priority | Task ID | Task | Spec File | Status |
 |---|---|---|---|---|
 | 1 | TASK-001 | Persist Task Edit Form Size | `docs/task_11022026/CODEX_TASK_TaskEditForm_PersistSize.md` | Done |
-| 2 | TASK-002 | Collections Workspace | `docs/task_11022026/CODEX_TASK_CollectionsWorkspace.md` | Todo |
+| 2 | TASK-002 | Collections Workspace | `docs/task_11022026/CODEX_TASK_CollectionsWorkspace.md` | Done |
 | 3 | TASK-003 | Link parsing in description | `docs/task_11022026/CODEX_TASK_TaskDescription_LinkParsing.md` | Todo |
 | 4 | TASK-004 | Ctrl+Enter saves form | `docs/task_11022026/CODEX_TASK_TaskEditForm_CtrlEnterSave.md` | Todo |
 | 5 | TASK-005 | Periodic tasks scheduler | `docs/task_11022026/CODEX_TASK_PeriodicTasks_Scheduler.md` | Todo |

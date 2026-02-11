@@ -143,6 +143,10 @@ class ProjectsNav(QWidget):
             self._add_clear_item("Без фильтра")
             self._add_section("Задачи", self._task_entries())
             self._add_section("Карты", self._map_entries())
+        elif mode_name == "Коллекции":
+            header = "Теги"
+            hint = "Фильтрация коллекций доступна внутри рабочего пространства"
+            self._add_clear_item("Без фильтра")
         elif mode_name == "Объекты":
             header = "Проекты и метки"
             hint = "Фильтрация объектов по проектам, задачам и меткам"

@@ -36,6 +36,7 @@ from .workspaces.projects_workspace import ProjectsWorkspace
 from .workspaces.maps_workspace import MapsListWorkspace
 from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
+from .ui.workspaces.collections_workspace import CollectionsWorkspace
 from .workspaces.files_workspace import FileWorkspace
 from .workspaces.objects_workspace import ObjectWorkspace
 from .workspaces.ideas_workspace import IdeasWorkspace
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
     MODE_MAPS = "Карты"
     MODE_NOTES = "Заметки"
     MODE_FILES = "Файлы"
+    MODE_COLLECTIONS = "Коллекции"
     MODE_OBJECTS = "Объекты"
     MODE_SETTINGS = "Настройки"
 
@@ -205,6 +207,7 @@ class MainWindow(QMainWindow):
             self.MODE_MAPS: "Maps",
             self.MODE_NOTES: "Notes",
             self.MODE_FILES: "Files",
+            self.MODE_COLLECTIONS: "Collections",
             self.MODE_OBJECTS: "Objects",
             self.MODE_SETTINGS: "Settings",
         }
@@ -328,6 +331,7 @@ class MainWindow(QMainWindow):
         self.page_maps = MapsListWorkspace()
         self.page_notes = NoteWorkspace()
         self.page_files = FileWorkspace()
+        self.page_collections = CollectionsWorkspace()
         self.page_objects = ObjectWorkspace()
         self.page_settings = SettingsWorkspace()
 
@@ -339,6 +343,7 @@ class MainWindow(QMainWindow):
             self.MODE_MAPS: self.workspace_stack.addWidget(self.page_maps),
             self.MODE_NOTES: self.workspace_stack.addWidget(self.page_notes),
             self.MODE_FILES: self.workspace_stack.addWidget(self.page_files),
+            self.MODE_COLLECTIONS: self.workspace_stack.addWidget(self.page_collections),
             self.MODE_OBJECTS: self.workspace_stack.addWidget(self.page_objects),
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
@@ -458,6 +463,7 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_maps: self.MODE_MAPS,
             self.left_rail.btn_notes: self.MODE_NOTES,
             self.left_rail.btn_files: self.MODE_FILES,
+            self.left_rail.btn_collections: self.MODE_COLLECTIONS,
             self.left_rail.btn_objects: self.MODE_OBJECTS,
             self.left_rail.btn_settings: self.MODE_SETTINGS,
         }

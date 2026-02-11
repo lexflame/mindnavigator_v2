@@ -245,6 +245,11 @@ class Database:
             self._conn.execute("PRAGMA synchronous=NORMAL;")
             self._conn.execute("PRAGMA foreign_keys=ON;")
 
+            # TODO(task_11022026/TASK-002): add collections tables migration.
+            # Planned schema (v1 draft):
+            #   collections_items(id TEXT PRIMARY KEY, title TEXT, kind TEXT, url TEXT,
+            #                     tags_json TEXT, links_json TEXT, created_at TEXT, updated_at TEXT)
+
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
