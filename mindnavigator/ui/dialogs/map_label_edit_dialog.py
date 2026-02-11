@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -52,6 +53,49 @@ from mindnavigator.ui.dialogs.entity_picker_dialog import ChipItem, EntityPicker
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 import qtawesome as qta
+
+
+def _parse_marker_properties_blob(raw: str) -> tuple[str, list[tuple[str, str]]]:
+    text = (raw or "").strip()
+    if not text:
+        return "", []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return text, []
+    if not isinstance(data, dict):
+        return text, []
+    important = str(data.get("important") or "").strip()
+    fields_raw = data.get("custom_fields")
+    custom_fields: list[tuple[str, str]] = []
+    if isinstance(fields_raw, list):
+        for item in fields_raw:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            value = str(item.get("value") or "").strip()
+            if not name and not value:
+                continue
+            custom_fields.append((name, value))
+    return important, custom_fields
+
+
+def _serialize_marker_properties_blob(important: str, custom_fields: list[tuple[str, str]]) -> str:
+    clean_important = (important or "").strip()
+    cleaned_fields = []
+    for name, value in custom_fields:
+        n = (name or "").strip()
+        v = (value or "").strip()
+        if not n and not v:
+            continue
+        cleaned_fields.append({"name": n, "value": v})
+    if not cleaned_fields:
+        return clean_important
+    payload = {
+        "important": clean_important,
+        "custom_fields": cleaned_fields,
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @dataclass(frozen=True)
@@ -931,7 +975,92 @@ class MapLabelEditDialog(QDialog):
         important_layout.addWidget(self.important_counter)
 
         layout.addWidget(important_wrap)
+
+        custom_wrap = QFrame()
+        custom_wrap.setObjectName("MapLabelCustomFields")
+        custom_layout = QVBoxLayout(custom_wrap)
+        custom_layout.setContentsMargins(10, 8, 10, 8)
+        custom_layout.setSpacing(8)
+
+        custom_header = QHBoxLayout()
+        custom_title = QLabel("Произвольные поля")
+        custom_title.setObjectName("MapLabelFieldLabel")
+        self.custom_add_btn = QToolButton()
+        self.custom_add_btn.setText("Добавить поле")
+        self.custom_add_btn.clicked.connect(lambda: self._add_custom_field_row(mark_dirty=True))
+        custom_header.addWidget(custom_title)
+        custom_header.addStretch(1)
+        custom_header.addWidget(self.custom_add_btn)
+
+        self.custom_fields_layout = QVBoxLayout()
+        self.custom_fields_layout.setSpacing(6)
+        self.custom_fields_placeholder = QLabel("Нет дополнительных полей")
+        self.custom_fields_placeholder.setObjectName("MapLabelHint")
+        self.custom_fields_layout.addWidget(self.custom_fields_placeholder)
+        self._custom_field_rows: list[tuple[QWidget, QLineEdit, QLineEdit]] = []
+
+        custom_layout.addLayout(custom_header)
+        custom_layout.addLayout(self.custom_fields_layout)
+        layout.addWidget(custom_wrap)
         return section
+
+    def _add_custom_field_row(self, name: str = "", value: str = "", mark_dirty: bool = False) -> None:
+        row = QWidget()
+        row.setObjectName("MapLabelCustomRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+
+        name_edit = QLineEdit(name)
+        name_edit.setPlaceholderText("Название поля")
+        value_edit = QLineEdit(value)
+        value_edit.setPlaceholderText("Значение")
+        remove_btn = QToolButton()
+        remove_btn.setText("×")
+        remove_btn.setToolTip("Удалить поле")
+        remove_btn.clicked.connect(lambda: self._remove_custom_field_row(row))
+        name_edit.textChanged.connect(self._on_text_change)
+        value_edit.textChanged.connect(self._on_text_change)
+
+        row_layout.addWidget(name_edit, 1)
+        row_layout.addWidget(value_edit, 2)
+        row_layout.addWidget(remove_btn, 0)
+
+        if self.custom_fields_placeholder is not None:
+            self.custom_fields_placeholder.hide()
+        self.custom_fields_layout.addWidget(row)
+        self._custom_field_rows.append((row, name_edit, value_edit))
+        if mark_dirty:
+            self._mark_dirty()
+
+    def _remove_custom_field_row(self, row_widget: QWidget) -> None:
+        kept_rows = []
+        for row, name_edit, value_edit in self._custom_field_rows:
+            if row is row_widget:
+                row.deleteLater()
+            else:
+                kept_rows.append((row, name_edit, value_edit))
+        self._custom_field_rows = kept_rows
+        if not self._custom_field_rows and self.custom_fields_placeholder is not None:
+            self.custom_fields_placeholder.show()
+        self._mark_dirty()
+
+    def _clear_custom_field_rows(self) -> None:
+        for row, _, _ in self._custom_field_rows:
+            row.deleteLater()
+        self._custom_field_rows = []
+        if self.custom_fields_placeholder is not None:
+            self.custom_fields_placeholder.show()
+
+    def _collect_custom_fields(self) -> list[tuple[str, str]]:
+        fields: list[tuple[str, str]] = []
+        for _row, name_edit, value_edit in self._custom_field_rows:
+            name = name_edit.text().strip()
+            value = value_edit.text().strip()
+            if not name and not value:
+                continue
+            fields.append((name, value))
+        return fields
 
     def _apply_styles(self) -> None:
         # Устанавливаем стили для диалога.
@@ -1018,6 +1147,14 @@ class MapLabelEditDialog(QDialog):
                 border-left: 3px solid #d59d35;
                 background: rgba(29, 31, 39, 0.85);
                 border-radius: 8px;
+            }}
+            QFrame#MapLabelCustomFields {{
+                border-left: 3px solid #3f8bd6;
+                background: rgba(25, 31, 44, 0.85);
+                border-radius: 8px;
+            }}
+            QWidget#MapLabelCustomRow QLineEdit {{
+                min-height: 24px;
             }}
             QWidget#ChipFlow {{
                 background: #202127;
@@ -1214,7 +1351,11 @@ class MapLabelEditDialog(QDialog):
             self.marker_type_combo.setCurrentIndex(type_index)
         self._set_marker_type(marker_type)
         self.desc_edit.setPlainText(self._marker.description or "")
-        self.important_edit.setPlainText(self._marker.properties or "")
+        important, custom_fields = _parse_marker_properties_blob(self._marker.properties or "")
+        self.important_edit.setPlainText(important)
+        self._clear_custom_field_rows()
+        for name, value in custom_fields:
+            self._add_custom_field_row(name, value)
         self._set_parent_path(self._marker.parent_path)
 
         self._set_links("task", self._marker.task_ids)
@@ -1290,7 +1431,10 @@ class MapLabelEditDialog(QDialog):
             self.type_combo.currentText().strip(),
             float(self.size_spin.value()),
             self.desc_edit.toPlainText().strip(),
-            self.important_edit.toPlainText().strip(),
+            _serialize_marker_properties_blob(
+                self.important_edit.toPlainText().strip(),
+                self._collect_custom_fields(),
+            ),
             chip_ids("task"),
             chip_ids("project"),
             chip_ids("note"),

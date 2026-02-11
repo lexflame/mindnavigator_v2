@@ -116,6 +116,7 @@ class TaskRoles:
     SubtaskDepth = Qt.UserRole + 16
     ProjectArea = Qt.UserRole + 17
     AttachmentSummary = Qt.UserRole + 18
+    RecurrenceKind = Qt.UserRole + 19
 
 
 class QuickProjectCreateDialog(QDialog):
@@ -336,6 +337,8 @@ class TasksModel(QAbstractListModel):
             return self._task_depths.get(r.id, 0)
         if role == TaskRoles.AttachmentSummary:
             return self._attachment_summary(r.id)
+        if role == TaskRoles.RecurrenceKind:
+            return r.recurrence_kind
         if role == Qt.DisplayRole:
             return r.title
         return None
@@ -1832,19 +1835,41 @@ class TaskEditDialog(QDialog):
         self.project_edit.clear()
         self.project_edit.addItem("Без проекта", None)
         projects = get_database().fetch_projects()
+        projects_by_id = {project.id: project for project in projects}
+        title_cache: Dict[int, str] = {}
+
+        def full_title(project_id: int, seen: Optional[set[int]] = None) -> str:
+            cached = title_cache.get(project_id)
+            if cached is not None:
+                return cached
+            project = projects_by_id.get(project_id)
+            if project is None:
+                return ""
+            seen_set = seen or set()
+            if project_id in seen_set:
+                title_cache[project_id] = project.title
+                return project.title
+            if project.parent_project_id is None:
+                title_cache[project_id] = project.title
+                return project.title
+            parent_title = full_title(project.parent_project_id, seen_set | {project_id})
+            resolved = f"{parent_title} / {project.title}" if parent_title else project.title
+            title_cache[project_id] = resolved
+            return resolved
         priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
         projects.sort(
             key=lambda project: (
                 project.area.lower(),
                 priority_order.get(normalize_priority(project.priority), 4),
-                project.title.lower(),
+                full_title(project.id).lower(),
                 project.id,
             )
         )
         for project in projects:
             if project.archived:
                 continue
-            self.project_edit.addItem(f"{project.area} · {project.title}", project.id)
+            title = full_title(project.id)
+            self.project_edit.addItem(f"{project.area} · {title}", project.id)
         if selected_id is not None:
             idx = self.project_edit.findData(selected_id)
             if idx >= 0:
@@ -2288,7 +2313,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
     TIME_W = 140
-    PROJECT_W = 230
+    PROJECT_W = 320
     TEXT_VPAD = 8
     TEXT_GAP = 6
     ROW_H_EXPANDED_MIN = 82
@@ -2465,6 +2490,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         description: str = index.data(TaskRoles.Description) or ""
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         project_area: str = index.data(TaskRoles.ProjectArea) or ""
+        recurrence_kind: str = (index.data(TaskRoles.RecurrenceKind) or "").strip().lower()
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
         overdue = self._is_overdue(day, done)
@@ -2515,6 +2541,8 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setFont(self._font_small)
             painter.setPen(self.C_DIM)
             display_project = f"{project_area} / {project_title}" if project_area else project_title
+            if recurrence_kind in {"daily", "weekly", "monthly"}:
+                display_project = f"{display_project} · REC"
             elided_project = QFontMetrics(self._font_small).elidedText(
                 display_project,
                 Qt.ElideRight,

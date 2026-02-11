@@ -48,6 +48,12 @@ class ProjectData:
     updated: date
     priority: str
     archived: bool
+    parent_project_id: Optional[int] = None
+    default_task_priority: str = ""
+    force_recurrence_kind: str = ""
+    linked_map_id: Optional[int] = None
+    linked_note_id: Optional[int] = None
+    linked_object_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -309,7 +315,13 @@ class Database:
                     title TEXT NOT NULL,
                     updated TEXT NOT NULL,
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
-                    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+                    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                    parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                    default_task_priority TEXT NOT NULL DEFAULT '',
+                    force_recurrence_kind TEXT NOT NULL DEFAULT '',
+                    linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
+                    linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+                    linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL
                 );
                 """
             )
@@ -535,6 +547,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_overlays_map ON map_overlays(map_id);")
@@ -556,6 +569,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_relations_right ON collection_relations(right_item_id);")
 
         self._ensure_task_project_column()
+        self._ensure_project_extended_columns()
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
         self._ensure_task_recurrence_columns()
@@ -575,6 +589,24 @@ class Database:
         if "project_id" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);")
+
+    def _ensure_project_extended_columns(self) -> None:
+        """Р”РѕР±Р°РІР»СЏРµС‚ СЂР°СЃС€РёСЂРµРЅРЅС‹Рµ РєРѕР»РѕРЅРєРё РїСЂРѕРµРєС‚РѕРІ, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
+        names = {row["name"] for row in columns}
+        additions = {
+            "parent_project_id": "ALTER TABLE projects ADD COLUMN parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;",
+            "default_task_priority": "ALTER TABLE projects ADD COLUMN default_task_priority TEXT NOT NULL DEFAULT '';",
+            "force_recurrence_kind": "ALTER TABLE projects ADD COLUMN force_recurrence_kind TEXT NOT NULL DEFAULT '';",
+            "linked_map_id": "ALTER TABLE projects ADD COLUMN linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL;",
+            "linked_note_id": "ALTER TABLE projects ADD COLUMN linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL;",
+            "linked_object_id": "ALTER TABLE projects ADD COLUMN linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL;",
+        }
+        with self._conn:
+            for column, ddl in additions.items():
+                if column not in names:
+                    self._conn.execute(ddl)
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
 
     def _ensure_task_description_column(self) -> None:
         """Добавляет колонку description, если она отсутствует."""
@@ -853,7 +885,13 @@ class Database:
                 title TEXT NOT NULL,
                 updated TEXT NOT NULL,
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
-                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                default_task_priority TEXT NOT NULL DEFAULT '',
+                force_recurrence_kind TEXT NOT NULL DEFAULT '',
+                linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
+                linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+                linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL
             );
             """
         )
@@ -862,6 +900,7 @@ class Database:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
 
     def _rebuild_task_attachments_table(self) -> None:
         columns = self._conn.execute("PRAGMA table_info(task_attachments);").fetchall()
@@ -1138,13 +1177,17 @@ class Database:
                 t.priority,
                 t.done,
                 t.project_id,
-                COALESCE(p.title, '') AS project_title,
+                CASE
+                    WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
+                    ELSE COALESCE(p.title, '')
+                END AS project_title,
                 COALESCE(p.area, '') AS project_area,
                 t.parent_id,
                 t.recurrence_kind,
                 t.recurrence_interval
             FROM tasks t
-            LEFT JOIN projects p ON p.id = t.project_id;
+            LEFT JOIN projects p ON p.id = t.project_id
+            LEFT JOIN projects pp ON pp.id = p.parent_project_id;
             """
         ).fetchall()
         tasks = []
@@ -1367,6 +1410,257 @@ class Database:
             recurrence_interval,
         )
 
+    def create_task(
+        self,
+        title: str,
+        description: str,
+        day: date,
+        time_text: str,
+        priority: str,
+        project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
+    ) -> TaskData:
+        """Создает задачу в базе данных."""
+        title = validate_title(title)
+        description = (description or "").strip()
+        time_text = validate_time_text(time_text)
+        priority = normalize_priority(priority)
+        recurrence_kind = (recurrence_kind or "").strip().lower()
+        recurrence_interval = max(1, int(recurrence_interval or 1))
+        if not isinstance(day, date):
+            raise ValueError("Дата задачи некорректна.")
+
+        if parent_id is not None:
+            parent_row = self._conn.execute(
+                "SELECT day, time_text FROM tasks WHERE id = ?;",
+                (parent_id,),
+            ).fetchone()
+            if parent_row:
+                day = date.fromisoformat(parent_row["day"])
+                time_text = parent_row["time_text"] or ""
+
+        project_title = ""
+        project_area = ""
+        project_links: List[Tuple[str, int]] = []
+        if project_id is not None:
+            row = self._conn.execute(
+                """
+                SELECT
+                    p.area, p.title, pp.title AS parent_title, p.default_task_priority, p.force_recurrence_kind,
+                    linked_map_id, linked_note_id, linked_object_id
+                FROM projects p
+                LEFT JOIN projects pp ON pp.id = p.parent_project_id
+                WHERE p.id = ?;
+                """,
+                (project_id,),
+            ).fetchone()
+            if row:
+                project_area = row["area"]
+                project_title = f'{row["parent_title"]} / {row["title"]}' if row["parent_title"] else row["title"]
+                forced_priority = (row["default_task_priority"] or "").strip()
+                forced_recurrence = (row["force_recurrence_kind"] or "").strip().lower()
+                if forced_priority:
+                    priority = normalize_priority(forced_priority)
+                if forced_recurrence in {"daily", "weekly", "monthly"}:
+                    recurrence_kind = forced_recurrence
+                    recurrence_interval = max(1, recurrence_interval)
+                for kind, ref_id in (
+                    ("map", row["linked_map_id"]),
+                    ("note", row["linked_note_id"]),
+                    ("object", row["linked_object_id"]),
+                ):
+                    if ref_id is not None:
+                        project_links.append((kind, int(ref_id)))
+
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO tasks (
+                    title, description, day, time_text, priority, done, project_id, parent_id,
+                    recurrence_kind, recurrence_interval, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    title,
+                    description,
+                    day.isoformat(),
+                    time_text,
+                    priority,
+                    project_id,
+                    parent_id,
+                    recurrence_kind,
+                    recurrence_interval,
+                    now,
+                    now,
+                ),
+            )
+        for kind, ref_id in project_links:
+            self.add_task_attachment(cur.lastrowid, kind, ref_id)
+        return TaskData(
+            cur.lastrowid,
+            day,
+            time_text,
+            title,
+            description,
+            priority,
+            False,
+            project_id,
+            project_title,
+            project_area,
+            parent_id,
+            recurrence_kind,
+            recurrence_interval,
+        )
+
+    def update_task(
+        self,
+        task_id: int,
+        title: str,
+        description: str,
+        day: date,
+        time_text: str,
+        priority: str,
+        done: bool,
+        project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
+    ) -> TaskData:
+        """Обновляет задачу."""
+        prev_row = self._conn.execute(
+            "SELECT priority FROM tasks WHERE id = ?;",
+            (task_id,),
+        ).fetchone()
+        prev_priority = prev_row["priority"] if prev_row else priority
+        title = validate_title(title)
+        description = (description or "").strip()
+        time_text = validate_time_text(time_text)
+        priority = normalize_priority(priority)
+        recurrence_kind = (recurrence_kind or "").strip().lower()
+        recurrence_interval = max(1, int(recurrence_interval or 1))
+        if not isinstance(day, date):
+            raise ValueError("Дата задачи некорректна.")
+
+        prev_parent_row = self._conn.execute(
+            "SELECT parent_id FROM tasks WHERE id = ?;",
+            (task_id,),
+        ).fetchone()
+        prev_parent_id = prev_parent_row["parent_id"] if prev_parent_row is not None else None
+        if parent_id is not None and parent_id != prev_parent_id:
+            parent_row = self._conn.execute(
+                "SELECT day, time_text FROM tasks WHERE id = ?;",
+                (parent_id,),
+            ).fetchone()
+            if parent_row:
+                day = date.fromisoformat(parent_row["day"])
+                time_text = parent_row["time_text"] or ""
+
+        project_title = ""
+        project_area = ""
+        project_links: List[Tuple[str, int]] = []
+        if project_id is not None:
+            row = self._conn.execute(
+                """
+                SELECT p.area, p.title, pp.title AS parent_title, p.default_task_priority, p.force_recurrence_kind
+                FROM projects p
+                LEFT JOIN projects pp ON pp.id = p.parent_project_id
+                WHERE p.id = ?;
+                """,
+                (project_id,),
+            ).fetchone()
+            if row:
+                project_area = row["area"]
+                project_title = f'{row["parent_title"]} / {row["title"]}' if row["parent_title"] else row["title"]
+                forced_priority = (row["default_task_priority"] or "").strip()
+                forced_recurrence = (row["force_recurrence_kind"] or "").strip().lower()
+                if forced_priority:
+                    priority = normalize_priority(forced_priority)
+                if forced_recurrence in {"daily", "weekly", "monthly"}:
+                    recurrence_kind = forced_recurrence
+                    recurrence_interval = max(1, recurrence_interval)
+            links_row = self._conn.execute(
+                """
+                SELECT linked_map_id, linked_note_id, linked_object_id
+                FROM projects
+                WHERE id = ?;
+                """,
+                (project_id,),
+            ).fetchone()
+            if links_row:
+                for kind, ref_id in (
+                    ("map", links_row["linked_map_id"]),
+                    ("note", links_row["linked_note_id"]),
+                    ("object", links_row["linked_object_id"]),
+                ):
+                    if ref_id is not None:
+                        project_links.append((kind, int(ref_id)))
+
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
+                    recurrence_kind = ?, recurrence_interval = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (
+                    title,
+                    description,
+                    day.isoformat(),
+                    time_text,
+                    priority,
+                    int(done),
+                    project_id,
+                    parent_id,
+                    recurrence_kind,
+                    recurrence_interval,
+                    now,
+                    task_id,
+                ),
+            )
+            cascade_priority = None
+            if priority == "Отложенная" and prev_priority != "Отложенная":
+                cascade_priority = priority
+            elif prev_priority == "Отложенная" and priority != "Отложенная":
+                cascade_priority = priority
+            if cascade_priority is not None:
+                self._conn.execute(
+                    """
+                    WITH RECURSIVE descendants(id) AS (
+                        SELECT id FROM tasks WHERE parent_id = ?
+                        UNION ALL
+                        SELECT t.id FROM tasks t
+                        JOIN descendants d ON t.parent_id = d.id
+                    )
+                    UPDATE tasks
+                    SET priority = ?, updated_at = ?
+                    WHERE id IN (SELECT id FROM descendants);
+                    """,
+                    (task_id, cascade_priority, now),
+                )
+        for kind, ref_id in project_links:
+            self.add_task_attachment(task_id, kind, ref_id)
+        return TaskData(
+            task_id,
+            day,
+            time_text,
+            title,
+            description,
+            priority,
+            bool(done),
+            project_id,
+            project_title,
+            project_area,
+            parent_id,
+            recurrence_kind,
+            recurrence_interval,
+        )
+
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
         row = self._conn.execute(
@@ -1514,7 +1808,13 @@ class Database:
     def fetch_projects(self) -> List[ProjectData]:
         """Возвращает список проектов."""
         rows = self._conn.execute(
-            "SELECT id, area, title, updated, priority, archived FROM projects;"
+            """
+            SELECT
+                id, area, title, updated, priority, archived,
+                parent_project_id, default_task_priority, force_recurrence_kind,
+                linked_map_id, linked_note_id, linked_object_id
+            FROM projects;
+            """
         ).fetchall()
         projects = []
         for row in rows:
@@ -1526,27 +1826,79 @@ class Database:
                     updated=date.fromisoformat(row["updated"]),
                     priority=row["priority"],
                     archived=bool(row["archived"]),
+                    parent_project_id=row["parent_project_id"],
+                    default_task_priority=row["default_task_priority"] or "",
+                    force_recurrence_kind=(row["force_recurrence_kind"] or "").strip().lower(),
+                    linked_map_id=row["linked_map_id"],
+                    linked_note_id=row["linked_note_id"],
+                    linked_object_id=row["linked_object_id"],
                 )
             )
         return projects
 
-    def create_project(self, area: str, title: str, updated: date, priority: str, archived: bool = False) -> ProjectData:
+    def create_project(
+        self,
+        area: str,
+        title: str,
+        updated: date,
+        priority: str,
+        archived: bool = False,
+        parent_project_id: Optional[int] = None,
+        default_task_priority: str = "",
+        force_recurrence_kind: str = "",
+        linked_map_id: Optional[int] = None,
+        linked_note_id: Optional[int] = None,
+        linked_object_id: Optional[int] = None,
+    ) -> ProjectData:
         """Создает проект в базе данных."""
         area = validate_area(area)
         title = validate_title(title, field_name="Название проекта")
         priority = normalize_priority(priority)
+        default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
+        force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
+            raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
             raise ValueError("Дата проекта некорректна.")
 
         with self._conn:
             cur = self._conn.execute(
                 """
-                INSERT INTO projects (area, title, updated, priority, archived)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT INTO projects (
+                    area, title, updated, priority, archived,
+                    parent_project_id, default_task_priority, force_recurrence_kind,
+                    linked_map_id, linked_note_id, linked_object_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (area, title, updated.isoformat(), priority, int(archived)),
+                (
+                    area,
+                    title,
+                    updated.isoformat(),
+                    priority,
+                    int(archived),
+                    parent_project_id,
+                    default_task_priority,
+                    force_recurrence_kind,
+                    linked_map_id,
+                    linked_note_id,
+                    linked_object_id,
+                ),
             )
-        return ProjectData(cur.lastrowid, area, title, updated, priority, bool(archived))
+        return ProjectData(
+            cur.lastrowid,
+            area,
+            title,
+            updated,
+            priority,
+            bool(archived),
+            parent_project_id=parent_project_id,
+            default_task_priority=default_task_priority,
+            force_recurrence_kind=force_recurrence_kind,
+            linked_map_id=linked_map_id,
+            linked_note_id=linked_note_id,
+            linked_object_id=linked_object_id,
+        )
 
     def update_project(
         self,
@@ -1574,6 +1926,85 @@ class Database:
                 (area, title, updated.isoformat(), priority, int(archived), project_id),
             )
         return ProjectData(project_id, area, title, updated, priority, bool(archived))
+
+    def update_project(
+        self,
+        project_id: int,
+        area: str,
+        title: str,
+        updated: date,
+        priority: str,
+        archived: bool,
+        parent_project_id: Optional[int] = None,
+        default_task_priority: str = "",
+        force_recurrence_kind: str = "",
+        linked_map_id: Optional[int] = None,
+        linked_note_id: Optional[int] = None,
+        linked_object_id: Optional[int] = None,
+    ) -> ProjectData:
+        """Обновляет данные проекта."""
+        area = validate_area(area)
+        title = validate_title(title, field_name="Название проекта")
+        priority = normalize_priority(priority)
+        default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
+        force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
+            raise ValueError("Некорректная периодичность проекта.")
+        if not isinstance(updated, date):
+            raise ValueError("Дата проекта некорректна.")
+        if parent_project_id == project_id:
+            parent_project_id = None
+        if parent_project_id is not None:
+            cursor = parent_project_id
+            seen: set[int] = set()
+            while cursor is not None and cursor not in seen:
+                if cursor == project_id:
+                    raise ValueError("Циклическая связь проектов не допускается.")
+                seen.add(cursor)
+                row = self._conn.execute(
+                    "SELECT parent_project_id FROM projects WHERE id = ?;",
+                    (cursor,),
+                ).fetchone()
+                cursor = row["parent_project_id"] if row is not None else None
+
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET area = ?, title = ?, updated = ?, priority = ?, archived = ?,
+                    parent_project_id = ?, default_task_priority = ?, force_recurrence_kind = ?,
+                    linked_map_id = ?, linked_note_id = ?, linked_object_id = ?
+                WHERE id = ?;
+                """,
+                (
+                    area,
+                    title,
+                    updated.isoformat(),
+                    priority,
+                    int(archived),
+                    parent_project_id,
+                    default_task_priority,
+                    force_recurrence_kind,
+                    linked_map_id,
+                    linked_note_id,
+                    linked_object_id,
+                    project_id,
+                ),
+            )
+        return ProjectData(
+            project_id,
+            area,
+            title,
+            updated,
+            priority,
+            bool(archived),
+            parent_project_id=parent_project_id,
+            default_task_priority=default_task_priority,
+            force_recurrence_kind=force_recurrence_kind,
+            linked_map_id=linked_map_id,
+            linked_note_id=linked_note_id,
+            linked_object_id=linked_object_id,
+        )
 
     def delete_project(self, project_id: int) -> None:
         """Удаляет проект по id."""

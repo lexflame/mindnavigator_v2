@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import html
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
@@ -52,6 +53,48 @@ from mindnavigator.marker_types import (
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
 from mindnavigator.resources import resource_path
+
+
+def _parse_marker_properties_blob(raw: str) -> tuple[str, list[tuple[str, str]]]:
+    text = (raw or "").strip()
+    if not text:
+        return "", []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return text, []
+    if not isinstance(data, dict):
+        return text, []
+    important = str(data.get("important") or "").strip()
+    custom_fields: list[tuple[str, str]] = []
+    fields_raw = data.get("custom_fields")
+    if isinstance(fields_raw, list):
+        for item in fields_raw:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            value = str(item.get("value") or "").strip()
+            if not name and not value:
+                continue
+            custom_fields.append((name, value))
+    return important, custom_fields
+
+
+def _format_marker_properties_text(raw: str) -> str:
+    important, custom_fields = _parse_marker_properties_blob(raw)
+    lines: List[str] = []
+    if important:
+        lines.append(important)
+    for name, value in custom_fields:
+        if name and value:
+            lines.append(f"{name}: {value}")
+        elif name:
+            lines.append(name)
+        elif value:
+            lines.append(value)
+    if not lines:
+        return "—"
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -2480,7 +2523,7 @@ class MapCanvas(QWidget):
         props_header.addWidget(props_label)
         props_header.addStretch(1)
 
-        props_value = QLabel(marker.properties or "—")
+        props_value = QLabel(_format_marker_properties_text(marker.properties))
         props_value.setObjectName("MapLabelValue")
         props_value.setWordWrap(True)
         props_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -3204,7 +3247,7 @@ class MapEditorWorkspace(QWidget):
         self.info_map.setText(self._format_links(marker.map_ids, self._maps_by_id))
         self.info_marker.setText(self._format_links(marker.marker_ids, self._markers_by_id))
         self.info_description.setText(self._format_value(marker.description))
-        self.info_important.setText(self._format_value(marker.properties))
+        self.info_important.setText(_format_marker_properties_text(marker.properties))
         self._apply_marker_type_info(marker)
         self._update_info_preview(marker)
 
