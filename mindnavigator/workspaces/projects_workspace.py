@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import List, Union, Optional
+from typing import Dict, List, Union, Optional
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
@@ -46,6 +46,12 @@ class ProjectRow:
     updated: date
     priority: str           # Low | Medium | High
     archived: bool
+    parent_project_id: Optional[int] = None
+    default_task_priority: str = ""
+    force_recurrence_kind: str = ""
+    linked_map_id: Optional[int] = None
+    linked_note_id: Optional[int] = None
+    linked_object_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,7 @@ class ProjectsModel(QAbstractListModel):
         self._db = get_database()
         self._all_rows: List[Row] = []
         self._rows: List[Row] = []
+        self._project_title_cache: Dict[int, str] = {}
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
@@ -91,6 +98,12 @@ class ProjectsModel(QAbstractListModel):
                 p.updated,
                 p.priority,
                 p.archived,
+                p.parent_project_id,
+                p.default_task_priority,
+                p.force_recurrence_kind,
+                p.linked_map_id,
+                p.linked_note_id,
+                p.linked_object_id,
             )
             for p in projects
         ]
@@ -127,7 +140,7 @@ class ProjectsModel(QAbstractListModel):
         if role == ProjectRoles.Area:
             return r.area
         if role == ProjectRoles.Title:
-            return r.title
+            return self._project_title_cache.get(r.id, r.title)
         if role == ProjectRoles.Updated:
             return format_project_date(r.updated)
         if role == ProjectRoles.UpdatedDate:
@@ -137,7 +150,7 @@ class ProjectsModel(QAbstractListModel):
         if role == ProjectRoles.Archived:
             return r.archived
         if role == Qt.DisplayRole:
-            return r.title
+            return self._project_title_cache.get(r.id, r.title)
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
@@ -169,11 +182,49 @@ class ProjectsModel(QAbstractListModel):
         self._task_filter_id = task_id
         self._rebuild()
 
-    def add_project(self, area: str, title: str, updated: date, priority: str, archived: bool):
+    def add_project(
+        self,
+        area: str,
+        title: str,
+        updated: date,
+        priority: str,
+        archived: bool,
+        parent_project_id: Optional[int] = None,
+        default_task_priority: str = "",
+        force_recurrence_kind: str = "",
+        linked_map_id: Optional[int] = None,
+        linked_note_id: Optional[int] = None,
+        linked_object_id: Optional[int] = None,
+    ):
         """Добавляет новый проект и пересобирает список."""
-        project = self._db.create_project(area=area, title=title, updated=updated, priority=priority, archived=archived)
+        project = self._db.create_project(
+            area=area,
+            title=title,
+            updated=updated,
+            priority=priority,
+            archived=archived,
+            parent_project_id=parent_project_id,
+            default_task_priority=default_task_priority,
+            force_recurrence_kind=force_recurrence_kind,
+            linked_map_id=linked_map_id,
+            linked_note_id=linked_note_id,
+            linked_object_id=linked_object_id,
+        )
         self._all_rows.append(
-            ProjectRow(project.id, project.area, project.title, project.updated, project.priority, project.archived)
+            ProjectRow(
+                project.id,
+                project.area,
+                project.title,
+                project.updated,
+                project.priority,
+                project.archived,
+                project.parent_project_id,
+                project.default_task_priority,
+                project.force_recurrence_kind,
+                project.linked_map_id,
+                project.linked_note_id,
+                project.linked_object_id,
+            )
         )
         self._rebuild()
 
@@ -190,7 +241,20 @@ class ProjectsModel(QAbstractListModel):
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, ProjectRow) and it.area == area:
-                it = ProjectRow(it.id, it.area, it.title, it.updated, it.priority, archived)
+                it = ProjectRow(
+                    it.id,
+                    it.area,
+                    it.title,
+                    it.updated,
+                    it.priority,
+                    archived,
+                    it.parent_project_id,
+                    it.default_task_priority,
+                    it.force_recurrence_kind,
+                    it.linked_map_id,
+                    it.linked_note_id,
+                    it.linked_object_id,
+                )
             new_all.append(it)
         self._all_rows = new_all
         self._rebuild()
@@ -211,7 +275,20 @@ class ProjectsModel(QAbstractListModel):
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, ProjectRow) and it.area == area:
-                it = ProjectRow(it.id, new_area, it.title, it.updated, it.priority, it.archived)
+                it = ProjectRow(
+                    it.id,
+                    new_area,
+                    it.title,
+                    it.updated,
+                    it.priority,
+                    it.archived,
+                    it.parent_project_id,
+                    it.default_task_priority,
+                    it.force_recurrence_kind,
+                    it.linked_map_id,
+                    it.linked_note_id,
+                    it.linked_object_id,
+                )
             new_all.append(it)
         self._all_rows = new_all
         if self._area_focus == area:
@@ -235,6 +312,12 @@ class ProjectsModel(QAbstractListModel):
         updated: date,
         priority: str,
         archived: bool,
+        parent_project_id: Optional[int] = None,
+        default_task_priority: str = "",
+        force_recurrence_kind: str = "",
+        linked_map_id: Optional[int] = None,
+        linked_note_id: Optional[int] = None,
+        linked_object_id: Optional[int] = None,
     ):
         """Обновляет проект по индексу строки."""
         r = self.project_at_row(row_idx)
@@ -247,6 +330,12 @@ class ProjectsModel(QAbstractListModel):
             updated=updated,
             priority=priority,
             archived=archived,
+            parent_project_id=parent_project_id,
+            default_task_priority=default_task_priority,
+            force_recurrence_kind=force_recurrence_kind,
+            linked_map_id=linked_map_id,
+            linked_note_id=linked_note_id,
+            linked_object_id=linked_object_id,
         )
 
         new_all: List[Row] = []
@@ -259,6 +348,12 @@ class ProjectsModel(QAbstractListModel):
                     updated_project.updated,
                     updated_project.priority,
                     updated_project.archived,
+                    updated_project.parent_project_id,
+                    updated_project.default_task_priority,
+                    updated_project.force_recurrence_kind,
+                    updated_project.linked_map_id,
+                    updated_project.linked_note_id,
+                    updated_project.linked_object_id,
                 )
             new_all.append(it)
 
@@ -278,7 +373,20 @@ class ProjectsModel(QAbstractListModel):
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, ProjectRow) and it.id == r.id:
-                it = ProjectRow(it.id, it.area, it.title, it.updated, it.priority, new_archived)
+                it = ProjectRow(
+                    it.id,
+                    it.area,
+                    it.title,
+                    it.updated,
+                    it.priority,
+                    new_archived,
+                    it.parent_project_id,
+                    it.default_task_priority,
+                    it.force_recurrence_kind,
+                    it.linked_map_id,
+                    it.linked_note_id,
+                    it.linked_object_id,
+                )
             new_all.append(it)
 
         self._all_rows = new_all
@@ -295,6 +403,7 @@ class ProjectsModel(QAbstractListModel):
 
     def _rebuild(self):
         """Пересобирает список проектов с учетом фильтров."""
+        self._rebuild_project_title_cache()
         search = self._search
         task_project_id = None
         if self._task_filter_id is not None:
@@ -320,7 +429,8 @@ class ProjectsModel(QAbstractListModel):
             if self._filter_mode == "Архив" and not it.archived:
                 continue
 
-            if search and search not in it.title.lower():
+            display_title = self._project_title_cache.get(it.id, it.title).lower()
+            if search and search not in it.title.lower() and search not in display_title and search not in it.area.lower():
                 continue
 
             projects.append(it)
@@ -330,7 +440,14 @@ class ProjectsModel(QAbstractListModel):
         def priority_key(priority: str) -> int:
             return priority_order[normalize_priority(priority)]
 
-        projects.sort(key=lambda x: (x.area.lower(), priority_key(x.priority), x.title.lower(), x.id))
+        projects.sort(
+            key=lambda x: (
+                x.area.lower(),
+                priority_key(x.priority),
+                self._project_title_cache.get(x.id, x.title).lower(),
+                x.id,
+            )
+        )
 
         new_rows: List[Row] = []
         cur: Optional[str] = None
@@ -343,6 +460,41 @@ class ProjectsModel(QAbstractListModel):
         self.beginResetModel()
         self._rows = new_rows
         self.endResetModel()
+
+    def _rebuild_project_title_cache(self) -> None:
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+        cache: Dict[int, str] = {}
+
+        def resolve_title(project: ProjectRow, seen: Optional[set[int]] = None) -> str:
+            cached = cache.get(project.id)
+            if cached is not None:
+                return cached
+
+            seen_set = seen or set()
+            if project.id in seen_set:
+                cache[project.id] = project.title
+                return project.title
+
+            if project.parent_project_id is None:
+                cache[project.id] = project.title
+                return project.title
+
+            parent = project_map.get(project.parent_project_id)
+            if parent is None:
+                cache[project.id] = project.title
+                return project.title
+
+            nested = f"{resolve_title(parent, seen_set | {project.id})} / {project.title}"
+            cache[project.id] = nested
+            return nested
+
+        for project in project_map.values():
+            resolve_title(project)
+
+        self._project_title_cache = cache
 
 
 class ProjectsItemDelegate(QStyledItemDelegate):
@@ -701,6 +853,12 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     updated=values["updated"],
                     priority=values["priority"],
                     archived=values["archived"],
+                    parent_project_id=values["parent_project_id"],
+                    default_task_priority=values["default_task_priority"],
+                    force_recurrence_kind=values["force_recurrence_kind"],
+                    linked_map_id=values["linked_map_id"],
+                    linked_note_id=values["linked_note_id"],
+                    linked_object_id=values["linked_object_id"],
                 )
                 self._refresh_area_combo(values["area"])
             except ValueError as exc:
@@ -732,10 +890,12 @@ class ProjectEditDialog(QDialog):
         """Создает диалог создания или редактирования проекта."""
         super().__init__(parent)
         is_new = project is None
+        self._project = project
+        self._db = get_database()
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(560, 300)
+        self.setFixedSize(640, 560)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -768,6 +928,58 @@ class ProjectEditDialog(QDialog):
         self.priority_edit = QComboBox()
         self.priority_edit.addItems(["Low", "Medium", "High"])
         self.priority_edit.setCurrentText(project.priority if project else "Medium")
+        self.parent_project_edit = QComboBox()
+        self.parent_project_edit.addItem("None", None)
+        for item in self._db.fetch_projects():
+            if project and item.id == project.id:
+                continue
+            self.parent_project_edit.addItem(f"{item.area} / {item.title}", item.id)
+        parent_idx = self.parent_project_edit.findData(project.parent_project_id if project else None)
+        if parent_idx >= 0:
+            self.parent_project_edit.setCurrentIndex(parent_idx)
+
+        self.default_task_priority_edit = QComboBox()
+        self.default_task_priority_edit.addItem("None", "")
+        self.default_task_priority_edit.addItem("Low", "Low")
+        self.default_task_priority_edit.addItem("Medium", "Medium")
+        self.default_task_priority_edit.addItem("High", "High")
+        default_priority = (project.default_task_priority if project else "") or ""
+        default_prio_idx = self.default_task_priority_edit.findData(default_priority)
+        if default_prio_idx >= 0:
+            self.default_task_priority_edit.setCurrentIndex(default_prio_idx)
+
+        self.force_recurrence_kind_edit = QComboBox()
+        self.force_recurrence_kind_edit.addItem("None", "")
+        self.force_recurrence_kind_edit.addItem("Daily", "daily")
+        self.force_recurrence_kind_edit.addItem("Weekly", "weekly")
+        self.force_recurrence_kind_edit.addItem("Monthly", "monthly")
+        recurrence_idx = self.force_recurrence_kind_edit.findData((project.force_recurrence_kind if project else "") or "")
+        if recurrence_idx >= 0:
+            self.force_recurrence_kind_edit.setCurrentIndex(recurrence_idx)
+
+        self.linked_map_edit = QComboBox()
+        self.linked_map_edit.addItem("None", None)
+        for map_item in self._db.fetch_maps():
+            self.linked_map_edit.addItem(map_item.title, map_item.id)
+        linked_map_idx = self.linked_map_edit.findData(project.linked_map_id if project else None)
+        if linked_map_idx >= 0:
+            self.linked_map_edit.setCurrentIndex(linked_map_idx)
+
+        self.linked_note_edit = QComboBox()
+        self.linked_note_edit.addItem("None", None)
+        for note_item in self._db.fetch_notes():
+            self.linked_note_edit.addItem(note_item.title, note_item.id)
+        linked_note_idx = self.linked_note_edit.findData(project.linked_note_id if project else None)
+        if linked_note_idx >= 0:
+            self.linked_note_edit.setCurrentIndex(linked_note_idx)
+
+        self.linked_object_edit = QComboBox()
+        self.linked_object_edit.addItem("None", None)
+        for object_item in self._db.fetch_objects():
+            self.linked_object_edit.addItem(object_item.title, object_item.id)
+        linked_object_idx = self.linked_object_edit.findData(project.linked_object_id if project else None)
+        if linked_object_idx >= 0:
+            self.linked_object_edit.setCurrentIndex(linked_object_idx)
 
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
@@ -776,6 +988,12 @@ class ProjectEditDialog(QDialog):
         form.addRow("Название", self.title_edit)
         form.addRow("Дата обновления", self.updated_edit)
         form.addRow("Приоритет", self.priority_edit)
+        form.addRow("Parent project", self.parent_project_edit)
+        form.addRow("Task priority preset", self.default_task_priority_edit)
+        form.addRow("Force recurrence", self.force_recurrence_kind_edit)
+        form.addRow("Linked map", self.linked_map_edit)
+        form.addRow("Linked note", self.linked_note_edit)
+        form.addRow("Linked object", self.linked_object_edit)
         form.addRow("", self.archived_edit)
 
         layout.addLayout(form)
@@ -855,6 +1073,12 @@ class ProjectEditDialog(QDialog):
             "title": self.title_edit.text().strip(),
             "updated": date(qd.year(), qd.month(), qd.day()),
             "priority": self.priority_edit.currentText().strip() or "Medium",
+            "parent_project_id": self.parent_project_edit.currentData(),
+            "default_task_priority": self.default_task_priority_edit.currentData() or "",
+            "force_recurrence_kind": self.force_recurrence_kind_edit.currentData() or "",
+            "linked_map_id": self.linked_map_edit.currentData(),
+            "linked_note_id": self.linked_note_edit.currentData(),
+            "linked_object_id": self.linked_object_edit.currentData(),
             "archived": self.archived_edit.isChecked(),
         }
 
@@ -1113,7 +1337,16 @@ class ProjectsWorkspace(QWidget):
                 updated=values["updated"],
                 priority=values["priority"],
                 archived=values["archived"],
+                parent_project_id=values["parent_project_id"],
+                default_task_priority=values["default_task_priority"],
+                force_recurrence_kind=values["force_recurrence_kind"],
+                linked_map_id=values["linked_map_id"],
+                linked_note_id=values["linked_note_id"],
+                linked_object_id=values["linked_object_id"],
             )
             self._refresh_area_combo(values["area"])
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
+
+
+
