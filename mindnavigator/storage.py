@@ -20,6 +20,7 @@ from typing import Iterable, List, Optional
 PRIORITIES = ("Low", "Medium", "High", "Отложенная")
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
+COLLECTION_ENTITY_TYPES = ("building", "city", "film", "game", "character", "other")
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,28 @@ class ObjectImageData:
     description: str
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class CollectionItemData:
+    id: int
+    title: str
+    entity_type: str
+    topic: str
+    image_url: str
+    source_url: str
+    description: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class CollectionRelationData:
+    id: int
+    left_item_id: int
+    right_item_id: int
+    relation_kind: str
+    created_at: str
 
 
 def default_db_path() -> Path:
@@ -449,6 +472,34 @@ class Database:
                 );
                 """
             )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    entity_type TEXT NOT NULL CHECK (entity_type IN ('building', 'city', 'film', 'game', 'character', 'other')),
+                    topic TEXT NOT NULL DEFAULT '',
+                    image_url TEXT NOT NULL DEFAULT '',
+                    source_url TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_relations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    left_item_id INTEGER NOT NULL REFERENCES collection_items(id) ON DELETE CASCADE,
+                    right_item_id INTEGER NOT NULL REFERENCES collection_items(id) ON DELETE CASCADE,
+                    relation_kind TEXT NOT NULL DEFAULT '=',
+                    created_at TEXT NOT NULL,
+                    CHECK (left_item_id < right_item_id),
+                    UNIQUE(left_item_id, right_item_id, relation_kind)
+                );
+                """
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
@@ -468,6 +519,10 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_topic ON collection_items(topic);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_entity_type ON collection_items(entity_type);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_relations_left ON collection_relations(left_item_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_relations_right ON collection_relations(right_item_id);")
 
         self._ensure_task_project_column()
         self._ensure_task_description_column()
@@ -2424,6 +2479,236 @@ class Database:
         """Удаляет изображение объекта."""
         with self._conn:
             self._conn.execute("DELETE FROM object_images WHERE id = ?;", (image_id,))
+
+    def _normalize_collection_entity_type(self, entity_type: str) -> str:
+        value = (entity_type or "").strip().lower() or "other"
+        if value not in COLLECTION_ENTITY_TYPES:
+            raise ValueError(
+                "Тип коллекции должен быть одним из: building, city, film, game, character, other."
+            )
+        return value
+
+    def fetch_collection_items(
+        self,
+        search_text: str = "",
+        topic: Optional[str] = None,
+        entity_type: Optional[str] = None,
+    ) -> List[CollectionItemData]:
+        """Возвращает элементы режима коллекций."""
+        clauses: list[str] = []
+        params: list[object] = []
+        search_text = (search_text or "").strip().lower()
+        topic = (topic or "").strip()
+        if search_text:
+            clauses.append(
+                "(lower(title) LIKE ? OR lower(topic) LIKE ? OR lower(description) LIKE ? OR lower(source_url) LIKE ?)"
+            )
+            like = f"%{search_text}%"
+            params.extend([like, like, like, like])
+        if topic:
+            clauses.append("topic = ?")
+            params.append(topic)
+        if entity_type:
+            clauses.append("entity_type = ?")
+            params.append(self._normalize_collection_entity_type(entity_type))
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"""
+            SELECT id, title, entity_type, topic, image_url, source_url, description, created_at, updated_at
+            FROM collection_items
+            {where_sql}
+            ORDER BY updated_at DESC, title COLLATE NOCASE ASC, id DESC;
+            """,
+            tuple(params),
+        ).fetchall()
+        return [
+            CollectionItemData(
+                row["id"],
+                row["title"],
+                row["entity_type"],
+                row["topic"] or "",
+                row["image_url"] or "",
+                row["source_url"] or "",
+                row["description"] or "",
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def fetch_collection_topics(self) -> List[str]:
+        """Возвращает список тем коллекций."""
+        rows = self._conn.execute(
+            """
+            SELECT DISTINCT topic
+            FROM collection_items
+            WHERE trim(topic) <> ''
+            ORDER BY topic COLLATE NOCASE ASC;
+            """
+        ).fetchall()
+        return [row["topic"] for row in rows]
+
+    def create_collection_item(
+        self,
+        *,
+        title: str,
+        entity_type: str,
+        topic: str = "",
+        image_url: str = "",
+        source_url: str = "",
+        description: str = "",
+    ) -> CollectionItemData:
+        """Создает элемент коллекции."""
+        title = validate_title(title)
+        entity_type = self._normalize_collection_entity_type(entity_type)
+        topic = (topic or "").strip()
+        image_url = (image_url or "").strip()
+        source_url = (source_url or "").strip()
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO collection_items
+                (title, entity_type, topic, image_url, source_url, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (title, entity_type, topic, image_url, source_url, description, now, now),
+            )
+        return CollectionItemData(
+            cur.lastrowid, title, entity_type, topic, image_url, source_url, description, now, now
+        )
+
+    def update_collection_item(
+        self,
+        item_id: int,
+        *,
+        title: str,
+        entity_type: str,
+        topic: str = "",
+        image_url: str = "",
+        source_url: str = "",
+        description: str = "",
+    ) -> CollectionItemData:
+        """Обновляет элемент коллекции."""
+        title = validate_title(title)
+        entity_type = self._normalize_collection_entity_type(entity_type)
+        topic = (topic or "").strip()
+        image_url = (image_url or "").strip()
+        source_url = (source_url or "").strip()
+        description = (description or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE collection_items
+                SET title = ?, entity_type = ?, topic = ?, image_url = ?, source_url = ?, description = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (title, entity_type, topic, image_url, source_url, description, now, item_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, title, entity_type, topic, image_url, source_url, description, created_at, updated_at
+            FROM collection_items
+            WHERE id = ?;
+            """,
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Элемент коллекции не найден.")
+        return CollectionItemData(
+            row["id"],
+            row["title"],
+            row["entity_type"],
+            row["topic"] or "",
+            row["image_url"] or "",
+            row["source_url"] or "",
+            row["description"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def delete_collection_item(self, item_id: int) -> None:
+        """Удаляет элемент коллекции."""
+        with self._conn:
+            self._conn.execute("DELETE FROM collection_items WHERE id = ?;", (item_id,))
+
+    def fetch_collection_relations(self, item_id: Optional[int] = None) -> List[CollectionRelationData]:
+        """Возвращает связи элементов коллекции."""
+        if item_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT id, left_item_id, right_item_id, relation_kind, created_at
+                FROM collection_relations
+                ORDER BY created_at DESC, id DESC;
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT id, left_item_id, right_item_id, relation_kind, created_at
+                FROM collection_relations
+                WHERE left_item_id = ? OR right_item_id = ?
+                ORDER BY created_at DESC, id DESC;
+                """,
+                (item_id, item_id),
+            ).fetchall()
+        return [
+            CollectionRelationData(
+                row["id"],
+                row["left_item_id"],
+                row["right_item_id"],
+                row["relation_kind"] or "=",
+                row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def create_collection_relation(
+        self,
+        left_item_id: int,
+        right_item_id: int,
+        relation_kind: str = "=",
+    ) -> CollectionRelationData:
+        """Создает перекрестную связь между элементами коллекции."""
+        if left_item_id == right_item_id:
+            raise ValueError("Нельзя связать элемент сам с собой.")
+        left_id, right_id = sorted((int(left_item_id), int(right_item_id)))
+        relation_kind = (relation_kind or "=").strip() or "="
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO collection_relations
+                (left_item_id, right_item_id, relation_kind, created_at)
+                VALUES (?, ?, ?, ?);
+                """,
+                (left_id, right_id, relation_kind, now),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, left_item_id, right_item_id, relation_kind, created_at
+            FROM collection_relations
+            WHERE left_item_id = ? AND right_item_id = ? AND relation_kind = ?;
+            """,
+            (left_id, right_id, relation_kind),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Не удалось создать связь коллекции.")
+        return CollectionRelationData(
+            row["id"],
+            row["left_item_id"],
+            row["right_item_id"],
+            row["relation_kind"] or "=",
+            row["created_at"],
+        )
+
+    def delete_collection_relation(self, relation_id: int) -> None:
+        """Удаляет связь коллекции."""
+        with self._conn:
+            self._conn.execute("DELETE FROM collection_relations WHERE id = ?;", (relation_id,))
 
     def get_setting(self, key: str, default: str = "") -> str:
         """Возвращает значение настройки."""
