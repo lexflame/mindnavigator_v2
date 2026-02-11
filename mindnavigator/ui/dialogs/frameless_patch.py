@@ -20,6 +20,7 @@ _PATCHED = False
 _ORIGINAL_INIT = None
 _ORIGINAL_EXEC = None
 _DEFAULT_DIALOG_SIZE = QSize(1450, 812)
+_MINIMAL_FLEX_SIZE = QSize(560, 300)
 
 
 def enable_frameless_qdialogs() -> None:
@@ -42,9 +43,14 @@ def enable_frameless_qdialogs() -> None:
         if _should_skip_dialog(self) or _is_popup_dialog(self):
             return _ORIGINAL_EXEC(self, *args, **kwargs)
 
-        # Enforce default dialog geometry before each modal open.
-        self.resize(_DEFAULT_DIALOG_SIZE)
-        _center_dialog(self)
+        category = _dialog_category(self)
+        if category == "minimal_flex":
+            self.resize(_MINIMAL_FLEX_SIZE)
+            _center_dialog(self, force_screen_center=True)
+        else:
+            # Enforce default dialog geometry before each modal open.
+            self.resize(_DEFAULT_DIALOG_SIZE)
+            _center_dialog(self)
 
         parent = self.parentWidget()
         overlay_parent = _resolve_overlay_parent(parent)
@@ -84,7 +90,14 @@ def _resolve_overlay_parent(parent: QWidget | None) -> QWidget | None:
     return active.window() if active is not None else None
 
 
-def _center_dialog(dialog: QDialog) -> None:
+def _dialog_category(dialog: QDialog) -> str:
+    value = dialog.property("dialog_category")
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _center_dialog(dialog: QDialog, force_screen_center: bool = False) -> None:
     anchor = dialog.parentWidget().window() if dialog.parentWidget() is not None else QApplication.activeWindow()
     screen = None
     if anchor is not None and anchor.windowHandle() is not None:
@@ -97,7 +110,10 @@ def _center_dialog(dialog: QDialog) -> None:
         return
 
     available = screen.availableGeometry()
-    center_point = anchor.frameGeometry().center() if anchor is not None else available.center()
+    if force_screen_center:
+        center_point = available.center()
+    else:
+        center_point = anchor.frameGeometry().center() if anchor is not None else available.center()
 
     frame = QRect(dialog.frameGeometry())
     frame.setSize(dialog.size())
