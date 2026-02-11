@@ -70,7 +70,8 @@ class ConfirmDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("ConfirmDialog")
         self.setWindowTitle(title)
-        self.setMinimumWidth(420)
+        self.setProperty("dialog_category", "minimal_flex")
+        self.setFixedSize(560, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)

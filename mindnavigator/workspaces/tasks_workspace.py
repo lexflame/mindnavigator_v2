@@ -1443,13 +1443,18 @@ class TaskDetailsDialog(QDialog):
 
 
 class TaskEditDialog(QDialog):
+    _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
+
     def __init__(self, task: TaskRow, parent=None):
         """Создает диалог редактирования задачи."""
         super().__init__(parent)
         self.setWindowTitle("Редактирование задачи")
         self.setObjectName("TaskEditDialog")
+        self.setProperty("dialog_category", "keep_size")
         self.setMinimumWidth(460)
         self.setMinimumHeight(420)
+        self._db = get_database()
+        self._restore_saved_size()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1541,7 +1546,6 @@ class TaskEditDialog(QDialog):
 
         layout.addLayout(form)
 
-        self._db = get_database()
         self._task_id = task.id
         self._attachments: List = []
         self._notes_by_id = {}
@@ -1715,6 +1719,28 @@ class TaskEditDialog(QDialog):
                 padding: 4px;
             }}
         """)
+
+    def _restore_saved_size(self) -> None:
+        raw = self._db.get_setting(self._SIZE_SETTING_KEY, default="").strip()
+        if not raw:
+            return
+        width_str, separator, height_str = raw.partition("x")
+        if not separator:
+            return
+        try:
+            width = int(width_str)
+            height = int(height_str)
+        except ValueError:
+            return
+        self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
+
+    def _save_current_size(self) -> None:
+        size = self.size()
+        self._db.set_setting(self._SIZE_SETTING_KEY, f"{size.width()}x{size.height()}")
+
+    def closeEvent(self, event) -> None:
+        self._save_current_size()
+        super().closeEvent(event)
 
     def _populate_projects(self, selected_id: Optional[int] = None) -> None:
         self.project_edit.blockSignals(True)

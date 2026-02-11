@@ -47,6 +47,8 @@ def enable_frameless_qdialogs() -> None:
         if category == "minimal_flex":
             self.resize(_MINIMAL_FLEX_SIZE)
             _center_dialog(self, force_screen_center=True)
+        elif category == "keep_size":
+            _center_dialog(self)
         else:
             # Enforce default dialog geometry before each modal open.
             self.resize(_DEFAULT_DIALOG_SIZE)
