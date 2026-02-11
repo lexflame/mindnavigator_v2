@@ -36,6 +36,8 @@ class TaskData:
     project_title: str = ""
     project_area: str = ""
     parent_id: Optional[int] = None
+    recurrence_kind: str = ""
+    recurrence_interval: int = 1
 
 
 @dataclass(frozen=True)
@@ -280,6 +282,8 @@ class Database:
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
+                    recurrence_kind TEXT NOT NULL DEFAULT '',
+                    recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -527,6 +531,7 @@ class Database:
         self._ensure_task_project_column()
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
+        self._ensure_task_recurrence_columns()
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_marker_attachment_columns()
@@ -559,6 +564,18 @@ class Database:
         if "parent_id" not in names:
             with self._conn:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id);")
+
+    def _ensure_task_recurrence_columns(self) -> None:
+        """Добавляет колонки периодичности задачи, если они отсутствуют."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "recurrence_kind" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN recurrence_kind TEXT NOT NULL DEFAULT '';")
+            if "recurrence_interval" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1;"
+                )
 
     def _ensure_priority_values(self) -> None:
         """Обновляет ограничения приоритета до актуального списка значений."""
@@ -1096,7 +1113,9 @@ class Database:
                 t.project_id,
                 COALESCE(p.title, '') AS project_title,
                 COALESCE(p.area, '') AS project_area,
-                t.parent_id
+                t.parent_id,
+                t.recurrence_kind,
+                t.recurrence_interval
             FROM tasks t
             LEFT JOIN projects p ON p.id = t.project_id;
             """
@@ -1116,6 +1135,8 @@ class Database:
                     project_title=row["project_title"] or "",
                     project_area=row["project_area"] or "",
                     parent_id=row["parent_id"],
+                    recurrence_kind=row["recurrence_kind"] or "",
+                    recurrence_interval=max(1, int(row["recurrence_interval"] or 1)),
                 )
             )
         return tasks
@@ -1157,12 +1178,16 @@ class Database:
         priority: str,
         project_id: Optional[int] = None,
         parent_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
+        recurrence_kind = (recurrence_kind or "").strip().lower()
+        recurrence_interval = max(1, int(recurrence_interval or 1))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
@@ -1170,10 +1195,25 @@ class Database:
         with self._conn:
             cur = self._conn.execute(
                 """
-                INSERT INTO tasks (title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?);
+                INSERT INTO tasks (
+                    title, description, day, time_text, priority, done, project_id, parent_id,
+                    recurrence_kind, recurrence_interval, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
                 """,
-                (title, description, day.isoformat(), time_text, priority, project_id, parent_id, now, now),
+                (
+                    title,
+                    description,
+                    day.isoformat(),
+                    time_text,
+                    priority,
+                    project_id,
+                    parent_id,
+                    recurrence_kind,
+                    recurrence_interval,
+                    now,
+                    now,
+                ),
             )
         project_title = ""
         project_area = ""
@@ -1197,6 +1237,8 @@ class Database:
             project_title,
             project_area,
             parent_id,
+            recurrence_kind,
+            recurrence_interval,
         )
 
     def update_task(
@@ -1210,6 +1252,8 @@ class Database:
         done: bool,
         project_id: Optional[int] = None,
         parent_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
@@ -1221,6 +1265,8 @@ class Database:
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
+        recurrence_kind = (recurrence_kind or "").strip().lower()
+        recurrence_interval = max(1, int(recurrence_interval or 1))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
@@ -1229,10 +1275,24 @@ class Database:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?, updated_at = ?
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
+                    recurrence_kind = ?, recurrence_interval = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (title, description, day.isoformat(), time_text, priority, int(done), project_id, parent_id, now, task_id),
+                (
+                    title,
+                    description,
+                    day.isoformat(),
+                    time_text,
+                    priority,
+                    int(done),
+                    project_id,
+                    parent_id,
+                    recurrence_kind,
+                    recurrence_interval,
+                    now,
+                    task_id,
+                ),
             )
             cascade_priority = None
             if priority == "Отложенная" and prev_priority != "Отложенная":
@@ -1276,16 +1336,81 @@ class Database:
             project_title,
             project_area,
             parent_id,
+            recurrence_kind,
+            recurrence_interval,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
+        row = self._conn.execute(
+            """
+            SELECT id, title, description, day, time_text, priority, done, project_id, parent_id, recurrence_kind, recurrence_interval
+            FROM tasks
+            WHERE id = ?;
+            """,
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return
+        prev_done = bool(row["done"])
+        recurrence_kind = (row["recurrence_kind"] or "").strip().lower()
+        recurrence_interval = max(1, int(row["recurrence_interval"] or 1))
         now = datetime.utcnow().isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 "UPDATE tasks SET done = ?, updated_at = ? WHERE id = ?;",
                 (int(done), now, task_id),
             )
+            if done and not prev_done and recurrence_kind:
+                current_day = date.fromisoformat(row["day"])
+                next_day = self._next_recurrence_day(current_day, recurrence_kind, recurrence_interval)
+                self._conn.execute(
+                    """
+                    INSERT INTO tasks (
+                        title, description, day, time_text, priority, done, project_id, parent_id,
+                        recurrence_kind, recurrence_interval, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        row["title"],
+                        row["description"] or "",
+                        next_day.isoformat(),
+                        row["time_text"] or "",
+                        row["priority"],
+                        row["project_id"],
+                        row["parent_id"],
+                        recurrence_kind,
+                        recurrence_interval,
+                        now,
+                        now,
+                    ),
+                )
+
+    def _next_recurrence_day(self, base_day: date, recurrence_kind: str, recurrence_interval: int) -> date:
+        interval = max(1, int(recurrence_interval or 1))
+        if recurrence_kind == "daily":
+            return base_day + timedelta(days=interval)
+        if recurrence_kind == "weekly":
+            return base_day + timedelta(days=7 * interval)
+        if recurrence_kind == "monthly":
+            return self._add_months(base_day, interval)
+        return base_day
+
+    @staticmethod
+    def _add_months(base_day: date, months: int) -> date:
+        month0 = base_day.month - 1 + max(1, months)
+        year = base_day.year + month0 // 12
+        month = month0 % 12 + 1
+        if month == 2:
+            leap = (year % 400 == 0) or (year % 4 == 0 and year % 100 != 0)
+            max_day = 29 if leap else 28
+        elif month in {4, 6, 9, 11}:
+            max_day = 30
+        else:
+            max_day = 31
+        day = min(base_day.day, max_day)
+        return date(year, month, day)
 
     def delete_task(self, task_id: int) -> None:
         """Удаляет задачу по id."""
