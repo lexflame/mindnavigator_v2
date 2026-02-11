@@ -11,13 +11,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import html
 import json
 from pathlib import Path
+import re
 from typing import Dict, List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
@@ -49,10 +51,20 @@ ATTACHMENT_KIND_LABELS = {
     "image": "Изображение",
 }
 ATTACHMENT_KIND_ORDER = ("note", "object", "map", "marker", "file", "image")
+_URL_RE = re.compile(r"(https?://[^\s<>'\"()]+)")
 
 
 def attachment_kind_label(kind: str) -> str:
     return ATTACHMENT_KIND_LABELS.get(kind, kind)
+
+
+def _linkify_description_text(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return "—"
+    escaped = html.escape(raw)
+    linked = _URL_RE.sub(r"<a href='\1'>\1</a>", escaped)
+    return linked.replace("\n", "<br>")
 
 
 @dataclass(frozen=True)
@@ -68,6 +80,8 @@ class TaskRow:
     project_title: str = ""
     project_area: str = ""
     parent_id: Optional[int] = None
+    recurrence_kind: str = ""
+    recurrence_interval: int = 1
 
 
 @dataclass(frozen=True)
@@ -238,6 +252,8 @@ class TasksModel(QAbstractListModel):
                 t.project_title,
                 t.project_area,
                 t.parent_id,
+                t.recurrence_kind,
+                t.recurrence_interval,
             )
             for t in tasks
         ]
@@ -379,6 +395,8 @@ class TasksModel(QAbstractListModel):
         priority: str,
         description: str = "",
         project_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
     ):
         """Добавляет новую задачу и пересобирает текущий список."""
         task = self._db.create_task(
@@ -389,6 +407,8 @@ class TasksModel(QAbstractListModel):
             priority=priority,
             project_id=project_id,
             parent_id=None,
+            recurrence_kind=recurrence_kind,
+            recurrence_interval=recurrence_interval,
         )
         self._all_rows.append(
             TaskRow(
@@ -403,6 +423,8 @@ class TasksModel(QAbstractListModel):
                 task.project_title,
                 task.project_area,
                 task.parent_id,
+                task.recurrence_kind,
+                task.recurrence_interval,
             )
         )
         self._rebuild()
@@ -435,6 +457,8 @@ class TasksModel(QAbstractListModel):
         priority: str,
         done: bool,
         project_id: Optional[int],
+        recurrence_kind: str,
+        recurrence_interval: int,
     ):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
@@ -450,6 +474,8 @@ class TasksModel(QAbstractListModel):
             done=done,
             project_id=project_id,
             parent_id=r.parent_id,
+            recurrence_kind=recurrence_kind,
+            recurrence_interval=recurrence_interval,
         )
         priority_changed = r.priority != updated.priority
         cascade_needed = (
@@ -475,6 +501,8 @@ class TasksModel(QAbstractListModel):
                     updated.project_title,
                     updated.project_area,
                     updated.parent_id,
+                    updated.recurrence_kind,
+                    updated.recurrence_interval,
                 )
             new_all.append(it)
 
@@ -491,6 +519,9 @@ class TasksModel(QAbstractListModel):
 
         new_done = not r.done
         self._db.set_task_done(r.id, new_done)
+        if new_done and bool(r.recurrence_kind):
+            self._reload_from_db()
+            return
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == r.id:
@@ -506,6 +537,8 @@ class TasksModel(QAbstractListModel):
                     it.project_title,
                     it.project_area,
                     it.parent_id,
+                    it.recurrence_kind,
+                    it.recurrence_interval,
                 )
             new_all.append(it)
 
@@ -542,6 +575,8 @@ class TasksModel(QAbstractListModel):
             done=task.done,
             project_id=task.project_id,
             parent_id=current_parent_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -558,6 +593,8 @@ class TasksModel(QAbstractListModel):
                     updated.project_title,
                     updated.project_area,
                     updated.parent_id,
+                    updated.recurrence_kind,
+                    updated.recurrence_interval,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -596,16 +633,19 @@ class TasksModel(QAbstractListModel):
                 return False
 
         target_day = parent_task.day if parent_task is not None else task.day
+        target_time = parent_task.time_text if parent_task is not None else task.time_text
         updated = self._db.update_task(
             task_id=task.id,
             title=task.title,
             description=task.description,
             day=target_day,
-            time_text=task.time_text,
+            time_text=target_time,
             priority=task.priority,
             done=task.done,
             project_id=task.project_id,
             parent_id=parent_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -622,6 +662,8 @@ class TasksModel(QAbstractListModel):
                     updated.project_title,
                     updated.project_area,
                     updated.parent_id,
+                    updated.recurrence_kind,
+                    updated.recurrence_interval,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -1085,9 +1127,11 @@ class TaskDetailsDialog(QDialog):
         desc_layout.setContentsMargins(14, 12, 14, 12)
         desc_title = QLabel("Описание")
         desc_title.setObjectName("TaskDetailsSectionTitle")
-        desc_text = QLabel(task.description or "—")
+        desc_text = QLabel(_linkify_description_text(task.description))
         desc_text.setWordWrap(True)
-        desc_text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        desc_text.setTextFormat(Qt.RichText)
+        desc_text.setTextInteractionFlags(Qt.TextBrowserInteraction | Qt.TextSelectableByMouse)
+        desc_text.setOpenExternalLinks(True)
         desc_layout.addWidget(desc_title)
         desc_layout.addWidget(desc_text)
         content_layout.addWidget(desc_block)
@@ -1113,6 +1157,14 @@ class TaskDetailsDialog(QDialog):
         parent_title = "—"
         if task.parent_id is not None:
             parent_title = self._task_title(task.parent_id)
+        recurrence_text = "—"
+        if task.recurrence_kind:
+            labels = {"daily": "Ежедневно", "weekly": "Еженедельно", "monthly": "Ежемесячно"}
+            base = labels.get(task.recurrence_kind, task.recurrence_kind)
+            if task.recurrence_interval > 1:
+                recurrence_text = f"{base}, интервал {task.recurrence_interval}"
+            else:
+                recurrence_text = base
 
         form.addRow("ID", QLabel(str(task.id)))
         form.addRow("Дата", QLabel(task.day.isoformat()))
@@ -1121,6 +1173,7 @@ class TaskDetailsDialog(QDialog):
         form.addRow("Статус", QLabel("Выполнено" if task.done else "В работе"))
         form.addRow("Проект", QLabel(project_text))
         form.addRow("Родитель", QLabel(parent_title))
+        form.addRow("Повтор", QLabel(recurrence_text))
         props_layout.addLayout(form)
         content_layout.addWidget(props_block)
 
@@ -1539,6 +1592,26 @@ class TaskEditDialog(QDialog):
         time_block_layout.addWidget(self.time_toggle)
         time_block_layout.addWidget(self.time_edit)
 
+        self.recurrence_toggle = QCheckBox("По расписанию")
+        self.recurrence_toggle.setCursor(Qt.PointingHandCursor)
+        self.recurrence_type_edit = QComboBox()
+        self.recurrence_type_edit.addItem("Ежедневно", "daily")
+        self.recurrence_type_edit.addItem("Еженедельно", "weekly")
+        self.recurrence_type_edit.addItem("Ежемесячно", "monthly")
+        recurrence_idx = self.recurrence_type_edit.findData(task.recurrence_kind)
+        if recurrence_idx >= 0:
+            self.recurrence_type_edit.setCurrentIndex(recurrence_idx)
+        self.recurrence_toggle.setChecked(bool(task.recurrence_kind))
+        self.recurrence_type_edit.setEnabled(self.recurrence_toggle.isChecked())
+        self.recurrence_toggle.toggled.connect(self.recurrence_type_edit.setEnabled)
+
+        recurrence_row = QWidget()
+        recurrence_layout = QHBoxLayout(recurrence_row)
+        recurrence_layout.setContentsMargins(0, 0, 0, 0)
+        recurrence_layout.setSpacing(6)
+        recurrence_layout.addWidget(self.recurrence_toggle)
+        recurrence_layout.addWidget(self.recurrence_type_edit, 1)
+
         self.priority_edit = QComboBox()
         self.priority_edit.addItems(["Low", "Medium", "High", "Отложенная"])
         self.priority_edit.setCurrentText(task.priority or "Medium")
@@ -1550,6 +1623,7 @@ class TaskEditDialog(QDialog):
         form.addRow("Описание", self.description_edit)
         form.addRow("Проект", project_row)
         form.addRow("Дата и время", time_block)
+        form.addRow("Повтор", recurrence_row)
         form.addRow("Приоритет", self.priority_edit)
         form.addRow("", self.done_edit)
 
@@ -1593,6 +1667,8 @@ class TaskEditDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_accept)
+        QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_accept)
 
         self.setStyleSheet(f"""
             QDialog#TaskEditDialog {{
@@ -2169,6 +2245,8 @@ class TaskEditDialog(QDialog):
             "priority": self.priority_edit.currentText().strip() or "Medium",
             "done": self.done_edit.isChecked(),
             "project_id": self.project_edit.currentData(),
+            "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
+            "recurrence_interval": 1,
         }
 
 
@@ -2710,6 +2788,8 @@ class TasksItemDelegate(QStyledItemDelegate):
                     priority=values["priority"],
                     done=values["done"],
                     project_id=values["project_id"],
+                    recurrence_kind=values["recurrence_kind"],
+                    recurrence_interval=values["recurrence_interval"],
                 )
             except ValueError as exc:
                 QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
@@ -3190,6 +3270,8 @@ class TasksWorkspace(BaseWorkspace):
                 time_text=values["time_text"],
                 priority=values["priority"],
                 project_id=values["project_id"],
+                recurrence_kind=values["recurrence_kind"],
+                recurrence_interval=values["recurrence_interval"],
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
@@ -3205,10 +3287,15 @@ class TasksWorkspace(BaseWorkspace):
                 depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
                 has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
                 layout = self.delegate._row_layout(rect, depth, has_subtasks)
-                if layout["doc"].contains(pos):
+                if has_subtasks and layout["title"].contains(pos):
+                    self.model.toggle_subtasks_expanded_by_row(index.row())
+                elif layout["doc"].contains(pos):
                     self.delegate._open_task_view(index)
                 else:
-                    self.model.toggle_expanded_by_row(index.row())
+                    if has_subtasks:
+                        self.model.toggle_subtasks_expanded_by_row(index.row())
+                    else:
+                        self.delegate._open_task_view(index)
                 return True
         return super().eventFilter(obj, event)
 
