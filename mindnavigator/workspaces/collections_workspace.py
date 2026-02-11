@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize, QUrl
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -45,6 +47,20 @@ ENTITY_CHOICES = [
     ("Персонаж", "character"),
     ("Другое", "other"),
 ]
+
+RELATION_TEMPLATE_CHOICES = [
+    ("Авто", "__auto__"),
+    ("здание=фильм", "здание=фильм"),
+    ("город=фильм", "город=фильм"),
+    ("здание=игра", "здание=игра"),
+    ("Другое...", "__custom__"),
+]
+
+RELATION_TYPE_MAP = {
+    frozenset(("building", "film")): "здание=фильм",
+    frozenset(("city", "film")): "город=фильм",
+    frozenset(("building", "game")): "здание=игра",
+}
 
 
 class CollectionItemEditDialog(QDialog):
@@ -176,16 +192,27 @@ class CollectionRelationDialog(QDialog):
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
 
+        self._source_item = source_item
+        self._candidates_by_id: Dict[int, CollectionItemData] = {}
         self.target_combo = QComboBox()
         for item in candidates:
             label = f"{ENTITY_LABELS.get(item.entity_type, item.entity_type)} · {item.title}"
             self.target_combo.addItem(label, item.id)
+            self._candidates_by_id[item.id] = item
 
-        self.kind_edit = QLineEdit("=")
-        self.kind_edit.setPlaceholderText("Тип связи, например: =, по мотивам, вдохновлено")
+        self.template_combo = QComboBox()
+        for label, value in RELATION_TEMPLATE_CHOICES:
+            self.template_combo.addItem(label, value)
+        self.template_combo.currentIndexChanged.connect(self._on_template_changed)
+        self.target_combo.currentIndexChanged.connect(self._sync_template_for_selection)
+
+        self.kind_edit = QLineEdit("")
+        self.kind_edit.setPlaceholderText("Произвольный тип связи")
+        self.kind_edit.setEnabled(False)
 
         form.addRow("Связать с", self.target_combo)
-        form.addRow("Тип связи", self.kind_edit)
+        form.addRow("Шаблон связи", self.template_combo)
+        form.addRow("Пользовательский тип", self.kind_edit)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -226,6 +253,7 @@ class CollectionRelationDialog(QDialog):
             }}
             """
         )
+        self._sync_template_for_selection()
 
     def _accept(self) -> None:
         if self.target_combo.currentData() is None:
@@ -234,10 +262,42 @@ class CollectionRelationDialog(QDialog):
         self.accept()
 
     def values(self) -> dict:
+        template_value = self.template_combo.currentData()
+        if template_value == "__auto__":
+            relation_kind = self._suggest_template_for_current_target() or "="
+        elif template_value == "__custom__":
+            relation_kind = self.kind_edit.text().strip() or "="
+        else:
+            relation_kind = template_value
         return {
             "target_id": self.target_combo.currentData(),
-            "relation_kind": self.kind_edit.text().strip() or "=",
+            "relation_kind": relation_kind,
         }
+
+    def _suggest_template_for_current_target(self) -> str:
+        target_id = self.target_combo.currentData()
+        target_item = self._candidates_by_id.get(target_id)
+        if target_item is None:
+            return "="
+        key = frozenset((self._source_item.entity_type, target_item.entity_type))
+        return RELATION_TYPE_MAP.get(key, "=")
+
+    def _sync_template_for_selection(self) -> None:
+        if self.template_combo.currentData() == "__auto__":
+            self.kind_edit.setText(self._suggest_template_for_current_target())
+
+    def _on_template_changed(self) -> None:
+        value = self.template_combo.currentData()
+        if value == "__custom__":
+            self.kind_edit.setEnabled(True)
+            if not self.kind_edit.text().strip():
+                self.kind_edit.setText("=")
+        elif value == "__auto__":
+            self.kind_edit.setEnabled(False)
+            self.kind_edit.setText(self._suggest_template_for_current_target())
+        else:
+            self.kind_edit.setEnabled(False)
+            self.kind_edit.setText(value)
 
 
 class CollectionsWorkspace(QWidget):
@@ -248,6 +308,11 @@ class CollectionsWorkspace(QWidget):
         self._items_by_id: Dict[int, CollectionItemData] = {}
         self._relations: List[CollectionRelationData] = []
         self._current_item_id: Optional[int] = None
+        self._thumb_size = QSize(56, 56)
+        self._thumb_cache: Dict[str, QIcon] = {}
+        self._thumb_pending_urls: set[str] = set()
+        self._thumb_loader = QNetworkAccessManager(self)
+        self._thumb_loader.finished.connect(self._on_thumb_loaded)
         self._build_ui()
         self.refresh_collections()
 
@@ -292,6 +357,7 @@ class CollectionsWorkspace(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(8)
         self.items_list = QListWidget()
+        self.items_list.setIconSize(self._thumb_size)
         self.items_list.currentItemChanged.connect(self._on_item_selected)
         left_layout.addWidget(self.items_list, 1)
 
@@ -442,7 +508,10 @@ class CollectionsWorkspace(QWidget):
                 label = f"{label}\n#{item.topic}"
             list_item = QListWidgetItem(label)
             list_item.setData(Qt.UserRole, item.id)
+            list_item.setIcon(self._placeholder_icon())
+            list_item.setSizeHint(QSize(220, 64))
             self.items_list.addItem(list_item)
+            self._load_thumbnail(item.id, item.image_url)
         self.items_list.blockSignals(False)
 
         if not self._items:
@@ -571,3 +640,82 @@ class CollectionsWorkspace(QWidget):
         relation_id = current.data(Qt.UserRole)
         self._db.delete_collection_relation(int(relation_id))
         self.refresh_collections()
+
+    def focus_item(self, item_id: int) -> None:
+        self.refresh_collections()
+        for row in range(self.items_list.count()):
+            item = self.items_list.item(row)
+            if item.data(Qt.UserRole) == item_id:
+                self.items_list.setCurrentRow(row)
+                self._on_item_selected(item, None)
+                break
+
+    def _placeholder_icon(self) -> QIcon:
+        key = "__placeholder__"
+        cached = self._thumb_cache.get(key)
+        if cached is not None:
+            return cached
+        pixmap = QPixmap(self._thumb_size)
+        pixmap.fill(QColor("#1f232a"))
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("#3a3f4a"))
+        painter.drawRect(0, 0, self._thumb_size.width() - 1, self._thumb_size.height() - 1)
+        painter.end()
+        icon = QIcon(pixmap)
+        self._thumb_cache[key] = icon
+        return icon
+
+    def _load_thumbnail(self, item_id: int, image_url: str) -> None:
+        url = (image_url or "").strip()
+        if not url:
+            return
+        if url in self._thumb_cache:
+            self._apply_thumbnail_icon(item_id, self._thumb_cache[url])
+            return
+        if url in self._thumb_pending_urls:
+            return
+        qurl = QUrl.fromUserInput(url)
+        if not qurl.isValid() or qurl.isEmpty():
+            return
+        request = QNetworkRequest(qurl)
+        reply = self._thumb_loader.get(request)
+        reply.setProperty("collection_item_id", item_id)
+        reply.setProperty("thumb_url", url)
+        self._thumb_pending_urls.add(url)
+
+    def _on_thumb_loaded(self, reply: QNetworkReply) -> None:
+        url = str(reply.property("thumb_url") or "").strip()
+        item_id = int(reply.property("collection_item_id") or 0)
+        if url:
+            self._thumb_pending_urls.discard(url)
+        icon: Optional[QIcon] = None
+        if reply.error() == QNetworkReply.NoError:
+            data = reply.readAll().data()
+            pixmap = QPixmap()
+            if pixmap.loadFromData(data):
+                scaled = pixmap.scaled(
+                    self._thumb_size,
+                    Qt.KeepAspectRatioByExpanding,
+                    Qt.SmoothTransformation,
+                )
+                cropped = QPixmap(self._thumb_size)
+                cropped.fill(Qt.transparent)
+                painter = QPainter(cropped)
+                x = (scaled.width() - self._thumb_size.width()) // 2
+                y = (scaled.height() - self._thumb_size.height()) // 2
+                painter.drawPixmap(-x, -y, scaled)
+                painter.end()
+                icon = QIcon(cropped)
+        if icon is not None:
+            if url:
+                self._thumb_cache[url] = icon
+            if item_id:
+                self._apply_thumbnail_icon(item_id, icon)
+        reply.deleteLater()
+
+    def _apply_thumbnail_icon(self, item_id: int, icon: QIcon) -> None:
+        for row in range(self.items_list.count()):
+            item = self.items_list.item(row)
+            if item.data(Qt.UserRole) == item_id:
+                item.setIcon(icon)
+                break

@@ -12,6 +12,15 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidg
 
 from mindnavigator.storage import get_database
 
+_COLLECTION_ENTITY_LABELS = {
+    "building": "Здание",
+    "city": "Город",
+    "film": "Фильм",
+    "game": "Игра",
+    "character": "Персонаж",
+    "other": "Другое",
+}
+
 
 class SearchNav(QWidget):
     """Панель быстрого поиска по всем сущностям приложения."""
@@ -235,6 +244,18 @@ class SearchNav(QWidget):
                         "id": obj.id,
                     }
                 )
+        for collection in self._db.fetch_collection_items(search_text=query):
+            entity_label = _COLLECTION_ENTITY_LABELS.get(collection.entity_type, collection.entity_type)
+            tooltip_parts = [entity_label, collection.topic, collection.source_url]
+            tooltip = " · ".join(part for part in tooltip_parts if part)
+            matches.append(
+                {
+                    "entity": "collection",
+                    "label": f"Коллекция: {collection.title}",
+                    "tooltip": tooltip,
+                    "id": collection.id,
+                }
+            )
         return matches
 
     def _update_results(self, text: str):
