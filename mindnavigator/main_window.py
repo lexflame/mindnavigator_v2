@@ -43,7 +43,7 @@ from .constants import APP_NAME
 from .resources import resource_path
 from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
 
-from .ui.styles import MATH_PHYS_PATTERN, TITLEBAR_BACKGROUND
+from .ui.styles import TITLEBAR_BACKGROUND
 
 
 class MainWindow(QMainWindow):
@@ -411,7 +411,6 @@ class MainWindow(QMainWindow):
         self.centralWidget().setStyleSheet(f"""
             QWidget#OuterRoot {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
-                background-image: url("{MATH_PHYS_PATTERN}");
                 background-position: top left;
                 background-repeat: repeat;
             }}

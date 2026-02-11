@@ -24,7 +24,6 @@ MATH_PHYS_PATTERN = (
 MATH_PHYS_BACKGROUND = f"""
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
         stop:0 #1d2030, stop:0.5 #171a24, stop:1 #12141b);
-    background-image: url("{MATH_PHYS_PATTERN}");
     background-position: center;
     background-repeat: repeat;
 """
@@ -32,7 +31,6 @@ MATH_PHYS_BACKGROUND = f"""
 TITLEBAR_BACKGROUND = f"""
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #2b3465, stop:0.5 #1b223a, stop:0.5001 #101217, stop:1 #101217);
-    background-image: url("{MATH_PHYS_PATTERN}");
     background-position: top left;
     background-repeat: repeat;
 """
