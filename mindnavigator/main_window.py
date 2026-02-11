@@ -630,6 +630,9 @@ class MainWindow(QMainWindow):
             self.set_mode(self.MODE_OBJECTS)
         elif entity == "collection":
             self.set_mode(self.MODE_COLLECTIONS)
+            item_id = payload.get("id")
+            if item_id is not None and hasattr(self.page_collections, "focus_item"):
+                self.page_collections.focus_item(int(item_id))
 
     def resizeEvent(self, event):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
