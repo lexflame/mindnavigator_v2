@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
     QFileDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
     QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
-    QPushButton, QScrollArea
+    QPushButton, QScrollArea, QColorDialog
 )
 from shiboken6 import isValid
 
@@ -766,12 +766,138 @@ class MapImagePreviewDialog(QDialog):
         self.image_label.setText("")
 
 
+class OverlayEditDialog(QDialog):
+    def __init__(self, overlay: MapOverlay, parent=None):
+        super().__init__(parent)
+        self.setObjectName("OverlayEditDialog")
+        self.setWindowTitle("Редактирование геометрии")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        self._overlay = overlay
+        self._selected_color = QColor(overlay.color)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.title_edit = QLineEdit(overlay.title)
+        self.title_edit.setPlaceholderText("Название области или пути")
+
+        self.kind_combo = QComboBox()
+        self.kind_combo.addItem("Область", "region")
+        self.kind_combo.addItem("Путь", "path")
+        kind_index = self.kind_combo.findData(overlay.kind)
+        if kind_index >= 0:
+            self.kind_combo.setCurrentIndex(kind_index)
+
+        color_row = QWidget()
+        color_layout = QHBoxLayout(color_row)
+        color_layout.setContentsMargins(0, 0, 0, 0)
+        color_layout.setSpacing(8)
+        self.color_preview = QLabel()
+        self.color_preview.setFixedSize(28, 28)
+        self.color_preview.setObjectName("OverlayColorPreview")
+        self.color_button = QToolButton()
+        self.color_button.setText("Выбрать цвет…")
+        self.color_button.clicked.connect(self._pick_color)
+        color_layout.addWidget(self.color_preview)
+        color_layout.addWidget(self.color_button, 1)
+        self._refresh_color_preview()
+
+        form.addRow("Название", self.title_edit)
+        form.addRow("Тип", self.kind_combo)
+        form.addRow("Цвет", color_row)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setStyleSheet(
+            f"""
+            QDialog#OverlayEditDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+            QDialog#OverlayEditDialog QLabel {{
+                color: #cfcfcf;
+            }}
+            QDialog#OverlayEditDialog QLineEdit,
+            QDialog#OverlayEditDialog QComboBox {{
+                background: #202127;
+                color: #e6e6e6;
+                border: 1px solid #2a2b2f;
+                padding: 8px 10px;
+                border-radius: 6px;
+                min-height: 28px;
+            }}
+            QDialog#OverlayEditDialog QDialogButtonBox QPushButton,
+            QDialog#OverlayEditDialog QToolButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+            QDialog#OverlayEditDialog QDialogButtonBox QPushButton:hover,
+            QDialog#OverlayEditDialog QToolButton:hover {{
+                background: #34363b;
+            }}
+            QLabel#OverlayColorPreview {{
+                border: 1px solid #3a3b40;
+                border-radius: 4px;
+                background: #202127;
+            }}
+            """
+        )
+
+    def _pick_color(self) -> None:
+        chosen = QColorDialog.getColor(self._selected_color, self, "Цвет геометрии")
+        if not chosen.isValid():
+            return
+        self._selected_color = chosen
+        self._refresh_color_preview()
+
+    def _refresh_color_preview(self) -> None:
+        self.color_preview.setStyleSheet(
+            f"background: {self._selected_color.name()}; border: 1px solid #3a3b40; border-radius: 4px;"
+        )
+
+    def _on_accept(self) -> None:
+        title = self.title_edit.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Проверка", "Название не может быть пустым.")
+            return
+        kind = self.kind_combo.currentData() or self._overlay.kind
+        min_points = 3 if kind == "region" else 2
+        if len(self._overlay.points) < min_points:
+            QMessageBox.warning(self, "Проверка", "Недостаточно точек для выбранного типа.")
+            return
+        self.accept()
+
+    def values(self) -> tuple[str, str, QColor]:
+        return (
+            self.title_edit.text().strip(),
+            self.kind_combo.currentData() or self._overlay.kind,
+            QColor(self._selected_color),
+        )
+
+
 class MapCanvas(QWidget):
     # Класс отрисовки маркеров на карте
     markerSelected = Signal(object)
     markerAdded = Signal(object)
     markerRemoved = Signal(int)
     markerUpdated = Signal(object)
+    overlayAdded = Signal(object)
+    overlayUpdated = Signal(object)
+    overlayRemoved = Signal(int)
 
     GRID_COLOR = QColor(70, 74, 82, 120)
     GRID_TEXT = QColor(150, 155, 160, 180)
@@ -834,6 +960,7 @@ class MapCanvas(QWidget):
         self._overlays: List[MapOverlay] = []
         self._next_overlay_id = 1
         self._overlay_draft_points: List[QPointF] = []
+        self._selected_overlay_id: Optional[int] = None
         # Инициализируем стартовый набор маркеров.
         self._seed_markers()
 
@@ -873,7 +1000,25 @@ class MapCanvas(QWidget):
         self._overlays = list(overlays)
         self._next_overlay_id = max((item.id for item in self._overlays), default=0) + 1
         self._overlay_draft_points = []
+        self._selected_overlay_id = None
         self.update()
+
+    def apply_saved_overlay_id(self, transient_overlay: MapOverlay, saved_id: int) -> None:
+        # После сохранения в БД заменяем временный id геометрии на постоянный.
+        for idx, item in enumerate(self._overlays):
+            if item is transient_overlay or item == transient_overlay:
+                self._overlays[idx] = MapOverlay(
+                    id=saved_id,
+                    kind=item.kind,
+                    points=item.points,
+                    color=item.color,
+                    title=item.title,
+                )
+                if self._selected_overlay_id == item.id:
+                    self._selected_overlay_id = saved_id
+                self._next_overlay_id = max(self._next_overlay_id, saved_id + 1)
+                self.update()
+                return
 
     def set_attachment_sources(self, tasks, projects, notes, objects, files, maps, markers) -> None:
         # Сохраняем источники данных и создаем словари быстрого доступа.
@@ -1235,17 +1380,83 @@ class MapCanvas(QWidget):
         for overlay in self._overlays:
             if len(overlay.points) < 2:
                 continue
-            pen = QPen(overlay.color, max(1.0, 2.0 / self._scale))
+            is_selected = overlay.id == self._selected_overlay_id
+            pen_width = 3.0 / self._scale if is_selected else 2.0 / self._scale
+            pen = QPen(overlay.color, max(1.0, pen_width))
             painter.setPen(pen)
             if overlay.kind == "region":
                 poly = QPolygonF(overlay.points)
                 fill = QColor(overlay.color)
-                fill.setAlpha(55)
+                fill.setAlpha(95 if is_selected else 55)
                 painter.setBrush(fill)
                 painter.drawPolygon(poly)
             else:
                 painter.setBrush(Qt.NoBrush)
                 painter.drawPolyline(QPolygonF(overlay.points))
+            if is_selected and overlay.points:
+                painter.setBrush(QColor("#ffffff"))
+                painter.setPen(QPen(QColor("#101216"), max(1.0, 1.0 / self._scale)))
+                for point in overlay.points:
+                    painter.drawEllipse(point, 3.0 / self._scale, 3.0 / self._scale)
+
+    def _overlay_by_id(self, overlay_id: int) -> Optional[MapOverlay]:
+        for overlay in self._overlays:
+            if overlay.id == overlay_id:
+                return overlay
+        return None
+
+    def _overlay_at(self, world_pos: QPointF) -> Optional[MapOverlay]:
+        # Проверяем попадание в область или в линию пути.
+        tolerance = max(6.0, 8.0 / self._scale)
+        for overlay in reversed(self._overlays):
+            points = overlay.points
+            if len(points) < 2:
+                continue
+            if overlay.kind == "region":
+                polygon = QPolygonF(points)
+                if polygon.containsPoint(world_pos, Qt.OddEvenFill):
+                    return overlay
+                if self._distance_to_polyline(world_pos, points, closed=True) <= tolerance:
+                    return overlay
+            else:
+                if self._distance_to_polyline(world_pos, points, closed=False) <= tolerance:
+                    return overlay
+        return None
+
+    @staticmethod
+    def _distance_to_polyline(point: QPointF, points: List[QPointF], closed: bool) -> float:
+        if len(points) < 2:
+            return float("inf")
+        min_distance = float("inf")
+        segment_count = len(points)
+        end_index = segment_count if closed else segment_count - 1
+        for i in range(end_index):
+            a = points[i]
+            b = points[(i + 1) % segment_count]
+            distance = MapCanvas._distance_to_segment(point, a, b)
+            if distance < min_distance:
+                min_distance = distance
+        return min_distance
+
+    @staticmethod
+    def _distance_to_segment(p: QPointF, a: QPointF, b: QPointF) -> float:
+        ax, ay = a.x(), a.y()
+        bx, by = b.x(), b.y()
+        px, py = p.x(), p.y()
+        abx = bx - ax
+        aby = by - ay
+        denom = abx * abx + aby * aby
+        if denom <= 0.0:
+            dx = px - ax
+            dy = py - ay
+            return (dx * dx + dy * dy) ** 0.5
+        t = ((px - ax) * abx + (py - ay) * aby) / denom
+        t = max(0.0, min(1.0, t))
+        cx = ax + abx * t
+        cy = ay + aby * t
+        dx = px - cx
+        dy = py - cy
+        return (dx * dx + dy * dy) ** 0.5
 
     def _draw_overlay_draft(self, painter: QPainter) -> None:
         # Отрисовываем черновую линию/область при режиме рисования.
@@ -1597,12 +1808,21 @@ class MapCanvas(QWidget):
             if marker:
                 # Выделяем маркер и готовимся к перетаскиванию.
                 self._selected = marker
+                self._selected_overlay_id = None
                 self.markerSelected.emit(marker)
                 self._dragging_marker_id = marker.id
                 self.update()
                 return
+            overlay = self._overlay_at(world_pos)
+            if overlay is not None:
+                self._selected_overlay_id = overlay.id
+                self._selected = None
+                self.markerSelected.emit(None)
+                self.update()
+                return
             # Снимаем выделение и включаем панорамирование.
             self._selected = None
+            self._selected_overlay_id = None
             self.markerSelected.emit(None)
             self._dragging_marker_id = None
             self._panning = True
@@ -1760,6 +1980,7 @@ class MapCanvas(QWidget):
             )
             self._next_overlay_id += 1
             self._overlays.append(overlay)
+            self.overlayAdded.emit(overlay)
         elif self._tool == MapTool.MEASURE and len(points) >= 2:
             overlay = MapOverlay(
                 id=self._next_overlay_id,
@@ -1770,6 +1991,7 @@ class MapCanvas(QWidget):
             )
             self._next_overlay_id += 1
             self._overlays.append(overlay)
+            self.overlayAdded.emit(overlay)
         self._overlay_draft_points = []
         self.update()
 
@@ -1836,6 +2058,37 @@ class MapCanvas(QWidget):
             self._selected = None
             self.markerSelected.emit(None)
         self.update()
+
+    def _set_overlay(self, updated: MapOverlay) -> None:
+        # Обновляем оверлей в списке и уведомляем подписчиков.
+        self._overlays = [updated if item.id == updated.id else item for item in self._overlays]
+        self._selected_overlay_id = updated.id
+        self.overlayUpdated.emit(updated)
+        self.update()
+
+    def _remove_overlay(self, overlay: MapOverlay) -> None:
+        # Удаляем область/путь.
+        self._overlays = [item for item in self._overlays if item.id != overlay.id]
+        if self._selected_overlay_id == overlay.id:
+            self._selected_overlay_id = None
+        self.overlayRemoved.emit(overlay.id)
+        self.update()
+
+    def _edit_overlay(self, overlay: MapOverlay) -> None:
+        # Редактируем параметры области/пути через отдельный диалог.
+        dialog = OverlayEditDialog(overlay, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        title, kind, color = dialog.values()
+        self._set_overlay(
+            MapOverlay(
+                id=overlay.id,
+                kind=kind,
+                points=overlay.points,
+                color=color,
+                title=title,
+            )
+        )
 
     def _edit_marker(self, marker: Marker) -> None:
         # Открываем диалог редактирования маркера.
@@ -2324,6 +2577,7 @@ class MapCanvas(QWidget):
         # Контекстное меню для быстрых действий с маркером.
         world_pos = self._map_to_world(pos)
         marker = self._marker_at(world_pos)
+        overlay = self._overlay_at(world_pos) if marker is None else None
         menu = QMenu(self)
         act_add = menu.addAction("Добавить маркер")
         act_view = menu.addAction("Просмотреть метку")
@@ -2337,6 +2591,10 @@ class MapCanvas(QWidget):
         act_resize = menu.addAction("Изменить размер")
         act_edit = menu.addAction("Редактировать маркер")
         act_delete = menu.addAction("Удалить маркер")
+        menu.addSeparator()
+        overlay_kind = "область" if overlay and overlay.kind == "region" else "путь"
+        act_overlay_edit = menu.addAction(f"Редактировать {overlay_kind}")
+        act_overlay_delete = menu.addAction(f"Удалить {overlay_kind}")
         act_view.setEnabled(marker is not None)
         type_menu.setEnabled(marker is not None)
         act_bigger.setEnabled(marker is not None)
@@ -2344,6 +2602,8 @@ class MapCanvas(QWidget):
         act_resize.setEnabled(marker is not None)
         act_edit.setEnabled(marker is not None)
         act_delete.setEnabled(marker is not None)
+        act_overlay_edit.setEnabled(overlay is not None)
+        act_overlay_delete.setEnabled(overlay is not None)
         chosen = menu.exec(QCursor.pos())
         if chosen == act_add:
             self._add_marker(world_pos)
@@ -2383,6 +2643,18 @@ class MapCanvas(QWidget):
             self._edit_marker(marker)
         elif chosen == act_delete and marker:
             self._remove_marker(marker)
+        elif chosen == act_overlay_edit and overlay:
+            self._edit_overlay(overlay)
+        elif chosen == act_overlay_delete and overlay:
+            confirm = QMessageBox.question(
+                self,
+                "Удаление геометрии",
+                f"Удалить {overlay_kind}?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if confirm == QMessageBox.Yes:
+                self._remove_overlay(overlay)
 
 
 class MarkerSearchModel(QAbstractListModel):
@@ -2760,6 +3032,9 @@ class MapEditorWorkspace(QWidget):
         self.canvas.markerAdded.connect(self._on_marker_added)
         self.canvas.markerUpdated.connect(self._on_marker_updated)
         self.canvas.markerRemoved.connect(self._on_marker_removed)
+        self.canvas.overlayAdded.connect(self._on_overlay_added)
+        self.canvas.overlayUpdated.connect(self._on_overlay_updated)
+        self.canvas.overlayRemoved.connect(self._on_overlay_removed)
 
         # Стили для редактора.
         self.setStyleSheet("""
@@ -3023,6 +3298,18 @@ class MapEditorWorkspace(QWidget):
         # Загружаем карту и синхронизируем маркеры из базы.
         self._current_map_id = map_id
         self.canvas.set_tiles(tiles_path, tiles_h, tiles_w)
+        overlays = self._db.fetch_map_overlays(map_id)
+        loaded_overlays = [
+            MapOverlay(
+                id=item.id,
+                kind=item.kind,
+                points=[QPointF(x, y) for x, y in item.points],
+                color=QColor(item.color),
+                title=item.title,
+            )
+            for item in overlays
+        ]
+        self.canvas.set_overlays(loaded_overlays)
         markers = self._db.fetch_map_markers(map_id)
         if not markers:
             # Если маркеров нет, создаем дефолтные.
@@ -3094,6 +3381,19 @@ class MapEditorWorkspace(QWidget):
             image_path=marker.image_path,
         )
 
+    def _sync_overlay(self, overlay: MapOverlay):
+        # Сохраняем геометрию карты в базе, если карта выбрана.
+        if self._current_map_id is None:
+            return None
+        points = [(point.x(), point.y()) for point in overlay.points]
+        return self._db.create_map_overlay(
+            map_id=self._current_map_id,
+            kind=overlay.kind,
+            points=points,
+            color=overlay.color.name(),
+            title=overlay.title,
+        )
+
     def _on_marker_added(self, marker: Marker) -> None:
         # Реакция на добавление маркера.
         self._sync_marker(marker)
@@ -3114,6 +3414,35 @@ class MapEditorWorkspace(QWidget):
             return
         self._db.delete_map_marker(marker_id)
         self.markersChanged.emit()
+
+    def _on_overlay_added(self, overlay: MapOverlay) -> None:
+        # Реакция на добавление области/пути: сохраняем в БД и фиксируем id.
+        saved = self._sync_overlay(overlay)
+        if saved is None:
+            return
+        self.canvas.apply_saved_overlay_id(overlay, saved.id)
+
+    def _on_overlay_updated(self, overlay: MapOverlay) -> None:
+        # Реакция на изменение области/пути: обновляем запись в БД.
+        if self._current_map_id is None:
+            return
+        points = [(point.x(), point.y()) for point in overlay.points]
+        try:
+            self._db.update_map_overlay(
+                overlay_id=overlay.id,
+                kind=overlay.kind,
+                points=points,
+                color=overlay.color.name(),
+                title=overlay.title,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+
+    def _on_overlay_removed(self, overlay_id: int) -> None:
+        # Реакция на удаление области/пути: удаляем запись из БД.
+        if self._current_map_id is None:
+            return
+        self._db.delete_map_overlay(overlay_id)
 
     def _format_value(self, value: str) -> str:
         # Приводим значение к отображаемому виду.

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 PRIORITIES = ("Low", "Medium", "High", "Отложенная")
 MAX_TITLE_LEN = 160
@@ -82,6 +82,18 @@ class MapMarkerData:
     marker_ids: List[int]
     parent_path: str
     image_path: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class MapOverlayData:
+    id: int
+    map_id: int
+    kind: str
+    points: List[Tuple[float, float]]
+    color: str
+    title: str
     created_at: str
     updated_at: str
 
@@ -478,6 +490,20 @@ class Database:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS map_overlays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL CHECK (kind IN ('region', 'path')),
+                    points TEXT NOT NULL DEFAULT '[]',
+                    color TEXT NOT NULL DEFAULT '#6cb5ff',
+                    title TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS collection_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -511,6 +537,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_overlays_map ON map_overlays(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_project_id ON ideas(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);")
@@ -1924,6 +1951,185 @@ class Database:
         """Удаляет метку карты."""
         with self._conn:
             self._conn.execute("DELETE FROM map_markers WHERE id = ?;", (marker_id,))
+
+    def fetch_map_overlays(self, map_id: Optional[int] = None) -> List[MapOverlayData]:
+        """Возвращает список геометрий карты (области/пути)."""
+        if map_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT id, map_id, kind, points, color, title, created_at, updated_at
+                FROM map_overlays;
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT id, map_id, kind, points, color, title, created_at, updated_at
+                FROM map_overlays
+                WHERE map_id = ?;
+                """,
+                (map_id,),
+            ).fetchall()
+        overlays: List[MapOverlayData] = []
+        for row in rows:
+            parsed = []
+            try:
+                raw_points = json.loads(row["points"] or "[]")
+            except json.JSONDecodeError:
+                raw_points = []
+            for pair in raw_points:
+                if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                    continue
+                try:
+                    parsed.append((float(pair[0]), float(pair[1])))
+                except (TypeError, ValueError):
+                    continue
+            overlays.append(
+                MapOverlayData(
+                    id=row["id"],
+                    map_id=row["map_id"],
+                    kind=row["kind"],
+                    points=parsed,
+                    color=row["color"] or "#6cb5ff",
+                    title=row["title"] or "",
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+            )
+        return overlays
+
+    def create_map_overlay(
+        self,
+        map_id: int,
+        kind: str,
+        points: List[Tuple[float, float]],
+        color: str,
+        title: str = "",
+    ) -> MapOverlayData:
+        """Создает геометрию карты и возвращает сохраненную запись."""
+        overlay_kind = (kind or "").strip().lower()
+        if overlay_kind not in {"region", "path"}:
+            raise ValueError("Некорректный тип геометрии карты.")
+        normalized: List[Tuple[float, float]] = []
+        for pair in points or []:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                continue
+            try:
+                normalized.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError):
+                continue
+        min_points = 3 if overlay_kind == "region" else 2
+        if len(normalized) < min_points:
+            raise ValueError("Недостаточно точек для сохранения геометрии.")
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        color_value = (color or "").strip() or "#6cb5ff"
+        title_value = (title or "").strip()
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO map_overlays (map_id, kind, points, color, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    map_id,
+                    overlay_kind,
+                    json.dumps([[x, y] for x, y in normalized], ensure_ascii=False),
+                    color_value,
+                    title_value,
+                    now,
+                    now,
+                ),
+            )
+        return MapOverlayData(
+            id=cur.lastrowid,
+            map_id=map_id,
+            kind=overlay_kind,
+            points=normalized,
+            color=color_value,
+            title=title_value,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def update_map_overlay(
+        self,
+        overlay_id: int,
+        kind: str,
+        points: List[Tuple[float, float]],
+        color: str,
+        title: str = "",
+    ) -> MapOverlayData:
+        """Обновляет геометрию карты и возвращает актуальную запись."""
+        overlay_kind = (kind or "").strip().lower()
+        if overlay_kind not in {"region", "path"}:
+            raise ValueError("Некорректный тип геометрии карты.")
+        normalized: List[Tuple[float, float]] = []
+        for pair in points or []:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                continue
+            try:
+                normalized.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError):
+                continue
+        min_points = 3 if overlay_kind == "region" else 2
+        if len(normalized) < min_points:
+            raise ValueError("Недостаточно точек для сохранения геометрии.")
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        color_value = (color or "").strip() or "#6cb5ff"
+        title_value = (title or "").strip()
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE map_overlays
+                SET kind = ?, points = ?, color = ?, title = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (
+                    overlay_kind,
+                    json.dumps([[x, y] for x, y in normalized], ensure_ascii=False),
+                    color_value,
+                    title_value,
+                    now,
+                    overlay_id,
+                ),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, map_id, kind, points, color, title, created_at, updated_at
+            FROM map_overlays
+            WHERE id = ?;
+            """,
+            (overlay_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Геометрия карты не найдена.")
+        parsed = []
+        try:
+            raw_points = json.loads(row["points"] or "[]")
+        except json.JSONDecodeError:
+            raw_points = []
+        for pair in raw_points:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                continue
+            try:
+                parsed.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError):
+                continue
+        return MapOverlayData(
+            id=row["id"],
+            map_id=row["map_id"],
+            kind=row["kind"],
+            points=parsed,
+            color=row["color"] or "#6cb5ff",
+            title=row["title"] or "",
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def delete_map_overlay(self, overlay_id: int) -> None:
+        """Удаляет геометрию карты."""
+        with self._conn:
+            self._conn.execute("DELETE FROM map_overlays WHERE id = ?;", (overlay_id,))
 
     def fetch_notes(self) -> List[NoteData]:
         """Возвращает список всех заметок."""
