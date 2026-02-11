@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
+from mindnavigator.ui.modals import show_dialog_standard
 
 
 DOC_EXTENSIONS = {".doc", ".docx", ".txt"}
@@ -397,7 +398,7 @@ class ObjectEditDialog(QDialog):
 
     def _import_description(self) -> None:
         dialog = CloudDocPickerDialog(self)
-        if dialog.exec() != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.Accepted:
             return
         rel_path = dialog.selected_rel_path()
         if not rel_path:
@@ -932,7 +933,7 @@ class ObjectWorkspace(QWidget):
 
     def _add_object(self) -> None:
         dialog = ObjectEditDialog(self)
-        if dialog.exec() != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.Accepted:
             return
         values = dialog.values()
         try:
@@ -951,7 +952,7 @@ class ObjectWorkspace(QWidget):
         if not obj:
             return
         dialog = ObjectEditDialog(self, initial=obj)
-        if dialog.exec() != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.Accepted:
             return
         values = dialog.values()
         try:

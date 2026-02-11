@@ -1,8 +1,9 @@
 from .attach_file_select_nav import AttachFileSelectNav
+from .base_dialog import MNBaseDialog
 from .entity_picker_dialog import ChipItem, EntityPickerDialog
 from .map_label_edit_dialog import MapLabelEditDialog
 
-__all__ = ["AttachFileSelectNav", "ChipItem", "EntityPickerDialog", "MapLabelEditDialog"]
+__all__ = ["AttachFileSelectNav", "ChipItem", "EntityPickerDialog", "MNBaseDialog", "MapLabelEditDialog"]
 """Диалоги интерфейса MindNavigator.
 
 Входные данные:

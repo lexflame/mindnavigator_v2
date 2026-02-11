@@ -45,11 +45,20 @@ class ModalOverlay(QFrame):
 
 
 def exec_with_overlay(dialog: QDialog, parent: QWidget | None) -> int:
-    """Запускает диалог с затемнением родительского окна."""
+    return show_dialog_standard(dialog, parent)
+
+
+def show_dialog_standard(dialog: QDialog, parent: QWidget | None) -> int:
+    """Runs dialog with app backdrop and optional positioning hook."""
     overlay_parent = parent.window() if parent else None
     overlay = ModalOverlay(overlay_parent) if overlay_parent else None
     if overlay is not None:
+        dialog.accepted.connect(overlay.deleteLater)
+        dialog.rejected.connect(overlay.deleteLater)
         dialog.finished.connect(overlay.deleteLater)
+    center_fn = getattr(dialog, "center_on_active_parent", None)
+    if callable(center_fn):
+        center_fn(parent)
     return dialog.exec()
 
 
@@ -119,3 +128,4 @@ class ConfirmDialog(QDialog):
                 background: #34363b;
             }}
         """)
+

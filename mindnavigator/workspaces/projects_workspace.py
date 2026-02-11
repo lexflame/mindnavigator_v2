@@ -29,7 +29,7 @@ from mindnavigator.storage import (
     validate_area,
     validate_title,
 )
-from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
@@ -593,7 +593,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
             return
 
         model = index.model()
@@ -654,7 +654,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
             return
 
         if hasattr(model, "delete_area"):
@@ -1101,7 +1101,7 @@ class ProjectsWorkspace(QWidget):
     def _on_create_project(self):
         """Открывает диалог создания проекта."""
         dialog = ProjectEditDialog(parent=self)
-        if dialog.exec() != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.Accepted:
             return
 
         values = dialog.values()

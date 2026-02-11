@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import CloudFileData, TaskAttachmentData, get_database, normalize_priority, validate_time_text
-from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
@@ -1304,7 +1304,7 @@ class TaskDetailsDialog(QDialog):
                 border-radius: 6px;
             }}
         """)
-        exec_with_overlay(dialog, self)
+        show_dialog_standard(dialog, self)
 
     def _open_file_info(self, file_item) -> None:
         description = self._cloud_file_link_text(file_item)
@@ -1335,7 +1335,7 @@ class TaskDetailsDialog(QDialog):
             start_index=start_index,
             cloud_root=Path(cloud_root),
         )
-        exec_with_overlay(dialog, self)
+        show_dialog_standard(dialog, self)
 
 
 class TaskEditDialog(QDialog):
@@ -1946,7 +1946,7 @@ class TaskEditDialog(QDialog):
                 border-radius: 6px;
             }}
         """)
-        exec_with_overlay(dialog, self)
+        show_dialog_standard(dialog, self)
 
     def _open_file_info(self, file_item) -> None:
         description = self._cloud_file_link_text(file_item)
@@ -1977,7 +1977,7 @@ class TaskEditDialog(QDialog):
             start_index=start_index,
             cloud_root=Path(cloud_root),
         )
-        exec_with_overlay(dialog, self)
+        show_dialog_standard(dialog, self)
 
     def values(self):
         """Возвращает текущие значения формы в виде словаря."""
@@ -2465,7 +2465,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
             return
 
         m = index.model()
@@ -2512,7 +2512,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = TaskDetailsDialog(task, parent=parent)
-        exec_with_overlay(dialog, parent)
+        show_dialog_standard(dialog, parent)
 
     def _prio_color(self, p: str) -> QColor:
         """Возвращает цвет для приоритета."""
