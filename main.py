@@ -19,6 +19,7 @@ from mindnavigator.resources import resource_path
 from mindnavigator.ui.splash import show_splash
 from mindnavigator.main_window import MainWindow
 from mindnavigator.storage import get_database
+from mindnavigator.ui.dialogs.frameless_patch import enable_frameless_qdialogs
 from mindnavigator.ui.styles import APP_STYLESHEET
 
 
@@ -59,6 +60,7 @@ def main() -> None:
     # Отключаем использование высокоразрешающих пиктограмм (для слабых GPU/старых драйверов)
     # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
 
+    enable_frameless_qdialogs()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
