@@ -24,7 +24,15 @@ from PySide6.QtWidgets import (
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea
 )
 
-from mindnavigator.storage import CloudFileData, TaskAttachmentData, get_database, normalize_priority, validate_time_text
+from mindnavigator.storage import (
+    CloudFileData,
+    TaskAttachmentData,
+    get_database,
+    normalize_priority,
+    validate_area,
+    validate_time_text,
+    validate_title,
+)
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
@@ -94,6 +102,101 @@ class TaskRoles:
     SubtaskDepth = Qt.UserRole + 16
     ProjectArea = Qt.UserRole + 17
     AttachmentSummary = Qt.UserRole + 18
+
+
+class QuickProjectCreateDialog(QDialog):
+    def __init__(self, parent=None):
+        """Создает краткий диалог создания проекта."""
+        super().__init__(parent)
+        self.setWindowTitle("Создание проекта")
+        self.setObjectName("QuickProjectCreateDialog")
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
+        title_label = QLabel("Создание проекта")
+        title_label.setObjectName("DialogTitle")
+        layout.addWidget(title_label)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
+
+        self.area_edit = QComboBox()
+        self.area_edit.setEditable(True)
+        self.area_edit.addItems(get_database().project_areas())
+        self.area_edit.setCurrentText("")
+        if self.area_edit.lineEdit():
+            self.area_edit.lineEdit().setPlaceholderText("Область проекта")
+
+        self.title_edit = QLineEdit()
+        self.title_edit.setPlaceholderText("Название проекта")
+
+        self.updated_edit = QDateEdit()
+        self.updated_edit.setCalendarPopup(True)
+        self.updated_edit.setDisplayFormat("dd.MM.yyyy")
+        self.updated_edit.setKeyboardTracking(False)
+        self.updated_edit.setDate(QDate.currentDate())
+
+        self.priority_edit = QComboBox()
+        self.priority_edit.addItems(["Low", "Medium", "High"])
+        self.priority_edit.setCurrentText("Medium")
+
+        form.addRow("Область", self.area_edit)
+        form.addRow("Название", self.title_edit)
+        form.addRow("Дата", self.updated_edit)
+        form.addRow("Приоритет", self.priority_edit)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setStyleSheet(f"""
+            QDialog#QuickProjectCreateDialog {{
+                {MATH_PHYS_BACKGROUND}
+            }}
+
+            QDialog#QuickProjectCreateDialog QDialogButtonBox QPushButton {{
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
+                padding: 8px 14px;
+                border-radius: 6px;
+                min-width: 90px;
+            }}
+
+            QDialog#QuickProjectCreateDialog QDialogButtonBox QPushButton:hover {{
+                background: #34363b;
+            }}
+        """)
+
+    def _on_accept(self):
+        """Проверяет ввод перед созданием проекта."""
+        try:
+            validate_area(self.area_edit.currentText())
+            validate_title(self.title_edit.text(), field_name="Название проекта")
+            normalize_priority(self.priority_edit.currentText())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        self.accept()
+
+    def values(self) -> dict:
+        """Возвращает значения формы проекта."""
+        qd = self.updated_edit.date()
+        return {
+            "area": self.area_edit.currentText().strip(),
+            "title": self.title_edit.text().strip(),
+            "updated": date(qd.year(), qd.month(), qd.day()),
+            "priority": self.priority_edit.currentText().strip() or "Medium",
+        }
 
 
 class TasksModel(QAbstractListModel):
@@ -1369,25 +1472,21 @@ class TaskEditDialog(QDialog):
         self.description_edit.setMinimumHeight(90)
 
         self.project_edit = QComboBox()
-        self.project_edit.addItem("Без проекта", None)
-        projects = get_database().fetch_projects()
-        priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
-        projects.sort(
-            key=lambda project: (
-                project.area.lower(),
-                priority_order.get(normalize_priority(project.priority), 4),
-                project.title.lower(),
-                project.id,
-            )
-        )
-        for project in projects:
-            if project.archived:
-                continue
-            self.project_edit.addItem(f"{project.area} · {project.title}", project.id)
-        if task.project_id is not None:
-            idx = self.project_edit.findData(task.project_id)
-            if idx >= 0:
-                self.project_edit.setCurrentIndex(idx)
+        self._populate_projects(task.project_id)
+
+        self.project_create_btn = QToolButton()
+        self.project_create_btn.setText("+")
+        self.project_create_btn.setFixedSize(24, 24)
+        self.project_create_btn.setCursor(Qt.PointingHandCursor)
+        self.project_create_btn.setToolTip("Создать проект")
+        self.project_create_btn.clicked.connect(self._open_project_create_dialog)
+
+        project_row = QWidget()
+        project_row_layout = QHBoxLayout(project_row)
+        project_row_layout.setContentsMargins(0, 0, 0, 0)
+        project_row_layout.setSpacing(6)
+        project_row_layout.addWidget(self.project_create_btn)
+        project_row_layout.addWidget(self.project_edit, 1)
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
@@ -1434,7 +1533,7 @@ class TaskEditDialog(QDialog):
 
         form.addRow("Название", self.title_edit)
         form.addRow("Описание", self.description_edit)
-        form.addRow("Проект", self.project_edit)
+        form.addRow("Проект", project_row)
         form.addRow("Дата и время", time_block)
         form.addRow("Приоритет", self.priority_edit)
         form.addRow("", self.done_edit)
@@ -1615,6 +1714,48 @@ class TaskEditDialog(QDialog):
                 padding: 4px;
             }}
         """)
+
+    def _populate_projects(self, selected_id: Optional[int] = None) -> None:
+        self.project_edit.blockSignals(True)
+        self.project_edit.clear()
+        self.project_edit.addItem("Без проекта", None)
+        projects = get_database().fetch_projects()
+        priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
+        projects.sort(
+            key=lambda project: (
+                project.area.lower(),
+                priority_order.get(normalize_priority(project.priority), 4),
+                project.title.lower(),
+                project.id,
+            )
+        )
+        for project in projects:
+            if project.archived:
+                continue
+            self.project_edit.addItem(f"{project.area} · {project.title}", project.id)
+        if selected_id is not None:
+            idx = self.project_edit.findData(selected_id)
+            if idx >= 0:
+                self.project_edit.setCurrentIndex(idx)
+        self.project_edit.blockSignals(False)
+
+    def _open_project_create_dialog(self) -> None:
+        dialog = QuickProjectCreateDialog(parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+            return
+        values = dialog.values()
+        try:
+            created = get_database().create_project(
+                area=values["area"],
+                title=values["title"],
+                updated=values["updated"],
+                priority=values["priority"],
+                archived=False,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        self._populate_projects(created.id)
 
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
