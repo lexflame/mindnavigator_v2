@@ -635,6 +635,15 @@ class Marker:
     image_path: str = ""
 
 
+@dataclass(frozen=True)
+class MapOverlay:
+    id: int
+    kind: str  # "region" | "path"
+    points: List[QPointF]
+    color: QColor
+    title: str = ""
+
+
 class MapImagePreviewDialog(QDialog):
     def __init__(
         self,
@@ -822,6 +831,9 @@ class MapCanvas(QWidget):
         self._maps_by_id = {}
         self._marker_items_by_id = {}
         self._marker_icon_cache: Dict[tuple[str, int], QPixmap] = {}
+        self._overlays: List[MapOverlay] = []
+        self._next_overlay_id = 1
+        self._overlay_draft_points: List[QPointF] = []
         # Инициализируем стартовый набор маркеров.
         self._seed_markers()
 
@@ -855,6 +867,13 @@ class MapCanvas(QWidget):
     def markers(self) -> List[Marker]:
         # Возвращаем копию списка маркеров.
         return list(self._markers)
+
+    def set_overlays(self, overlays: List[MapOverlay]) -> None:
+        # Полностью заменяем список геометрий карты.
+        self._overlays = list(overlays)
+        self._next_overlay_id = max((item.id for item in self._overlays), default=0) + 1
+        self._overlay_draft_points = []
+        self.update()
 
     def set_attachment_sources(self, tasks, projects, notes, objects, files, maps, markers) -> None:
         # Сохраняем источники данных и создаем словари быстрого доступа.
@@ -1027,6 +1046,8 @@ class MapCanvas(QWidget):
         # Переключаем активный инструмент на канве.
         self._tool = tool
         self._preview_pos = None
+        if tool not in (MapTool.ADD_REGION, MapTool.MEASURE):
+            self._overlay_draft_points = []
         self.update()
 
     def tool(self) -> MapTool:
@@ -1098,9 +1119,12 @@ class MapCanvas(QWidget):
         self._draw_background(painter)
         if self._grid_enabled:
             self._draw_grid(painter)
+        self._draw_overlays(painter)
         self._draw_markers(painter)
         if self._preview_pos and self._tool == MapTool.ADD_MARKER:
             self._draw_preview(painter)
+        if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
+            self._draw_overlay_draft(painter)
 
         painter.restore()
 
@@ -1205,6 +1229,45 @@ class MapCanvas(QWidget):
             # При активном режиме изменения размера рисуем ручки.
             if self._resize_marker_id == marker.id:
                 self._draw_resize_handles(painter, marker)
+
+    def _draw_overlays(self, painter: QPainter) -> None:
+        # Отрисовываем полигоны областей и пути сообщения.
+        for overlay in self._overlays:
+            if len(overlay.points) < 2:
+                continue
+            pen = QPen(overlay.color, max(1.0, 2.0 / self._scale))
+            painter.setPen(pen)
+            if overlay.kind == "region":
+                poly = QPolygonF(overlay.points)
+                fill = QColor(overlay.color)
+                fill.setAlpha(55)
+                painter.setBrush(fill)
+                painter.drawPolygon(poly)
+            else:
+                painter.setBrush(Qt.NoBrush)
+                painter.drawPolyline(QPolygonF(overlay.points))
+
+    def _draw_overlay_draft(self, painter: QPainter) -> None:
+        # Отрисовываем черновую линию/область при режиме рисования.
+        if not self._overlay_draft_points:
+            return
+        preview_color = QColor("#67b9ff") if self._tool == MapTool.MEASURE else QColor("#f2c26d")
+        pen = QPen(preview_color, max(1.0, 2.0 / self._scale))
+        pen.setStyle(Qt.DashLine)
+        painter.setPen(pen)
+        if len(self._overlay_draft_points) == 1:
+            p = self._overlay_draft_points[0]
+            painter.drawEllipse(p, 4.0 / self._scale, 4.0 / self._scale)
+            return
+        poly = QPolygonF(self._overlay_draft_points)
+        if self._tool == MapTool.ADD_REGION and len(self._overlay_draft_points) >= 3:
+            fill = QColor(preview_color)
+            fill.setAlpha(40)
+            painter.setBrush(fill)
+            painter.drawPolygon(poly)
+        else:
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPolyline(poly)
 
     def _draw_preview(self, painter: QPainter) -> None:
         # Предпросмотр размещения нового маркера.
@@ -1483,6 +1546,12 @@ class MapCanvas(QWidget):
     def mousePressEvent(self, event):
         # Обработка кликов мыши на канве.
         if event.button() == Qt.RightButton:
+            if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
+                if self._overlay_draft_points:
+                    self._finalize_overlay()
+                else:
+                    self._open_context_menu(event.pos())
+                return
             if event.modifiers() & Qt.ControlModifier:
                 # Ctrl + ПКМ — открыть карточку выбранного маркера.
                 world_pos = self._map_to_world(event.position())
@@ -1497,6 +1566,9 @@ class MapCanvas(QWidget):
             return
 
         if event.button() == Qt.LeftButton:
+            if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
+                self._append_overlay_point(self._map_to_world(event.position()))
+                return
             # ЛКМ — выбор, перемещение, добавление маркеров или панорамирование.
             world_pos = self._map_to_world(event.position())
             if self._resize_marker_id is not None:
@@ -1655,8 +1727,12 @@ class MapCanvas(QWidget):
             self._resize_dragging = False
 
     def mouseDoubleClickEvent(self, event):
-        # Двойной клик по маркеру — фокусируем и увеличиваем.
+        # Двойной клик по маркеру — фокусируем и увеличиваем. В режимах рисования завершает контур.
         if event.button() == Qt.LeftButton:
+            if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
+                self._append_overlay_point(self._map_to_world(event.position()))
+                self._finalize_overlay()
+                return
             world_pos = self._map_to_world(event.position())
             marker = self._marker_at(world_pos)
             if marker:
@@ -1665,6 +1741,37 @@ class MapCanvas(QWidget):
                 self._zoom_to_marker(marker)
                 return
         super().mouseDoubleClickEvent(event)
+
+    def _append_overlay_point(self, point: QPointF) -> None:
+        # Добавляем вершину чернового контура.
+        self._overlay_draft_points.append(point)
+        self.update()
+
+    def _finalize_overlay(self) -> None:
+        # Завершаем построение области/пути и переносим в список геометрий.
+        points = list(self._overlay_draft_points)
+        if self._tool == MapTool.ADD_REGION and len(points) >= 3:
+            overlay = MapOverlay(
+                id=self._next_overlay_id,
+                kind="region",
+                points=points,
+                color=QColor("#e2a84e"),
+                title=f"Область {self._next_overlay_id}",
+            )
+            self._next_overlay_id += 1
+            self._overlays.append(overlay)
+        elif self._tool == MapTool.MEASURE and len(points) >= 2:
+            overlay = MapOverlay(
+                id=self._next_overlay_id,
+                kind="path",
+                points=points,
+                color=QColor("#6cb5ff"),
+                title=f"Путь {self._next_overlay_id}",
+            )
+            self._next_overlay_id += 1
+            self._overlays.append(overlay)
+        self._overlay_draft_points = []
+        self.update()
 
     def wheelEvent(self, event):
         # Обрабатываем масштабирование и изменение размера маркера.
@@ -2370,7 +2477,7 @@ class MapEditorWorkspace(QWidget):
         self.btn_select = tool_button("fa5s.mouse-pointer", "Выбрать", MapTool.SELECT)
         self.btn_marker = tool_button("fa5s.map-marker-alt", "Добавить маркер", MapTool.ADD_MARKER)
         self.btn_region = tool_button("fa5s.draw-polygon", "Добавить регион", MapTool.ADD_REGION)
-        self.btn_measure = tool_button("fa5s.ruler", "Измерение", MapTool.MEASURE)
+        self.btn_measure = tool_button("fa5s.ruler", "Рисовать путь", MapTool.MEASURE)
         self.btn_grid = tool_button("fa5s.border-all", "Сетка", None)
         self.btn_grid.setCheckable(True)
         self.btn_grid.setChecked(True)
