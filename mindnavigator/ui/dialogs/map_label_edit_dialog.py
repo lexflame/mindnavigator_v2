@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
 )
 
 from mindnavigator.storage import get_database
@@ -652,9 +653,15 @@ class MapLabelEditDialog(QDialog):
 
         left = self._build_left_panel()
         right = self._build_right_panel(type_suggestions)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setObjectName("MapLabelFormScroll")
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setFrameShape(QFrame.NoFrame)
+        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.form_scroll.setWidget(right)
 
         body_layout.addWidget(left, 0)
-        body_layout.addWidget(right, 1)
+        body_layout.addWidget(self.form_scroll, 1)
         return body
 
     def _build_left_panel(self) -> QWidget:
@@ -719,7 +726,7 @@ class MapLabelEditDialog(QDialog):
         container.setObjectName("MapLabelFormContainer")
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         form_layout = QVBoxLayout(container)
-        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setContentsMargins(0, 0, 8, 0)
         form_layout.setSpacing(16)
 
         form_layout.addWidget(self._build_section_main(type_suggestions))
@@ -1043,6 +1050,36 @@ class MapLabelEditDialog(QDialog):
                 background: #202127;
                 border: 1px solid #2a2b2f;
                 border-radius: 10px;
+            }}
+            QScrollArea#MapLabelFormScroll {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollArea#MapLabelFormScroll > QWidget > QWidget {{
+                background: transparent;
+            }}
+            QScrollArea#MapLabelFormScroll QScrollBar:vertical {{
+                width: 10px;
+                margin: 2px;
+                background: transparent;
+            }}
+            QScrollArea#MapLabelFormScroll QScrollBar::handle:vertical {{
+                background: #3a3d44;
+                border-radius: 5px;
+                min-height: 28px;
+            }}
+            QScrollArea#MapLabelFormScroll QScrollBar::handle:vertical:hover {{
+                background: #4a4d56;
+            }}
+            QScrollArea#MapLabelFormScroll QScrollBar::add-line:vertical,
+            QScrollArea#MapLabelFormScroll QScrollBar::sub-line:vertical {{
+                height: 0px;
+                width: 0px;
+                background: transparent;
+            }}
+            QScrollArea#MapLabelFormScroll QScrollBar::add-page:vertical,
+            QScrollArea#MapLabelFormScroll QScrollBar::sub-page:vertical {{
+                background: transparent;
             }}
             QWidget#EntityChipFlow {{
                 background: transparent;
