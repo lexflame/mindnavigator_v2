@@ -8,6 +8,7 @@
 """
 
 from .projects_workspace import ProjectsWorkspace
+from .collections_workspace import CollectionsWorkspace
 from .maps_workspace import MapsListWorkspace
 from .notes_workspace import NoteWorkspace
 from .files_workspace import FileWorkspace
