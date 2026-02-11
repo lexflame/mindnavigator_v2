@@ -734,8 +734,8 @@ class ProjectEditDialog(QDialog):
         is_new = project is None
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
-        self.setMinimumWidth(460)
-        self.setMinimumHeight(300)
+        self.setProperty("dialog_category", "minimal_flex")
+        self.setFixedSize(560, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -865,7 +865,8 @@ class ProjectAreaEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Редактирование области")
         self.setObjectName("ProjectAreaEditDialog")
-        self.setMinimumWidth(420)
+        self.setProperty("dialog_category", "minimal_flex")
+        self.setFixedSize(560, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
