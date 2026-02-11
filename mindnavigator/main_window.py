@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import sys
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -46,6 +48,19 @@ from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, loa
 from .ui.styles import TITLEBAR_BACKGROUND
 
 
+if sys.platform == "win32":
+    class _WinMSG(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", ctypes.c_void_p),
+            ("message", ctypes.c_uint),
+            ("wParam", ctypes.c_size_t),
+            ("lParam", ctypes.c_size_t),
+            ("time", ctypes.c_uint),
+            ("pt_x", ctypes.c_long),
+            ("pt_y", ctypes.c_long),
+        ]
+
+
 class MainWindow(QMainWindow):
     """Главное окно приложения с кастомным заголовком и рабочими областями."""
 
@@ -60,6 +75,10 @@ class MainWindow(QMainWindow):
     MODE_FILES = "Файлы"
     MODE_OBJECTS = "Объекты"
     MODE_SETTINGS = "Настройки"
+    _TRAY_RESTORE_HOTKEY_ID = 0x4D4E57
+    _WM_HOTKEY = 0x0312
+    _MOD_CONTROL = 0x0002
+    _MOD_SHIFT = 0x0004
 
     def __init__(self):
         """Инициализирует окно, компоненты интерфейса и обработчики."""
@@ -96,6 +115,7 @@ class MainWindow(QMainWindow):
         self._wire_modes()
         self._init_tray()
         self._init_hotkeys()
+        self._register_system_restore_hotkey()
 
         # Включаем отслеживание мыши и фильтр событий для собственного ресайза.
         self.setMouseTracking(True)
@@ -103,6 +123,32 @@ class MainWindow(QMainWindow):
 
         # Выставляем стартовый режим.
         self.set_mode(self.MODE_TASKS)
+
+    def _register_system_restore_hotkey(self) -> None:
+        self._system_restore_hotkey_registered = False
+        if sys.platform != "win32":
+            return
+        try:
+            hwnd = int(self.winId())
+            result = ctypes.windll.user32.RegisterHotKey(
+                hwnd,
+                self._TRAY_RESTORE_HOTKEY_ID,
+                self._MOD_CONTROL | self._MOD_SHIFT,
+                ord("W"),
+            )
+            self._system_restore_hotkey_registered = bool(result)
+        except Exception:
+            self._system_restore_hotkey_registered = False
+
+    def _unregister_system_restore_hotkey(self) -> None:
+        if sys.platform != "win32":
+            return
+        if not getattr(self, "_system_restore_hotkey_registered", False):
+            return
+        try:
+            ctypes.windll.user32.UnregisterHotKey(int(self.winId()), self._TRAY_RESTORE_HOTKEY_ID)
+        finally:
+            self._system_restore_hotkey_registered = False
 
     def _init_tray(self):
         """Настраивает системный трей для сворачивания приложения."""
@@ -142,6 +188,9 @@ class MainWindow(QMainWindow):
                 self.showMaximized()
             else:
                 self.showNormal()
+                if not self._restore_geom.isNull():
+                    self.setGeometry(self._restore_geom)
+            self._was_maximized_before_minimize = False
         # Поднимаем окно поверх и синхронизируем состояние кнопки.
         self.raise_()
         self.activateWindow()
@@ -152,6 +201,12 @@ class MainWindow(QMainWindow):
         # Если трей не создан, выходим без действий.
         if self._tray_icon is None:
             return
+        self._was_maximized_before_minimize = self._was_maximized_before_minimize or self.isMaximized()
+        if not self._was_maximized_before_minimize:
+            geom = self.normalGeometry() if self.isMinimized() else self.geometry()
+            if not geom.isNull() and geom.width() > 0 and geom.height() > 0:
+                self._restore_geom = QRect(geom)
+        self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
         # Прячем окно и показываем уведомление.
         self.hide()
         self._tray_icon.showMessage(
@@ -227,6 +282,9 @@ class MainWindow(QMainWindow):
 
     def _hotkey_create_task(self) -> None:
         self.set_mode(self.MODE_TASKS)
+        if hasattr(self.page_tasks, "open_create_task_dialog"):
+            self.page_tasks.open_create_task_dialog()
+            return
         if hasattr(self.page_tasks, "new_title"):
             self.page_tasks.new_title.setFocus()
 
@@ -567,13 +625,36 @@ class MainWindow(QMainWindow):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
         # Передаем событие базовому классу и обновляем ширину панелей.
         super().resizeEvent(event)
+        if not self.isMaximized() and not self.isMinimized() and self.isVisible():
+            self._restore_geom = self.geometry()
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
 
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if not self.isMaximized() and not self.isMinimized() and self.isVisible():
+            self._restore_geom = self.geometry()
+
     def closeEvent(self, event):
+        self._unregister_system_restore_hotkey()
         if hasattr(self, "hotkey_store") and hasattr(self, "hotkeys"):
             self.hotkey_store.save(self.hotkeys)
         super().closeEvent(event)
+
+    def nativeEvent(self, eventType, message):
+        if (
+            sys.platform == "win32"
+            and getattr(self, "_system_restore_hotkey_registered", False)
+            and eventType in {"windows_generic_MSG", "windows_dispatcher_MSG"}
+        ):
+            try:
+                msg = ctypes.cast(message, ctypes.POINTER(_WinMSG)).contents
+            except Exception:
+                return super().nativeEvent(eventType, message)
+            if msg.message == self._WM_HOTKEY and int(msg.wParam) == self._TRAY_RESTORE_HOTKEY_ID:
+                self._restore_from_tray()
+                return True, 0
+        return super().nativeEvent(eventType, message)
 
     def changeEvent(self, event):
         """Обрабатывает сворачивание окна для отправки в трей."""

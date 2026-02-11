@@ -371,14 +371,23 @@ class TasksModel(QAbstractListModel):
         self._priority_filter = priority
         self._rebuild()
 
-    def add_task(self, title: str, day: date, time_text: str, priority: str):
+    def add_task(
+        self,
+        title: str,
+        day: date,
+        time_text: str,
+        priority: str,
+        description: str = "",
+        project_id: Optional[int] = None,
+    ):
         """Добавляет новую задачу и пересобирает текущий список."""
         task = self._db.create_task(
             title=title,
-            description="",
+            description=description,
             day=day,
             time_text=time_text,
             priority=priority,
+            project_id=project_id,
             parent_id=None,
         )
         self._all_rows.append(
@@ -2163,6 +2172,40 @@ class TaskEditDialog(QDialog):
         }
 
 
+class TaskCreateDialog(TaskEditDialog):
+    _SIZE_SETTING_KEY = "ui.task_create_dialog_size"
+
+    def __init__(self, parent=None):
+        task = TaskRow(
+            id=0,
+            day=date.today(),
+            time_text="",
+            title="",
+            description="",
+            priority="Medium",
+            done=False,
+            project_id=None,
+            project_title="",
+            project_area="",
+            parent_id=None,
+        )
+        super().__init__(task, parent=parent)
+        self.setWindowTitle("Создание задачи")
+        title_labels = self.findChildren(QLabel, "DialogTitle")
+        if title_labels:
+            title_labels[0].setText("Создание задачи")
+        self.done_edit.hide()
+        attachments_frame = self.findChild(QFrame, "TaskAttachments")
+        if attachments_frame is not None:
+            attachments_frame.hide()
+        buttons = self.findChild(QDialogButtonBox)
+        if buttons is not None:
+            save_button = buttons.button(QDialogButtonBox.Save)
+            if save_button is not None:
+                save_button.setText("Создать")
+        self.title_edit.setFocus()
+
+
 class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
@@ -3133,6 +3176,23 @@ class TasksWorkspace(BaseWorkspace):
 
         self.new_title.clear()
         self.new_title.setFocus()
+
+    def open_create_task_dialog(self) -> None:
+        dialog = TaskCreateDialog(parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+            return
+        values = dialog.values()
+        try:
+            self.model.add_task(
+                title=values["title"],
+                description=values["description"],
+                day=values["day"],
+                time_text=values["time_text"],
+                priority=values["priority"],
+                project_id=values["project_id"],
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:

@@ -21,7 +21,7 @@
       "id": "app.tray.restore",
       "title": "Restore from tray",
       "description": "Restore the main window from the system tray.",
-      "default_sequence": "Ctrl+Shift+X",
+      "default_sequence": "Ctrl+Shift+W",
       "contexts": ["Global"],
       "allow_in_text_inputs": true
     },
