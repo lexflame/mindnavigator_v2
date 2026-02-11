@@ -110,7 +110,8 @@ class QuickProjectCreateDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Создание проекта")
         self.setObjectName("QuickProjectCreateDialog")
-        self.setMinimumWidth(420)
+        self.setProperty("dialog_category", "minimal_flex")
+        self.setFixedSize(560, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
