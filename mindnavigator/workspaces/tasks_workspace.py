@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import Dict, List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QSettings
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea, QSplitter
 )
 
 from mindnavigator.storage import CloudFileData, TaskAttachmentData, get_database, normalize_priority, validate_time_text
@@ -1339,6 +1339,10 @@ class TaskDetailsDialog(QDialog):
 
 
 class TaskEditDialog(QDialog):
+    # Stable UI state keys for task edit dialog persistence.
+    _SETTINGS_GEOMETRY_KEY = "ui/task_edit_form/geometry"
+    _SETTINGS_SPLITTER_SIZES_KEY = "ui/task_edit_form/splitter_sizes"
+
     def __init__(self, task: TaskRow, parent=None):
         """Создает диалог редактирования задачи."""
         super().__init__(parent)
@@ -1346,6 +1350,9 @@ class TaskEditDialog(QDialog):
         self.setObjectName("TaskEditDialog")
         self.setMinimumWidth(460)
         self.setMinimumHeight(420)
+        self._settings = QSettings()
+        self._geometry_restored = False
+        self._was_shown = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1475,6 +1482,7 @@ class TaskEditDialog(QDialog):
 
         self._load_attachment_sources()
         self._refresh_attachments()
+        self._restore_splitter_sizes()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
@@ -1616,6 +1624,21 @@ class TaskEditDialog(QDialog):
             }}
         """)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._was_shown = True
+        if not self._geometry_restored:
+            geometry = self._settings.value(self._SETTINGS_GEOMETRY_KEY, None)
+            if geometry is not None:
+                self.restoreGeometry(geometry)
+            self._geometry_restored = True
+
+    def closeEvent(self, event):
+        if self._was_shown:
+            self._settings.setValue(self._SETTINGS_GEOMETRY_KEY, self.saveGeometry())
+            self._save_splitter_sizes()
+        super().closeEvent(event)
+
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
         title = self.title_edit.text().strip()
@@ -1635,6 +1658,35 @@ class TaskEditDialog(QDialog):
         if not self.time_toggle.isChecked():
             return ""
         return self.time_edit.time().toString("HH:mm")
+
+    def _restore_splitter_sizes(self) -> None:
+        splitter = self._first_splitter()
+        if splitter is None:
+            return
+        raw_sizes = self._settings.value(self._SETTINGS_SPLITTER_SIZES_KEY, "")
+        if not raw_sizes:
+            return
+        if isinstance(raw_sizes, str):
+            try:
+                payload = json.loads(raw_sizes)
+            except json.JSONDecodeError:
+                return
+        elif isinstance(raw_sizes, list):
+            payload = raw_sizes
+        else:
+            return
+        if isinstance(payload, list) and payload and all(isinstance(size, int) for size in payload):
+            splitter.setSizes(payload)
+
+    def _save_splitter_sizes(self) -> None:
+        splitter = self._first_splitter()
+        if splitter is None:
+            return
+        self._settings.setValue(self._SETTINGS_SPLITTER_SIZES_KEY, json.dumps(splitter.sizes()))
+
+    def _first_splitter(self) -> Optional[QSplitter]:
+        splitters = self.findChildren(QSplitter)
+        return splitters[0] if splitters else None
 
     def _load_attachment_sources(self) -> None:
         notes = self._db.fetch_notes()
