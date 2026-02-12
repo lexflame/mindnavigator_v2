@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QMessageBox,
     QFileDialog,
+    QInputDialog,
     QSplitter,
     QTabWidget,
     QTableWidget,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QDialog,
+    QMenu,
 )
 from PySide6.QtCore import QUrl
 
@@ -43,6 +45,7 @@ from mindnavigator.shop_parsing import ShopParseService
 from mindnavigator.shop_parsers import build_default_parsers
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.dialogs.purchase_add_dialog import PurchaseAddByUrlDialog
+from mindnavigator.ui.dialogs.purchase_edit_dialog import PurchaseEditDialog
 from mindnavigator.ui.dialogs.purchase_compare_dialog import PurchaseCompareDialog
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
@@ -101,6 +104,21 @@ class PurchasesWorkspace(BaseWorkspace):
         self.category_tree.setHeaderHidden(True)
         self.category_tree.setObjectName("PurchasesCategoryTree")
         self.category_tree.itemSelectionChanged.connect(self._on_category_selected)
+        category_controls = QHBoxLayout()
+        self.category_add_btn = QToolButton()
+        self.category_add_btn.setText("Добавить")
+        self.category_add_btn.setIcon(qta.icon("fa5s.plus", color="#cfcfcf"))
+        self.category_rename_btn = QToolButton()
+        self.category_rename_btn.setText("Переименовать")
+        self.category_rename_btn.setIcon(qta.icon("fa5s.edit", color="#cfcfcf"))
+        self.category_delete_btn = QToolButton()
+        self.category_delete_btn.setText("Удалить")
+        self.category_delete_btn.setIcon(qta.icon("fa5s.trash", color="#cfcfcf"))
+        category_controls.addWidget(self.category_add_btn)
+        category_controls.addWidget(self.category_rename_btn)
+        category_controls.addWidget(self.category_delete_btn)
+        category_controls.addStretch(1)
+        left_layout.addLayout(category_controls)
         left_layout.addWidget(self.category_tree, 1)
 
         splitter.addWidget(left_panel)
@@ -124,12 +142,14 @@ class PurchasesWorkspace(BaseWorkspace):
             ["Товар", "Категория", "Лучшая цена", "Источники", "Актуальность"]
         )
         self.items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.items_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.items_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.items_table.horizontalHeader().setStretchLastSection(True)
         self.items_table.verticalHeader().setVisible(False)
         self.items_table.setSortingEnabled(True)
         self.items_table.itemSelectionChanged.connect(self._on_item_selected)
+        self.items_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.items_table.customContextMenuRequested.connect(self._show_items_context_menu)
         center_layout.addWidget(self.items_table, 1)
 
         splitter.addWidget(center_panel)
@@ -236,6 +256,7 @@ class PurchasesWorkspace(BaseWorkspace):
         self.source_props_table.horizontalHeader().setStretchLastSection(True)
         self.source_props_table.verticalHeader().setVisible(False)
         self.source_props_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.source_props_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         source_props_layout.addWidget(self.source_props_table, 1)
         props_split.addWidget(source_props_block)
 
@@ -345,10 +366,23 @@ class PurchasesWorkspace(BaseWorkspace):
         self.wishlist_add_item_btn.clicked.connect(self._add_item_to_wishlist)
         self.wishlist_combo.currentIndexChanged.connect(self._load_wishlist_items)
         self._load_wishlists()
+        self.category_add_btn.clicked.connect(self._add_category)
+        self.category_rename_btn.clicked.connect(self._rename_category)
+        self.category_delete_btn.clicked.connect(self._delete_category)
 
         self.setStyleSheet("""
             QWidget#PurchasesWorkspace { background: #16171a; }
             QWidget#PurchasesWorkspace QLabel { color: #cfcfcf; }
+            QWidget#PurchasesWorkspace QTableWidget,
+            QWidget#PurchasesWorkspace QTableWidget QLineEdit,
+            QWidget#PurchasesWorkspace QTableWidget QAbstractItemView,
+            QWidget#PurchasesWorkspace QTreeWidget,
+            QWidget#PurchasesWorkspace QTreeWidget QAbstractItemView,
+            QWidget#PurchasesWorkspace QComboBox,
+            QWidget#PurchasesWorkspace QLineEdit,
+            QWidget#PurchasesWorkspace QPlainTextEdit {
+                color: #cfcfcf;
+            }
             QWidget#PurchasesWorkspace QWidget#WorkspaceToolbar,
             QWidget#PurchasesWorkspace QWidget#WorkspaceSearch,
             QWidget#PurchasesWorkspace QWidget#WorkspaceFilters {
@@ -362,8 +396,9 @@ class PurchasesWorkspace(BaseWorkspace):
                 color: #cfcfcf;
                 background: #2a2b2f;
                 border: 1px solid #3a3b40;
-                padding: 6px 10px;
+                padding: 8px 12px;
                 border-radius: 6px;
+                min-height: 28px;
             }
             QWidget#PurchasesWorkspace QToolButton:hover { background: #34363b; }
             QWidget#PurchasesWorkspace QLineEdit,
@@ -374,6 +409,9 @@ class PurchasesWorkspace(BaseWorkspace):
                 border: 1px solid #2a2b2f;
                 padding: 6px 8px;
                 border-radius: 6px;
+            }
+            QWidget#PurchasesWorkspace QCheckBox {
+                color: #cfcfcf;
             }
             QTreeWidget#PurchasesCategoryTree {
                 background: #16171a;
@@ -387,6 +425,21 @@ class PurchasesWorkspace(BaseWorkspace):
                 border: 1px solid #2a2b2f;
                 border-radius: 8px;
                 color: #cfcfcf;
+            }
+            QTableWidget::horizontalHeader {
+                background: #2b2f36;
+            }
+            QHeaderView::section {
+                color: #000000;
+                background: #2b2f36;
+                border: 1px solid #3a3b40;
+                padding: 6px;
+            }
+            QTableWidget::item:hover {
+                background: #23252b;
+            }
+            QTableWidget::item:selected {
+                background: #2b2f36;
             }
             QTabWidget#PurchasesCardTabs::pane {
                 border: 1px solid #2a2b2f;
@@ -413,6 +466,13 @@ class PurchasesWorkspace(BaseWorkspace):
                 left: 8px;
                 padding: 0 4px 0 4px;
             }
+            QLineEdit[readOnly="true"],
+            QPlainTextEdit[readOnly="true"] {
+                background: #1c1d22;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }
         """)
 
     def create_actions(self) -> dict[str, QAction]:
@@ -422,6 +482,12 @@ class PurchasesWorkspace(BaseWorkspace):
         action_refresh = QAction("Обновить данные", self)
         action_refresh.setIcon(qta.icon("fa5s.sync", color="#cfcfcf"))
         action_refresh.triggered.connect(self._refresh_sources_bulk)
+        action_edit = QAction("Редактировать", self)
+        action_edit.setIcon(qta.icon("fa5s.edit", color="#cfcfcf"))
+        action_edit.triggered.connect(self._edit_selected_item)
+        action_delete = QAction("Удалить товар", self)
+        action_delete.setIcon(qta.icon("fa5s.trash", color="#cfcfcf"))
+        action_delete.triggered.connect(self._delete_selected_item)
         action_compare = QAction("В сравнение", self)
         action_compare.setIcon(qta.icon("fa5s.balance-scale", color="#cfcfcf"))
         action_compare.triggered.connect(self._open_compare_dialog)
@@ -440,6 +506,8 @@ class PurchasesWorkspace(BaseWorkspace):
         return {
             "add_url": action_add,
             "refresh": action_refresh,
+            "edit": action_edit,
+            "delete": action_delete,
             "compare": action_compare,
             "wishlist": action_wishlist,
             "export": action_export,
@@ -447,19 +515,36 @@ class PurchasesWorkspace(BaseWorkspace):
             "stop": action_stop,
         }
 
+    def get_selection(self):
+        return self._current_item_id
+
     def _open_add_url_dialog(self) -> None:
         dialog = PurchaseAddByUrlDialog(self._db, self)
-        if exec_with_overlay(dialog, self) != dialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
             return
         result = dialog.result_payload()
         if result is None:
             return
-        self._add_item_row(result.item.title, "—", "—", "1", "только что", item_id=result.item.id)
         self._load_categories()
+        self.refresh()
+        self._select_item_by_id(result.item.id)
         self._set_status("Товар добавлен")
 
     def _open_compare_dialog(self) -> None:
         selected_rows = self.items_table.selectionModel().selectedRows()
+        if len(selected_rows) == 2:
+            item_ids = []
+            for index in selected_rows:
+                item = self.items_table.item(index.row(), 0)
+                if item is None:
+                    continue
+                item_id = item.data(Qt.UserRole)
+                if item_id is not None:
+                    item_ids.append(int(item_id))
+            if len(item_ids) == 2:
+                dialog = PurchaseCompareDialog(self._db, item_ids=item_ids, parent=self)
+                dialog.exec()
+                return
         category_id = None
         if selected_rows:
             for index in selected_rows:
@@ -480,6 +565,96 @@ class PurchasesWorkspace(BaseWorkspace):
                 self._db.add_shop_compare_item(item_row.id, category_id)
         dialog = PurchaseCompareDialog(self._db, category_id=category_id, parent=self)
         dialog.exec()
+
+    def _edit_selected_item(self) -> None:
+        if self._current_item_id is None:
+            self._set_status("Товар не выбран")
+            return
+        item = self._db.get_shop_item(self._current_item_id)
+        if item is None:
+            self._set_status("Товар не найден")
+            return
+        dialog = PurchaseEditDialog(self._db, item, parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+            return
+        payload = dialog.payload()
+        self._db.update_shop_item(
+            item.id,
+            title=payload["title"],
+            category_id=payload["category_id"],
+            user_notes=payload["user_notes"],
+        )
+        self._load_categories()
+        self.refresh()
+        self._select_item_by_id(item.id)
+        self._set_status("Товар обновлён")
+
+    def _delete_selected_item(self) -> None:
+        if self._current_item_id is None:
+            self._set_status("Товар не выбран")
+            return
+        dialog = ConfirmDialog(
+            "Удалить товар",
+            "Удалить выбранный товар и все его источники?",
+            parent=self,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
+        )
+        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+            return
+        self._db.delete_shop_item(self._current_item_id)
+        self._current_item_id = None
+        self.refresh()
+        self._set_status("Товар удалён")
+
+    def _show_items_context_menu(self, pos) -> None:
+        index = self.items_table.indexAt(pos)
+        if not index.isValid():
+            return
+        row = index.row()
+        item = self.items_table.item(row, 0)
+        if item is None:
+            return
+        item_id = item.data(Qt.UserRole)
+        if item_id is None:
+            return
+        if not self.items_table.selectionModel().isRowSelected(row, self.items_table.rootIndex()):
+            self.items_table.selectRow(row)
+        menu = QMenu(self)
+        action_open = menu.addAction("Открыть источник")
+        action_edit = menu.addAction("Редактировать")
+        action_compare = menu.addAction("В сравнение")
+        action_compare_two = menu.addAction("Сравнить два")
+        action_wishlist = menu.addAction("В хотелки")
+        menu.addSeparator()
+        action_delete = menu.addAction("Удалить")
+        action = menu.exec(self.items_table.viewport().mapToGlobal(pos))
+        if action == action_open:
+            self._open_first_source_for_item(int(item_id))
+        elif action == action_edit:
+            self._current_item_id = int(item_id)
+            self._edit_selected_item()
+        elif action == action_compare:
+            self._current_item_id = int(item_id)
+            self._open_compare_dialog()
+        elif action == action_compare_two:
+            selected_rows = self.items_table.selectionModel().selectedRows()
+            if len(selected_rows) != 2:
+                self._set_status("Выберите 2 товара")
+                return
+            self._open_compare_dialog()
+        elif action == action_wishlist:
+            self._current_item_id = int(item_id)
+            self._open_wishlist_tab()
+        if action == action_delete:
+            self._delete_selected_item()
+
+    def _open_first_source_for_item(self, item_id: int) -> None:
+        sources = self._db.fetch_shop_sources(item_id)
+        if not sources:
+            self._set_status("Нет источников для открытия")
+            return
+        QDesktopServices.openUrl(QUrl(sources[0].url))
 
     def _open_wishlist_tab(self) -> None:
         if self.wishlist_tab is None:
@@ -548,13 +723,15 @@ class PurchasesWorkspace(BaseWorkspace):
             item = QTableWidgetItem(value)
             if col == 0 and item_id is not None:
                 item.setData(Qt.UserRole, item_id)
+            if col == 3 and value == "0":
+                item.setForeground(QColor("#ff6b6b"))
             if col == 4:
                 if freshness_color is not None:
                     item.setForeground(freshness_color)
                 if freshness_tip:
                     item.setToolTip(freshness_tip)
             self.items_table.setItem(row, col, item)
-        self.items_count.setText(str(self.items_table.rowCount()))
+        self.items_count.setText(f"{self.items_table.rowCount()} товаров")
 
     def refresh(self) -> None:
         self.items_table.setSortingEnabled(False)
@@ -580,12 +757,21 @@ class PurchasesWorkspace(BaseWorkspace):
                 freshness_tip=tip,
                 item_id=row["id"],
             )
-        self.items_count.setText(str(len(items)))
+        self.items_count.setText(f"{len(items)} товаров")
         self.items_table.setSortingEnabled(True)
         if items and self._current_item_id is None:
             self.items_table.selectRow(0)
         elif not items:
             self._clear_details()
+
+    def _select_item_by_id(self, item_id: int) -> None:
+        for row in range(self.items_table.rowCount()):
+            item = self.items_table.item(row, 0)
+            if item is None:
+                continue
+            if item.data(Qt.UserRole) == item_id:
+                self.items_table.selectRow(row)
+                return
 
     def _load_categories(self) -> None:
         self.category_tree.clear()
@@ -611,6 +797,55 @@ class PurchasesWorkspace(BaseWorkspace):
             add_children(item, cat.id)
         self.category_tree.expandAll()
         self.category_tree.setCurrentItem(root_all)
+
+    def _add_category(self) -> None:
+        title, ok = QInputDialog.getText(self, "Новая категория", "Название:")
+        if not ok:
+            return
+        title = (title or "").strip()
+        if not title:
+            return
+        parent_id = None
+        current = self.category_tree.currentItem()
+        if current is not None:
+            parent_id = current.data(0, Qt.UserRole)
+        self._db.create_shop_category(title, parent_id=parent_id)
+        self._load_categories()
+
+    def _rename_category(self) -> None:
+        current = self.category_tree.currentItem()
+        if current is None:
+            return
+        category_id = current.data(0, Qt.UserRole)
+        if category_id is None:
+            self._set_status("Нельзя переименовать корневую категорию")
+            return
+        title, ok = QInputDialog.getText(self, "Переименовать", "Новое название:", text=current.text(0))
+        if not ok:
+            return
+        title = (title or "").strip()
+        if not title:
+            return
+        self._db.update_shop_category_title(int(category_id), title)
+        self._load_categories()
+
+    def _delete_category(self) -> None:
+        current = self.category_tree.currentItem()
+        if current is None:
+            return
+        category_id = current.data(0, Qt.UserRole)
+        if category_id is None:
+            self._set_status("Нельзя удалить корневую категорию")
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Удалить категорию",
+            "Удалить выбранную категорию? Товары будут без категории.",
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self._db.delete_shop_category(int(category_id))
+        self._load_categories()
 
     def _on_category_selected(self) -> None:
         current = self.category_tree.currentItem()
@@ -911,26 +1146,32 @@ class PurchasesWorkspace(BaseWorkspace):
         if not indexes:
             self._set_status("Свойство не выбрано")
             return
-        row = indexes[0].row()
-        name_item = self.source_props_table.item(row, 0)
-        value_item = self.source_props_table.item(row, 1)
-        unit_item = self.source_props_table.item(row, 2)
-        key_item = self.source_props_table.item(row, 3)
-        if name_item is None or value_item is None:
-            return
-        name = name_item.text()
-        value = value_item.text()
-        unit = unit_item.text() if unit_item else ""
-        normalized = key_item.text() if key_item else self._normalize_key(name)
-        self._db.upsert_shop_item_property(
-            item_id=self._current_item_id,
-            name=name,
-            value=value,
-            unit=unit,
-            normalized_key=normalized,
-        )
+        accepted = 0
+        for index in indexes:
+            row = index.row()
+            name_item = self.source_props_table.item(row, 0)
+            value_item = self.source_props_table.item(row, 1)
+            unit_item = self.source_props_table.item(row, 2)
+            key_item = self.source_props_table.item(row, 3)
+            if name_item is None or value_item is None:
+                continue
+            name = name_item.text()
+            value = value_item.text()
+            unit = unit_item.text() if unit_item else ""
+            normalized = key_item.text() if key_item else ""
+            if not normalized:
+                normalized = self._normalize_key(name)
+            self._db.upsert_shop_item_property(
+                item_id=self._current_item_id,
+                name=name,
+                value=value,
+                unit=unit,
+                normalized_key=normalized,
+            )
+            accepted += 1
         self._load_properties(self._current_item_id, self._current_source_id)
-        self._set_status("Свойство принято")
+        count = len(self._db.fetch_shop_item_properties(self._current_item_id))
+        self._set_status(f"Принято: {accepted} (всего: {count})")
 
     def _delete_item_property(self) -> None:
         indexes = self.item_props_table.selectionModel().selectedRows()
@@ -1069,8 +1310,8 @@ class PurchasesWorkspace(BaseWorkspace):
             min_30 = self._db.fetch_item_min_price_last_days(entry.item_id, 30)
             if min_30 is not None:
                 total_expected += min_30 * entry.qty
-            if target is not None:
-                total_expected = max(total_expected, target * entry.qty)
+            elif target is not None:
+                total_expected += target * entry.qty
         if total_current or total_expected:
             self.wishlist_summary.setText(
                 f"Итого: {total_current:.2f} | Ожидаемая: {total_expected:.2f}"

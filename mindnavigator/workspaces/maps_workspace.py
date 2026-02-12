@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
     QFileDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
     QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
-    QPushButton, QScrollArea, QColorDialog
+    QPushButton, QScrollArea, QColorDialog, QSplitter
 )
 from shiboken6 import isValid
 
@@ -935,6 +935,7 @@ class OverlayEditDialog(QDialog):
 class MapCanvas(QWidget):
     # Класс отрисовки маркеров на карте
     markerSelected = Signal(object)
+    markerDoubleClicked = Signal(object)
     markerAdded = Signal(object)
     markerRemoved = Signal(int)
     markerUpdated = Signal(object)
@@ -2002,6 +2003,7 @@ class MapCanvas(QWidget):
                 self._selected = marker
                 self.markerSelected.emit(marker)
                 self._zoom_to_marker(marker)
+                self.markerDoubleClicked.emit(marker)
                 return
         super().mouseDoubleClickEvent(event)
 
@@ -2267,6 +2269,7 @@ class MapCanvas(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle("Метка на карте")
         dialog.setObjectName("MapLabelViewDialog")
+        dialog.setAttribute(Qt.WA_StyledBackground, True)
         dialog.resize(980, 680)
         dialog.setMinimumSize(760, 520)
 
@@ -2301,6 +2304,7 @@ class MapCanvas(QWidget):
 
         # Основное тело диалога.
         body = QFrame()
+        body.setObjectName("MapLabelBody")
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(14)
@@ -2540,8 +2544,14 @@ class MapCanvas(QWidget):
         right_layout.addWidget(text_section)
         right_layout.addStretch(1)
 
+        right_scroll = QScrollArea()
+        right_scroll.setObjectName("MapLabelViewScroll")
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_scroll.setWidget(right_panel)
+
         body_layout.addWidget(left_panel, 0)
-        body_layout.addWidget(right_panel, 1)
+        body_layout.addWidget(right_scroll, 1)
 
         root_layout.addWidget(header)
         root_layout.addWidget(body, 1)
@@ -2567,6 +2577,9 @@ class MapCanvas(QWidget):
                 border: 1px solid #2a2b2f;
                 border-radius: 10px;
             }}
+            QFrame#MapLabelBody {{
+                background: transparent;
+            }}
             QLabel#MapLabelSectionTitle {{
                 color: #d9d9d9;
                 font-weight: 600;
@@ -2588,6 +2601,19 @@ class MapCanvas(QWidget):
                 border-radius: 8px;
                 color: #8e919a;
                 background: #1b1d24;
+            }}
+            QScrollArea#MapLabelViewScroll {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollArea#MapLabelViewScroll QWidget#qt_scrollarea_viewport {{
+                background: transparent;
+            }}
+            QScrollArea#MapLabelViewScroll > QWidget {{
+                background: transparent;
+            }}
+            QScrollArea#MapLabelViewScroll > QWidget > QWidget {{
+                background: transparent;
             }}
             QToolButton, QPushButton {{
                 background: #2a2b2f;
@@ -2755,8 +2781,17 @@ class MapEditorWorkspace(QWidget):
         self._current_map_id: Optional[int] = None
         self._info_marker_id: Optional[int] = None
         self._info_panel_default_width = 520
+        self._info_panel_expand_delta = 80
         self._info_panel_expanded_width = 600
         self._info_panel_fullscreen_ratio = 0.35
+        self._info_panel_block_save = False
+        try:
+            saved_width = int(self._db.get_setting("map_info_panel_width", default="").strip() or 0)
+        except ValueError:
+            saved_width = 0
+        if saved_width >= 280:
+            self._info_panel_default_width = saved_width
+            self._info_panel_expanded_width = saved_width + self._info_panel_expand_delta
 
         # Корневая компоновка редактора.
         root = QHBoxLayout(self)
@@ -2835,7 +2870,7 @@ class MapEditorWorkspace(QWidget):
         # Правая панель с краткой информацией по маркеру.
         self.info_panel = QFrame()
         self.info_panel.setObjectName("MapInfoPanel")
-        self.info_panel.setFixedWidth(self._info_panel_default_width)
+        self.info_panel.setMinimumWidth(280)
         info_layout = QVBoxLayout(self.info_panel)
         info_layout.setContentsMargins(10, 10, 10, 10)
         info_layout.setSpacing(0)
@@ -3064,14 +3099,24 @@ class MapEditorWorkspace(QWidget):
         info_layout.addWidget(self.info_scroll)
 
         # Собираем основные панели.
+        self.center_splitter = QSplitter(Qt.Horizontal)
+        self.center_splitter.setObjectName("MapInfoSplitter")
+        self.center_splitter.setHandleWidth(6)
+        self.center_splitter.setChildrenCollapsible(False)
+        self.center_splitter.addWidget(self.canvas)
+        self.center_splitter.addWidget(self.info_panel)
+        self.center_splitter.setStretchFactor(0, 1)
+        self.center_splitter.setStretchFactor(1, 0)
+        self.center_splitter.splitterMoved.connect(self._on_info_splitter_moved)
+
         root.addWidget(self.toolbar)
-        root.addWidget(self.canvas, 1)
-        root.addWidget(self.info_panel)
+        root.addWidget(self.center_splitter, 1)
 
         self.info_panel.hide()
 
         # Подключаем сигналы от канвы.
         self.canvas.markerSelected.connect(self._on_marker_selected)
+        self.canvas.markerDoubleClicked.connect(self._on_marker_double_clicked)
         self.canvas.markerAdded.connect(self._on_marker_added)
         self.canvas.markerUpdated.connect(self._on_marker_updated)
         self.canvas.markerRemoved.connect(self._on_marker_removed)
@@ -3109,6 +3154,13 @@ class MapEditorWorkspace(QWidget):
             QFrame#MapInfoPanel {
                 background: rgba(20, 22, 30, 0.92);
                 border-left: 1px solid #2a2b2f;
+            }
+
+            QSplitter#MapInfoSplitter::handle {
+                background: #2a2b2f;
+            }
+            QSplitter#MapInfoSplitter::handle:hover {
+                background: #3a3b40;
             }
 
             QScrollArea#MapInfoScroll {
@@ -3206,11 +3258,39 @@ class MapEditorWorkspace(QWidget):
             width = max(int(self.width() * self._info_panel_fullscreen_ratio), 1)
         else:
             width = self._info_panel_expanded_width if self._nav_collapsed else self._info_panel_default_width
-        self.info_panel.setFixedWidth(width)
+        self._set_info_panel_width(width)
         if self._info_marker_id is not None:
             marker = self._markers_by_id.get(self._info_marker_id)
             if marker:
                 self._update_info_preview(marker)
+
+    def _set_info_panel_width(self, width: int) -> None:
+        if not hasattr(self, "center_splitter") or self.center_splitter is None:
+            self.info_panel.setFixedWidth(width)
+            return
+        total = self.center_splitter.size().width()
+        if total <= 0:
+            return
+        min_panel = self.info_panel.minimumWidth() or 240
+        width = max(min(width, total - 200), min_panel)
+        self._info_panel_block_save = True
+        self.center_splitter.setSizes([max(total - width, 200), width])
+        self._info_panel_block_save = False
+
+    def _on_info_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._info_panel_block_save or self._fullscreen_active:
+            return
+        if not self.info_panel.isVisible():
+            return
+        sizes = self.center_splitter.sizes()
+        if len(sizes) < 2:
+            return
+        panel_width = sizes[1]
+        if panel_width < 280:
+            return
+        self._info_panel_default_width = panel_width
+        self._info_panel_expanded_width = panel_width + self._info_panel_expand_delta
+        self._db.set_setting("map_info_panel_width", str(panel_width))
 
     def _on_fullscreen_toggled(self, checked: bool) -> None:
         # Пробрасываем сигнал о полноэкранном режиме.
@@ -3223,11 +3303,19 @@ class MapEditorWorkspace(QWidget):
         if not marker:
             self._info_marker_id = None
             self.info_panel.hide()
+            if hasattr(self, "center_splitter") and self.center_splitter is not None:
+                self._info_panel_block_save = True
+                self.center_splitter.setSizes([1, 0])
+                self._info_panel_block_save = False
             return
-        if self._fullscreen_active:
-            self._update_info_panel_width()
+        self._update_info_panel_width()
         self.info_panel.show()
         self._apply_marker_info(marker)
+
+    def _on_marker_double_clicked(self, marker: Optional[Marker]) -> None:
+        if not marker:
+            return
+        self.canvas._edit_marker(marker)
 
     def _apply_marker_info(self, marker: Marker) -> None:
         # Обновляем значения в инфо-панели.

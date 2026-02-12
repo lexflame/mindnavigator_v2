@@ -18,8 +18,8 @@ import json
 import re
 from typing import Dict, List, Optional, Set
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import QObject, Qt, QThread, Signal, QSize, QUrl
+from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -40,11 +40,18 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QDialog,
+    QProgressDialog,
+    QToolButton,
+    QGridLayout,
 )
 
 import qtawesome as qta
 
+from mindnavigator.collections_importer import FolderCollectionImporter
 from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
+from mindnavigator.ui.dialogs.collection_category_dialog import CollectionCategorySelectDialog
+from mindnavigator.ui.dialogs.collection_import_dialog import CollectionImportDialog
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.workspaces.objects_workspace import DOC_EXTENSIONS, extract_text_from_document
 
 
@@ -634,6 +641,7 @@ class FileWorkspace(QWidget):
         root_item = QTreeWidgetItem(["Облако"])
         root_item.setData(0, Qt.UserRole, "")
         self.folder_tree.addTopLevelItem(root_item)
+        root_item.setIcon(0, self._icon_folder)
         self._tree_items[""] = root_item
         self._populate_tree(root_item, "")
         root_item.setExpanded(True)
@@ -647,6 +655,7 @@ class FileWorkspace(QWidget):
             child_item = QTreeWidgetItem([name])
             child_item.setData(0, Qt.UserRole, child_path)
             parent_item.addChild(child_item)
+            child_item.setIcon(0, self._icon_folder)
             self._tree_items[child_path] = child_item
             self._populate_tree(child_item, child_path)
 
@@ -671,13 +680,18 @@ class FileWorkspace(QWidget):
         files = sorted(data.get("files", []), key=lambda item: item.name.lower())
         cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
         cloud_root_path = Path(cloud_root) if cloud_root else None
+        collection_map = self._collection_folder_map(cloud_root_path)
         for child_path in folders:
             name = child_path.split("/")[-1]
-            item = QListWidgetItem(name)
-            item.setIcon(self._icon_folder)
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, ("folder", child_path))
             item.setToolTip(name)
+            collection_id = None
+            if cloud_root_path:
+                full_path = (cloud_root_path / child_path).resolve()
+                collection_id = collection_map.get(str(full_path))
             self.file_grid.addItem(item)
+            self._attach_folder_widget(item, name, collection_id)
         for file_item in files:
             description = self._format_description(file_item.description)
             size = self._format_size(file_item.size)
@@ -768,6 +782,9 @@ class FileWorkspace(QWidget):
         if item_type == "folder":
             create_object_action = transfer_menu.addAction("Создать объект")
             create_object_action.triggered.connect(lambda: self._create_object_from_folder(rel_path))
+            create_collection_action = transfer_menu.addAction("Создать коллекцию")
+            create_collection_action.setToolTip("Создать коллекцию из выбранной папки")
+            create_collection_action.triggered.connect(lambda: self._create_collection_from_folder(rel_path))
         else:
             if Path(rel_path).suffix.lower() in DOC_EXTENSIONS:
                 import_note_action = transfer_menu.addAction("Импорт в заметку")
@@ -798,6 +815,149 @@ class FileWorkspace(QWidget):
             "FileTransfer",
             f"Создан объект: {obj.title}",
         )
+
+    def _create_collection_from_folder(self, rel_path: str) -> None:
+        cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
+        if not cloud_root:
+            QMessageBox.warning(self, "FileTransfer", "Путь к облаку не задан.")
+            return
+        folder_path = Path(cloud_root) / rel_path
+        if not folder_path.exists() or not folder_path.is_dir():
+            QMessageBox.warning(self, "FileTransfer", "Папка не найдена в облаке.")
+            return
+
+        category_dialog = CollectionCategorySelectDialog(
+            self._db,
+            self._db.fetch_collection_categories(),
+            parent=self,
+        )
+        if exec_with_overlay(category_dialog, self) != QDialog.Accepted:
+            return
+        category_id = category_dialog.selected_category_id()
+
+        import_dialog = CollectionImportDialog(default_title=folder_path.name or "Коллекция", parent=self)
+        if exec_with_overlay(import_dialog, self) != QDialog.Accepted:
+            return
+        values = import_dialog.values()
+        title = values.get("title") or folder_path.name or "Коллекция"
+        include_subfolders = bool(values.get("include_subfolders"))
+
+        import_options = json.dumps({"include_subfolders": include_subfolders}, ensure_ascii=False)
+        try:
+            collection = self._db.create_collection_item(
+                title=title,
+                entity_type="other",
+                category_id=category_id,
+                source_folder_path=str(folder_path),
+                import_options_json=import_options,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "FileTransfer", str(exc))
+            return
+
+        importer = FolderCollectionImporter()
+        files, list_errors = importer.list_files(folder_path, include_subfolders=include_subfolders)
+        if not self._confirm_large_folder(len(files)):
+            return
+        items, errors = self._scan_with_progress(importer, folder_path, files)
+        errors = list_errors + errors
+        entries = [
+            {
+                "source_path": item.source_path,
+                "rel_path": item.rel_path,
+                "title": item.title,
+                "ext": item.ext,
+                "mime": item.mime,
+                "size_bytes": item.size_bytes,
+                "meta_json": item.meta_json,
+            }
+            for item in items
+        ]
+        if entries:
+            self._db.create_collection_entries(collection.id, entries)
+        else:
+            QMessageBox.information(
+                self,
+                "FileTransfer",
+                "Папка пуста. Коллекция создана без элементов.",
+            )
+
+        if errors:
+            self._report_import_errors(errors, "FileTransfer импорт коллекции")
+
+        QMessageBox.information(
+            self,
+            "FileTransfer",
+            f"Создана коллекция: {collection.title}",
+        )
+
+    def _confirm_large_folder(self, total: int) -> bool:
+        if total <= 2000:
+            return True
+        if total >= 10000:
+            QMessageBox.warning(
+                self,
+                "FileTransfer",
+                "В папке более 10k файлов. Импорт может занять длительное время.",
+            )
+        dialog = ConfirmDialog(
+            "Большая папка",
+            f"В папке {total} файлов. Продолжить импорт?",
+            parent=self,
+            confirm_text="Продолжить",
+            cancel_text="Отмена",
+        )
+        return show_dialog_standard(dialog, self) == QDialog.Accepted
+
+    def _scan_with_progress(
+        self,
+        importer: FolderCollectionImporter,
+        folder_path: Path,
+        files: List[Path],
+    ) -> tuple[list, list]:
+        progress = QProgressDialog("Сканирование файлов...", "Отмена", 0, max(1, len(files)), self)
+        progress.setWindowTitle("Импорт коллекции")
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+
+        def progress_cb(index: int, total: int | None, _path: Path) -> None:
+            progress.setMaximum(total or max(1, len(files)))
+            progress.setValue(index)
+            QApplication.processEvents()
+
+        def cancel_cb() -> bool:
+            return progress.wasCanceled()
+
+        items, errors, cancelled = importer.scan_files(
+            folder_path,
+            files,
+            progress_cb=progress_cb,
+            cancel_cb=cancel_cb,
+        )
+        progress.close()
+        if cancelled:
+            return [], []
+        return items, errors
+
+    def _report_import_errors(self, errors: List[str], context: str) -> None:
+        if not errors:
+            return
+        log_path = Path.home() / ".mindnavigator" / "collection_import_errors.txt"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"\n[{datetime.utcnow().isoformat(timespec='seconds')}] {context}\n")
+            for line in errors:
+                handle.write(f"{line}\n")
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("FileTransfer")
+        box.setText(f"Импорт завершен с ошибками ({len(errors)}).")
+        box.setInformativeText(f"Лог: {log_path}")
+        open_btn = box.addButton("Открыть лог", QMessageBox.ActionRole)
+        box.addButton("Ок", QMessageBox.AcceptRole)
+        box.exec()
+        if box.clickedButton() == open_btn:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path)))
 
     def _import_note_from_file(self, rel_path: str) -> None:
         cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
@@ -833,6 +993,78 @@ class FileWorkspace(QWidget):
             if text:
                 return text
         return description
+
+    def _collection_folder_map(self, cloud_root: Optional[Path]) -> Dict[str, int]:
+        if not cloud_root:
+            return {}
+        mapping: Dict[str, int] = {}
+        for row in self._db.fetch_collection_source_folders():
+            path = (row.get("source_folder_path") or "").strip()
+            if not path:
+                continue
+            try:
+                norm = str(Path(path).resolve())
+            except Exception:
+                norm = path
+            mapping[norm] = int(row.get("id") or 0)
+        return mapping
+
+    def _attach_folder_widget(self, item: QListWidgetItem, name: str, collection_id: Optional[int]) -> None:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        icon_container = QWidget()
+        grid = QGridLayout(icon_container)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(0)
+
+        icon_label = QLabel()
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setFixedSize(self.file_grid.iconSize())
+        icon_pixmap = self._icon_folder.pixmap(self.file_grid.iconSize())
+        icon_label.setPixmap(icon_pixmap)
+        grid.addWidget(icon_label, 0, 0, Qt.AlignCenter)
+
+        if collection_id:
+            dot = QToolButton()
+            dot.setFixedSize(12, 12)
+            dot.setToolTip("Открыть коллекцию")
+            dot.setStyleSheet(
+                """
+                QToolButton {
+                    background: #37c76b;
+                    border: 1px solid #1f7f46;
+                    border-radius: 6px;
+                    padding: 0px;
+                }
+                QToolButton:hover {
+                    background: #48d97b;
+                }
+                """
+            )
+            dot.clicked.connect(lambda _=None, cid=collection_id: self._open_collection(cid))
+            grid.addWidget(dot, 0, 0, Qt.AlignRight | Qt.AlignBottom)
+
+        name_label = QLabel(name)
+        name_label.setAlignment(Qt.AlignCenter)
+        name_label.setWordWrap(True)
+        name_label.setStyleSheet("color: #d6d6d6;")
+
+        layout.addWidget(icon_container)
+        layout.addWidget(name_label)
+
+        item.setSizeHint(self.file_grid.gridSize())
+        self.file_grid.setItemWidget(item, widget)
+
+    def _open_collection(self, collection_id: int) -> None:
+        window = self.window()
+        mode_name = getattr(window, "MODE_COLLECTIONS", "Коллекции")
+        if hasattr(window, "set_mode"):
+            window.set_mode(mode_name)
+        if hasattr(window, "page_collections") and hasattr(window.page_collections, "focus_item"):
+            window.page_collections.focus_item(int(collection_id))
 
     def _find_file_by_rel_path(self, rel_path: str) -> Optional[CloudFileData]:
         return next((item for item in self._cloud_files if item.rel_path == rel_path), None)

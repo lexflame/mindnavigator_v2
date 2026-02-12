@@ -27,6 +27,7 @@ class SplashWidget(QWidget):
 
         # Эффект прозрачности
         self.opacity_effect = QGraphicsOpacityEffect()
+        self.opacity_effect.setOpacity(0.0)
         self.setGraphicsEffect(self.opacity_effect)
         # Анимация прозрачности
         self.animation = QPropertyAnimation(self.opacity_effect, b"opacity")

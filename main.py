@@ -72,8 +72,7 @@ def main() -> None:
     # Показываем заставку
     splash = show_splash(app, resource_path("assets/splash.jpg"))
     splash.set_status("Инициализация интерфейса…")
-    splash.hide()
-
+    splash.raise_()
     splash.fade_in()
 
     # Создаём главное окно

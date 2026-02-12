@@ -4,6 +4,7 @@ from .entity_picker_dialog import ChipItem, EntityPickerDialog
 from .map_label_edit_dialog import MapLabelEditDialog
 from .purchase_add_dialog import PurchaseAddByUrlDialog, PurchaseAddResult
 from .purchase_compare_dialog import PurchaseCompareDialog
+from .purchase_edit_dialog import PurchaseEditDialog
 
 __all__ = [
     "AttachFileSelectNav",
@@ -14,6 +15,7 @@ __all__ = [
     "PurchaseAddByUrlDialog",
     "PurchaseAddResult",
     "PurchaseCompareDialog",
+    "PurchaseEditDialog",
 ]
 """Диалоги интерфейса MindNavigator.
 

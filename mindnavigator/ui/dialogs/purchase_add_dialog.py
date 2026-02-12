@@ -63,7 +63,7 @@ class PurchaseAddByUrlDialog(QDialog):
         self.setObjectName("PurchaseAddByUrlDialog")
         self.setWindowTitle("Добавить товар по URL")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(640, 520)
+        self.setMinimumSize(760, 620)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -95,6 +95,14 @@ class PurchaseAddByUrlDialog(QDialog):
         self.preview_price = QLabel("—")
         self.preview_stock = QLabel("—")
         self.preview_sku = QLabel("—")
+        for label in (
+            self.preview_title,
+            self.preview_shop,
+            self.preview_price,
+            self.preview_stock,
+            self.preview_sku,
+        ):
+            label.setWordWrap(True)
         preview_layout.addRow("Название", self.preview_title)
         preview_layout.addRow("Магазин", self.preview_shop)
         preview_layout.addRow("Цена", self.preview_price)
@@ -181,7 +189,7 @@ class PurchaseAddByUrlDialog(QDialog):
                 font-weight: 600;
             }}
             QDialog#PurchaseAddByUrlDialog QLabel {{
-                color: #cfcfcf;
+                color: #e0e0e0;
                 font-size: 13px;
             }}
             QDialog#PurchaseAddByUrlDialog QLineEdit,
@@ -189,8 +197,9 @@ class PurchaseAddByUrlDialog(QDialog):
                 background: #202127;
                 color: #cfcfcf;
                 border: 1px solid #2a2b2f;
-                padding: 6px 8px;
+                padding: 8px 10px;
                 border-radius: 6px;
+                min-height: 28px;
             }}
             QDialog#PurchaseAddByUrlDialog QGroupBox {{
                 border: 1px solid #2a2b2f;
@@ -200,7 +209,12 @@ class PurchaseAddByUrlDialog(QDialog):
             QDialog#PurchaseAddByUrlDialog QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
-                padding: 0 4px 0 4px;
+                padding: 0 6px;
+                color: #cfcfcf;
+            }}
+            QDialog#PurchaseAddByUrlDialog QRadioButton {{
+                color: #cfcfcf;
+                padding: 2px 0;
             }}
             QDialog#PurchaseAddByUrlDialog QDialogButtonBox QPushButton,
             QDialog#PurchaseAddByUrlDialog QToolButton#PurchaseParseButton {{
@@ -209,17 +223,18 @@ class PurchaseAddByUrlDialog(QDialog):
                 border: 1px solid #3a3b40;
                 padding: 8px 14px;
                 border-radius: 6px;
-                min-width: 90px;
+                min-width: 110px;
+                min-height: 32px;
             }}
             QDialog#PurchaseAddByUrlDialog QDialogButtonBox QPushButton:hover,
             QDialog#PurchaseAddByUrlDialog QToolButton#PurchaseParseButton:hover {{
                 background: #34363b;
             }}
             QLabel#PurchaseDialogStatus {{
-                color: #9aa0a8;
+                color: #b4bac3;
             }}
             QLabel#PurchaseParseHint {{
-                color: #7f8691;
+                color: #8b92a0;
             }}
         """)
 
@@ -264,10 +279,24 @@ class PurchaseAddByUrlDialog(QDialog):
             parser = self._parse_service.resolve_parser(url)
             result = parser.parse(url)
         except (ValueError, HttpClientError) as exc:
-            self._set_status(str(exc))
-            self._parsed_ok = False
-            self._refresh_save_state()
-            return
+            # Fallback: allow manual save without parser data.
+            parsed = urlparse(url)
+            shop = parsed.netloc.lower() or "unknown"
+            result = ParsedShopResult(
+                title="",
+                sku="",
+                price=None,
+                currency="",
+                in_stock=False,
+                stock_text="",
+                category_hint="",
+                properties=[],
+                images=[],
+                shop_code=shop,
+                canonical_url=url,
+                raw={"error": str(exc)},
+            )
+            self._set_status("Парсер не найден — сохранение без парсинга.")
 
         self._parsed_result = result
         self._shop_code = result.shop_code or urlparse(url).netloc.lower()
@@ -293,6 +322,8 @@ class PurchaseAddByUrlDialog(QDialog):
         self.status_label.setText(text)
 
     def _on_accept(self) -> None:
+        if not self._parsed_ok:
+            self._parse_url()
         if not self._parsed_ok:
             self._set_status("Сначала выполните предпросмотр.")
             return

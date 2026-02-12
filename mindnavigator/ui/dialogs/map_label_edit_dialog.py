@@ -584,6 +584,7 @@ class MapLabelEditDialog(QDialog):
         super().__init__(parent)
         # Сохраняем исходные данные и состояние диалога.
         self.setObjectName("MapLabelEditDialog")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self._db = get_database()
         self._marker = marker
         self._entity_sources = entity_sources
@@ -691,6 +692,7 @@ class MapLabelEditDialog(QDialog):
     def _build_body(self, type_suggestions: list[str]) -> QWidget:
         # Основной контейнер с левой и правой панелями.
         body = QFrame()
+        body.setObjectName("MapLabelBody")
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(14)
@@ -1088,6 +1090,9 @@ class MapLabelEditDialog(QDialog):
                 border: 1px solid #2a2b2f;
                 border-radius: 10px;
             }}
+            QFrame#MapLabelBody {{
+                background: transparent;
+            }}
             QLabel#MapLabelSectionTitle {{
                 color: #d9d9d9;
                 font-weight: 600;
@@ -1192,7 +1197,16 @@ class MapLabelEditDialog(QDialog):
                 background: transparent;
                 border: none;
             }}
+            QScrollArea#MapLabelFormScroll > QWidget {{
+                background: transparent;
+            }}
+            QScrollArea#MapLabelFormScroll QWidget#qt_scrollarea_viewport {{
+                background: transparent;
+            }}
             QScrollArea#MapLabelFormScroll > QWidget > QWidget {{
+                background: transparent;
+            }}
+            QWidget#MapLabelFormContainer {{
                 background: transparent;
             }}
             QScrollArea#MapLabelFormScroll QScrollBar:vertical {{
