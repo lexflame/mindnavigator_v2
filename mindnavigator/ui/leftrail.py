@@ -36,6 +36,7 @@ class LeftRail(QWidget):
         self._icons = {
             "Проекты": "fa5s.folder-open",
             "Задачи": "fa5s.tasks",
+            "Покупки": "fa5s.shopping-cart",
             "Идеи": "fa5s.lightbulb",
             "Коллекции": "fa5s.project-diagram",
             "Карты": "fa5s.map",
@@ -61,6 +62,7 @@ class LeftRail(QWidget):
 
         self.btn_projects = btn(self._icons["Проекты"], "Проекты")
         self.btn_tasks = btn(self._icons["Задачи"], "Задачи")
+        self.btn_purchases = btn(self._icons["Покупки"], "Покупки")
         self.btn_ideas = btn(self._icons["Идеи"], "Идеи")
         self.btn_collections = btn(self._icons["Коллекции"], "Коллекции")
         self.btn_maps = btn(self._icons["Карты"], "Карты")
