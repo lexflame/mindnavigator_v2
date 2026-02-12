@@ -42,6 +42,7 @@ from .workspaces.settings_workspace import SettingsWorkspace
 from .workspaces.files_workspace import FileWorkspace
 from .workspaces.objects_workspace import ObjectWorkspace
 from .workspaces.ideas_workspace import IdeasWorkspace
+from .workspaces.purchases_workspace import PurchasesWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
 
     MODE_PROJECTS = "Проекты"
     MODE_TASKS = "Задачи"
+    MODE_PURCHASES = "Покупки"
     MODE_IDEAS = "Идеи"
     MODE_COLLECTIONS = "Коллекции"
     MODE_MAPS = "Карты"
@@ -258,6 +260,7 @@ class MainWindow(QMainWindow):
         mapping = {
             self.MODE_TASKS: "Tasks",
             self.MODE_PROJECTS: "Projects",
+            self.MODE_PURCHASES: "Purchases",
             self.MODE_IDEAS: "Ideas",
             self.MODE_COLLECTIONS: "Collections",
             self.MODE_MAPS: "Maps",
@@ -385,6 +388,7 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_projects = ProjectsWorkspace()
+        self.page_purchases = PurchasesWorkspace()
         self.page_ideas = IdeasWorkspace()
         self.page_collections = CollectionsWorkspace()
         self.page_maps = MapsListWorkspace()
@@ -397,6 +401,7 @@ class MainWindow(QMainWindow):
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
+            self.MODE_PURCHASES: self.workspace_stack.addWidget(self.page_purchases),
             self.MODE_IDEAS: self.workspace_stack.addWidget(self.page_ideas),
             self.MODE_COLLECTIONS: self.workspace_stack.addWidget(self.page_collections),
             self.MODE_MAPS: self.workspace_stack.addWidget(self.page_maps),
@@ -516,6 +521,7 @@ class MainWindow(QMainWindow):
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
+            self.left_rail.btn_purchases: self.MODE_PURCHASES,
             self.left_rail.btn_ideas: self.MODE_IDEAS,
             self.left_rail.btn_collections: self.MODE_COLLECTIONS,
             self.left_rail.btn_maps: self.MODE_MAPS,
@@ -546,6 +552,9 @@ class MainWindow(QMainWindow):
         # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
+        elif mode_name == self.MODE_PURCHASES:
+            if hasattr(self.page_purchases, "refresh"):
+                self.page_purchases.refresh()
         elif mode_name == self.MODE_IDEAS:
             self.page_ideas.refresh()
         elif mode_name == self.MODE_COLLECTIONS:

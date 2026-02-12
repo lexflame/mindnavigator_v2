@@ -14,3 +14,4 @@ from .notes_workspace import NoteWorkspace
 from .files_workspace import FileWorkspace
 from .objects_workspace import ObjectWorkspace
 from .ideas_workspace import IdeasWorkspace
+from .purchases_workspace import PurchasesWorkspace
