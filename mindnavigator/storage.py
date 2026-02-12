@@ -193,11 +193,24 @@ class ObjectImageData:
 class CollectionItemData:
     id: int
     title: str
+    category_id: Optional[int]
     entity_type: str
     topic: str
     image_url: str
     source_url: str
     description: str
+    source_folder_path: str
+    import_options_json: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class CollectionCategoryData:
+    id: int
+    title: str
+    parent_id: Optional[int]
+    sort_index: int
     created_at: str
     updated_at: str
 
@@ -209,6 +222,22 @@ class CollectionRelationData:
     right_item_id: int
     relation_kind: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class CollectionEntryData:
+    id: int
+    collection_id: int
+    source_path: str
+    rel_path: str
+    title: str
+    ext: str
+    mime: str
+    size_bytes: int
+    meta_json: str
+    is_missing: bool
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -598,13 +627,29 @@ class Database:
                 CREATE TABLE IF NOT EXISTS collection_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
+                    category_id INTEGER REFERENCES collection_category(id) ON DELETE SET NULL,
                     entity_type TEXT NOT NULL CHECK (entity_type IN ('building', 'city', 'film', 'game', 'character', 'other')),
                     topic TEXT NOT NULL DEFAULT '',
                     image_url TEXT NOT NULL DEFAULT '',
                     source_url TEXT NOT NULL DEFAULT '',
                     description TEXT NOT NULL DEFAULT '',
+                    source_folder_path TEXT NOT NULL DEFAULT '',
+                    import_options_json TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_category (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    parent_id INTEGER REFERENCES collection_category(id) ON DELETE SET NULL,
+                    sort_index INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(title, parent_id)
                 );
                 """
             )
@@ -618,6 +663,24 @@ class Database:
                     created_at TEXT NOT NULL,
                     CHECK (left_item_id < right_item_id),
                     UNIQUE(left_item_id, right_item_id, relation_kind)
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collection_id INTEGER NOT NULL REFERENCES collection_items(id) ON DELETE CASCADE,
+                    source_path TEXT NOT NULL,
+                    rel_path TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    ext TEXT NOT NULL DEFAULT '',
+                    mime TEXT NOT NULL DEFAULT '',
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    meta_json TEXT NOT NULL DEFAULT '',
+                    is_missing INTEGER NOT NULL DEFAULT 0 CHECK (is_missing IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 );
                 """
             )
@@ -764,8 +827,17 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_topic ON collection_items(topic);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_entity_type ON collection_items(entity_type);")
+            columns = self._conn.execute("PRAGMA table_info(collection_items);").fetchall()
+            names = {row["name"] for row in columns}
+            if "category_id" in names:
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_collection_items_category ON collection_items(category_id);"
+                )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_relations_left ON collection_relations(left_item_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_relations_right ON collection_relations(right_item_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_category_parent ON collection_category(parent_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_item_collection ON collection_item(collection_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_item_source ON collection_item(source_path);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_shop_source_item ON shop_source(item_id);")
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_shop_price_history_source ON shop_price_history(source_id, captured_at);"
@@ -787,6 +859,10 @@ class Database:
         self._ensure_marker_image_column()
         self._ensure_map_marker_foreign_keys()
         self._ensure_task_attachment_foreign_keys()
+        self._ensure_collection_category_table()
+        self._ensure_collection_item_category_column()
+        self._ensure_collection_item_extra_columns()
+        self._ensure_collection_entry_columns()
         self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
@@ -935,6 +1011,66 @@ class Database:
             self._rebuild_task_attachments_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
+
+    def _ensure_collection_category_table(self) -> None:
+        tables = {
+            row["name"]
+            for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        }
+        if "collection_category" not in tables:
+            with self._conn:
+                self._conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS collection_category (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        parent_id INTEGER REFERENCES collection_category(id) ON DELETE SET NULL,
+                        sort_index INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(title, parent_id)
+                    );
+                    """
+                )
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_collection_category_parent ON collection_category(parent_id);"
+                )
+
+    def _ensure_collection_item_category_column(self) -> None:
+        columns = self._conn.execute("PRAGMA table_info(collection_items);").fetchall()
+        names = {row["name"] for row in columns}
+        if "category_id" not in names:
+            with self._conn:
+                self._conn.execute(
+                    "ALTER TABLE collection_items ADD COLUMN category_id INTEGER REFERENCES collection_category(id) ON DELETE SET NULL;"
+                )
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_collection_items_category ON collection_items(category_id);"
+                )
+
+    def _ensure_collection_item_extra_columns(self) -> None:
+        columns = self._conn.execute("PRAGMA table_info(collection_items);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "source_folder_path" not in names:
+                self._conn.execute(
+                    "ALTER TABLE collection_items ADD COLUMN source_folder_path TEXT NOT NULL DEFAULT '';"
+                )
+            if "import_options_json" not in names:
+                self._conn.execute(
+                    "ALTER TABLE collection_items ADD COLUMN import_options_json TEXT NOT NULL DEFAULT '';"
+                )
+
+    def _ensure_collection_entry_columns(self) -> None:
+        columns = self._conn.execute("PRAGMA table_info(collection_item);").fetchall()
+        if not columns:
+            return
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "is_missing" not in names:
+                self._conn.execute(
+                    "ALTER TABLE collection_item ADD COLUMN is_missing INTEGER NOT NULL DEFAULT 0 CHECK (is_missing IN (0, 1));"
+                )
 
     def _rebuild_map_markers_table(self) -> None:
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
@@ -3462,6 +3598,7 @@ class Database:
         search_text: str = "",
         topic: Optional[str] = None,
         entity_type: Optional[str] = None,
+        category_ids: Optional[Iterable[int]] = None,
     ) -> List[CollectionItemData]:
         """Возвращает элементы режима коллекций."""
         clauses: list[str] = []
@@ -3480,11 +3617,19 @@ class Database:
         if entity_type:
             clauses.append("entity_type = ?")
             params.append(self._normalize_collection_entity_type(entity_type))
+        if category_ids is not None:
+            category_list = [int(value) for value in category_ids if value is not None]
+            if not category_list:
+                return []
+            placeholders = ", ".join("?" for _ in category_list)
+            clauses.append(f"category_id IN ({placeholders})")
+            params.extend(category_list)
 
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = self._conn.execute(
             f"""
-            SELECT id, title, entity_type, topic, image_url, source_url, description, created_at, updated_at
+            SELECT id, title, category_id, entity_type, topic, image_url, source_url, description,
+                   source_folder_path, import_options_json, created_at, updated_at
             FROM collection_items
             {where_sql}
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC, id DESC;
@@ -3495,16 +3640,29 @@ class Database:
             CollectionItemData(
                 row["id"],
                 row["title"],
+                row["category_id"],
                 row["entity_type"],
                 row["topic"] or "",
                 row["image_url"] or "",
                 row["source_url"] or "",
                 row["description"] or "",
+                row["source_folder_path"] or "",
+                row["import_options_json"] or "",
                 row["created_at"],
                 row["updated_at"],
             )
             for row in rows
         ]
+
+    def fetch_collection_source_folders(self) -> List[dict]:
+        rows = self._conn.execute(
+            """
+            SELECT id, title, source_folder_path
+            FROM collection_items
+            WHERE trim(source_folder_path) <> '';
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def fetch_collection_topics(self) -> List[str]:
         """Возвращает список тем коллекций."""
@@ -3523,10 +3681,13 @@ class Database:
         *,
         title: str,
         entity_type: str,
+        category_id: Optional[int] = None,
         topic: str = "",
         image_url: str = "",
         source_url: str = "",
         description: str = "",
+        source_folder_path: str = "",
+        import_options_json: str = "",
     ) -> CollectionItemData:
         """Создает элемент коллекции."""
         title = validate_title(title)
@@ -3535,18 +3696,44 @@ class Database:
         image_url = (image_url or "").strip()
         source_url = (source_url or "").strip()
         description = (description or "").strip()
+        source_folder_path = (source_folder_path or "").strip()
+        import_options_json = (import_options_json or "").strip()
         now = datetime.utcnow().isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
                 INSERT INTO collection_items
-                (title, entity_type, topic, image_url, source_url, description, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                (title, category_id, entity_type, topic, image_url, source_url, description,
+                 source_folder_path, import_options_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (title, entity_type, topic, image_url, source_url, description, now, now),
+                (
+                    title,
+                    category_id,
+                    entity_type,
+                    topic,
+                    image_url,
+                    source_url,
+                    description,
+                    source_folder_path,
+                    import_options_json,
+                    now,
+                    now,
+                ),
             )
         return CollectionItemData(
-            cur.lastrowid, title, entity_type, topic, image_url, source_url, description, now, now
+            cur.lastrowid,
+            title,
+            category_id,
+            entity_type,
+            topic,
+            image_url,
+            source_url,
+            description,
+            source_folder_path,
+            import_options_json,
+            now,
+            now,
         )
 
     def update_collection_item(
@@ -3555,10 +3742,13 @@ class Database:
         *,
         title: str,
         entity_type: str,
+        category_id: Optional[int] = None,
         topic: str = "",
         image_url: str = "",
         source_url: str = "",
         description: str = "",
+        source_folder_path: Optional[str] = None,
+        import_options_json: Optional[str] = None,
     ) -> CollectionItemData:
         """Обновляет элемент коллекции."""
         title = validate_title(title)
@@ -3567,19 +3757,50 @@ class Database:
         image_url = (image_url or "").strip()
         source_url = (source_url or "").strip()
         description = (description or "").strip()
+        if source_folder_path is None or import_options_json is None:
+            existing = self._conn.execute(
+                """
+                SELECT source_folder_path, import_options_json
+                FROM collection_items
+                WHERE id = ?;
+                """,
+                (item_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError("Р­Р»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё РЅРµ РЅР°Р№РґРµРЅ.")
+            if source_folder_path is None:
+                source_folder_path = existing["source_folder_path"] or ""
+            if import_options_json is None:
+                import_options_json = existing["import_options_json"] or ""
+        source_folder_path = (source_folder_path or "").strip()
+        import_options_json = (import_options_json or "").strip()
         now = datetime.utcnow().isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE collection_items
-                SET title = ?, entity_type = ?, topic = ?, image_url = ?, source_url = ?, description = ?, updated_at = ?
+                SET title = ?, category_id = ?, entity_type = ?, topic = ?, image_url = ?, source_url = ?,
+                    description = ?, source_folder_path = ?, import_options_json = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (title, entity_type, topic, image_url, source_url, description, now, item_id),
+                (
+                    title,
+                    category_id,
+                    entity_type,
+                    topic,
+                    image_url,
+                    source_url,
+                    description,
+                    source_folder_path,
+                    import_options_json,
+                    now,
+                    item_id,
+                ),
             )
         row = self._conn.execute(
             """
-            SELECT id, title, entity_type, topic, image_url, source_url, description, created_at, updated_at
+            SELECT id, title, category_id, entity_type, topic, image_url, source_url, description,
+                   source_folder_path, import_options_json, created_at, updated_at
             FROM collection_items
             WHERE id = ?;
             """,
@@ -3590,11 +3811,14 @@ class Database:
         return CollectionItemData(
             row["id"],
             row["title"],
+            row["category_id"],
             row["entity_type"],
             row["topic"] or "",
             row["image_url"] or "",
             row["source_url"] or "",
             row["description"] or "",
+            row["source_folder_path"] or "",
+            row["import_options_json"] or "",
             row["created_at"],
             row["updated_at"],
         )
@@ -3603,6 +3827,195 @@ class Database:
         """Удаляет элемент коллекции."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_items WHERE id = ?;", (item_id,))
+
+    def create_collection_category(
+        self,
+        title: str,
+        parent_id: Optional[int] = None,
+        sort_index: int = 0,
+    ) -> CollectionCategoryData:
+        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                INSERT INTO collection_category (title, parent_id, sort_index, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (title, parent_id, int(sort_index), now, now),
+            )
+        return CollectionCategoryData(cur.lastrowid, title, parent_id, int(sort_index), now, now)
+
+    def fetch_collection_categories(self) -> List[CollectionCategoryData]:
+        rows = self._conn.execute(
+            """
+            SELECT id, title, parent_id, sort_index, created_at, updated_at
+            FROM collection_category
+            ORDER BY sort_index ASC, title COLLATE NOCASE ASC, id ASC;
+            """
+        ).fetchall()
+        return [
+            CollectionCategoryData(
+                row["id"],
+                row["title"],
+                row["parent_id"],
+                row["sort_index"] or 0,
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def list_collection_category_tree(self) -> List[CollectionCategoryData]:
+        return self.fetch_collection_categories()
+
+    def ensure_collection_category_path(
+        self,
+        path: str,
+        base_parent_id: Optional[int] = None,
+    ) -> Optional[int]:
+        parts = [part.strip() for part in (path or "").split("/") if part.strip()]
+        if not parts:
+            return base_parent_id
+        parent_id = base_parent_id
+        for title in parts:
+            if parent_id is None:
+                row = self._conn.execute(
+                    """
+                    SELECT id
+                    FROM collection_category
+                    WHERE title = ? AND parent_id IS NULL;
+                    """,
+                    (title,),
+                ).fetchone()
+            else:
+                row = self._conn.execute(
+                    """
+                    SELECT id
+                    FROM collection_category
+                    WHERE title = ? AND parent_id = ?;
+                    """,
+                    (title, parent_id),
+                ).fetchone()
+            if row is None:
+                category = self.create_collection_category(title, parent_id=parent_id)
+                parent_id = category.id
+            else:
+                parent_id = row["id"]
+        return parent_id
+
+    def get_collection_category(self, category_id: int) -> Optional[CollectionCategoryData]:
+        row = self._conn.execute(
+            """
+            SELECT id, title, parent_id, sort_index, created_at, updated_at
+            FROM collection_category
+            WHERE id = ?;
+            """,
+            (category_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return CollectionCategoryData(
+            row["id"],
+            row["title"],
+            row["parent_id"],
+            row["sort_index"] or 0,
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def update_collection_category_title(self, category_id: int, title: str) -> CollectionCategoryData:
+        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE collection_category
+                SET title = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (title, now, category_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, title, parent_id, sort_index, created_at, updated_at
+            FROM collection_category
+            WHERE id = ?;
+            """,
+            (category_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ РЅРµ РЅР°Р№РґРµРЅР°.")
+        return CollectionCategoryData(
+            row["id"],
+            row["title"],
+            row["parent_id"],
+            row["sort_index"] or 0,
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def move_collection_category(self, category_id: int, parent_id: Optional[int]) -> CollectionCategoryData:
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE collection_category
+                SET parent_id = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (parent_id, now, category_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, title, parent_id, sort_index, created_at, updated_at
+            FROM collection_category
+            WHERE id = ?;
+            """,
+            (category_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ РЅРµ РЅР°Р№РґРµРЅР°.")
+        return CollectionCategoryData(
+            row["id"],
+            row["title"],
+            row["parent_id"],
+            row["sort_index"] or 0,
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def delete_collection_category(
+        self,
+        category_id: int,
+        *,
+        move_children_to_root: bool = False,
+        move_items_to_root: bool = False,
+    ) -> None:
+        children_count = self._conn.execute(
+            "SELECT COUNT(*) AS cnt FROM collection_category WHERE parent_id = ?;",
+            (category_id,),
+        ).fetchone()["cnt"]
+        items_count = self._conn.execute(
+            "SELECT COUNT(*) AS cnt FROM collection_items WHERE category_id = ?;",
+            (category_id,),
+        ).fetchone()["cnt"]
+        if children_count and not move_children_to_root:
+            raise ValueError("Категория содержит подкатегории.")
+        if items_count and not move_items_to_root:
+            raise ValueError("Категория содержит коллекции.")
+        with self._conn:
+            if move_children_to_root:
+                self._conn.execute(
+                    "UPDATE collection_category SET parent_id = NULL WHERE parent_id = ?;",
+                    (category_id,),
+                )
+            if move_items_to_root:
+                self._conn.execute(
+                    "UPDATE collection_items SET category_id = NULL WHERE category_id = ?;",
+                    (category_id,),
+                )
+            self._conn.execute("DELETE FROM collection_category WHERE id = ?;", (category_id,))
 
     def fetch_collection_relations(self, item_id: Optional[int] = None) -> List[CollectionRelationData]:
         """Возвращает связи элементов коллекции."""
@@ -3678,6 +4091,142 @@ class Database:
         """Удаляет связь коллекции."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_relations WHERE id = ?;", (relation_id,))
+
+    def create_collection_entries(
+        self,
+        collection_id: int,
+        entries: Iterable[dict],
+    ) -> None:
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        payload = []
+        for entry in entries:
+            payload.append(
+                (
+                    collection_id,
+                    (entry.get("source_path") or "").strip(),
+                    (entry.get("rel_path") or "").strip(),
+                    (entry.get("title") or "").strip(),
+                    (entry.get("ext") or "").strip(),
+                    (entry.get("mime") or "").strip(),
+                    int(entry.get("size_bytes") or 0),
+                    (entry.get("meta_json") or "").strip(),
+                    int(bool(entry.get("is_missing") or 0)),
+                    now,
+                    now,
+                )
+            )
+        if not payload:
+            return
+        with self._conn:
+            self._conn.executemany(
+                """
+                INSERT INTO collection_item
+                (collection_id, source_path, rel_path, title, ext, mime, size_bytes, meta_json, is_missing, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                payload,
+            )
+
+    def fetch_collection_entries(self, collection_id: int) -> List[CollectionEntryData]:
+        rows = self._conn.execute(
+            """
+            SELECT id, collection_id, source_path, rel_path, title, ext, mime, size_bytes, meta_json, is_missing,
+                   created_at, updated_at
+            FROM collection_item
+            WHERE collection_id = ?
+            ORDER BY rel_path COLLATE NOCASE ASC, id ASC;
+            """,
+            (collection_id,),
+        ).fetchall()
+        return [
+            CollectionEntryData(
+                row["id"],
+                row["collection_id"],
+                row["source_path"],
+                row["rel_path"],
+                row["title"],
+                row["ext"] or "",
+                row["mime"] or "",
+                row["size_bytes"] or 0,
+                row["meta_json"] or "",
+                bool(row["is_missing"]),
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def sync_collection_entries(
+        self,
+        collection_id: int,
+        entries: Iterable[dict],
+    ) -> None:
+        existing_rows = self._conn.execute(
+            """
+            SELECT id, rel_path
+            FROM collection_item
+            WHERE collection_id = ?;
+            """,
+            (collection_id,),
+        ).fetchall()
+        existing_by_rel = {row["rel_path"]: row["id"] for row in existing_rows}
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        incoming_rel = set()
+        with self._conn:
+            for entry in entries:
+                rel_path = (entry.get("rel_path") or "").strip()
+                if not rel_path:
+                    continue
+                incoming_rel.add(rel_path)
+                if rel_path in existing_by_rel:
+                    self._conn.execute(
+                        """
+                        UPDATE collection_item
+                        SET source_path = ?, title = ?, ext = ?, mime = ?, size_bytes = ?, meta_json = ?,
+                            is_missing = 0, updated_at = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            (entry.get("source_path") or "").strip(),
+                            (entry.get("title") or "").strip(),
+                            (entry.get("ext") or "").strip(),
+                            (entry.get("mime") or "").strip(),
+                            int(entry.get("size_bytes") or 0),
+                            (entry.get("meta_json") or "").strip(),
+                            now,
+                            existing_by_rel[rel_path],
+                        ),
+                    )
+                else:
+                    self._conn.execute(
+                        """
+                        INSERT INTO collection_item
+                        (collection_id, source_path, rel_path, title, ext, mime, size_bytes, meta_json, is_missing, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?);
+                        """,
+                        (
+                            collection_id,
+                            (entry.get("source_path") or "").strip(),
+                            rel_path,
+                            (entry.get("title") or "").strip(),
+                            (entry.get("ext") or "").strip(),
+                            (entry.get("mime") or "").strip(),
+                            int(entry.get("size_bytes") or 0),
+                            (entry.get("meta_json") or "").strip(),
+                            now,
+                            now,
+                        ),
+                    )
+            missing_rel = set(existing_by_rel.keys()) - incoming_rel
+            for rel_path in missing_rel:
+                self._conn.execute(
+                    """
+                    UPDATE collection_item
+                    SET is_missing = 1, updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (now, existing_by_rel[rel_path]),
+                )
 
     # --- Shop data ---
     def create_shop_category(self, title: str, parent_id: Optional[int] = None) -> ShopCategoryData:
@@ -3855,6 +4404,10 @@ class Database:
     def delete_shop_source(self, source_id: int) -> None:
         with self._conn:
             self._conn.execute("DELETE FROM shop_source WHERE id = ?;", (source_id,))
+
+    def delete_shop_item(self, item_id: int) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM shop_item WHERE id = ?;", (item_id,))
 
     def fetch_shop_item_properties(self, item_id: int) -> List[ShopItemPropertyData]:
         rows = self._conn.execute(
@@ -4287,6 +4840,47 @@ class Database:
                 (title, category_id, user_notes, now, now),
             )
         return ShopItemData(cur.lastrowid, title, category_id, user_notes, now, now)
+
+    def update_shop_item(
+        self,
+        item_id: int,
+        *,
+        title: str,
+        category_id: Optional[int],
+        user_notes: str,
+    ) -> ShopItemData:
+        title = (title or "").strip() or "Без названия"
+        if len(title) > MAX_TITLE_LEN:
+            title = title[:MAX_TITLE_LEN].rstrip()
+        user_notes = (user_notes or "").strip()
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE shop_item
+                SET title = ?, category_id = ?, user_notes = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (title, category_id, user_notes, now, item_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, title, category_id, user_notes, created_at, updated_at
+            FROM shop_item
+            WHERE id = ?;
+            """,
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Товар не найден.")
+        return ShopItemData(
+            row["id"],
+            row["title"],
+            row["category_id"],
+            row["user_notes"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
 
     def upsert_shop_source(
         self,

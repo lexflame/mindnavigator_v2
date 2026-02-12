@@ -7,10 +7,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QCheckBox,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
+    QHBoxLayout,
     QVBoxLayout,
+    QHeaderView,
 )
 
 from mindnavigator.storage import Database, ShopItemPropertyData
@@ -18,10 +21,17 @@ from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 
 class PurchaseCompareDialog(QDialog):
-    def __init__(self, db: Database, category_id: int | None = None, parent=None) -> None:
+    def __init__(
+        self,
+        db: Database,
+        category_id: int | None = None,
+        item_ids: list[int] | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._db = db
         self._category_id = category_id
+        self._item_ids = item_ids or []
 
         self.setObjectName("PurchaseCompareDialog")
         self.setWindowTitle("Сравнение товаров")
@@ -36,6 +46,18 @@ class PurchaseCompareDialog(QDialog):
         title.setObjectName("DialogTitle")
         layout.addWidget(title)
 
+        controls = QHBoxLayout()
+        self.only_common = QCheckBox("Только общие свойства")
+        self.only_common.setChecked(True)
+        self.only_diff = QCheckBox("Только различия")
+        self.only_diff.setChecked(False)
+        self.common_label = QLabel("")
+        controls.addWidget(self.only_common)
+        controls.addWidget(self.only_diff)
+        controls.addStretch(1)
+        controls.addWidget(self.common_label)
+        layout.addLayout(controls)
+
         self.category_combo = QComboBox()
         self._load_categories()
         layout.addWidget(self.category_combo)
@@ -44,6 +66,7 @@ class PurchaseCompareDialog(QDialog):
         self.table.setObjectName("PurchaseCompareTable")
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table, 1)
 
@@ -53,6 +76,8 @@ class PurchaseCompareDialog(QDialog):
         layout.addWidget(buttons)
 
         self.category_combo.currentIndexChanged.connect(self._reload_table)
+        self.only_common.toggled.connect(self._reload_table)
+        self.only_diff.toggled.connect(self._reload_table)
         self._reload_table()
 
         self.setStyleSheet(f"""
@@ -104,10 +129,16 @@ class PurchaseCompareDialog(QDialog):
             idx = self.category_combo.findData(self._category_id)
             if idx >= 0:
                 self.category_combo.setCurrentIndex(idx)
+        if self._item_ids:
+            self.category_combo.setEnabled(False)
 
     def _reload_table(self) -> None:
-        category_id = self.category_combo.currentData()
-        items = self._db.fetch_shop_compare_items(category_id)
+        if self._item_ids:
+            items = [self._db.get_shop_item(item_id) for item_id in self._item_ids]
+            items = [item for item in items if item is not None]
+        else:
+            category_id = self.category_combo.currentData()
+            items = self._db.fetch_shop_compare_items(category_id)
         if not items:
             self.table.setRowCount(0)
             self.table.setColumnCount(0)
@@ -115,20 +146,41 @@ class PurchaseCompareDialog(QDialog):
         properties_by_item: dict[int, list[ShopItemPropertyData]] = {
             item.id: self._db.fetch_shop_item_properties(item.id) for item in items
         }
+        all_props = sum(len(props) for props in properties_by_item.values())
+        if all_props == 0:
+            self.table.setRowCount(1)
+            self.table.setColumnCount(1)
+            self.table.setHorizontalHeaderLabels(["Свойства"])
+            self.table.setItem(0, 0, QTableWidgetItem("Нет свойств для сравнения"))
+            self.common_label.setText("Общие: 0 / Всего: 0")
+            return
         all_keys: list[str] = []
+        key_sets: list[set[str]] = []
         for props in properties_by_item.values():
+            keys = set()
             for prop in props:
                 key = prop.normalized_key or prop.name
-                if key not in all_keys:
-                    all_keys.append(key)
+                if key:
+                    keys.add(key)
+                    if key not in all_keys:
+                        all_keys.append(key)
+            key_sets.append(keys)
         all_keys.sort()
+        common_keys = set.intersection(*key_sets) if key_sets else set()
+        keys_to_show = all_keys
+        if self.only_common.isChecked():
+            keys_to_show = [key for key in keys_to_show if key in common_keys]
+        self.common_label.setText(
+            f"Общие: {len(common_keys)} / Всего: {len(all_keys)}"
+        )
 
         self.table.setColumnCount(len(items) + 1)
         headers = ["Свойство"] + [item.title for item in items]
         self.table.setHorizontalHeaderLabels(headers)
-        self.table.setRowCount(len(all_keys))
-        for row_idx, key in enumerate(all_keys):
+        self.table.setRowCount(len(keys_to_show))
+        for row_idx, key in enumerate(keys_to_show):
             self.table.setItem(row_idx, 0, QTableWidgetItem(key))
+            row_values: list[str] = []
             for col_idx, item in enumerate(items, start=1):
                 value = ""
                 for prop in properties_by_item.get(item.id, []):
@@ -138,4 +190,17 @@ class PurchaseCompareDialog(QDialog):
                         if prop.unit:
                             value = f"{value} {prop.unit}"
                         break
+                row_values.append(value)
                 self.table.setItem(row_idx, col_idx, QTableWidgetItem(value))
+            distinct = {val for val in row_values if val}
+            has_diff = len(distinct) > 1
+            if self.only_diff.isChecked() and not has_diff:
+                self.table.hideRow(row_idx)
+            else:
+                self.table.showRow(row_idx)
+            if has_diff:
+                for col_idx in range(1, len(items) + 1):
+                    cell = self.table.item(row_idx, col_idx)
+                    if cell is not None:
+                        cell.setBackground(Qt.yellow)
+                        cell.setForeground(Qt.black)
