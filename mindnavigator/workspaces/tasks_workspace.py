@@ -616,14 +616,12 @@ class TasksModel(QAbstractListModel):
             if self._is_descendant(parent_id, task.id):
                 return False
 
-        target_day = parent_task.day if parent_task is not None else task.day
-        target_time = parent_task.time_text if parent_task is not None else task.time_text
         updated = self._db.update_task(
             task_id=task.id,
             title=task.title,
             description=task.description,
-            day=target_day,
-            time_text=target_time,
+            day=task.day,
+            time_text=task.time_text,
             priority=task.priority,
             done=task.done,
             project_id=task.project_id,

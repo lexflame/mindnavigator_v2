@@ -1791,15 +1791,6 @@ class Database:
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
-        if parent_id is not None:
-            parent_row = self._conn.execute(
-                "SELECT day, time_text FROM tasks WHERE id = ?;",
-                (parent_id,),
-            ).fetchone()
-            if parent_row:
-                day = date.fromisoformat(parent_row["day"])
-                time_text = parent_row["time_text"] or ""
-
         project_title = ""
         project_area = ""
         project_links: List[Tuple[str, int]] = []
@@ -1903,20 +1894,6 @@ class Database:
         recurrence_interval = max(1, int(recurrence_interval or 1))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
-
-        prev_parent_row = self._conn.execute(
-            "SELECT parent_id FROM tasks WHERE id = ?;",
-            (task_id,),
-        ).fetchone()
-        prev_parent_id = prev_parent_row["parent_id"] if prev_parent_row is not None else None
-        if parent_id is not None and parent_id != prev_parent_id:
-            parent_row = self._conn.execute(
-                "SELECT day, time_text FROM tasks WHERE id = ?;",
-                (parent_id,),
-            ).fetchone()
-            if parent_row:
-                day = date.fromisoformat(parent_row["day"])
-                time_text = parent_row["time_text"] or ""
 
         project_title = ""
         project_area = ""
