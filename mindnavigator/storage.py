@@ -38,6 +38,7 @@ class TaskData:
     parent_id: Optional[int] = None
     recurrence_kind: str = ""
     recurrence_interval: int = 1
+    completion_delay_minutes: int = 0
 
 
 @dataclass(frozen=True)
@@ -406,6 +407,7 @@ class Database:
                     time_text TEXT NOT NULL DEFAULT '',
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+                    completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
                     recurrence_kind TEXT NOT NULL DEFAULT '',
@@ -852,6 +854,7 @@ class Database:
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
         self._ensure_task_recurrence_columns()
+        self._ensure_task_completion_delay_column()
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_marker_attachment_columns()
@@ -917,6 +920,16 @@ class Database:
             if "recurrence_interval" not in names:
                 self._conn.execute(
                     "ALTER TABLE tasks ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1;"
+                )
+
+    def _ensure_task_completion_delay_column(self) -> None:
+        """Добавляет колонку расхождения по времени выполнения, если она отсутствует."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "completion_delay_minutes" not in names:
+            with self._conn:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN completion_delay_minutes INTEGER NOT NULL DEFAULT 0;"
                 )
 
     def _ensure_priority_values(self) -> None:
@@ -1200,6 +1213,7 @@ class Database:
                 time_text TEXT NOT NULL DEFAULT '',
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+                completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                 project_id INTEGER REFERENCES projects(id),
                 parent_id INTEGER REFERENCES tasks(id),
                 created_at TEXT NOT NULL,
@@ -1210,9 +1224,9 @@ class Database:
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at
+                id, title, description, day, time_text, priority, done, completion_delay_minutes, project_id, parent_id, created_at, updated_at
             )
-            SELECT id, title, description, day, time_text, priority, done, project_id, parent_id, created_at, updated_at
+            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0), project_id, parent_id, created_at, updated_at
             FROM tasks_old;
             """
         )
@@ -1519,6 +1533,7 @@ class Database:
                 t.description,
                 t.priority,
                 t.done,
+                t.completion_delay_minutes,
                 t.project_id,
                 CASE
                     WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
@@ -1544,6 +1559,7 @@ class Database:
                     description=row["description"] or "",
                     priority=row["priority"],
                     done=bool(row["done"]),
+                    completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
                     project_id=row["project_id"],
                     project_title=row["project_title"] or "",
                     project_area=row["project_area"] or "",
@@ -2019,14 +2035,53 @@ class Database:
         prev_done = bool(row["done"])
         recurrence_kind = (row["recurrence_kind"] or "").strip().lower()
         recurrence_interval = max(1, int(row["recurrence_interval"] or 1))
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now_utc = datetime.utcnow().isoformat(timespec="seconds")
+        completed_local = datetime.now()
+        planned_day = date.fromisoformat(row["day"])
+        planned_time_text = (row["time_text"] or "").strip()
+        try:
+            if planned_time_text:
+                planned_dt = datetime.strptime(
+                    f"{planned_day.isoformat()} {planned_time_text}",
+                    "%Y-%m-%d %H:%M",
+                )
+            else:
+                planned_dt = datetime.combine(planned_day, datetime.min.time())
+        except ValueError:
+            planned_dt = datetime.combine(planned_day, datetime.min.time())
+        completion_delay_minutes = 0
+        if done:
+            delta_minutes = int((completed_local - planned_dt).total_seconds() // 60)
+            if delta_minutes > 0:
+                completion_delay_minutes = delta_minutes
         with self._conn:
-            self._conn.execute(
-                "UPDATE tasks SET done = ?, updated_at = ? WHERE id = ?;",
-                (int(done), now, task_id),
-            )
+            if done:
+                self._conn.execute(
+                    """
+                    UPDATE tasks
+                    SET done = ?, day = ?, time_text = ?, completion_delay_minutes = ?, updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (
+                        int(done),
+                        completed_local.date().isoformat(),
+                        completed_local.strftime("%H:%M"),
+                        completion_delay_minutes,
+                        now_utc,
+                        task_id,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    """
+                    UPDATE tasks
+                    SET done = ?, completion_delay_minutes = 0, updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (int(done), now_utc, task_id),
+                )
             if done and not prev_done and recurrence_kind:
-                current_day = date.fromisoformat(row["day"])
+                current_day = planned_day
                 next_day = self._next_recurrence_day(current_day, recurrence_kind, recurrence_interval)
                 self._conn.execute(
                     """
@@ -2046,8 +2101,8 @@ class Database:
                         row["parent_id"],
                         recurrence_kind,
                         recurrence_interval,
-                        now,
-                        now,
+                        now_utc,
+                        now_utc,
                     ),
                 )
 
