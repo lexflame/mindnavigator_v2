@@ -19,7 +19,7 @@ from typing import Dict, List, Union, Optional, Set, Tuple
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
@@ -27,18 +27,32 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView
 )
 
-from mindnavigator.storage import (
-    CloudFileData,
-    TaskAttachmentData,
-    get_database,
-    normalize_priority,
-    validate_area,
-    validate_time_text,
-    validate_title,
-)
-from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
-from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
-from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
+try:
+    from mindnavigator.storage import (
+        CloudFileData,
+        TaskAttachmentData,
+        get_database,
+        normalize_priority,
+        validate_area,
+        validate_time_text,
+        validate_title,
+    )
+    from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+    from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+    from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
+except ModuleNotFoundError:
+    from ..storage import (
+        CloudFileData,
+        TaskAttachmentData,
+        get_database,
+        normalize_priority,
+        validate_area,
+        validate_time_text,
+        validate_title,
+    )
+    from ..ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+    from ..ui.styles import MATH_PHYS_BACKGROUND
+    from ..ui.workspaces.base_workspace import BaseWorkspace
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _PARENT_UNSET = object()
@@ -3028,6 +3042,56 @@ class TasksWorkspace(BaseWorkspace):
                 background: #16171a;
                 border: 1px solid #2a2b2f;
             }
+
+            QTableWidget#TasksGanttTable {
+                background: #16171a;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                gridline-color: #2a2b2f;
+                alternate-background-color: #1b1c20;
+                selection-background-color: #2f3238;
+                selection-color: #f2f2f2;
+            }
+
+            QTableWidget#TasksGanttTable::item {
+                padding: 4px 6px;
+            }
+
+            QTableWidget#TasksGanttTable QHeaderView::section {
+                background: #202127;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                padding: 4px 6px;
+            }
+
+            QTableWidget#TasksGanttTable QTableCornerButton::section {
+                background: #202127;
+                border: 1px solid #2a2b2f;
+            }
+
+            QTableWidget#TasksGanttTable QSpinBox {
+                background: #202127;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                padding: 2px 6px;
+            }
+
+            QTableWidget#TasksGanttTable QSpinBox::up-button,
+            QTableWidget#TasksGanttTable QSpinBox::down-button {
+                background: #2a2b2f;
+                border-left: 1px solid #3a3b40;
+                width: 14px;
+            }
+
+            QTableWidget#TasksGanttTable QSpinBox::up-button:hover,
+            QTableWidget#TasksGanttTable QSpinBox::down-button:hover {
+                background: #34363b;
+            }
+
+            QLabel#TasksGanttHint {
+                color: #aeb3bf;
+                padding: 2px 4px;
+            }
         """)
 
     def build_content(self) -> None:
@@ -3143,6 +3207,13 @@ class TasksWorkspace(BaseWorkspace):
         self.gantt_table.setAlternatingRowColors(True)
         self.gantt_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.gantt_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table_palette = self.gantt_table.palette()
+        table_palette.setColor(QPalette.Base, QColor("#16171a"))
+        table_palette.setColor(QPalette.AlternateBase, QColor("#1b1c20"))
+        table_palette.setColor(QPalette.Text, QColor("#cfcfcf"))
+        table_palette.setColor(QPalette.Mid, QColor("#3a3b40"))
+        table_palette.setColor(QPalette.Highlight, QColor("#4f7ecf"))
+        self.gantt_table.setPalette(table_palette)
         self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.gantt_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
@@ -3168,8 +3239,23 @@ class TasksWorkspace(BaseWorkspace):
             if r.width() <= 0 or r.height() <= 0:
                 return
 
-            painter.setPen(QColor("#3a3b40"))
-            painter.setBrush(QColor("#1f2227"))
+            pal = self.palette()
+            border_color = pal.mid().color()
+            track_color = pal.alternateBase().color()
+            accent_color = pal.highlight().color()
+            label_color = pal.text().color()
+            label_color.setAlpha(140)
+            minor_tick_color = pal.mid().color()
+            minor_tick_color.setAlpha(120)
+            if track_color.lightness() > 120:
+                border_color = QColor("#3a3b40")
+                track_color = QColor("#1f2227")
+                accent_color = QColor("#4f7ecf")
+                label_color = QColor("#8a8d95")
+                minor_tick_color = QColor("#43464d")
+
+            painter.setPen(border_color)
+            painter.setBrush(track_color)
             painter.drawRoundedRect(r, 4, 4)
 
             # Почасовая сетка и подписи времени (каждые 2 часа).
@@ -3179,13 +3265,13 @@ class TasksWorkspace(BaseWorkspace):
                 minute_mark = hour * 60
                 x = r.left() + int((minute_mark - self._day_start) / span * r.width())
                 strong_tick = (hour % 2 == 0) or (minute_mark == self._day_start) or (minute_mark == self._day_end)
-                tick_color = QColor("#5b5e66") if strong_tick else QColor("#43464d")
+                tick_color = border_color if strong_tick else minor_tick_color
                 painter.setPen(tick_color)
                 painter.drawLine(x, r.top() + 1, x, baseline_y)
                 if strong_tick:
                     label = f"{hour:02d}"
                     label_rect = QRect(x - 10, baseline_y + 1, 20, 8)
-                    painter.setPen(QColor("#8a8d95"))
+                    painter.setPen(label_color)
                     painter.drawText(label_rect, Qt.AlignHCenter | Qt.AlignTop, label)
 
             start_clamped = min(max(self._start, self._day_start), self._day_end)
@@ -3198,7 +3284,7 @@ class TasksWorkspace(BaseWorkspace):
             bar_w = max(2, x2 - x1)
             bar = QRect(x1, r.top() + 1, bar_w, max(2, baseline_y - r.top() - 1))
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor("#4f7ecf"))
+            painter.setBrush(accent_color)
             painter.drawRoundedRect(bar, 4, 4)
 
     def _build_filters(self) -> None:
