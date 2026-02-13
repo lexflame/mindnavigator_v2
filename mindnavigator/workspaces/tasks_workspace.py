@@ -3172,7 +3172,22 @@ class TasksWorkspace(BaseWorkspace):
             painter.setBrush(QColor("#1f2227"))
             painter.drawRoundedRect(r, 4, 4)
 
+            # Почасовая сетка и подписи времени (каждые 2 часа).
             span = max(1, self._day_end - self._day_start)
+            baseline_y = r.bottom() - 9
+            for hour in range(self._day_start // 60, self._day_end // 60 + 1):
+                minute_mark = hour * 60
+                x = r.left() + int((minute_mark - self._day_start) / span * r.width())
+                strong_tick = (hour % 2 == 0) or (minute_mark == self._day_start) or (minute_mark == self._day_end)
+                tick_color = QColor("#5b5e66") if strong_tick else QColor("#43464d")
+                painter.setPen(tick_color)
+                painter.drawLine(x, r.top() + 1, x, baseline_y)
+                if strong_tick:
+                    label = f"{hour:02d}"
+                    label_rect = QRect(x - 10, baseline_y + 1, 20, 8)
+                    painter.setPen(QColor("#8a8d95"))
+                    painter.drawText(label_rect, Qt.AlignHCenter | Qt.AlignTop, label)
+
             start_clamped = min(max(self._start, self._day_start), self._day_end)
             end_clamped = min(max(self._end, self._day_start), self._day_end)
             if end_clamped <= start_clamped:
@@ -3181,7 +3196,7 @@ class TasksWorkspace(BaseWorkspace):
             x1 = r.left() + int((start_clamped - self._day_start) / span * r.width())
             x2 = r.left() + int((end_clamped - self._day_start) / span * r.width())
             bar_w = max(2, x2 - x1)
-            bar = QRect(x1, r.top() + 1, bar_w, max(2, r.height() - 2))
+            bar = QRect(x1, r.top() + 1, bar_w, max(2, baseline_y - r.top() - 1))
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor("#4f7ecf"))
             painter.drawRoundedRect(bar, 4, 4)
@@ -3663,7 +3678,7 @@ class TasksWorkspace(BaseWorkspace):
                 parent=self.gantt_table,
             )
             self.gantt_table.setCellWidget(row, 4, bar_widget)
-            self.gantt_table.setRowHeight(row, 24)
+            self.gantt_table.setRowHeight(row, 34)
 
             minutes_spin = QSpinBox(self.gantt_table)
             minutes_spin.setRange(5, 8 * 60)
