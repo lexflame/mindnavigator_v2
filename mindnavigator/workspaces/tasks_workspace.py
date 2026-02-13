@@ -27,32 +27,18 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView
 )
 
-try:
-    from mindnavigator.storage import (
-        CloudFileData,
-        TaskAttachmentData,
-        get_database,
-        normalize_priority,
-        validate_area,
-        validate_time_text,
-        validate_title,
-    )
-    from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
-    from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
-    from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
-except ModuleNotFoundError:
-    from ..storage import (
-        CloudFileData,
-        TaskAttachmentData,
-        get_database,
-        normalize_priority,
-        validate_area,
-        validate_time_text,
-        validate_title,
-    )
-    from ..ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
-    from ..ui.styles import MATH_PHYS_BACKGROUND
-    from ..ui.workspaces.base_workspace import BaseWorkspace
+from mindnavigator.storage import (
+    CloudFileData,
+    TaskAttachmentData,
+    get_database,
+    normalize_priority,
+    validate_area,
+    validate_time_text,
+    validate_title,
+)
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _PARENT_UNSET = object()
