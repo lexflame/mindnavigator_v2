@@ -2934,6 +2934,8 @@ class TasksWorkspace(BaseWorkspace):
 
     workspace_id = "tasks"
     workspace_title = "Задачи"
+    GANTT_DAY_START_HOUR = 8
+    GANTT_DAY_END_HOUR = 22
 
     def __init__(self, parent=None):
         """Создает интерфейс рабочей области задач."""
@@ -3149,6 +3151,40 @@ class TasksWorkspace(BaseWorkspace):
         self.gantt_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         layout.addWidget(self.gantt_table, 1)
         return page
+
+    class _GanttBarWidget(QWidget):
+        def __init__(self, start_minutes: int, end_minutes: int, day_start: int, day_end: int, parent=None):
+            super().__init__(parent)
+            self._start = int(start_minutes)
+            self._end = int(end_minutes)
+            self._day_start = int(day_start)
+            self._day_end = int(day_end)
+            self.setMinimumHeight(18)
+
+        def paintEvent(self, event):
+            super().paintEvent(event)
+            painter = QPainter(self)
+            r = self.rect().adjusted(2, 3, -2, -3)
+            if r.width() <= 0 or r.height() <= 0:
+                return
+
+            painter.setPen(QColor("#3a3b40"))
+            painter.setBrush(QColor("#1f2227"))
+            painter.drawRoundedRect(r, 4, 4)
+
+            span = max(1, self._day_end - self._day_start)
+            start_clamped = min(max(self._start, self._day_start), self._day_end)
+            end_clamped = min(max(self._end, self._day_start), self._day_end)
+            if end_clamped <= start_clamped:
+                return
+
+            x1 = r.left() + int((start_clamped - self._day_start) / span * r.width())
+            x2 = r.left() + int((end_clamped - self._day_start) / span * r.width())
+            bar_w = max(2, x2 - x1)
+            bar = QRect(x1, r.top() + 1, bar_w, max(2, r.height() - 2))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#4f7ecf"))
+            painter.drawRoundedRect(bar, 4, 4)
 
     def _build_filters(self) -> None:
         while self.filter_layout.count():
@@ -3564,11 +3600,6 @@ class TasksWorkspace(BaseWorkspace):
                 pass
         return datetime.combine(task_day, datetime.min.time())
 
-    @staticmethod
-    def _timeline_text(minutes: int) -> str:
-        blocks = max(1, min(24, int(round(minutes / 15.0))))
-        return "█" * blocks
-
     def _refresh_gantt_day(self) -> None:
         db = get_database()
         priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
@@ -3606,6 +3637,8 @@ class TasksWorkspace(BaseWorkspace):
 
         cursor = datetime.combine(self._focus_day, datetime.strptime("09:00", "%H:%M").time())
         total_minutes = 0
+        day_start_minutes = self.GANTT_DAY_START_HOUR * 60
+        day_end_minutes = self.GANTT_DAY_END_HOUR * 60
         self.gantt_table.setRowCount(len(tasks))
         for row, task in enumerate(tasks):
             pref_dt = self._parse_task_datetime(task.day, task.time_text)
@@ -3619,7 +3652,18 @@ class TasksWorkspace(BaseWorkspace):
             self.gantt_table.setItem(row, 1, QTableWidgetItem(task.time_text or "—"))
             self.gantt_table.setItem(row, 2, QTableWidgetItem(start_dt.strftime("%H:%M")))
             self.gantt_table.setItem(row, 3, QTableWidgetItem(end_dt.strftime("%H:%M")))
-            self.gantt_table.setItem(row, 4, QTableWidgetItem(self._timeline_text(estimate)))
+
+            start_minutes = start_dt.hour * 60 + start_dt.minute
+            end_minutes = end_dt.hour * 60 + end_dt.minute
+            bar_widget = self._GanttBarWidget(
+                start_minutes=start_minutes,
+                end_minutes=end_minutes,
+                day_start=day_start_minutes,
+                day_end=day_end_minutes,
+                parent=self.gantt_table,
+            )
+            self.gantt_table.setCellWidget(row, 4, bar_widget)
+            self.gantt_table.setRowHeight(row, 24)
 
             minutes_spin = QSpinBox(self.gantt_table)
             minutes_spin.setRange(5, 8 * 60)
