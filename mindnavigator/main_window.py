@@ -220,6 +220,13 @@ class MainWindow(QMainWindow):
             2000,
         )
 
+    def minimize_to_tray(self) -> None:
+        """Сворачивает окно: в трей при наличии, иначе стандартно в панель задач."""
+        if self._tray_icon is not None:
+            self._minimize_to_tray()
+            return
+        self.showMinimized()
+
     def _hotkey_defaults_path(self) -> Path:
         return Path(__file__).resolve().parents[1] / "defaults" / "hotkeys.default.json"
 
@@ -685,6 +692,18 @@ class MainWindow(QMainWindow):
         if event.type() == QEvent.WindowStateChange and self.isMinimized():
             self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowMaximized)
             self._minimize_to_tray()
+            return
+        if event.type() == QEvent.ActivationChange:
+            app = QApplication.instance()
+            app_inactive = app is None or app.applicationState() != Qt.ApplicationActive
+            if (
+                app_inactive
+                and self._tray_icon is not None
+                and self.isVisible()
+                and not self.isHidden()
+                and not self.isMinimized()
+            ):
+                self._minimize_to_tray()
 
     def keyPressEvent(self, event):
         """Обрабатывает горячие клавиши окна."""
