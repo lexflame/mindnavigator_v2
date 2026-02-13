@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+from datetime import datetime, timedelta
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QPoint, QRect, QEvent
+from PySide6.QtCore import Qt, QPoint, QRect, QEvent, QTimer
 from pathlib import Path
 
 from .windowing import ResizeEdge
@@ -46,6 +47,7 @@ from .workspaces.purchases_workspace import PurchasesWorkspace
 from .constants import APP_NAME
 from .resources import resource_path
 from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
+from .storage import get_database
 
 from .ui.styles import TITLEBAR_BACKGROUND
 
@@ -113,11 +115,14 @@ class MainWindow(QMainWindow):
         self._was_maximized_before_fullscreen = False
         self._map_fullscreen_active = False
         self._map_fullscreen_restore: dict[str, bool] = {}
+        self._task_reminder_timer: QTimer | None = None
+        self._task_remind_next_at: dict[int, datetime] = {}
 
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
         self._wire_modes()
         self._init_tray()
+        self._init_task_reminders()
         self._init_hotkeys()
         self._register_system_restore_hotkey()
 
@@ -229,6 +234,57 @@ class MainWindow(QMainWindow):
 
     def _hotkey_defaults_path(self) -> Path:
         return Path(__file__).resolve().parents[1] / "defaults" / "hotkeys.default.json"
+
+    def _init_task_reminders(self) -> None:
+        """Запускает периодические напоминания о просроченных задачах."""
+        self._task_reminder_timer = QTimer(self)
+        self._task_reminder_timer.setInterval(60 * 1000)
+        self._task_reminder_timer.timeout.connect(self._check_task_reminders)
+        self._task_reminder_timer.start()
+        QTimer.singleShot(10 * 1000, self._check_task_reminders)
+
+    def _check_task_reminders(self) -> None:
+        """Показывает напоминания каждые 30 минут до переноса или выполнения задачи."""
+        if self._tray_icon is None:
+            return
+        now = datetime.now()
+        due_tasks = []
+        active_due_ids: set[int] = set()
+        for task in get_database().fetch_tasks():
+            if task.done or task.priority == "Отложенная":
+                continue
+            planned = datetime.combine(task.day, datetime.min.time())
+            time_text = (task.time_text or "").strip()
+            if time_text:
+                try:
+                    planned = datetime.strptime(
+                        f"{task.day.isoformat()} {time_text}",
+                        "%Y-%m-%d %H:%M",
+                    )
+                except ValueError:
+                    planned = datetime.combine(task.day, datetime.min.time())
+            if planned > now:
+                continue
+            active_due_ids.add(task.id)
+            due_tasks.append((planned, task))
+
+        stale_ids = [task_id for task_id in self._task_remind_next_at if task_id not in active_due_ids]
+        for task_id in stale_ids:
+            self._task_remind_next_at.pop(task_id, None)
+
+        due_tasks.sort(key=lambda item: (item[0], item[1].id))
+        for planned, task in due_tasks:
+            next_at = self._task_remind_next_at.get(task.id)
+            if next_at is not None and now < next_at:
+                continue
+            due_text = planned.strftime("%Y-%m-%d %H:%M")
+            self._tray_icon.showMessage(
+                APP_NAME,
+                f"Напоминание о задаче: {task.title}\nСрок: {due_text}",
+                QSystemTrayIcon.Information,
+                5000,
+            )
+            self._task_remind_next_at[task.id] = now + timedelta(minutes=30)
 
     def _hotkey_overrides_path(self) -> Path:
         return Path.home() / ".mindnavigator" / "hotkeys.overrides.json"
