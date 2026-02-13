@@ -39,6 +39,8 @@ class TaskData:
     recurrence_kind: str = ""
     recurrence_interval: int = 1
     completion_delay_minutes: int = 0
+    gantt_estimate_minutes: int = 0
+    gantt_forecasted: bool = False
 
 
 @dataclass(frozen=True)
@@ -408,6 +410,8 @@ class Database:
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
+                    gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
+                    gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
                     recurrence_kind TEXT NOT NULL DEFAULT '',
@@ -855,6 +859,7 @@ class Database:
         self._ensure_task_parent_column()
         self._ensure_task_recurrence_columns()
         self._ensure_task_completion_delay_column()
+        self._ensure_task_gantt_columns()
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_marker_attachment_columns()
@@ -930,6 +935,20 @@ class Database:
             with self._conn:
                 self._conn.execute(
                     "ALTER TABLE tasks ADD COLUMN completion_delay_minutes INTEGER NOT NULL DEFAULT 0;"
+                )
+
+    def _ensure_task_gantt_columns(self) -> None:
+        """Добавляет колонки оценок Ганта, если они отсутствуют."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "gantt_estimate_minutes" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0;"
+                )
+            if "gantt_forecasted" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN gantt_forecasted INTEGER NOT NULL DEFAULT 0;"
                 )
 
     def _ensure_priority_values(self) -> None:
@@ -1214,6 +1233,8 @@ class Database:
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
+                gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
+                gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
                 project_id INTEGER REFERENCES projects(id),
                 parent_id INTEGER REFERENCES tasks(id),
                 created_at TEXT NOT NULL,
@@ -1224,9 +1245,9 @@ class Database:
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, title, description, day, time_text, priority, done, completion_delay_minutes, project_id, parent_id, created_at, updated_at
+                id, title, description, day, time_text, priority, done, completion_delay_minutes, gantt_estimate_minutes, gantt_forecasted, project_id, parent_id, created_at, updated_at
             )
-            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0), project_id, parent_id, created_at, updated_at
+            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0), COALESCE(gantt_estimate_minutes, 0), COALESCE(gantt_forecasted, 0), project_id, parent_id, created_at, updated_at
             FROM tasks_old;
             """
         )
@@ -1534,6 +1555,8 @@ class Database:
                 t.priority,
                 t.done,
                 t.completion_delay_minutes,
+                t.gantt_estimate_minutes,
+                t.gantt_forecasted,
                 t.project_id,
                 CASE
                     WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
@@ -1560,6 +1583,8 @@ class Database:
                     priority=row["priority"],
                     done=bool(row["done"]),
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
+                    gantt_estimate_minutes=max(0, int(row["gantt_estimate_minutes"] or 0)),
+                    gantt_forecasted=bool(row["gantt_forecasted"]),
                     project_id=row["project_id"],
                     project_title=row["project_title"] or "",
                     project_area=row["project_area"] or "",
@@ -2082,6 +2107,20 @@ class Database:
                         now_utc,
                     ),
                 )
+
+    def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:
+        """Сохраняет оценку времени задачи для режима диаграммы Ганта."""
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        safe_minutes = max(0, int(minutes or 0))
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET gantt_estimate_minutes = ?, gantt_forecasted = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (safe_minutes, int(bool(forecasted)), now, task_id),
+            )
 
     def _next_recurrence_day(self, base_day: date, recurrence_kind: str, recurrence_interval: int) -> date:
         interval = max(1, int(recurrence_interval or 1))
