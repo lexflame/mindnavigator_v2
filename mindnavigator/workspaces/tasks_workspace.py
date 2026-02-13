@@ -3168,8 +3168,8 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.lbl_day)
         self.filter_layout.addWidget(self.btn_next_day)
         self.filter_layout.addSpacing(12)
-        self.filter_layout.addWidget(self.cmb_priority)
         self.filter_layout.addStretch(1)
+        self.filter_layout.addWidget(self.cmb_priority)
         self._relocate_search()
 
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
@@ -3195,6 +3195,9 @@ class TasksWorkspace(BaseWorkspace):
         super().on_enter(context)
 
     def apply_query(self, query: str) -> None:
+        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
+        priority = None if priority_value == "Любой" else priority_value
+        self.model.set_priority_filter(priority)
         self.model.set_search(query)
 
     def apply_filters(self, filters: Dict[str, object]) -> None:
