@@ -23,7 +23,8 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixma
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView
 )
 
 from mindnavigator.storage import (
@@ -2938,6 +2939,7 @@ class TasksWorkspace(BaseWorkspace):
         """Создает интерфейс рабочей области задач."""
         self._focus_day = date.today()
         self._applying_filters = False
+        self._gantt_mode = False
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
@@ -3093,7 +3095,6 @@ class TasksWorkspace(BaseWorkspace):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
         self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
-        content_layout.addWidget(self.list, 1)
 
         self.model = TasksModel(self)
         self.list.setModel(self.model)
@@ -3111,7 +3112,43 @@ class TasksWorkspace(BaseWorkspace):
         self.model.modelReset.connect(self.update_action_states)
         self.model.layoutChanged.connect(self.update_action_states)
 
+        self.content_stack = QStackedWidget()
+        self.content_stack.addWidget(self.list)
+        self.gantt_page = self._build_gantt_page()
+        self.content_stack.addWidget(self.gantt_page)
+        self.content_stack.setCurrentWidget(self.list)
+        content_layout.addWidget(self.content_stack, 1)
+
         self.set_content(content)
+
+    def _build_gantt_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.gantt_hint = QLabel("Режим Гант: прогноз длительности строится автоматически и сохраняется.")
+        self.gantt_hint.setObjectName("TasksGanttHint")
+        self.gantt_hint.setWordWrap(True)
+        layout.addWidget(self.gantt_hint)
+
+        self.gantt_table = QTableWidget(0, 6, page)
+        self.gantt_table.setObjectName("TasksGanttTable")
+        self.gantt_table.setHorizontalHeaderLabels(
+            ["Задача", "Срок", "Старт", "Финиш", "Лента", "Минуты"]
+        )
+        self.gantt_table.verticalHeader().setVisible(False)
+        self.gantt_table.setAlternatingRowColors(True)
+        self.gantt_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.gantt_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        layout.addWidget(self.gantt_table, 1)
+        return page
 
     def _build_filters(self) -> None:
         while self.filter_layout.count():
@@ -3151,6 +3188,13 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_next_day.setCursor(Qt.PointingHandCursor)
         self.btn_next_day.setAutoRaise(True)
 
+        self.btn_gantt = QToolButton()
+        self.btn_gantt.setText("Гант")
+        self.btn_gantt.setCheckable(True)
+        self.btn_gantt.setCursor(Qt.PointingHandCursor)
+        self.btn_gantt.setAutoRaise(True)
+        self.btn_gantt.setVisible(False)
+
         self.lbl_day = QLabel()
         self.lbl_day.setObjectName("TasksDayLabel")
 
@@ -3167,6 +3211,7 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.btn_prev_day)
         self.filter_layout.addWidget(self.lbl_day)
         self.filter_layout.addWidget(self.btn_next_day)
+        self.filter_layout.addWidget(self.btn_gantt)
         self.filter_layout.addSpacing(12)
         self.filter_layout.addStretch(1)
         self.filter_layout.addWidget(self.cmb_priority)
@@ -3174,6 +3219,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
+        self.btn_gantt.toggled.connect(self._set_gantt_mode)
         self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
 
     def _relocate_search(self) -> None:
@@ -3190,6 +3236,8 @@ class TasksWorkspace(BaseWorkspace):
     def refresh(self) -> None:
         """Перезагружает список задач из базы."""
         self.model.refresh()
+        if self._gantt_mode:
+            self._refresh_gantt_day()
 
     def on_enter(self, context: dict | None = None) -> None:
         super().on_enter(context)
@@ -3277,6 +3325,10 @@ class TasksWorkspace(BaseWorkspace):
         """Сдвигает фокусную дату на указанное число дней."""
         self._focus_day = self._focus_day + timedelta(days=delta)
         self._update_day_label()
+        if self._gantt_mode:
+            self._remember_filter("focus_day", self._focus_day.isoformat())
+            self._refresh_gantt_day()
+            return
         if not self._applying_filters:
             self._filters["focus_day"] = self._focus_day.isoformat()
             self.set_filter("tab", "all")
@@ -3308,6 +3360,9 @@ class TasksWorkspace(BaseWorkspace):
             QMessageBox.warning(self, "Проверка", str(exc))
             return
 
+        if self._gantt_mode and d == self._focus_day:
+            self._refresh_gantt_day()
+
         self.new_title.clear()
         self.new_title.setFocus()
 
@@ -3329,6 +3384,9 @@ class TasksWorkspace(BaseWorkspace):
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        if self._gantt_mode and values["day"] == self._focus_day:
+            self._refresh_gantt_day()
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:
@@ -3390,34 +3448,54 @@ class TasksWorkspace(BaseWorkspace):
 
     def _apply_mode(self, mode: str, focus_day: Optional[date] = None) -> None:
         if mode == "Сегодня":
+            if self._gantt_mode:
+                self.btn_gantt.setChecked(False)
             self.model.set_filter_mode("Сегодня")
             self._focus_day = date.today()
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
+            self.btn_gantt.setVisible(False)
             self.tab_today.setChecked(True)
         elif mode == "Выполнено":
+            if self._gantt_mode:
+                self.btn_gantt.setChecked(False)
             self.model.set_filter_mode("Выполнено")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
+            self.btn_gantt.setVisible(False)
             self.tab_done.setChecked(True)
         elif mode == "План":
             self.model.set_filter_mode("План")
-            self.model.set_focus_day(None)
-            self._set_drag_drop_state(True)
+            self.btn_gantt.setVisible(True)
+            if self._gantt_mode:
+                self.model.set_focus_day(self._focus_day)
+                self._set_drag_drop_state(False)
+                self.content_stack.setCurrentWidget(self.gantt_page)
+                self._refresh_gantt_day()
+            else:
+                self.model.set_focus_day(None)
+                self._set_drag_drop_state(True)
+                self.content_stack.setCurrentWidget(self.list)
             if hasattr(self, "tab_plan"):
                 self.tab_plan.setChecked(True)
         elif mode == "Отложенные":
+            if self._gantt_mode:
+                self.btn_gantt.setChecked(False)
             self.model.set_filter_mode("Отложенные")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
+            self.btn_gantt.setVisible(False)
             if hasattr(self, "tab_deferred"):
                 self.tab_deferred.setChecked(True)
         else:
+            if self._gantt_mode:
+                self.btn_gantt.setChecked(False)
             self.model.set_filter_mode("Все")
             if focus_day is not None:
                 self._focus_day = focus_day
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
+            self.btn_gantt.setVisible(False)
             self.tab_all.setChecked(True)
         self._update_day_label()
 
@@ -3434,6 +3512,133 @@ class TasksWorkspace(BaseWorkspace):
         priority = None if value == "Любой" else value
         self._remember_filter("priority", priority)
         self.model.set_priority_filter(priority)
+        if self._gantt_mode:
+            self._refresh_gantt_day()
+
+    def _set_gantt_mode(self, enabled: bool) -> None:
+        plan_mode = self.model.filter_mode() == "План"
+        if enabled and not plan_mode:
+            self.btn_gantt.blockSignals(True)
+            self.btn_gantt.setChecked(False)
+            self.btn_gantt.blockSignals(False)
+            return
+        self._gantt_mode = bool(enabled and plan_mode)
+        if self._gantt_mode:
+            self.model.set_filter_mode("План")
+            self.model.set_focus_day(self._focus_day)
+            self._set_drag_drop_state(False)
+            self.content_stack.setCurrentWidget(self.gantt_page)
+            self._refresh_gantt_day()
+        else:
+            if plan_mode:
+                self.model.set_filter_mode("План")
+                self.model.set_focus_day(None)
+                self._set_drag_drop_state(True)
+            self.content_stack.setCurrentWidget(self.list)
+
+    def _estimate_task_minutes(self, task) -> int:
+        text = f"{task.title} {task.description or ''}".lower()
+        words = len((task.description or "").split())
+        base = 50
+        if task.priority == "High":
+            base = 90
+        elif task.priority == "Low":
+            base = 35
+        elif task.priority == "Отложенная":
+            base = 25
+        complexity_markers = [
+            "исслед", "архитект", "интеграц", "рефактор", "оптимизац",
+            "debug", "тест", "докум", "design", "api", "sql",
+            "миграц", "парсер", "настро", "синхрон",
+        ]
+        marker_hits = sum(1 for marker in complexity_markers if marker in text)
+        raw = base + words * 2 + marker_hits * 15
+        return max(15, min(8 * 60, int(round(raw / 5.0) * 5)))
+
+    @staticmethod
+    def _parse_task_datetime(task_day: date, time_text: str) -> datetime:
+        if time_text:
+            try:
+                return datetime.strptime(f"{task_day.isoformat()} {time_text}", "%Y-%m-%d %H:%M")
+            except ValueError:
+                pass
+        return datetime.combine(task_day, datetime.min.time())
+
+    @staticmethod
+    def _timeline_text(minutes: int) -> str:
+        blocks = max(1, min(24, int(round(minutes / 15.0))))
+        return "█" * blocks
+
+    def _refresh_gantt_day(self) -> None:
+        db = get_database()
+        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
+        priority_filter = None if priority_value == "Любой" else priority_value
+        tasks = [
+            task
+            for task in db.fetch_tasks()
+            if task.day == self._focus_day
+            and not task.done
+            and task.priority != "Отложенная"
+            and (priority_filter is None or task.priority == priority_filter)
+        ]
+        tasks.sort(key=lambda task: (self._parse_task_datetime(task.day, task.time_text), task.id))
+
+        predicted = 0
+        for task in tasks:
+            if not task.gantt_forecasted or task.gantt_estimate_minutes <= 0:
+                db.set_task_gantt_estimate(task.id, self._estimate_task_minutes(task), forecasted=True)
+                predicted += 1
+        if predicted:
+            tasks = [
+                task
+                for task in db.fetch_tasks()
+                if task.day == self._focus_day
+                and not task.done
+                and task.priority != "Отложенная"
+                and (priority_filter is None or task.priority == priority_filter)
+            ]
+            tasks.sort(key=lambda task: (self._parse_task_datetime(task.day, task.time_text), task.id))
+
+        self.gantt_table.setRowCount(0)
+        if not tasks:
+            self.gantt_hint.setText("На выбранный день нет активных задач для диаграммы Ганта.")
+            return
+
+        cursor = datetime.combine(self._focus_day, datetime.strptime("09:00", "%H:%M").time())
+        total_minutes = 0
+        self.gantt_table.setRowCount(len(tasks))
+        for row, task in enumerate(tasks):
+            pref_dt = self._parse_task_datetime(task.day, task.time_text)
+            start_dt = max(cursor, pref_dt)
+            estimate = max(15, int(task.gantt_estimate_minutes or 0))
+            end_dt = start_dt + timedelta(minutes=estimate)
+            cursor = end_dt
+            total_minutes += estimate
+
+            self.gantt_table.setItem(row, 0, QTableWidgetItem(task.title))
+            self.gantt_table.setItem(row, 1, QTableWidgetItem(task.time_text or "—"))
+            self.gantt_table.setItem(row, 2, QTableWidgetItem(start_dt.strftime("%H:%M")))
+            self.gantt_table.setItem(row, 3, QTableWidgetItem(end_dt.strftime("%H:%M")))
+            self.gantt_table.setItem(row, 4, QTableWidgetItem(self._timeline_text(estimate)))
+
+            minutes_spin = QSpinBox(self.gantt_table)
+            minutes_spin.setRange(5, 8 * 60)
+            minutes_spin.setSingleStep(5)
+            minutes_spin.setValue(estimate)
+            minutes_spin.setEnabled(bool(task.gantt_forecasted))
+            minutes_spin.valueChanged.connect(
+                lambda value, task_id=task.id: self._on_gantt_minutes_changed(task_id, value)
+            )
+            self.gantt_table.setCellWidget(row, 5, minutes_spin)
+
+        total_hours = total_minutes / 60.0
+        self.gantt_hint.setText(
+            f"Гант на {self._focus_day.isoformat()}: {len(tasks)} задач, {total_minutes} мин (~{total_hours:.1f} ч)."
+        )
+
+    def _on_gantt_minutes_changed(self, task_id: int, minutes: int) -> None:
+        get_database().set_task_gantt_estimate(task_id, minutes, forecasted=True)
+        self._refresh_gantt_day()
 
     def _set_drag_drop_state(self, enabled: bool):
         """Включает или выключает drag and drop списка."""
