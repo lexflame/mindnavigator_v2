@@ -59,7 +59,10 @@ class TitleBar(QWidget):
             b.setFixedSize(34, 26)
             b.setCursor(Qt.PointingHandCursor)
 
-        self.btn_min.clicked.connect(self._window.showMinimized)
+        if hasattr(self._window, "minimize_to_tray"):
+            self.btn_min.clicked.connect(self._window.minimize_to_tray)
+        else:
+            self.btn_min.clicked.connect(self._window.showMinimized)
         self.btn_max.clicked.connect(self._toggle_max_restore)
         self.btn_close.clicked.connect(self._window.close)
 
