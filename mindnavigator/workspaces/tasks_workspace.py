@@ -82,6 +82,7 @@ class TaskRow:
     parent_id: Optional[int] = None
     recurrence_kind: str = ""
     recurrence_interval: int = 1
+    completion_delay_minutes: int = 0
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class TaskRoles:
     ProjectArea = Qt.UserRole + 17
     AttachmentSummary = Qt.UserRole + 18
     RecurrenceKind = Qt.UserRole + 19
+    CompletionDelayMinutes = Qt.UserRole + 20
 
 
 class QuickProjectCreateDialog(QDialog):
@@ -255,6 +257,7 @@ class TasksModel(QAbstractListModel):
                 t.parent_id,
                 t.recurrence_kind,
                 t.recurrence_interval,
+                t.completion_delay_minutes,
             )
             for t in tasks
         ]
@@ -339,6 +342,8 @@ class TasksModel(QAbstractListModel):
             return self._attachment_summary(r.id)
         if role == TaskRoles.RecurrenceKind:
             return r.recurrence_kind
+        if role == TaskRoles.CompletionDelayMinutes:
+            return r.completion_delay_minutes
         if role == Qt.DisplayRole:
             return r.title
         return None
@@ -522,31 +527,7 @@ class TasksModel(QAbstractListModel):
 
         new_done = not r.done
         self._db.set_task_done(r.id, new_done)
-        if new_done and bool(r.recurrence_kind):
-            self._reload_from_db()
-            return
-        new_all: List[Row] = []
-        for it in self._all_rows:
-            if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(
-                    it.id,
-                    it.day,
-                    it.time_text,
-                    it.title,
-                    it.description,
-                    it.priority,
-                    new_done,
-                    it.project_id,
-                    it.project_title,
-                    it.project_area,
-                    it.parent_id,
-                    it.recurrence_kind,
-                    it.recurrence_interval,
-                )
-            new_all.append(it)
-
-        self._all_rows = new_all
-        self._rebuild()
+        self._reload_from_db()
 
     def delete_task_by_row(self, row_idx: int):
         """Удаляет задачу по индексу строки."""
@@ -2493,7 +2474,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         recurrence_kind: str = (index.data(TaskRoles.RecurrenceKind) or "").strip().lower()
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
+        completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
         overdue = self._is_overdue(day, done)
+        show_completion_delay = done and completion_delay_minutes > 4 * 60
+        completion_delay_text = self._format_completion_delay(completion_delay_minutes) if show_completion_delay else ""
         expanded = bool(index.data(TaskRoles.Expanded))
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
         subtasks_expanded = bool(index.data(TaskRoles.SubtasksExpanded))
@@ -2585,6 +2569,18 @@ class TasksItemDelegate(QStyledItemDelegate):
             ).height()
             current_y = r.top() + self.TEXT_VPAD + title_height
 
+            if completion_delay_text:
+                delay_box = QRect(
+                    title_rect.left(),
+                    current_y + self.TEXT_GAP,
+                    title_rect.width(),
+                    title_metrics.height(),
+                )
+                painter.setPen(self.C_OVERDUE)
+                painter.drawText(delay_box, Qt.AlignLeft | Qt.AlignTop, completion_delay_text)
+                painter.setPen(title_color)
+                current_y += self.TEXT_GAP + title_metrics.height()
+
             if description:
                 desc_box = QRect(
                     title_rect.left(),
@@ -2607,8 +2603,27 @@ class TasksItemDelegate(QStyledItemDelegate):
                 current_y += self.TEXT_GAP
                 self._draw_tags(painter, QPoint(title_rect.left(), current_y), title_rect.width(), tags)
         else:
-            elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
-            painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+            title_metrics = QFontMetrics(self._font)
+            if completion_delay_text:
+                delay_text = f" {completion_delay_text}"
+                delay_width = title_metrics.horizontalAdvance(delay_text)
+                title_width = max(40, title_rect.width() - delay_width)
+                title_part = title_metrics.elidedText(title, Qt.ElideRight, title_width)
+                title_part_rect = QRect(title_rect.left(), title_rect.top(), title_width, title_rect.height())
+                delay_part_rect = QRect(
+                    title_part_rect.right(),
+                    title_rect.top(),
+                    title_rect.width() - title_width,
+                    title_rect.height(),
+                )
+                painter.setPen(title_color)
+                painter.drawText(title_part_rect, Qt.AlignVCenter | Qt.AlignLeft, title_part)
+                painter.setPen(self.C_OVERDUE)
+                painter.drawText(delay_part_rect, Qt.AlignVCenter | Qt.AlignLeft, delay_text)
+                painter.setPen(title_color)
+            else:
+                elided = title_metrics.elidedText(title, Qt.ElideRight, title_rect.width())
+                painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
         # --- PRIORITY BLOCK (fixed layout) ---
         value_text = "OVERDUE" if overdue else priority
@@ -2852,6 +2867,13 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Формирует подпись для заголовка дня."""
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
+
+    def _format_completion_delay(self, delay_minutes: int) -> str:
+        """Формирует подпись расхождения по факту выполнения."""
+        minutes = max(0, int(delay_minutes or 0))
+        days = minutes // (24 * 60)
+        hours = (minutes % (24 * 60)) // 60
+        return f"(Просрочена: {days}д {hours}ч)"
 
     def _row_layout(self, r: QRect, depth: int = 0, has_subtasks: bool = False) -> dict:
         """Возвращает прямоугольники основных колонок строки."""
