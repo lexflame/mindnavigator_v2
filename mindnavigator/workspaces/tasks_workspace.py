@@ -811,6 +811,9 @@ class TasksModel(QAbstractListModel):
             current_day: Optional[date] = None
             roots = [t for t in children_map.get(None, []) if should_include(t)]
             roots.sort(key=sort_key)
+            if self._filter_mode == "Выполнено":
+                # Показываем свежие завершенные дни сверху, сохраняя порядок задач внутри дня.
+                roots.sort(key=lambda task: task.day, reverse=True)
             for task in roots:
                 if current_day != task.day:
                     current_day = task.day
