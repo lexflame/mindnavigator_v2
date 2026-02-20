@@ -37,3 +37,12 @@
 [2026-02-20 00:22] OUT: commit created (core data model)
 [2026-02-20 00:23] CMD: git commit -m "feat//:: TASK_4DE11127-2AFA-42C4-B3D0-D83E4F89B8C4"
 [2026-02-20 00:23] OUT: commit created (class skeleton and API)
+[2026-02-20 00:24] ACTION: Started TASK_C4D406F4-3D37-43D8-A3BE-4D6B655B4A8A (smooth motion engine).
+[2026-02-20 00:25] ACTION: Added interpolation profiles, frame-sync timing, and step clamping in controller.
+[2026-02-20 00:26] ACTION: Added motion-specific tests in tests/test_dragdrop_controller.py.
+[2026-02-20 00:27] CMD: python -m compileall mindnavigator/ui/dragdrop tests/test_dragdrop_controller.py
+[2026-02-20 00:27] OUT: OK (files compiled)
+[2026-02-20 00:28] CMD: python -m pytest tests/test_dragdrop_controller.py -q
+[2026-02-20 00:28] OUT: No module named pytest
+[2026-02-20 00:29] ACTION: Updated TASK_C4D406F4-3D37-43D8-A3BE-4D6B655B4A8A -> Completed (pytest missing in env).
+[2026-02-20 00:30] ACTION: Created docs/PARITY.md and added parity task for unexpected file .codex/manual/ERROR_GIT/git_runner.txt.
