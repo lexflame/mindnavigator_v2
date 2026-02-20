@@ -41,6 +41,8 @@ class DragDropController:
 
         self.state = DragSessionState()
         self.payload: DragPayload | None = None
+        self._visual_pos: Point = (0, 0)
+        self._last_render_ms: int = 0
         self._motion.validate()
 
         self.on_drag_started: Callable[[DragPayload, DragSessionState], None] | None = None
@@ -56,6 +58,8 @@ class DragDropController:
         self.state.current_pos_global = start_pos_global
         self.state.started_at_ms = now_ms
         self.state.last_frame_ms = now_ms
+        self._visual_pos = start_pos_global
+        self._last_render_ms = now_ms
         self.state.transition(DragPhase.ARMING)
 
     def on_pointer_move(self, pos_global: Point, now_ms: int) -> None:
@@ -76,9 +80,10 @@ class DragDropController:
         zone_id = self._resolve_zone(pos_global)
         is_valid = bool(zone_id and self._validator.validate(self.payload, zone_id))
         self.state.set_target(zone_id, is_valid)
+        smooth_pos = self._compute_smooth_position(pos_global, now_ms)
         self._render_drag_ghost(
             self.payload,
-            pos_global,
+            smooth_pos,
             self._motion.ghost_opacity,
             self._motion.ghost_scale,
         )
@@ -119,6 +124,8 @@ class DragDropController:
 
     def reset(self) -> None:
         self.payload = None
+        self._visual_pos = (0, 0)
+        self._last_render_ms = 0
         if self.state.phase != DragPhase.IDLE:
             self.state.reset()
         self._clear_drag_visuals()
@@ -145,3 +152,40 @@ class DragDropController:
     def _emit_drag_started(self) -> None:
         if self.payload is not None and self.on_drag_started:
             self.on_drag_started(self.payload, self.state)
+
+    def _compute_smooth_position(self, target: Point, now_ms: int) -> Point:
+        dt_ms = max(0, now_ms - self._last_render_ms)
+        self._last_render_ms = now_ms
+        alpha = min(1.0, dt_ms / float(self._motion.duration_ms))
+        eased = self._apply_profile(alpha)
+        cx, cy = self._visual_pos
+        tx, ty = target
+        next_pos = (
+            int(round(cx + (tx - cx) * eased)),
+            int(round(cy + (ty - cy) * eased)),
+        )
+        self._visual_pos = self._clamp_step(self._visual_pos, next_pos, self._motion.max_step_px)
+        return self._visual_pos
+
+    def _apply_profile(self, alpha: float) -> float:
+        if self._motion.profile == "linear":
+            return alpha
+        if self._motion.profile == "ease_out":
+            return 1.0 - (1.0 - alpha) * (1.0 - alpha)
+        if self._motion.profile == "spring_soft":
+            return min(1.0, (1.0 - (1.0 - alpha) ** 3) * 1.08)
+        return alpha
+
+    @staticmethod
+    def _clamp_step(current: Point, target: Point, max_step_px: int) -> Point:
+        cx, cy = current
+        tx, ty = target
+        dx = tx - cx
+        dy = ty - cy
+        abs_dx = abs(dx)
+        abs_dy = abs(dy)
+        if abs_dx <= max_step_px and abs_dy <= max_step_px:
+            return target
+        clamped_x = cx + (max_step_px if dx > 0 else -max_step_px if dx < 0 else 0)
+        clamped_y = cy + (max_step_px if dy > 0 else -max_step_px if dy < 0 else 0)
+        return clamped_x, clamped_y
