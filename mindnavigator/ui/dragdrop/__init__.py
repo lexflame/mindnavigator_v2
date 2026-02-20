@@ -7,6 +7,7 @@ from .controller import (
     DragSafetyConfig,
     DragStartThreshold,
 )
+from .demo import DemoTrace, build_demo_controller
 from .model import DragPayload, DragPhase, DragSessionState, MotionConfig, Point
 from .policy import (
     AcceptAllValidator,
@@ -24,6 +25,7 @@ __all__ = [
     "DefaultHitTestService",
     "DragPayload",
     "DragDropController",
+    "DemoTrace",
     "DragPhase",
     "DragPerformanceConfig",
     "DragPerformanceSnapshot",
@@ -38,4 +40,5 @@ __all__ = [
     "MotionConfig",
     "Point",
     "RuleBasedDropValidator",
+    "build_demo_controller",
 ]
