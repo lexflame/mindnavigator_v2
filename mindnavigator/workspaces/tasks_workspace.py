@@ -3301,6 +3301,8 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header = QLabel(self.list.viewport())
         self._sticky_header.setObjectName("TasksStickyHeader")
         self._sticky_header.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self._sticky_header.setAttribute(Qt.WA_StyledBackground, True)
+        self._sticky_header.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self._sticky_header.hide()
 
         self.btn_add.clicked.connect(self._on_create_task)
@@ -3802,7 +3804,6 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_gantt_day()
 
     def _set_gantt_mode(self, enabled: bool) -> None:
-        plan_mode = self.model.filter_mode() == "План"
         if enabled and not plan_mode:
             self.btn_gantt.blockSignals(True)
             self.btn_gantt.setChecked(False)
@@ -3825,10 +3826,8 @@ class TasksWorkspace(BaseWorkspace):
 
     def _is_sticky_header_enabled(self) -> bool:
         return (
-            self.model.filter_mode() == "РџР»Р°РЅ"
-            and not self._gantt_mode
+            not self._gantt_mode
             and self.content_stack.currentWidget() is self.list
-            and self.list.isVisible()
         )
 
     def _update_sticky_day_header(self) -> None:
@@ -3871,16 +3870,17 @@ class TasksWorkspace(BaseWorkspace):
 
         text = self.delegate._format_header(active_day)
         if active_day == date.today():
-            text = f"{text}  РЎР•Р“РћР”РќРЇ"
+            text = f"{text}  СЕГОДНЯ"
         self._sticky_header.setText(text)
 
         next_header_top: Optional[int] = None
         for row in range(active_row + 1, row_count):
             idx = self.model.index(row, 0)
             if idx.data(TaskRoles.RowType) == "header":
-                next_header_top = self.list.visualRect(idx).top()
-                break
-
+                rect = self.list.visualRect(idx)
+                if rect.isValid() and not rect.isEmpty():
+                    next_header_top = rect.top()
+                    break
         header_h = self.delegate.HEADER_H
         y = 0
         if next_header_top is not None and next_header_top < header_h:
