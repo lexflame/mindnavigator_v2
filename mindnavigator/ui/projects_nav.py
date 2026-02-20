@@ -36,6 +36,18 @@ class _ProjectsListWidget(QListWidget):
         self._pressed_project_id = project_id if isinstance(project_id, int) else None
         super().mousePressEvent(event)
 
+    def dragEnterEvent(self, event):
+        if event.source() is self:
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.source() is self:
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
     def startDrag(self, supportedActions):
         current = self.currentItem()
         if self._pressed_project_id is not None:
@@ -273,6 +285,7 @@ class ProjectsNav(QWidget):
 
     def _add_clear_item(self, label: str) -> None:
         item = QListWidgetItem(label)
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
         item.setData(Qt.UserRole, {"kind": "clear", "value": None})
         self.list.addItem(item)
 
@@ -295,6 +308,15 @@ class ProjectsNav(QWidget):
             return
         for entry in entries:
             item = QListWidgetItem(entry["label"])
+            if entry.get("kind") == "project":
+                item.setFlags(
+                    Qt.ItemIsEnabled
+                    | Qt.ItemIsSelectable
+                    | Qt.ItemIsDragEnabled
+                    | Qt.ItemIsDropEnabled
+                )
+            else:
+                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             item.setData(Qt.UserRole, entry)
             self.list.addItem(item)
 

@@ -207,3 +207,6 @@
 [2026-02-20 18:29] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added mousePress-based source capture and source==target drop handling with neighbor resolution for stable reorder.
 [2026-02-20 18:29] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 18:29] OUT: OK (projects_nav compiled).
+[2026-02-20 18:36] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added explicit dragEnter/dragMove accept and strict item flags for project drag/drop targets.
+[2026-02-20 18:36] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:36] OUT: OK (projects_nav compiled).
