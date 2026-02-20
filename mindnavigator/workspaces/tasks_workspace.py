@@ -3165,6 +3165,14 @@ class TasksWorkspace(BaseWorkspace):
                 background: #16171a;
                 border: 1px solid #2a2b2f;
             }
+            QLabel#TasksStickyHeader {
+                background: #16171a;
+                color: #8a8a8a;
+                border-bottom: 1px solid #3a3b40;
+                font-size: 9pt;
+                font-weight: 600;
+                padding: 0 10px;
+            }
 
             QTableWidget#TasksGanttTable {
                 background: #16171a;
@@ -3290,6 +3298,10 @@ class TasksWorkspace(BaseWorkspace):
 
         self.delegate = TasksItemDelegate(self.list)
         self.list.setItemDelegate(self.delegate)
+        self._sticky_header = QLabel(self.list.viewport())
+        self._sticky_header.setObjectName("TasksStickyHeader")
+        self._sticky_header.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self._sticky_header.hide()
 
         self.btn_add.clicked.connect(self._on_create_task)
         self.new_title.returnPressed.connect(self._on_create_task)
@@ -3300,6 +3312,11 @@ class TasksWorkspace(BaseWorkspace):
         selection_model.currentChanged.connect(lambda *_: self.update_action_states())
         self.model.modelReset.connect(self.update_action_states)
         self.model.layoutChanged.connect(self.update_action_states)
+        self.model.modelReset.connect(self._update_sticky_day_header)
+        self.model.layoutChanged.connect(self._update_sticky_day_header)
+        self.model.rowsInserted.connect(lambda *_: self._update_sticky_day_header())
+        self.model.rowsRemoved.connect(lambda *_: self._update_sticky_day_header())
+        self.list.verticalScrollBar().valueChanged.connect(lambda *_: self._update_sticky_day_header())
 
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self.list)
@@ -3311,6 +3328,7 @@ class TasksWorkspace(BaseWorkspace):
             attach_smooth_scroll(self.list),
             attach_smooth_scroll(self.gantt_table),
         ]
+        self._update_sticky_day_header()
 
         self.set_content(content)
 
@@ -3589,6 +3607,7 @@ class TasksWorkspace(BaseWorkspace):
         """Сдвигает фокусную дату на указанное число дней."""
         self._focus_day = self._focus_day + timedelta(days=delta)
         self._update_day_label()
+        self._update_sticky_day_header()
         if self._gantt_mode:
             self._remember_filter("focus_day", self._focus_day.isoformat())
             self._refresh_gantt_day()
@@ -3653,6 +3672,8 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_gantt_day()
 
     def eventFilter(self, obj, event) -> bool:
+        if obj is self.list.viewport() and event.type() == QEvent.Resize:
+            self._update_sticky_day_header()
         if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:
             if event.button() == Qt.LeftButton:
                 pos = event.position().toPoint()
@@ -3762,6 +3783,7 @@ class TasksWorkspace(BaseWorkspace):
             self.btn_gantt.setVisible(False)
             self.tab_all.setChecked(True)
         self._update_day_label()
+        self._update_sticky_day_header()
 
     def _remember_filter(self, key: str, value: Optional[object]) -> None:
         if value is None:
@@ -3799,6 +3821,74 @@ class TasksWorkspace(BaseWorkspace):
                 self.model.set_focus_day(None)
                 self._set_drag_drop_state(True)
             self.content_stack.setCurrentWidget(self.list)
+        self._update_sticky_day_header()
+
+    def _is_sticky_header_enabled(self) -> bool:
+        return (
+            self.model.filter_mode() == "РџР»Р°РЅ"
+            and not self._gantt_mode
+            and self.content_stack.currentWidget() is self.list
+            and self.list.isVisible()
+        )
+
+    def _update_sticky_day_header(self) -> None:
+        if not hasattr(self, "_sticky_header"):
+            return
+        if not self._is_sticky_header_enabled():
+            self._sticky_header.hide()
+            return
+
+        row_count = self.model.rowCount()
+        if row_count <= 0:
+            self._sticky_header.hide()
+            return
+
+        top_index = self.list.indexAt(QPoint(2, 2))
+        if not top_index.isValid():
+            top_index = self.model.index(0, 0)
+            if not top_index.isValid():
+                self._sticky_header.hide()
+                return
+        top_row = top_index.row()
+
+        active_row = -1
+        active_day: Optional[date] = None
+        for row in range(top_row, -1, -1):
+            idx = self.model.index(row, 0)
+            if idx.data(TaskRoles.RowType) == "header":
+                active_row = row
+                active_day = idx.data(TaskRoles.Day)
+                break
+        if active_row < 0 or active_day is None:
+            self._sticky_header.hide()
+            return
+
+        active_index = self.model.index(active_row, 0)
+        active_rect = self.list.visualRect(active_index)
+        if active_row == top_row and active_rect.top() >= 0:
+            self._sticky_header.hide()
+            return
+
+        text = self.delegate._format_header(active_day)
+        if active_day == date.today():
+            text = f"{text}  РЎР•Р“РћР”РќРЇ"
+        self._sticky_header.setText(text)
+
+        next_header_top: Optional[int] = None
+        for row in range(active_row + 1, row_count):
+            idx = self.model.index(row, 0)
+            if idx.data(TaskRoles.RowType) == "header":
+                next_header_top = self.list.visualRect(idx).top()
+                break
+
+        header_h = self.delegate.HEADER_H
+        y = 0
+        if next_header_top is not None and next_header_top < header_h:
+            y = next_header_top - header_h
+
+        self._sticky_header.setGeometry(0, y, self.list.viewport().width(), header_h)
+        self._sticky_header.raise_()
+        self._sticky_header.show()
 
     def _estimate_task_minutes(self, task) -> int:
         text = f"{task.title} {task.description or ''}".lower()
