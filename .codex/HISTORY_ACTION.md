@@ -97,3 +97,4 @@
 [2026-02-20 13:50] ACTION: Created sprint branch sprint/2_scrollbar_smooth.
 [2026-02-20 13:51] ACTION: Completed TASK_5B2F6F11-0D53-487E-AF6A-442BFD0C8A61 baseline audit and documented scroll targets/requirements.
 [2026-02-20 14:02] ACTION: Completed TASK_0E28539F-0B13-4E1F-9E80-F9EE8A307039 by introducing centralized scrollbar style API in mindnavigator/ui/styles.py.
+[2026-02-20 14:10] ACTION: Completed TASK_B5B10AB6-FD2F-4AA1-9157-8E7AA32EA0CD by switching to global scrollbar QSS and removing local duplicate scrollbar blocks.

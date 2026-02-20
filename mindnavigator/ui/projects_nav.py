@@ -77,27 +77,6 @@ class ProjectsNav(QWidget):
                 border: 1px solid #2a2b2f;
                 color: #cfcfcf;
             }
-            QListWidget#ProjectsFilterList QScrollBar:vertical {
-                background: #16171a;
-                width: 6px;
-                margin: 2px;
-            }
-            QListWidget#ProjectsFilterList QScrollBar::handle:vertical {
-                background: #2a2b2f;
-                border-radius: 3px;
-                min-height: 24px;
-            }
-            QListWidget#ProjectsFilterList QScrollBar::handle:vertical:hover {
-                background: #3a3c42;
-            }
-            QListWidget#ProjectsFilterList QScrollBar::add-line:vertical,
-            QListWidget#ProjectsFilterList QScrollBar::sub-line:vertical {
-                height: 0;
-            }
-            QListWidget#ProjectsFilterList QScrollBar::add-page:vertical,
-            QListWidget#ProjectsFilterList QScrollBar::sub-page:vertical {
-                background: none;
-            }
             QListWidget#ProjectsFilterList::item {
                 padding: 6px 8px;
             }
