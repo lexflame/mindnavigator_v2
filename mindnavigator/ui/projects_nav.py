@@ -26,9 +26,23 @@ class _ProjectsListWidget(QListWidget):
         super().__init__(owner)
         self._owner = owner
         self._drag_source_project_id: int | None = None
+        self._pressed_project_id: int | None = None
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.position().toPoint())
+        payload = (item.data(Qt.UserRole) or {}) if item is not None else {}
+        value = payload.get("value") or {}
+        project_id = value.get("id") if payload.get("kind") == "project" else None
+        self._pressed_project_id = project_id if isinstance(project_id, int) else None
+        super().mousePressEvent(event)
 
     def startDrag(self, supportedActions):
         current = self.currentItem()
+        if self._pressed_project_id is not None:
+            self._drag_source_project_id = self._pressed_project_id
+            self._pressed_project_id = None
+            super().startDrag(supportedActions)
+            return
         if current is None:
             selected = self.selectedItems()
             current = selected[0] if selected else None
@@ -90,6 +104,28 @@ class _ProjectsListWidget(QListWidget):
         indent_x = target_depth * 16 + 18
         # Reparent only when dropping in the middle of row and far enough to the right.
         as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (indent_x + 42)
+
+        if target_id == source_id:
+            direction = 1 if drop_after else -1
+            idx = self.row(target_item) + direction
+            candidate_id = None
+            while 0 <= idx < self.count():
+                candidate = self.item(idx)
+                candidate_payload = (candidate.data(Qt.UserRole) or {}) if candidate is not None else {}
+                candidate_value = candidate_payload.get("value") or {}
+                raw_id = candidate_value.get("id") if candidate_payload.get("kind") == "project" else None
+                if isinstance(raw_id, int):
+                    candidate_id = raw_id
+                    break
+                idx += direction
+            if candidate_id is None:
+                event.accept()
+                self._drag_source_project_id = None
+                return
+            target_id = candidate_id
+            as_child = False
+            drop_after = direction > 0
+
         ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
         if ok:
             event.acceptProposedAction()
