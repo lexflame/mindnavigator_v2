@@ -9,3 +9,5 @@
 __pycache__
 .codex/git_key/ghp_token
 .codex/manual/ERROR_GIT/
+/dist
+/dist
