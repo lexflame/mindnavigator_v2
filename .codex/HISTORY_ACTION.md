@@ -143,3 +143,111 @@
 [2026-02-20 16:07] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py
 [2026-02-20 16:07] OUT: OK (tasks_workspace compiled).
 [2026-02-20 16:08] ACTION: TASK_6B4D8F2C-2A1E-4E96-B7A1-EDC5B6D1F2A4 completed; Sprint 3 marked as Completed.
+[2026-02-20 16:20] ACTION: Created sprint branch sprint/4_nested_projects_dragdrop for new sprint execution.
+[2026-02-20 16:21] ACTION: Added Sprint 4 planning file docs/sprints/4_SPRINT.md for nested projects and project Drag&Drop.
+[2026-02-20 16:22] ACTION: Registered Sprint 4 task backlog in .codex/HISTORY_TASK.md with TASK_GUID mapping.
+[2026-02-20 16:30] ACTION: Started TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 (requirements and UX flow for nested projects).
+[2026-02-20 16:31] ACTION: Audited current ProjectsNav and storage capabilities (parent_project_id, cycle checks, flat rendering gaps).
+[2026-02-20 16:32] ACTION: Added docs/sprints/TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40_PLAN.md with hierarchy constraints, DnD matrix, and acceptance criteria.
+[2026-02-20 16:33] ACTION: Completed TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 and moved Sprint 4 status to In Progress.
+[2026-02-20 16:45] ACTION: Started TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91 (storage model and migration design).
+[2026-02-20 16:49] ACTION: Added projects.sort_order with migration path, normalization helper, and parent+order indexes.
+[2026-02-20 16:51] ACTION: Updated project storage API for deterministic sibling order (fetch/create/update).
+[2026-02-20 16:52] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 16:52] OUT: OK (storage compiled).
+[2026-02-20 16:53] ACTION: Added docs/sprints/TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91_ARCH.md and completed TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91.
+[2026-02-20 17:05] ACTION: Started TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88 (domain API for project tree operations).
+[2026-02-20 17:08] ACTION: Added storage domain API for tree fetch, child fetch, move/reparent and sibling reorder.
+[2026-02-20 17:09] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 17:09] OUT: OK (storage compiled).
+[2026-02-20 17:10] ACTION: Added docs/sprints/TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88_API.md and completed TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88.
+[2026-02-20 17:18] ACTION: Started TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7 (ProjectsNav UI tree rendering).
+[2026-02-20 17:21] ACTION: Reworked projects navigation from flat list to hierarchy render with depth markers and collapsed-state memory.
+[2026-02-20 17:22] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:22] OUT: OK (projects_nav compiled).
+[2026-02-20 17:23] ACTION: Added docs/sprints/TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7_UI.md and completed TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7.
+[2026-02-20 17:30] ACTION: Started TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20 (Drag&Drop interaction for projects).
+[2026-02-20 17:33] ACTION: Added project drag/drop handling in ProjectsNav with drop intent resolution (root/reorder/reparent).
+[2026-02-20 17:34] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:34] OUT: OK (projects_nav compiled).
+[2026-02-20 17:35] ACTION: Added docs/sprints/TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20_DND.md and completed TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20.
+[2026-02-20 17:42] ACTION: Started TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11 (DnD validation and guardrails).
+[2026-02-20 17:43] ACTION: Added DnD guardrails in ProjectsNav: pseudo-target blocking, cycle/descendant checks, and max-depth validation (4 levels).
+[2026-02-20 17:44] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:44] OUT: OK (projects_nav compiled).
+[2026-02-20 17:45] ACTION: Added docs/sprints/TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11_GUARDRAILS.md and completed TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11.
+[2026-02-20 17:48] ACTION: Started TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 (persistence/order/reload consistency).
+[2026-02-20 17:49] ACTION: Unified root and nested sibling sorting in ProjectsNav by persisted sort_order for deterministic post-reload ordering.
+[2026-02-20 17:49] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:49] OUT: OK (projects_nav compiled).
+[2026-02-20 17:50] ACTION: Added docs/sprints/TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33_PERSISTENCE.md and completed TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33.
+[2026-02-20 17:52] ACTION: Started TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 (automated tests for tree and DnD logic).
+[2026-02-20 17:53] ACTION: Added tests/test_project_tree_storage.py with reorder/reparent/cycle/reindex scenarios for project tree storage logic.
+[2026-02-20 17:54] CMD: python -m pytest tests/test_project_tree_storage.py -q -p no:cacheprovider
+[2026-02-20 17:54] OUT: 4 passed (with datetime.utcnow deprecation warnings from storage internals).
+[2026-02-20 17:55] ACTION: Added docs/sprints/TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44_TESTS.md and completed TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44.
+[2026-02-20 17:57] ACTION: Started TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 (build and release readiness).
+[2026-02-20 17:57] CMD: python -m compileall mindnavigator/storage.py mindnavigator/ui/projects_nav.py
+[2026-02-20 17:57] OUT: OK (target modules compiled).
+[2026-02-20 17:58] CMD: python -m pytest tests/test_project_tree_storage.py tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py -q -p no:cacheprovider
+[2026-02-20 17:58] OUT: 27 passed (16 deprecation warnings from datetime.utcnow in storage internals).
+[2026-02-20 17:59] ACTION: Added docs/sprints/TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55_RELEASE.md, completed TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55, and marked Sprint 4 as Completed.
+[2026-02-20 18:06] ACTION: Started TASK_04051FC3-09AF-4387-AA60-831861E32727 (legacy DB startup migration hotfix).
+[2026-02-20 18:07] ACTION: Fixed storage initialization order by guarding idx_projects_parent_order creation when projects.sort_order is absent.
+[2026-02-20 18:08] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 18:08] OUT: OK (storage compiled).
+[2026-02-20 18:14] ACTION: Started TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225 (ProjectsNav DnD drop/move hotfix).
+[2026-02-20 18:15] ACTION: Improved drag source capture in ProjectsNav list and refined drop intent detection (reorder vs reparent).
+[2026-02-20 18:16] ACTION: Allowed root move when dropping on pseudo-items (clear/section/empty) and added safer cleanup of drag source state.
+[2026-02-20 18:16] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:16] OUT: OK (projects_nav compiled).
+[2026-02-20 18:22] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: switched projects list drag mode to InternalMove and added selectedItems() fallback for drag source resolution.
+[2026-02-20 18:22] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:22] OUT: OK (projects_nav compiled).
+[2026-02-20 18:29] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added mousePress-based source capture and source==target drop handling with neighbor resolution for stable reorder.
+[2026-02-20 18:29] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:29] OUT: OK (projects_nav compiled).
+[2026-02-20 18:36] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added explicit dragEnter/dragMove accept and strict item flags for project drag/drop targets.
+[2026-02-20 18:36] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:36] OUT: OK (projects_nav compiled).
+[2026-02-20 18:43] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: switched drop target resolution to indexAt(), enabled list-level acceptDrops, and forced MoveAction acceptance.
+[2026-02-20 18:43] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:43] OUT: OK (projects_nav compiled).
+[2026-02-20 18:49] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: fixed internal drag enter/move acceptance for both list and viewport sources.
+[2026-02-20 18:49] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:49] OUT: OK (projects_nav compiled).
+[2026-02-20 18:56] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added runtime DnD diagnostics logs in startDrag/dropEvent/_handle_project_drop.
+[2026-02-20 18:56] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:56] OUT: OK (projects_nav compiled).
+[2026-02-20 19:02] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added forced drag-start path in mouseMoveEvent based on startDragDistance.
+[2026-02-20 19:02] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 19:02] OUT: OK (projects_nav compiled).
+[2026-02-20 19:10] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added DnD trace logging to .codex/manual/dnd.log for non-console environments.
+[2026-02-20 19:10] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 19:10] OUT: OK (projects_nav compiled).
+[2026-02-20 19:16] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: switched DnD log path to absolute project-root based path from projects_nav.py.
+[2026-02-20 19:16] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 19:16] OUT: OK (projects_nav compiled).
+[2026-02-20 19:24] ACTION: Started TASK_0DE2B002-565F-4A74-9AD9-00668A7AA79A (ProjectsWorkspace project drag&drop hotfix).
+[2026-02-20 19:25] ACTION: Added internal drag/drop handling to ProjectsWorkspace list view and model-level move_project_by_drop operation.
+[2026-02-20 19:26] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:26] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:33] ACTION: Extended ProjectsWorkspace DnD with child reparent mode by horizontal drop intent (as_child) and center-zone detection.
+[2026-02-20 19:33] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:33] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:40] ACTION: Relaxed ProjectsWorkspace child-drop intent: any center-zone drop now reparents as child (without strict horizontal offset).
+[2026-02-20 19:40] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:40] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:47] ACTION: Stabilized ProjectsWorkspace DnD source capture via mousePress, handled source==target fallback, and switched list drag/drop mode from InternalMove to DragDrop.
+[2026-02-20 19:47] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:47] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:54] ACTION: Started TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 (visual hierarchy for nested projects in workspace list).
+[2026-02-20 19:55] ACTION: Added depth/children roles and delegate rendering with indentation and node markers (▸/•), switched row title to plain project title.
+[2026-02-20 19:55] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:55] OUT: OK (projects_workspace compiled).
+[2026-02-20 20:02] ACTION: Added collapse/expand behavior for nested projects in workspace list via marker click; default state remains expanded.
+[2026-02-20 20:02] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 20:02] OUT: OK (projects_workspace compiled).
+[2026-02-20 20:08] ACTION: Added persistence for collapsed project ids in workspace via storage settings key projects_workspace.collapsed_ids.
+[2026-02-20 20:08] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 20:08] OUT: OK (projects_workspace compiled).

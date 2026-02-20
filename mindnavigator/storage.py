@@ -57,6 +57,7 @@ class ProjectData:
     linked_map_id: Optional[int] = None
     linked_note_id: Optional[int] = None
     linked_object_id: Optional[int] = None
+    sort_order: int = 0
 
 
 @dataclass(frozen=True)
@@ -431,6 +432,7 @@ class Database:
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                     parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
                     default_task_priority TEXT NOT NULL DEFAULT '',
                     force_recurrence_kind TEXT NOT NULL DEFAULT '',
                     linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
@@ -816,6 +818,13 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
+            project_columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
+            project_column_names = {row["name"] for row in project_columns}
+            if "sort_order" in project_column_names:
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
+                )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_overlays_map ON map_overlays(map_id);")
@@ -887,6 +896,7 @@ class Database:
         names = {row["name"] for row in columns}
         additions = {
             "parent_project_id": "ALTER TABLE projects ADD COLUMN parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;",
+            "sort_order": "ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;",
             "default_task_priority": "ALTER TABLE projects ADD COLUMN default_task_priority TEXT NOT NULL DEFAULT '';",
             "force_recurrence_kind": "ALTER TABLE projects ADD COLUMN force_recurrence_kind TEXT NOT NULL DEFAULT '';",
             "linked_map_id": "ALTER TABLE projects ADD COLUMN linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL;",
@@ -898,6 +908,52 @@ class Database:
                 if column not in names:
                     self._conn.execute(ddl)
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
+            )
+            self._normalize_project_sort_order()
+
+    def _normalize_project_sort_order(self) -> None:
+        """Нормализует порядок проектов внутри каждого родителя."""
+        rows = self._conn.execute(
+            """
+            SELECT id, parent_project_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            ORDER BY parent_project_id, sort_order, id;
+            """
+        ).fetchall()
+        grouped: dict[Optional[int], list[int]] = {}
+        for row in rows:
+            grouped.setdefault(row["parent_project_id"], []).append(int(row["id"]))
+        for _, ids in grouped.items():
+            for idx, project_id in enumerate(ids):
+                self._conn.execute(
+                    "UPDATE projects SET sort_order = ? WHERE id = ?;",
+                    (idx, project_id),
+                )
+
+    def _next_project_sort_order(self, parent_project_id: Optional[int], exclude_id: Optional[int] = None) -> int:
+        """Возвращает следующий индекс сортировки для дочерних проектов."""
+        if exclude_id is None:
+            row = self._conn.execute(
+                """
+                SELECT COALESCE(MAX(sort_order), -1) AS max_order
+                FROM projects
+                WHERE parent_project_id IS ?;
+                """,
+                (parent_project_id,),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                """
+                SELECT COALESCE(MAX(sort_order), -1) AS max_order
+                FROM projects
+                WHERE parent_project_id IS ?
+                  AND id != ?;
+                """,
+                (parent_project_id, exclude_id),
+            ).fetchone()
+        return int(row["max_order"]) + 1 if row is not None else 0
 
     def _ensure_task_description_column(self) -> None:
         """Добавляет колонку description, если она отсутствует."""
@@ -1265,6 +1321,7 @@ class Database:
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                 archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                 parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
                 default_task_priority TEXT NOT NULL DEFAULT '',
                 force_recurrence_kind TEXT NOT NULL DEFAULT '',
                 linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
@@ -1279,6 +1336,9 @@ class Database:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
+        )
 
     def _rebuild_task_attachments_table(self) -> None:
         columns = self._conn.execute("PRAGMA table_info(task_attachments);").fetchall()
@@ -1441,13 +1501,13 @@ class Database:
             ("Misc", "Сбор референсов / moodboard", "01.01.2026", "Low", 0),
         ]
         with self._conn:
-            for area, title, updated, priority, archived in examples:
+            for idx, (area, title, updated, priority, archived) in enumerate(examples):
                 self._conn.execute(
                     """
-                    INSERT INTO projects (area, title, updated, priority, archived)
-                    VALUES (?, ?, ?, ?, ?);
+                    INSERT INTO projects (area, title, updated, priority, archived, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?);
                     """,
-                    (area, title, parse_project_date(updated).isoformat(), priority, archived),
+                    (area, title, parse_project_date(updated).isoformat(), priority, archived, idx),
                 )
 
     def _seed_maps(self) -> None:
@@ -1725,6 +1785,7 @@ class Database:
             raise ValueError("Дата задачи некорректна.")
 
         now = datetime.utcnow().isoformat(timespec="seconds")
+
         with self._conn:
             self._conn.execute(
                 """
@@ -2226,8 +2287,9 @@ class Database:
             SELECT
                 id, area, title, updated, priority, archived,
                 parent_project_id, default_task_priority, force_recurrence_kind,
-                linked_map_id, linked_note_id, linked_object_id
-            FROM projects;
+                linked_map_id, linked_note_id, linked_object_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            ORDER BY parent_project_id, sort_order, id;
             """
         ).fetchall()
         projects = []
@@ -2246,6 +2308,7 @@ class Database:
                     linked_map_id=row["linked_map_id"],
                     linked_note_id=row["linked_note_id"],
                     linked_object_id=row["linked_object_id"],
+                    sort_order=int(row["sort_order"] or 0),
                 )
             )
         return projects
@@ -2258,6 +2321,7 @@ class Database:
         priority: str,
         archived: bool = False,
         parent_project_id: Optional[int] = None,
+        sort_order: Optional[int] = None,
         default_task_priority: str = "",
         force_recurrence_kind: str = "",
         linked_map_id: Optional[int] = None,
@@ -2275,15 +2339,19 @@ class Database:
         if not isinstance(updated, date):
             raise ValueError("Дата проекта некорректна.")
 
+        if sort_order is None:
+            sort_order = self._next_project_sort_order(parent_project_id)
+        sort_order = max(0, int(sort_order))
+
         with self._conn:
             cur = self._conn.execute(
                 """
                 INSERT INTO projects (
                     area, title, updated, priority, archived,
-                    parent_project_id, default_task_priority, force_recurrence_kind,
+                    parent_project_id, sort_order, default_task_priority, force_recurrence_kind,
                     linked_map_id, linked_note_id, linked_object_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     area,
@@ -2292,6 +2360,7 @@ class Database:
                     priority,
                     int(archived),
                     parent_project_id,
+                    sort_order,
                     default_task_priority,
                     force_recurrence_kind,
                     linked_map_id,
@@ -2312,6 +2381,7 @@ class Database:
             linked_map_id=linked_map_id,
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
+            sort_order=sort_order,
         )
 
     def update_project(
@@ -2350,6 +2420,7 @@ class Database:
         priority: str,
         archived: bool,
         parent_project_id: Optional[int] = None,
+        sort_order: Optional[int] = None,
         default_task_priority: str = "",
         force_recurrence_kind: str = "",
         linked_map_id: Optional[int] = None,
@@ -2366,6 +2437,10 @@ class Database:
             raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
             raise ValueError("Дата проекта некорректна.")
+        current_row = self._conn.execute(
+            "SELECT parent_project_id, COALESCE(sort_order, 0) AS sort_order FROM projects WHERE id = ?;",
+            (project_id,),
+        ).fetchone()
         if parent_project_id == project_id:
             parent_project_id = None
         if parent_project_id is not None:
@@ -2380,13 +2455,21 @@ class Database:
                     (cursor,),
                 ).fetchone()
                 cursor = row["parent_project_id"] if row is not None else None
+        if sort_order is None:
+            if current_row is None:
+                sort_order = 0
+            elif current_row["parent_project_id"] == parent_project_id:
+                sort_order = int(current_row["sort_order"] or 0)
+            else:
+                sort_order = self._next_project_sort_order(parent_project_id, exclude_id=project_id)
+        sort_order = max(0, int(sort_order))
 
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE projects
                 SET area = ?, title = ?, updated = ?, priority = ?, archived = ?,
-                    parent_project_id = ?, default_task_priority = ?, force_recurrence_kind = ?,
+                    parent_project_id = ?, sort_order = ?, default_task_priority = ?, force_recurrence_kind = ?,
                     linked_map_id = ?, linked_note_id = ?, linked_object_id = ?
                 WHERE id = ?;
                 """,
@@ -2397,6 +2480,7 @@ class Database:
                     priority,
                     int(archived),
                     parent_project_id,
+                    sort_order,
                     default_task_priority,
                     force_recurrence_kind,
                     linked_map_id,
@@ -2418,7 +2502,134 @@ class Database:
             linked_map_id=linked_map_id,
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
+            sort_order=sort_order,
         )
+
+    def fetch_project_tree(self) -> List[ProjectData]:
+        """Возвращает проекты в порядке обхода по parent/sort_order."""
+        return self.fetch_projects()
+
+    def fetch_project_children(self, parent_project_id: Optional[int]) -> List[ProjectData]:
+        """Возвращает дочерние проекты для указанного родителя."""
+        rows = self._conn.execute(
+            """
+            SELECT
+                id, area, title, updated, priority, archived,
+                parent_project_id, default_task_priority, force_recurrence_kind,
+                linked_map_id, linked_note_id, linked_object_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            WHERE parent_project_id IS ?
+            ORDER BY sort_order, id;
+            """,
+            (parent_project_id,),
+        ).fetchall()
+        children: List[ProjectData] = []
+        for row in rows:
+            children.append(
+                ProjectData(
+                    id=row["id"],
+                    area=row["area"],
+                    title=row["title"],
+                    updated=date.fromisoformat(row["updated"]),
+                    priority=row["priority"],
+                    archived=bool(row["archived"]),
+                    parent_project_id=row["parent_project_id"],
+                    default_task_priority=row["default_task_priority"] or "",
+                    force_recurrence_kind=(row["force_recurrence_kind"] or "").strip().lower(),
+                    linked_map_id=row["linked_map_id"],
+                    linked_note_id=row["linked_note_id"],
+                    linked_object_id=row["linked_object_id"],
+                    sort_order=int(row["sort_order"] or 0),
+                )
+            )
+        return children
+
+    def _reindex_project_group(self, parent_project_id: Optional[int]) -> None:
+        """Пересобирает непрерывный sort_order для группы дочерних проектов."""
+        rows = self._conn.execute(
+            """
+            SELECT id
+            FROM projects
+            WHERE parent_project_id IS ?
+            ORDER BY COALESCE(sort_order, 0), id;
+            """,
+            (parent_project_id,),
+        ).fetchall()
+        for idx, row in enumerate(rows):
+            self._conn.execute(
+                "UPDATE projects SET sort_order = ? WHERE id = ?;",
+                (idx, row["id"]),
+            )
+
+    def move_project(self, project_id: int, new_parent_project_id: Optional[int], new_sort_order: Optional[int] = None) -> None:
+        """Перемещает проект в новую ветку и/или позицию среди siblings."""
+        if new_parent_project_id == project_id:
+            raise ValueError("Циклическая связь проектов не допускается.")
+
+        row = self._conn.execute(
+            """
+            SELECT parent_project_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            WHERE id = ?;
+            """,
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Проект не найден.")
+        old_parent = row["parent_project_id"]
+
+        if new_parent_project_id is not None:
+            cursor = new_parent_project_id
+            seen: set[int] = set()
+            while cursor is not None and cursor not in seen:
+                if cursor == project_id:
+                    raise ValueError("Циклическая связь проектов не допускается.")
+                seen.add(cursor)
+                parent_row = self._conn.execute(
+                    "SELECT parent_project_id FROM projects WHERE id = ?;",
+                    (cursor,),
+                ).fetchone()
+                if parent_row is None:
+                    raise ValueError("Новый родительский проект не найден.")
+                cursor = parent_row["parent_project_id"]
+
+        siblings_count_row = self._conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM projects
+            WHERE parent_project_id IS ?
+              AND id != ?;
+            """,
+            (new_parent_project_id, project_id),
+        ).fetchone()
+        siblings_count = int(siblings_count_row["cnt"] if siblings_count_row is not None else 0)
+        if new_sort_order is None:
+            new_sort_order = siblings_count
+        else:
+            new_sort_order = max(0, min(int(new_sort_order), siblings_count))
+
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET parent_project_id = ?, sort_order = ?
+                WHERE id = ?;
+                """,
+                (new_parent_project_id, new_sort_order, project_id),
+            )
+            self._reindex_project_group(old_parent)
+            self._reindex_project_group(new_parent_project_id)
+
+    def reorder_project(self, project_id: int, new_sort_order: int) -> None:
+        """Меняет порядок проекта среди siblings без смены родителя."""
+        row = self._conn.execute(
+            "SELECT parent_project_id FROM projects WHERE id = ?;",
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Проект не найден.")
+        parent_project_id = row["parent_project_id"]
+        self.move_project(project_id, parent_project_id, new_sort_order=new_sort_order)
 
     def delete_project(self, project_id: int) -> None:
         """Удаляет проект по id."""

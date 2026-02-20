@@ -46,4 +46,31 @@ Status: Completed
 | TASK_3C1B7D2A-8F59-4A8E-A0A1-1F3E9D7C6B52 | 3 | Stabilize b_start launch and sync pre-stop | fix | Completed |
 | TASK_6B4D8F2C-2A1E-4E96-B7A1-EDC5B6D1F2A4 | 3 | Sticky header stabilization and encoding-safe UI update | fix | Completed |
 
+## Sprint 4 - Nested Projects And Project Drag&Drop
+Created: 2026-02-20
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 | 4 | Requirements and UX flow for nested projects | feat | Completed |
+| TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91 | 4 | Storage model and migration design | feat | Completed |
+| TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88 | 4 | Domain API for project tree operations | feat | Completed |
+| TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7 | 4 | ProjectsNav UI tree rendering | feat | Completed |
+| TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20 | 4 | Drag&Drop interaction for projects | feat | Completed |
+| TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11 | 4 | Validation and guardrails for DnD | feat | Completed |
+| TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 | 4 | Persistence, ordering, and reload consistency | feat | Completed |
+| TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 | 4 | Automated tests for tree and DnD logic | feat | Completed |
+| TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 | 4 | Build and release readiness | feat | Completed |
+
+## Hotfixes
+Created: 2026-02-20
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_04051FC3-09AF-4387-AA60-831861E32727 | hotfix | Startup DB migration: missing projects.sort_order on legacy DB | fix | Completed |
+| TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225 | hotfix | ProjectsNav DnD: project does not move on drop | fix | Completed |
+| TASK_0DE2B002-565F-4A74-9AD9-00668A7AA79A | hotfix | ProjectsWorkspace list: enable project drag&drop reorder | fix | Completed |
+| TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 | hotfix | ProjectsWorkspace visual hierarchy (indent + markers) | fix | Completed |
+
 

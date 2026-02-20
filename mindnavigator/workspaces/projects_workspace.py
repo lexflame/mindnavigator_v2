@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Union, Optional
+import json
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
@@ -19,6 +20,7 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle, QDialog,
+    QAbstractItemView,
     QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox
 )
 
@@ -71,6 +73,9 @@ class ProjectRoles:
     Archived = Qt.UserRole + 6
     ProjectId = Qt.UserRole + 7
     UpdatedDate = Qt.UserRole + 8
+    Depth = Qt.UserRole + 9
+    HasChildren = Qt.UserRole + 10
+    IsCollapsed = Qt.UserRole + 11
 
 
 class ProjectsModel(QAbstractListModel):
@@ -81,6 +86,11 @@ class ProjectsModel(QAbstractListModel):
         self._all_rows: List[Row] = []
         self._rows: List[Row] = []
         self._project_title_cache: Dict[int, str] = {}
+        self._project_depth_cache: Dict[int, int] = {}
+        self._project_has_children_cache: Dict[int, bool] = {}
+        self._collapsed_project_ids: set[int] = set()
+        self._collapsed_state_key = "projects_workspace.collapsed_ids"
+        self._load_collapsed_state()
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
@@ -107,6 +117,11 @@ class ProjectsModel(QAbstractListModel):
             )
             for p in projects
         ]
+        valid_ids = {p.id for p in projects}
+        before = set(self._collapsed_project_ids)
+        self._collapsed_project_ids = {pid for pid in self._collapsed_project_ids if pid in valid_ids}
+        if before != self._collapsed_project_ids:
+            self._save_collapsed_state()
         self._rebuild()
 
     def refresh(self) -> None:
@@ -140,7 +155,7 @@ class ProjectsModel(QAbstractListModel):
         if role == ProjectRoles.Area:
             return r.area
         if role == ProjectRoles.Title:
-            return self._project_title_cache.get(r.id, r.title)
+            return r.title
         if role == ProjectRoles.Updated:
             return format_project_date(r.updated)
         if role == ProjectRoles.UpdatedDate:
@@ -149,9 +164,43 @@ class ProjectsModel(QAbstractListModel):
             return r.priority
         if role == ProjectRoles.Archived:
             return r.archived
+        if role == ProjectRoles.Depth:
+            return self._project_depth_cache.get(r.id, 0)
+        if role == ProjectRoles.HasChildren:
+            return self._project_has_children_cache.get(r.id, False)
+        if role == ProjectRoles.IsCollapsed:
+            return r.id in self._collapsed_project_ids
         if role == Qt.DisplayRole:
-            return self._project_title_cache.get(r.id, r.title)
+            return r.title
         return None
+
+    def toggle_project_collapsed(self, project_id: int) -> None:
+        if project_id in self._collapsed_project_ids:
+            self._collapsed_project_ids.remove(project_id)
+        else:
+            self._collapsed_project_ids.add(project_id)
+        self._save_collapsed_state()
+        self._rebuild()
+
+    def toggle_project_collapsed_by_row(self, row_idx: int) -> None:
+        row = self.project_at_row(row_idx)
+        if row is None:
+            return
+        if not self._project_has_children_cache.get(row.id, False):
+            return
+        self.toggle_project_collapsed(row.id)
+
+    def _load_collapsed_state(self) -> None:
+        raw = self._db.get_setting(self._collapsed_state_key, "[]")
+        try:
+            payload = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            payload = []
+        self._collapsed_project_ids = {int(v) for v in payload if isinstance(v, int)}
+
+    def _save_collapsed_state(self) -> None:
+        payload = sorted(self._collapsed_project_ids)
+        self._db.set_setting(self._collapsed_state_key, json.dumps(payload, ensure_ascii=False))
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Устанавливает флаги взаимодействия для строки."""
@@ -160,7 +209,52 @@ class ProjectsModel(QAbstractListModel):
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
             return Qt.ItemIsEnabled
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        return (
+            Qt.ItemIsEnabled
+            | Qt.ItemIsSelectable
+            | Qt.ItemIsDragEnabled
+            | Qt.ItemIsDropEnabled
+        )
+
+    def move_project_by_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int,
+        drop_after: bool,
+        as_child: bool,
+    ) -> bool:
+        """Перемещает проект относительно target в пределах его sibling-группы."""
+        projects = self._db.fetch_projects()
+        by_id = {p.id: p for p in projects}
+        source = by_id.get(source_project_id)
+        target = by_id.get(target_project_id)
+        if source is None or target is None:
+            return False
+        if source_project_id == target_project_id:
+            return False
+
+        if as_child:
+            try:
+                self._db.move_project(source_project_id, target_project_id, None)
+            except ValueError:
+                return False
+            self.refresh()
+            return True
+
+        parent_id = target.parent_project_id
+        siblings = self._db.fetch_project_children(parent_id)
+        sibling_ids = [p.id for p in siblings if p.id != source_project_id]
+        if target_project_id not in sibling_ids:
+            return False
+        index = sibling_ids.index(target_project_id)
+        if drop_after:
+            index += 1
+        try:
+            self._db.move_project(source_project_id, parent_id, index)
+        except ValueError:
+            return False
+        self.refresh()
+        return True
 
     def set_filter_mode(self, mode: str):
         """Обновляет режим фильтрации."""
@@ -413,6 +507,23 @@ class ProjectsModel(QAbstractListModel):
                     break
 
         projects: List[ProjectRow] = []
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+
+        def is_hidden_by_collapsed_parent(project: ProjectRow) -> bool:
+            parent_id = project.parent_project_id
+            seen: set[int] = set()
+            while isinstance(parent_id, int) and parent_id not in seen:
+                if parent_id in self._collapsed_project_ids:
+                    return True
+                seen.add(parent_id)
+                parent = project_map.get(parent_id)
+                if parent is None:
+                    break
+                parent_id = parent.parent_project_id
+            return False
         for it in self._all_rows:
             if not isinstance(it, ProjectRow):
                 continue
@@ -431,6 +542,8 @@ class ProjectsModel(QAbstractListModel):
 
             display_title = self._project_title_cache.get(it.id, it.title).lower()
             if search and search not in it.title.lower() and search not in display_title and search not in it.area.lower():
+                continue
+            if is_hidden_by_collapsed_parent(it):
                 continue
 
             projects.append(it)
@@ -467,6 +580,14 @@ class ProjectsModel(QAbstractListModel):
             if isinstance(row, ProjectRow)
         }
         cache: Dict[int, str] = {}
+        depth_cache: Dict[int, int] = {}
+        has_children_cache: Dict[int, bool] = {}
+
+        for project in project_map.values():
+            has_children_cache[project.id] = False
+        for project in project_map.values():
+            if project.parent_project_id in project_map:
+                has_children_cache[project.parent_project_id] = True
 
         def resolve_title(project: ProjectRow, seen: Optional[set[int]] = None) -> str:
             cached = cache.get(project.id)
@@ -491,10 +612,32 @@ class ProjectsModel(QAbstractListModel):
             cache[project.id] = nested
             return nested
 
+        def resolve_depth(project: ProjectRow, seen: Optional[set[int]] = None) -> int:
+            cached = depth_cache.get(project.id)
+            if cached is not None:
+                return cached
+            seen_set = seen or set()
+            if project.id in seen_set:
+                depth_cache[project.id] = 0
+                return 0
+            if project.parent_project_id is None:
+                depth_cache[project.id] = 0
+                return 0
+            parent = project_map.get(project.parent_project_id)
+            if parent is None:
+                depth_cache[project.id] = 0
+                return 0
+            depth = resolve_depth(parent, seen_set | {project.id}) + 1
+            depth_cache[project.id] = depth
+            return depth
+
         for project in project_map.values():
             resolve_title(project)
+            resolve_depth(project)
 
         self._project_title_cache = cache
+        self._project_depth_cache = depth_cache
+        self._project_has_children_cache = has_children_cache
 
 
 class ProjectsItemDelegate(QStyledItemDelegate):
@@ -573,6 +716,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         updated: str = index.data(ProjectRoles.Updated) or ""
         priority: str = index.data(ProjectRoles.Priority) or "Medium"
         archived: bool = bool(index.data(ProjectRoles.Archived))
+        depth: int = int(index.data(ProjectRoles.Depth) or 0)
+        has_children: bool = bool(index.data(ProjectRoles.HasChildren))
+        is_collapsed: bool = bool(index.data(ProjectRoles.IsCollapsed))
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -607,6 +753,16 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         icon_rect = QRect(x, cy - 8, 16, 16)
         self._icon_folder.paint(painter, icon_rect)
         x += 22
+
+        depth = max(0, min(depth, 6))
+        x += depth * 14
+
+        marker_rect = QRect(x, cy - 7, 14, 14)
+        painter.setFont(self._font_small)
+        painter.setPen(self.C_DIM)
+        marker_text = ">" if (has_children and is_collapsed) else ("v" if has_children else ".")
+        painter.drawText(marker_rect, Qt.AlignCenter, marker_text)
+        x += 18
 
         painter.setFont(self._font)
         painter.setPen(self.C_TEXT if not archived else self.C_DIM)
@@ -680,10 +836,21 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             x = r.left() + 10
             x += 22
             box_rect = QRect(x, cy - 7, 14, 14)
+            x += 22
+            x += 22
+            depth: int = int(index.data(ProjectRoles.Depth) or 0)
+            depth = max(0, min(depth, 6))
+            x += depth * 14
+            marker_rect = QRect(x, cy - 7, 14, 14)
 
             right_pad = 18
             menu_w = 30
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+
+            if marker_rect.contains(pos):
+                if hasattr(model, "toggle_project_collapsed_by_row"):
+                    model.toggle_project_collapsed_by_row(index.row())
+                    return True
 
             if box_rect.contains(pos):
                 model.toggle_archive_by_row(index.row())
@@ -1171,6 +1338,84 @@ class ProjectAreaEditDialog(QDialog):
         }
 
 
+class _ProjectsListView(QListView):
+    def __init__(self, owner: "ProjectsWorkspace"):
+        super().__init__(owner)
+        self._owner = owner
+        self._drag_source_project_id: Optional[int] = None
+        self._pressed_project_id: Optional[int] = None
+
+    def mousePressEvent(self, event):
+        index = self.indexAt(event.position().toPoint())
+        row_type = index.data(ProjectRoles.RowType) if index.isValid() else None
+        project_id = index.data(ProjectRoles.ProjectId) if row_type == "project" else None
+        self._pressed_project_id = project_id if isinstance(project_id, int) else None
+        super().mousePressEvent(event)
+
+    def startDrag(self, supportedActions):
+        if isinstance(self._pressed_project_id, int):
+            self._drag_source_project_id = self._pressed_project_id
+        else:
+            index = self.currentIndex()
+            row_type = index.data(ProjectRoles.RowType)
+            project_id = index.data(ProjectRoles.ProjectId) if row_type == "project" else None
+            self._drag_source_project_id = project_id if isinstance(project_id, int) else None
+        super().startDrag(supportedActions)
+        self._pressed_project_id = None
+
+    def dropEvent(self, event):
+        source_id = self._drag_source_project_id
+        if not isinstance(source_id, int):
+            event.ignore()
+            return
+
+        point = event.position().toPoint()
+        target_index = self.indexAt(point)
+        if not target_index.isValid() or target_index.data(ProjectRoles.RowType) != "project":
+            event.ignore()
+            self._drag_source_project_id = None
+            return
+
+        target_id = target_index.data(ProjectRoles.ProjectId)
+        if not isinstance(target_id, int):
+            event.ignore()
+            self._drag_source_project_id = None
+            return
+
+        rect = self.visualRect(target_index)
+        margin = max(4, rect.height() // 4)
+        drop_before_zone = point.y() <= rect.top() + margin
+        drop_after_zone = point.y() >= rect.bottom() - margin
+        drop_after = point.y() > rect.center().y()
+        as_child = not drop_before_zone and not drop_after_zone
+
+        if target_id == source_id:
+            direction = 1 if drop_after else -1
+            row = target_index.row() + direction
+            fallback_id = None
+            while 0 <= row < self.model().rowCount():
+                idx = self.model().index(row, 0)
+                if idx.data(ProjectRoles.RowType) == "project":
+                    maybe_id = idx.data(ProjectRoles.ProjectId)
+                    if isinstance(maybe_id, int) and maybe_id != source_id:
+                        fallback_id = maybe_id
+                        break
+                row += direction
+            if fallback_id is None:
+                event.ignore()
+                self._drag_source_project_id = None
+                return
+            target_id = fallback_id
+            as_child = False
+
+        ok = self._owner._handle_project_drop(source_id, target_id, drop_after, as_child)
+        if ok:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+        self._drag_source_project_id = None
+
+
 class ProjectsWorkspace(QWidget):
     def __init__(self, parent=None):
         """Создает рабочую область проектов."""
@@ -1238,12 +1483,18 @@ class ProjectsWorkspace(QWidget):
 
         root.addWidget(top)
 
-        self.list = QListView()
+        self.list = _ProjectsListView(self)
         self.list.setObjectName("ProjectsList")
         self.list.setUniformItemSizes(True)
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.DragDrop)
+        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setDragEnabled(True)
+        self.list.setAcceptDrops(True)
+        self.list.viewport().setAcceptDrops(True)
+        self.list.setDropIndicatorShown(True)
         root.addWidget(self.list, 1)
 
         self.model = ProjectsModel(self)
@@ -1310,6 +1561,23 @@ class ProjectsWorkspace(QWidget):
     def set_task_filter(self, task_id: Optional[int]) -> None:
         """Устанавливает фильтр по задаче для списка проектов."""
         self.model.set_task_filter(task_id)
+
+    def _handle_project_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int,
+        drop_after: bool,
+        as_child: bool,
+    ) -> bool:
+        ok = self.model.move_project_by_drop(source_project_id, target_project_id, drop_after, as_child)
+        if not ok:
+            return False
+        for row in range(self.model.rowCount()):
+            index = self.model.index(row, 0)
+            if index.data(ProjectRoles.ProjectId) == source_project_id:
+                self.list.setCurrentIndex(index)
+                break
+        return True
 
     def _refresh_area_combo(self, selected: Optional[str] = None):
         """Обновляет список областей проектов."""
