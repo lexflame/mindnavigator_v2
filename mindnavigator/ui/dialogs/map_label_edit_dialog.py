@@ -1209,29 +1209,6 @@ class MapLabelEditDialog(QDialog):
             QWidget#MapLabelFormContainer {{
                 background: transparent;
             }}
-            QScrollArea#MapLabelFormScroll QScrollBar:vertical {{
-                width: 10px;
-                margin: 2px;
-                background: transparent;
-            }}
-            QScrollArea#MapLabelFormScroll QScrollBar::handle:vertical {{
-                background: #3a3d44;
-                border-radius: 5px;
-                min-height: 28px;
-            }}
-            QScrollArea#MapLabelFormScroll QScrollBar::handle:vertical:hover {{
-                background: #4a4d56;
-            }}
-            QScrollArea#MapLabelFormScroll QScrollBar::add-line:vertical,
-            QScrollArea#MapLabelFormScroll QScrollBar::sub-line:vertical {{
-                height: 0px;
-                width: 0px;
-                background: transparent;
-            }}
-            QScrollArea#MapLabelFormScroll QScrollBar::add-page:vertical,
-            QScrollArea#MapLabelFormScroll QScrollBar::sub-page:vertical {{
-                background: transparent;
-            }}
             QWidget#EntityChipFlow {{
                 background: transparent;
             }}
@@ -1287,29 +1264,6 @@ class MapLabelEditDialog(QDialog):
             QAbstractItemView#CompleterPopup::item:selected {{
                 background: #3a4356;
                 color: #f2f4ff;
-            }}
-            QAbstractItemView#CompleterPopup QScrollBar:vertical {{
-                width: 8px;
-                margin: 4px 2px;
-                background: transparent;
-            }}
-            QAbstractItemView#CompleterPopup QScrollBar::handle:vertical {{
-                background: #3a3d44;
-                border-radius: 4px;
-                min-height: 24px;
-            }}
-            QAbstractItemView#CompleterPopup QScrollBar::handle:vertical:hover {{
-                background: #4a4d56;
-            }}
-            QAbstractItemView#CompleterPopup QScrollBar::add-line:vertical,
-            QAbstractItemView#CompleterPopup QScrollBar::sub-line:vertical {{
-                height: 0px;
-                width: 0px;
-                background: transparent;
-            }}
-            QAbstractItemView#CompleterPopup QScrollBar::add-page:vertical,
-            QAbstractItemView#CompleterPopup QScrollBar::sub-page:vertical {{
-                background: transparent;
             }}
             """
         )
