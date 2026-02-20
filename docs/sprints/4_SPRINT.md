@@ -59,3 +59,9 @@ Implement hierarchical projects (projects inside projects) and smooth/validated 
 - Project Drag&Drop supports reorder/reparent with validation.
 - Invalid drops are blocked with clear behavior and no data corruption.
 - Tests cover core tree logic, DnD validation, and persistence.
+
+## Release Summary
+- Released in `v1.2.0` and merged into `main`.
+- Added nested projects with persisted parent/child structure.
+- Implemented project Drag&Drop for reordering and reparenting with validation.
+- Added tree visualization improvements: indentation, expand/collapse, and stable render order.
