@@ -114,3 +114,8 @@
 [2026-02-20 14:35] CMD: python -m compileall mindnavigator/ui/smooth_scroll.py
 [2026-02-20 14:35] OUT: OK (smooth_scroll compiled).
 [2026-02-20 14:36] ACTION: Completed TASK_7F2D6F30-0E57-465F-BF6C-EA8F1ED9A148 and added perf/stability notes.
+[2026-02-20 14:38] ACTION: Started TASK_A312E8B4-B507-4667-BB2C-B6D0D9CB571E (automated tests for smooth-scroll).
+[2026-02-20 14:39] ACTION: Added tests/test_smooth_scroll.py with edge-case and stability scenarios.
+[2026-02-20 14:39] CMD: python -m pytest tests/test_smooth_scroll.py -q -p no:cacheprovider
+[2026-02-20 14:39] OUT: 5 passed.
+[2026-02-20 14:40] ACTION: Completed TASK_A312E8B4-B507-4667-BB2C-B6D0D9CB571E and added test notes.
