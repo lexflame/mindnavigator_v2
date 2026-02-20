@@ -186,3 +186,9 @@
 [2026-02-20 17:54] CMD: python -m pytest tests/test_project_tree_storage.py -q -p no:cacheprovider
 [2026-02-20 17:54] OUT: 4 passed (with datetime.utcnow deprecation warnings from storage internals).
 [2026-02-20 17:55] ACTION: Added docs/sprints/TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44_TESTS.md and completed TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44.
+[2026-02-20 17:57] ACTION: Started TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 (build and release readiness).
+[2026-02-20 17:57] CMD: python -m compileall mindnavigator/storage.py mindnavigator/ui/projects_nav.py
+[2026-02-20 17:57] OUT: OK (target modules compiled).
+[2026-02-20 17:58] CMD: python -m pytest tests/test_project_tree_storage.py tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py -q -p no:cacheprovider
+[2026-02-20 17:58] OUT: 27 passed (16 deprecation warnings from datetime.utcnow in storage internals).
+[2026-02-20 17:59] ACTION: Added docs/sprints/TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55_RELEASE.md, completed TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55, and marked Sprint 4 as Completed.

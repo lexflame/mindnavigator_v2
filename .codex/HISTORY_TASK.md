@@ -48,7 +48,7 @@ Status: Completed
 
 ## Sprint 4 - Nested Projects And Project Drag&Drop
 Created: 2026-02-20
-Status: In Progress
+Status: Completed
 
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
@@ -60,6 +60,6 @@ Status: In Progress
 | TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11 | 4 | Validation and guardrails for DnD | feat | Completed |
 | TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 | 4 | Persistence, ordering, and reload consistency | feat | Completed |
 | TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 | 4 | Automated tests for tree and DnD logic | feat | Completed |
-| TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 | 4 | Build and release readiness | feat | Planned |
+| TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 | 4 | Build and release readiness | feat | Completed |
 
 
