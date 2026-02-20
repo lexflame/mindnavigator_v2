@@ -44,12 +44,13 @@ Policy constraints remain in `APP_DEVEL_AGENTS.md`.
   `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `defenition`.
 - Verify compiled app root has minimal files only.
 - Verify compiled app root contains DB cleanup script.
+- For deployment target `C:\Program Portable\MindNavigator\`, set application icon from `assets/icon.ico`.
 
 ## CODEX CLI Triggers
 - Phrase `b_start`:
-  build + compile + place into `C:\Program Portable\NAME_APP\` + run.
+  build + compile + place into `C:\Program Portable\MindNavigator\` + run.
 - Phrase `b_build`:
-  build + compile + place into `C:\Program Portable\NAME_APP\` + run.
+  build + compile + place into `C:\Program Portable\MindNavigator\` + dont run.
 
 ## Notes
 - Use git keys from `.codex/git_key/` for git operations.
