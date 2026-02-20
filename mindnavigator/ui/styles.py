@@ -1,11 +1,7 @@
-"""Общие стили для фонов с абстрактным математико-физическим рисунком.
+"""Shared UI style tokens and QSS builders."""
 
-Входные данные:
-    Нет. Модуль содержит статические строковые шаблоны стилей.
-
-Выходные данные:
-    Строки QSS для применения к интерфейсу.
-"""
+from dataclasses import dataclass
+from typing import Any
 
 MATH_PHYS_PATTERN = (
     "data:image/svg+xml;base64,"
@@ -35,7 +31,7 @@ TITLEBAR_BACKGROUND = f"""
     background-repeat: repeat;
 """
 
-APP_STYLESHEET = """
+BASE_APP_STYLESHEET = """
     QMessageBox {
         background: #16171a;
     }
@@ -91,3 +87,107 @@ APP_STYLESHEET = """
         margin: 4px 8px;
     }
 """
+
+
+@dataclass(frozen=True)
+class ScrollbarStyleTokens:
+    track: str = "#17191f"
+    handle: str = "#4a5161"
+    handle_hover: str = "#5c6477"
+    handle_pressed: str = "#74809a"
+    handle_disabled: str = "#303644"
+    border: str = "#2a2d36"
+    corner: str = "transparent"
+    width_px: int = 12
+    min_handle_px: int = 28
+    radius_px: int = 6
+    margin_px: int = 2
+
+
+DEFAULT_SCROLLBAR_TOKENS = ScrollbarStyleTokens()
+
+
+def build_scrollbar_stylesheet(tokens: ScrollbarStyleTokens = DEFAULT_SCROLLBAR_TOKENS, scope: str = "") -> str:
+    prefix = f"{scope} " if scope else ""
+    return f"""
+{prefix}QScrollBar:vertical {{
+    background: {tokens.track};
+    width: {tokens.width_px}px;
+    margin: {tokens.margin_px}px;
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_px}px;
+}}
+{prefix}QScrollBar::handle:vertical {{
+    background: {tokens.handle};
+    min-height: {tokens.min_handle_px}px;
+    border-radius: {tokens.radius_px}px;
+}}
+{prefix}QScrollBar::handle:vertical:hover {{
+    background: {tokens.handle_hover};
+}}
+{prefix}QScrollBar::handle:vertical:pressed {{
+    background: {tokens.handle_pressed};
+}}
+{prefix}QScrollBar::handle:vertical:disabled {{
+    background: {tokens.handle_disabled};
+}}
+{prefix}QScrollBar::add-line:vertical,
+{prefix}QScrollBar::sub-line:vertical,
+{prefix}QScrollBar::add-page:vertical,
+{prefix}QScrollBar::sub-page:vertical {{
+    background: transparent;
+    border: none;
+    height: 0;
+}}
+{prefix}QScrollBar:horizontal {{
+    background: {tokens.track};
+    height: {tokens.width_px}px;
+    margin: {tokens.margin_px}px;
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_px}px;
+}}
+{prefix}QScrollBar::handle:horizontal {{
+    background: {tokens.handle};
+    min-width: {tokens.min_handle_px}px;
+    border-radius: {tokens.radius_px}px;
+}}
+{prefix}QScrollBar::handle:horizontal:hover {{
+    background: {tokens.handle_hover};
+}}
+{prefix}QScrollBar::handle:horizontal:pressed {{
+    background: {tokens.handle_pressed};
+}}
+{prefix}QScrollBar::handle:horizontal:disabled {{
+    background: {tokens.handle_disabled};
+}}
+{prefix}QScrollBar::add-line:horizontal,
+{prefix}QScrollBar::sub-line:horizontal,
+{prefix}QScrollBar::add-page:horizontal,
+{prefix}QScrollBar::sub-page:horizontal {{
+    background: transparent;
+    border: none;
+    width: 0;
+}}
+{prefix}QAbstractScrollArea::corner {{
+    background: {tokens.corner};
+}}
+"""
+
+
+def compose_app_stylesheet(extra_qss: str = "") -> str:
+    return f"{BASE_APP_STYLESHEET}\n{extra_qss}".strip()
+
+
+def apply_scrollbar_stylesheet(
+    widget: Any,
+    tokens: ScrollbarStyleTokens = DEFAULT_SCROLLBAR_TOKENS,
+    scope: str = "",
+    append: bool = True,
+) -> None:
+    qss = build_scrollbar_stylesheet(tokens=tokens, scope=scope)
+    current = widget.styleSheet() if append and hasattr(widget, "styleSheet") else ""
+    widget.setStyleSheet(f"{current}\n{qss}".strip())
+
+
+APP_SCROLLBAR_STYLESHEET = build_scrollbar_stylesheet()
+APP_STYLESHEET = compose_app_stylesheet(APP_SCROLLBAR_STYLESHEET)
