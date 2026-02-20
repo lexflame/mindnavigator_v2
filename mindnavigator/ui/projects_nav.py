@@ -9,6 +9,7 @@
 
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtWidgets import (
+    QApplication,
     QWidget,
     QVBoxLayout,
     QLabel,
@@ -27,6 +28,7 @@ class _ProjectsListWidget(QListWidget):
         self._owner = owner
         self._drag_source_project_id: int | None = None
         self._pressed_project_id: int | None = None
+        self._press_pos = None
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.position().toPoint())
@@ -34,7 +36,24 @@ class _ProjectsListWidget(QListWidget):
         value = payload.get("value") or {}
         project_id = value.get("id") if payload.get("kind") == "project" else None
         self._pressed_project_id = project_id if isinstance(project_id, int) else None
+        self._press_pos = event.position().toPoint()
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton):
+            super().mouseMoveEvent(event)
+            return
+        if self._press_pos is None or self._pressed_project_id is None:
+            super().mouseMoveEvent(event)
+            return
+        distance = (event.position().toPoint() - self._press_pos).manhattanLength()
+        if distance < QApplication.startDragDistance():
+            super().mouseMoveEvent(event)
+            return
+        self._drag_source_project_id = self._pressed_project_id
+        print(f"[ProjectsNav DnD] mouseMove trigger source={self._drag_source_project_id}")
+        self.startDrag(Qt.MoveAction)
+        self._press_pos = None
 
     def dragEnterEvent(self, event):
         source = event.source()
