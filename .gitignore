@@ -1,8 +1,12 @@
 *.pyc
-/mindnavigator/workspaces/__pycache__
 /build
+/dist
+/releases
+/artifacts
+/local_data
+/mindnavigator/workspaces/__pycache__
 __pycache__
 .codex/git_key/ghp_token
 .codex/manual/ERROR_GIT/
-/dist
-releases/MindNavigator-v1.1.0-win64.zip
+dist/MindNavigator (windows 11 x64)/_internal
+
