@@ -13,6 +13,12 @@ class DragStartThreshold:
     hold_ms: int = 50
 
 
+@dataclass(slots=True)
+class DragSafetyConfig:
+    cancel_on_leave_window: bool = True
+    fast_move_threshold_px: int = 480
+
+
 class DragDropController:
     def __init__(
         self,
@@ -27,6 +33,9 @@ class DragDropController:
         hit_test: HitTestService | None = None,
         motion: MotionConfig | None = None,
         threshold: DragStartThreshold | None = None,
+        safety: DragSafetyConfig | None = None,
+        is_within_window: Callable[[Point], bool] | None = None,
+        normalize_position: Callable[[Point], Point] | None = None,
     ) -> None:
         self._get_drop_zones = get_drop_zones
         self._render_drag_ghost = render_drag_ghost
@@ -38,6 +47,9 @@ class DragDropController:
         self._hit_test = hit_test or DefaultHitTestService()
         self._motion = motion or MotionConfig()
         self._threshold = threshold or DragStartThreshold()
+        self._safety = safety or DragSafetyConfig()
+        self._is_within_window = is_within_window
+        self._normalize_position = normalize_position or (lambda p: p)
 
         self.state = DragSessionState()
         self.payload: DragPayload | None = None
@@ -53,13 +65,14 @@ class DragDropController:
         self.on_drop_transition: Callable[[bool, int], None] | None = None
 
     def arm_drag(self, payload: DragPayload, start_pos_global: Point, now_ms: int) -> None:
+        normalized_start = self._normalize_position(start_pos_global)
         self.reset()
         self.payload = payload
-        self.state.start_pos_global = start_pos_global
-        self.state.current_pos_global = start_pos_global
+        self.state.start_pos_global = normalized_start
+        self.state.current_pos_global = normalized_start
         self.state.started_at_ms = now_ms
         self.state.last_frame_ms = now_ms
-        self._visual_pos = start_pos_global
+        self._visual_pos = normalized_start
         self._last_render_ms = now_ms
         self.state.transition(DragPhase.ARMING)
 
@@ -67,8 +80,14 @@ class DragDropController:
         if self.payload is None or self.state.phase == DragPhase.IDLE:
             return
 
-        self.state.update_position(pos_global, now_ms)
-        if self.state.phase == DragPhase.ARMING and not self._threshold_reached(pos_global, now_ms):
+        normalized_pos = self._normalize_position(pos_global)
+        if self._should_cancel_outside_window(normalized_pos):
+            self._cancel_internal("out_of_window")
+            return
+
+        safe_pos = self._limit_fast_move(self.state.current_pos_global, normalized_pos)
+        self.state.update_position(safe_pos, now_ms)
+        if self.state.phase == DragPhase.ARMING and not self._threshold_reached(safe_pos, now_ms):
             return
 
         if self.state.phase == DragPhase.ARMING:
@@ -78,10 +97,10 @@ class DragDropController:
         if self.state.phase != DragPhase.DRAGGING:
             return
 
-        zone_id = self._resolve_zone(pos_global)
+        zone_id = self._resolve_zone(safe_pos)
         is_valid = bool(zone_id and self._validator.validate(self.payload, zone_id))
         self.state.set_target(zone_id, is_valid)
-        smooth_pos = self._compute_smooth_position(pos_global, now_ms)
+        smooth_pos = self._compute_smooth_position(safe_pos, now_ms)
         self._render_drag_ghost(
             self.payload,
             smooth_pos,
@@ -96,7 +115,11 @@ class DragDropController:
         if self.payload is None:
             return
 
-        self.state.update_position(pos_global, now_ms)
+        normalized_pos = self._normalize_position(pos_global)
+        if self._should_cancel_outside_window(normalized_pos):
+            self._cancel_internal("released_outside_window")
+            return
+        self.state.update_position(normalized_pos, now_ms)
         if self.state.phase == DragPhase.ARMING:
             self._cancel_internal("released_before_drag")
             return
@@ -125,6 +148,10 @@ class DragDropController:
         if self.payload is None or self.state.phase == DragPhase.IDLE:
             return
         self._cancel_internal(reason)
+
+    def on_key_event(self, key: str) -> None:
+        if key.lower() in {"escape", "esc"}:
+            self.on_cancel("escape_key")
 
     def reset(self) -> None:
         self.payload = None
@@ -156,6 +183,27 @@ class DragDropController:
     def _emit_drag_started(self) -> None:
         if self.payload is not None and self.on_drag_started:
             self.on_drag_started(self.payload, self.state)
+
+    def _should_cancel_outside_window(self, pos_global: Point) -> bool:
+        if not self._safety.cancel_on_leave_window:
+            return False
+        if self._is_within_window is None:
+            return False
+        return not self._is_within_window(pos_global)
+
+    def _limit_fast_move(self, current: Point, target: Point) -> Point:
+        max_jump = self._safety.fast_move_threshold_px
+        if max_jump < 1:
+            return target
+        cx, cy = current
+        tx, ty = target
+        dx = tx - cx
+        dy = ty - cy
+        if abs(dx) <= max_jump and abs(dy) <= max_jump:
+            return target
+        clamped_x = cx + (max_jump if dx > 0 else -max_jump if dx < 0 else 0)
+        clamped_y = cy + (max_jump if dy > 0 else -max_jump if dy < 0 else 0)
+        return clamped_x, clamped_y
 
     def _ghost_opacity(self, is_valid: bool) -> float:
         return self._motion.ghost_opacity if is_valid else self._motion.ghost_invalid_opacity

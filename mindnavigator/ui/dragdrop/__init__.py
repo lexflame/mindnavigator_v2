@@ -1,6 +1,6 @@
 """Drag and drop primitives for reusable UI workflows."""
 
-from .controller import DragDropController, DragStartThreshold
+from .controller import DragDropController, DragSafetyConfig, DragStartThreshold
 from .model import DragPayload, DragPhase, DragSessionState, MotionConfig, Point
 from .policy import (
     AcceptAllValidator,
@@ -19,6 +19,7 @@ __all__ = [
     "DragPayload",
     "DragDropController",
     "DragPhase",
+    "DragSafetyConfig",
     "DragSessionState",
     "DragStartThreshold",
     "DropExecutor",
