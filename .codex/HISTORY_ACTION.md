@@ -181,3 +181,8 @@
 [2026-02-20 17:49] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 17:49] OUT: OK (projects_nav compiled).
 [2026-02-20 17:50] ACTION: Added docs/sprints/TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33_PERSISTENCE.md and completed TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33.
+[2026-02-20 17:52] ACTION: Started TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 (automated tests for tree and DnD logic).
+[2026-02-20 17:53] ACTION: Added tests/test_project_tree_storage.py with reorder/reparent/cycle/reindex scenarios for project tree storage logic.
+[2026-02-20 17:54] CMD: python -m pytest tests/test_project_tree_storage.py -q -p no:cacheprovider
+[2026-02-20 17:54] OUT: 4 passed (with datetime.utcnow deprecation warnings from storage internals).
+[2026-02-20 17:55] ACTION: Added docs/sprints/TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44_TESTS.md and completed TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44.
