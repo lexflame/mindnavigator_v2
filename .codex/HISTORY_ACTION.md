@@ -232,3 +232,6 @@
 [2026-02-20 19:25] ACTION: Added internal drag/drop handling to ProjectsWorkspace list view and model-level move_project_by_drop operation.
 [2026-02-20 19:26] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 19:26] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:33] ACTION: Extended ProjectsWorkspace DnD with child reparent mode by horizontal drop intent (as_child) and center-zone detection.
+[2026-02-20 19:33] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:33] OUT: OK (projects_workspace compiled).

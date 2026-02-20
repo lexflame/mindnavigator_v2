@@ -168,7 +168,13 @@ class ProjectsModel(QAbstractListModel):
             | Qt.ItemIsDropEnabled
         )
 
-    def move_project_by_drop(self, source_project_id: int, target_project_id: int, drop_after: bool) -> bool:
+    def move_project_by_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int,
+        drop_after: bool,
+        as_child: bool,
+    ) -> bool:
         """Перемещает проект относительно target в пределах его sibling-группы."""
         projects = self._db.fetch_projects()
         by_id = {p.id: p for p in projects}
@@ -178,6 +184,14 @@ class ProjectsModel(QAbstractListModel):
             return False
         if source_project_id == target_project_id:
             return False
+
+        if as_child:
+            try:
+                self._db.move_project(source_project_id, target_project_id, None)
+            except ValueError:
+                return False
+            self.refresh()
+            return True
 
         parent_id = target.parent_project_id
         siblings = self._db.fetch_project_children(parent_id)
@@ -1236,8 +1250,12 @@ class _ProjectsListView(QListView):
             return
 
         rect = self.visualRect(target_index)
+        margin = max(4, rect.height() // 4)
+        drop_before_zone = point.y() <= rect.top() + margin
+        drop_after_zone = point.y() >= rect.bottom() - margin
         drop_after = point.y() > rect.center().y()
-        ok = self._owner._handle_project_drop(source_id, target_id, drop_after)
+        as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (rect.left() + 120)
+        ok = self._owner._handle_project_drop(source_id, target_id, drop_after, as_child)
         if ok:
             event.acceptProposedAction()
         else:
@@ -1391,8 +1409,14 @@ class ProjectsWorkspace(QWidget):
         """Устанавливает фильтр по задаче для списка проектов."""
         self.model.set_task_filter(task_id)
 
-    def _handle_project_drop(self, source_project_id: int, target_project_id: int, drop_after: bool) -> bool:
-        ok = self.model.move_project_by_drop(source_project_id, target_project_id, drop_after)
+    def _handle_project_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int,
+        drop_after: bool,
+        as_child: bool,
+    ) -> bool:
+        ok = self.model.move_project_by_drop(source_project_id, target_project_id, drop_after, as_child)
         if not ok:
             return False
         for row in range(self.model.rowCount()):
