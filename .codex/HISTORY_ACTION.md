@@ -71,3 +71,6 @@
 [2026-02-20 00:50] ACTION: Started TASK_E5AB0A74-9E13-4FC3-902D-8A2FA3DE3D10 (demo/docs).
 [2026-02-20 00:51] ACTION: Added demo builder module and usage guide docs for dragdrop integration.
 [2026-02-20 00:52] ACTION: Updated TASK_E5... status -> Completed.
+[2026-02-20 00:53] ACTION: Started TASK_0F1733D2-3B9F-4E8D-BD6A-0C2F5F55189E (build/release readiness).
+[2026-02-20 00:54] ACTION: Added build scripts for Win/*nix build and start flows under scripts/.
+[2026-02-20 00:55] ACTION: Added build sprint notes and completed TASK_0F17....
