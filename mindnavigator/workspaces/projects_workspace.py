@@ -1254,7 +1254,7 @@ class _ProjectsListView(QListView):
         drop_before_zone = point.y() <= rect.top() + margin
         drop_after_zone = point.y() >= rect.bottom() - margin
         drop_after = point.y() > rect.center().y()
-        as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (rect.left() + 120)
+        as_child = not drop_before_zone and not drop_after_zone
         ok = self._owner._handle_project_drop(source_id, target_id, drop_after, as_child)
         if ok:
             event.acceptProposedAction()

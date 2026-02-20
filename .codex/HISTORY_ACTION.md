@@ -235,3 +235,6 @@
 [2026-02-20 19:33] ACTION: Extended ProjectsWorkspace DnD with child reparent mode by horizontal drop intent (as_child) and center-zone detection.
 [2026-02-20 19:33] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 19:33] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:40] ACTION: Relaxed ProjectsWorkspace child-drop intent: any center-zone drop now reparents as child (without strict horizontal offset).
+[2026-02-20 19:40] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:40] OUT: OK (projects_workspace compiled).
