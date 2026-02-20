@@ -68,3 +68,6 @@
 [2026-02-20 00:47] ACTION: Started TASK_D86A66D1-6A6D-44BB-87B5-73ED2371D4D5 (automated tests).
 [2026-02-20 00:48] ACTION: Added dragdrop integration tests for commit/reject lifecycles.
 [2026-02-20 00:49] ACTION: Added sprint notes for TASK_D86....
+[2026-02-20 00:50] ACTION: Started TASK_E5AB0A74-9E13-4FC3-902D-8A2FA3DE3D10 (demo/docs).
+[2026-02-20 00:51] ACTION: Added demo builder module and usage guide docs for dragdrop integration.
+[2026-02-20 00:52] ACTION: Updated TASK_E5... status -> Completed.
