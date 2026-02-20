@@ -22,6 +22,7 @@ Make parent/child structure obvious after drag&drop reparenting.
   - `•` for leaf project.
  - marker click toggles collapse/expand for project subtree.
  - default view state is fully expanded.
+ - collapsed state is persisted between app restarts (`projects_workspace.collapsed_ids` setting).
 
 4. Title rendering:
 - row title now uses plain project title (without full path),

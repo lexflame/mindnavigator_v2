@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Union, Optional
+import json
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
@@ -88,6 +89,8 @@ class ProjectsModel(QAbstractListModel):
         self._project_depth_cache: Dict[int, int] = {}
         self._project_has_children_cache: Dict[int, bool] = {}
         self._collapsed_project_ids: set[int] = set()
+        self._collapsed_state_key = "projects_workspace.collapsed_ids"
+        self._load_collapsed_state()
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
@@ -115,7 +118,10 @@ class ProjectsModel(QAbstractListModel):
             for p in projects
         ]
         valid_ids = {p.id for p in projects}
+        before = set(self._collapsed_project_ids)
         self._collapsed_project_ids = {pid for pid in self._collapsed_project_ids if pid in valid_ids}
+        if before != self._collapsed_project_ids:
+            self._save_collapsed_state()
         self._rebuild()
 
     def refresh(self) -> None:
@@ -173,6 +179,7 @@ class ProjectsModel(QAbstractListModel):
             self._collapsed_project_ids.remove(project_id)
         else:
             self._collapsed_project_ids.add(project_id)
+        self._save_collapsed_state()
         self._rebuild()
 
     def toggle_project_collapsed_by_row(self, row_idx: int) -> None:
@@ -182,6 +189,18 @@ class ProjectsModel(QAbstractListModel):
         if not self._project_has_children_cache.get(row.id, False):
             return
         self.toggle_project_collapsed(row.id)
+
+    def _load_collapsed_state(self) -> None:
+        raw = self._db.get_setting(self._collapsed_state_key, "[]")
+        try:
+            payload = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            payload = []
+        self._collapsed_project_ids = {int(v) for v in payload if isinstance(v, int)}
+
+    def _save_collapsed_state(self) -> None:
+        payload = sorted(self._collapsed_project_ids)
+        self._db.set_setting(self._collapsed_state_key, json.dumps(payload, ensure_ascii=False))
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Устанавливает флаги взаимодействия для строки."""
