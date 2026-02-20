@@ -130,3 +130,11 @@
 [2026-02-20 14:48] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py tests/test_smooth_scroll.py -q -p no:cacheprovider
 [2026-02-20 14:48] OUT: 28 passed.
 [2026-02-20 14:49] ACTION: Completed TASK_10A88701-DA0B-4FA8-85D8-CAECDA1A57E2 and marked Sprint 2 as Completed.
+[2026-02-20 15:30] ACTION: Started Sprint 3 task TASK_9F6A7E4B-1D3E-4C0D-8A27-6B1D29F8E4C1 for sticky day separator in Plan mode.
+[2026-02-20 15:31] ACTION: Implemented sticky day header overlay in tasks list with scroll/resize/model update hooks and push-off behavior.
+[2026-02-20 15:33] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py
+[2026-02-20 15:33] OUT: OK (tasks_workspace compiled).
+[2026-02-20 15:35] ACTION: Started TASK_3C1B7D2A-8F59-4A8E-A0A1-1F3E9D7C6B52 to stabilize scripts/build_start_win.bat launch flow.
+[2026-02-20 15:36] ACTION: Added pre-sync stop of running MindNavigator.exe and adjusted launch invocation handling in build_start script.
+[2026-02-20 15:37] CMD: scripts/build_start_win.bat
+[2026-02-20 15:37] OUT: Build/sync completed in sandbox; GUI launch still limited by environment access policy.

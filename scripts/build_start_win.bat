@@ -44,6 +44,12 @@ if not exist "!TARGET_DIR!" (
   )
 )
 
+tasklist /FI "IMAGENAME eq %EXE_NAME%" | find /I "%EXE_NAME%" >nul 2>&1
+if "%ERRORLEVEL%"=="0" (
+  echo [build_start_win] Stopping running %EXE_NAME%...
+  taskkill /IM "%EXE_NAME%" /F >nul 2>&1
+)
+
 echo [build_start_win] Syncing build to "%TARGET_DIR%"...
 robocopy "%DIST_DIR%" "%TARGET_DIR%" /MIR /R:1 /W:1 >nul
 set "ROBOCOPY_EXIT=%ERRORLEVEL%"
@@ -53,10 +59,31 @@ if errorlevel 8 (
   exit /b 1
 )
 
+set "FOLDER_ICON_REL=assets\icon.ico"
+set "FOLDER_ICON_ABS=%TARGET_DIR%\%FOLDER_ICON_REL%"
+if not exist "%FOLDER_ICON_ABS%" (
+  if exist "%TARGET_DIR%\_internal\assets\icon.ico" (
+    if not exist "%TARGET_DIR%\assets" mkdir "%TARGET_DIR%\assets" >nul 2>&1
+    copy /Y "%TARGET_DIR%\_internal\assets\icon.ico" "%FOLDER_ICON_ABS%" >nul
+  )
+)
+if exist "%FOLDER_ICON_ABS%" (
+  >"%TARGET_DIR%\desktop.ini" (
+    echo [.ShellClassInfo]
+    echo IconResource=%FOLDER_ICON_REL%,0
+  )
+  attrib +h +s "%TARGET_DIR%\desktop.ini" >nul 2>&1
+  attrib +s "%TARGET_DIR%" >nul 2>&1
+  if "%DEBUG_BUILD_START%"=="1" echo [build_start_win][debug] folder icon configured: %FOLDER_ICON_REL%
+) else (
+  echo [build_start_win] Warning: folder icon source not found.
+)
+
 if exist "%TARGET_DIR%\%EXE_NAME%" (
   echo [build_start_win] Starting %EXE_NAME%...
-  start "" "%TARGET_DIR%\%EXE_NAME%"
-  set "START_EXIT=!ERRORLEVEL!"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+    "try { Start-Process -FilePath '%TARGET_DIR%\%EXE_NAME%' -WorkingDirectory '%TARGET_DIR%' -ErrorAction Stop; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }"
+  set "START_EXIT=%ERRORLEVEL%"
   if "%DEBUG_BUILD_START%"=="1" echo [build_start_win][debug] start exit=%START_EXIT%
   if not "%START_EXIT%"=="0" (
     echo [build_start_win] Warning: failed to start "%TARGET_DIR%\%EXE_NAME%".

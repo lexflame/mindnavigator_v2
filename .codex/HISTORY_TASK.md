@@ -36,4 +36,13 @@ Status: Completed
 | TASK_A2DA8B13-D8F5-44D5-88C0-5C95BFB4E1A0 | 2 | Demo and docs | feat | Completed |
 | TASK_10A88701-DA0B-4FA8-85D8-CAECDA1A57E2 | 2 | Build and release readiness | feat | Completed |
 
+## Sprint 3 - Plan Mode Sticky Day Separator
+Created: 2026-02-20
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_9F6A7E4B-1D3E-4C0D-8A27-6B1D29F8E4C1 | 3 | Sticky day separator on scroll in Plan mode | feat | Completed |
+| TASK_3C1B7D2A-8F59-4A8E-A0A1-1F3E9D7C6B52 | 3 | Stabilize b_start launch and sync pre-stop | fix | Completed |
+
 
