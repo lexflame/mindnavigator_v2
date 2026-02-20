@@ -52,6 +52,7 @@ from mindnavigator.storage import CloudFileData, Database, default_db_path, get_
 from mindnavigator.ui.dialogs.collection_category_dialog import CollectionCategorySelectDialog
 from mindnavigator.ui.dialogs.collection_import_dialog import CollectionImportDialog
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.workspaces.objects_workspace import DOC_EXTENSIONS, extract_text_from_document
 
 
@@ -312,6 +313,7 @@ class FileWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._smooth_scroll_controllers: list[object] = []
         self._scan_thread: Optional[QThread] = None
         self._scan_worker: Optional[CloudScanWorker] = None
         self._all_cloud_files: List[CloudFileData] = []
@@ -452,6 +454,11 @@ class FileWorkspace(QWidget):
 
         layout.addLayout(header)
         layout.addWidget(self.mode_stack, 1)
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.log_output),
+            attach_smooth_scroll(self.folder_tree),
+            attach_smooth_scroll(self.file_grid),
+        ]
 
         self.setStyleSheet(
             """

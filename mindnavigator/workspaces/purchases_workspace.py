@@ -47,6 +47,7 @@ from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.dialogs.purchase_add_dialog import PurchaseAddByUrlDialog
 from mindnavigator.ui.dialogs.purchase_edit_dialog import PurchaseEditDialog
 from mindnavigator.ui.dialogs.purchase_compare_dialog import PurchaseCompareDialog
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
 
@@ -56,6 +57,7 @@ class PurchasesWorkspace(BaseWorkspace):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         self._db = get_database()
+        self._smooth_scroll_controllers: list[object] = []
         self._current_item_id: int | None = None
         self._current_source_id: int | None = None
         self._items_cache: dict[int, dict] = {}
@@ -351,6 +353,15 @@ class PurchasesWorkspace(BaseWorkspace):
         splitter.setStretchFactor(2, 2)
 
         self.set_content(splitter)
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.category_tree),
+            attach_smooth_scroll(self.items_table),
+            attach_smooth_scroll(self.detail_notes),
+            attach_smooth_scroll(self.sources_table),
+            attach_smooth_scroll(self.source_props_table),
+            attach_smooth_scroll(self.item_props_table),
+            attach_smooth_scroll(self.wishlist_table),
+        ]
         self._load_categories()
         self.refresh()
 

@@ -99,3 +99,8 @@
 [2026-02-20 14:02] ACTION: Completed TASK_0E28539F-0B13-4E1F-9E80-F9EE8A307039 by introducing centralized scrollbar style API in mindnavigator/ui/styles.py.
 [2026-02-20 14:10] ACTION: Completed TASK_B5B10AB6-FD2F-4AA1-9157-8E7AA32EA0CD by switching to global scrollbar QSS and removing local duplicate scrollbar blocks.
 [2026-02-20 14:18] ACTION: Completed TASK_7F4A1A67-1967-4B56-8DAB-1A89F73A9AA4 by adding reusable smooth_scroll controller module.
+[2026-02-20 14:25] ACTION: Started TASK_4414D168-37D5-414E-A3F6-0C4A5DA15B0A workspace integration across tasks/notes/files/objects/purchases/collections.
+[2026-02-20 14:26] ACTION: Added attach_smooth_scroll wiring and controller retention in 6 workspace modules.
+[2026-02-20 14:27] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py mindnavigator/workspaces/notes_workspace.py mindnavigator/workspaces/files_workspace.py mindnavigator/workspaces/objects_workspace.py mindnavigator/workspaces/purchases_workspace.py mindnavigator/workspaces/collections_workspace.py
+[2026-02-20 14:27] OUT: OK (6 workspace modules compiled).
+[2026-02-20 14:28] ACTION: Completed TASK_4414D168-37D5-414E-A3F6-0C4A5DA15B0A and added sprint integration notes.
