@@ -7,7 +7,7 @@ Status: Planned
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_8A7C1F61-0F8F-4E7A-9E75-DC0C0EBE9F11 | 1 | Product and UX requirements | feat | Completed |
-| TASK_6F4219EE-B4D0-4B2A-93F8-0A8E1F17CC90 | 1 | Architecture and design (MVP) | feat | Planned |
+| TASK_6F4219EE-B4D0-4B2A-93F8-0A8E1F17CC90 | 1 | Architecture and design (MVP) | feat | Completed |
 | TASK_2C33A47A-50D5-4A1A-8CFD-74FC0A3F4A62 | 1 | Core data model | feat | Planned |
 | TASK_4DE11127-2AFA-42C4-B3D0-D83E4F89B8C4 | 1 | Class skeleton and API | feat | Planned |
 | TASK_C4D406F4-3D37-43D8-A3BE-4D6B655B4A8A | 1 | Smooth motion engine | feat | Planned |
