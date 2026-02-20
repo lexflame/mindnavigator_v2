@@ -7,7 +7,10 @@ a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[("assets", "assets")],
+    datas=[
+        ("assets", "assets"),
+        ("defaults/hotkeys.default.json", "defaults"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
