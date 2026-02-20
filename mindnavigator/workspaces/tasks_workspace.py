@@ -37,6 +37,7 @@ from mindnavigator.storage import (
     validate_title,
 )
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
@@ -3077,6 +3078,7 @@ class TasksWorkspace(BaseWorkspace):
         self._focus_day = date.today()
         self._applying_filters = False
         self._gantt_mode = False
+        self._smooth_scroll_controllers: list[object] = []
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
@@ -3305,6 +3307,10 @@ class TasksWorkspace(BaseWorkspace):
         self.content_stack.addWidget(self.gantt_page)
         self.content_stack.setCurrentWidget(self.list)
         content_layout.addWidget(self.content_stack, 1)
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.list),
+            attach_smooth_scroll(self.gantt_table),
+        ]
 
         self.set_content(content)
 

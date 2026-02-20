@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
 from mindnavigator.ui.modals import show_dialog_standard
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 
 
 DOC_EXTENSIONS = {".doc", ".docx", ".txt"}
@@ -557,6 +558,7 @@ class ObjectWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._smooth_scroll_controllers: list[object] = []
         self._images: List[ObjectImageData] = []
         self._current_image_index = 0
         self._current_object_id: Optional[int] = None
@@ -723,6 +725,12 @@ class ObjectWorkspace(QWidget):
         self.splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self.splitter, 1)
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.catalog_tree),
+            attach_smooth_scroll(self.card_list),
+            attach_smooth_scroll(self.thumbnail_list),
+            attach_smooth_scroll(self.image_comment),
+        ]
 
         self._apply_styles()
         self._update_action_state(False)

@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 
 @dataclass(frozen=True)
 class NoteItem:
@@ -484,6 +485,7 @@ class NoteWorkspace(QWidget):
         super().__init__(parent)
         self.setObjectName("NotesWorkspace")
         self._state = NoteWorkspaceState()
+        self._smooth_scroll_controllers: list[object] = []
 
         self._build_ui()
         self._wire_logic()
@@ -838,6 +840,11 @@ class NoteWorkspace(QWidget):
 
         self.list_view.setModel(self.model)
         self.list_view.setItemDelegate(NoteCardDelegate(self.list_view))
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.tree),
+            attach_smooth_scroll(self.list_view),
+            attach_smooth_scroll(self.editor),
+        ]
 
         self.filters_group.buttonClicked.connect(self._on_filter_changed)
 

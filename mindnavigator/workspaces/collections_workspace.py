@@ -56,6 +56,7 @@ from mindnavigator.storage import (
     get_database,
 )
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 ENTITY_LABELS = {
@@ -593,6 +594,7 @@ class CollectionsWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._db = get_database()
+        self._smooth_scroll_controllers: list[object] = []
         self._items: List[CollectionItemData] = []
         self._items_by_id: Dict[int, CollectionItemData] = {}
         self._categories: List[CollectionCategoryData] = []
@@ -770,6 +772,12 @@ class CollectionsWorkspace(QWidget):
         splitter.setStretchFactor(1, 2)
         splitter.setStretchFactor(2, 3)
         layout.addWidget(splitter, 1)
+        self._smooth_scroll_controllers = [
+            attach_smooth_scroll(self.category_tree),
+            attach_smooth_scroll(self.items_list),
+            attach_smooth_scroll(self.relations_list),
+            attach_smooth_scroll(self.entries_list),
+        ]
 
         self._set_action_state(False)
         self._apply_styles()
