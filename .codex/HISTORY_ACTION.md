@@ -245,3 +245,6 @@
 [2026-02-20 19:55] ACTION: Added depth/children roles and delegate rendering with indentation and node markers (▸/•), switched row title to plain project title.
 [2026-02-20 19:55] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 19:55] OUT: OK (projects_workspace compiled).
+[2026-02-20 20:02] ACTION: Added collapse/expand behavior for nested projects in workspace list via marker click; default state remains expanded.
+[2026-02-20 20:02] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 20:02] OUT: OK (projects_workspace compiled).

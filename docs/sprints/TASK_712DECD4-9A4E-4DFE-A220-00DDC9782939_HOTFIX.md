@@ -20,6 +20,8 @@ Make parent/child structure obvious after drag&drop reparenting.
 - node marker before title:
   - `▸` for project with children,
   - `•` for leaf project.
+ - marker click toggles collapse/expand for project subtree.
+ - default view state is fully expanded.
 
 4. Title rendering:
 - row title now uses plain project title (without full path),

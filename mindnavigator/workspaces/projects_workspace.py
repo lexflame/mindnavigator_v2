@@ -74,6 +74,7 @@ class ProjectRoles:
     UpdatedDate = Qt.UserRole + 8
     Depth = Qt.UserRole + 9
     HasChildren = Qt.UserRole + 10
+    IsCollapsed = Qt.UserRole + 11
 
 
 class ProjectsModel(QAbstractListModel):
@@ -86,6 +87,7 @@ class ProjectsModel(QAbstractListModel):
         self._project_title_cache: Dict[int, str] = {}
         self._project_depth_cache: Dict[int, int] = {}
         self._project_has_children_cache: Dict[int, bool] = {}
+        self._collapsed_project_ids: set[int] = set()
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
@@ -112,6 +114,8 @@ class ProjectsModel(QAbstractListModel):
             )
             for p in projects
         ]
+        valid_ids = {p.id for p in projects}
+        self._collapsed_project_ids = {pid for pid in self._collapsed_project_ids if pid in valid_ids}
         self._rebuild()
 
     def refresh(self) -> None:
@@ -158,9 +162,26 @@ class ProjectsModel(QAbstractListModel):
             return self._project_depth_cache.get(r.id, 0)
         if role == ProjectRoles.HasChildren:
             return self._project_has_children_cache.get(r.id, False)
+        if role == ProjectRoles.IsCollapsed:
+            return r.id in self._collapsed_project_ids
         if role == Qt.DisplayRole:
             return r.title
         return None
+
+    def toggle_project_collapsed(self, project_id: int) -> None:
+        if project_id in self._collapsed_project_ids:
+            self._collapsed_project_ids.remove(project_id)
+        else:
+            self._collapsed_project_ids.add(project_id)
+        self._rebuild()
+
+    def toggle_project_collapsed_by_row(self, row_idx: int) -> None:
+        row = self.project_at_row(row_idx)
+        if row is None:
+            return
+        if not self._project_has_children_cache.get(row.id, False):
+            return
+        self.toggle_project_collapsed(row.id)
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Устанавливает флаги взаимодействия для строки."""
@@ -467,6 +488,23 @@ class ProjectsModel(QAbstractListModel):
                     break
 
         projects: List[ProjectRow] = []
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+
+        def is_hidden_by_collapsed_parent(project: ProjectRow) -> bool:
+            parent_id = project.parent_project_id
+            seen: set[int] = set()
+            while isinstance(parent_id, int) and parent_id not in seen:
+                if parent_id in self._collapsed_project_ids:
+                    return True
+                seen.add(parent_id)
+                parent = project_map.get(parent_id)
+                if parent is None:
+                    break
+                parent_id = parent.parent_project_id
+            return False
         for it in self._all_rows:
             if not isinstance(it, ProjectRow):
                 continue
@@ -485,6 +523,8 @@ class ProjectsModel(QAbstractListModel):
 
             display_title = self._project_title_cache.get(it.id, it.title).lower()
             if search and search not in it.title.lower() and search not in display_title and search not in it.area.lower():
+                continue
+            if is_hidden_by_collapsed_parent(it):
                 continue
 
             projects.append(it)
@@ -659,6 +699,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         archived: bool = bool(index.data(ProjectRoles.Archived))
         depth: int = int(index.data(ProjectRoles.Depth) or 0)
         has_children: bool = bool(index.data(ProjectRoles.HasChildren))
+        is_collapsed: bool = bool(index.data(ProjectRoles.IsCollapsed))
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -700,7 +741,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         marker_rect = QRect(x, cy - 7, 14, 14)
         painter.setFont(self._font_small)
         painter.setPen(self.C_DIM)
-        marker_text = "▸" if has_children else "•"
+        marker_text = ">" if (has_children and is_collapsed) else ("v" if has_children else ".")
         painter.drawText(marker_rect, Qt.AlignCenter, marker_text)
         x += 18
 
@@ -776,10 +817,21 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             x = r.left() + 10
             x += 22
             box_rect = QRect(x, cy - 7, 14, 14)
+            x += 22
+            x += 22
+            depth: int = int(index.data(ProjectRoles.Depth) or 0)
+            depth = max(0, min(depth, 6))
+            x += depth * 14
+            marker_rect = QRect(x, cy - 7, 14, 14)
 
             right_pad = 18
             menu_w = 30
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+
+            if marker_rect.contains(pos):
+                if hasattr(model, "toggle_project_collapsed_by_row"):
+                    model.toggle_project_collapsed_by_row(index.row())
+                    return True
 
             if box_rect.contains(pos):
                 model.toggle_archive_by_row(index.row())
