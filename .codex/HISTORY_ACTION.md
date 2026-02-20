@@ -238,3 +238,6 @@
 [2026-02-20 19:40] ACTION: Relaxed ProjectsWorkspace child-drop intent: any center-zone drop now reparents as child (without strict horizontal offset).
 [2026-02-20 19:40] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 19:40] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:47] ACTION: Stabilized ProjectsWorkspace DnD source capture via mousePress, handled source==target fallback, and switched list drag/drop mode from InternalMove to DragDrop.
+[2026-02-20 19:47] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:47] OUT: OK (projects_workspace compiled).
