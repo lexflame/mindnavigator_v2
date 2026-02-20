@@ -19,7 +19,7 @@ It also stores:
 - Type: parity
 - Title: Review unexpected file `.codex/manual/ERROR_GIT/git_runner.txt`
 - Sprint: 1
-- Status: Planned
+- Status: Done
 - Why:
   Unexpected file appeared during sprint execution and was not created intentionally in task flow.
 - Scope:
@@ -31,6 +31,10 @@ It also stores:
   - file origin is documented;
   - clear decision is made (`keep`/`remove`/`ignore`);
   - repository state is consistent with decision.
+- Result:
+  - origin identified: file added by commit `4636c8d` (`CODEX ADDON FILE`);
+  - classification: accidental debug output (CI lint error log), not product artifact;
+  - decision: `remove` from repository and `ignore` path `.codex/manual/ERROR_GIT/`.
 
 ### TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB
 - Type: parity
