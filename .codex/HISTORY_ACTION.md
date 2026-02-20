@@ -166,3 +166,8 @@
 [2026-02-20 17:22] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 17:22] OUT: OK (projects_nav compiled).
 [2026-02-20 17:23] ACTION: Added docs/sprints/TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7_UI.md and completed TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7.
+[2026-02-20 17:30] ACTION: Started TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20 (Drag&Drop interaction for projects).
+[2026-02-20 17:33] ACTION: Added project drag/drop handling in ProjectsNav with drop intent resolution (root/reorder/reparent).
+[2026-02-20 17:34] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:34] OUT: OK (projects_nav compiled).
+[2026-02-20 17:35] ACTION: Added docs/sprints/TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20_DND.md and completed TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20.

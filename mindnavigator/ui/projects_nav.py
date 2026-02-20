@@ -8,9 +8,52 @@
 """
 
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QAbstractItemView
 
 from mindnavigator.storage import get_database, normalize_priority, ProjectData
+
+
+class _ProjectsListWidget(QListWidget):
+    def __init__(self, owner: "ProjectsNav"):
+        super().__init__(owner)
+        self._owner = owner
+
+    def dropEvent(self, event):
+        source_item = self.currentItem()
+        source_data = source_item.data(Qt.UserRole) if source_item is not None else None
+        source_payload = source_data if isinstance(source_data, dict) else {}
+        source_kind = source_payload.get("kind")
+        source_value = source_payload.get("value") or {}
+        source_id = source_value.get("id")
+        if source_kind != "project" or not isinstance(source_id, int):
+            event.ignore()
+            return
+
+        target_item = self.itemAt(event.position().toPoint())
+        target_data = target_item.data(Qt.UserRole) if target_item is not None else None
+        target_payload = target_data if isinstance(target_data, dict) else {}
+        target_kind = target_payload.get("kind")
+        target_value = target_payload.get("value") or {}
+        target_id = target_value.get("id")
+
+        if target_kind != "project" or not isinstance(target_id, int):
+            ok = self._owner._handle_project_drop(source_id, None, as_child=False, drop_after=True)
+            if ok:
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+            return
+
+        target_rect = self.visualItemRect(target_item)
+        drop_after = event.position().toPoint().y() > target_rect.center().y()
+        target_depth = int(target_payload.get("depth") or 0)
+        indent_x = target_depth * 16 + 18
+        as_child = event.position().toPoint().x() > (indent_x + 26)
+        ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
+        if ok:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 class ProjectsNav(QWidget):
@@ -39,11 +82,16 @@ class ProjectsNav(QWidget):
         self.hint.setObjectName("ProjectsHint")
         self.hint.setWordWrap(True)
 
-        self.list = QListWidget()
+        self.list = _ProjectsListWidget(self)
         self.list.setObjectName("ProjectsFilterList")
         self.list.setSelectionMode(QListWidget.SingleSelection)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setDragDropMode(QAbstractItemView.DragDrop)
+        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setDragEnabled(True)
+        self.list.viewport().setAcceptDrops(True)
+        self.list.setDropIndicatorShown(True)
         self.list.currentItemChanged.connect(self._on_item_selected)
         self.list.itemDoubleClicked.connect(self._on_item_double_clicked)
 
@@ -215,7 +263,7 @@ class ProjectsNav(QWidget):
                 project_children = children.get(project.id, [])
                 has_children = bool(project_children)
                 is_expanded = project.id not in self._collapsed_project_ids
-                marker = "? " if (has_children and is_expanded) else ("? " if has_children else "  ")
+                marker = "v " if (has_children and is_expanded) else ("> " if has_children else "  ")
                 entries.append(
                     {
                         "label": f"{'  ' * depth}{marker}{self._project_item_label(project)}",
@@ -223,6 +271,8 @@ class ProjectsNav(QWidget):
                         "value": {"id": project.id, "title": project.title, "area": project.area},
                         "has_children": has_children,
                         "depth": depth,
+                        "parent_id": project.parent_project_id,
+                        "sort_order": project.sort_order,
                     }
                 )
                 if has_children and is_expanded:
@@ -317,6 +367,51 @@ class ProjectsNav(QWidget):
         current = self.list.currentItem()
         if current is not None:
             self._on_item_selected(current, None)
+
+    def _handle_project_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int | None,
+        as_child: bool,
+        drop_after: bool,
+    ) -> bool:
+        db = get_database()
+        try:
+            if target_project_id is None:
+                db.move_project(source_project_id, None, None)
+            elif as_child:
+                db.move_project(source_project_id, target_project_id, None)
+            else:
+                target = next((p for p in db.fetch_projects() if p.id == target_project_id), None)
+                if target is None:
+                    return False
+                parent_id = target.parent_project_id
+                siblings = db.fetch_project_children(parent_id)
+                sibling_ids = [p.id for p in siblings if p.id != source_project_id]
+                if target_project_id not in sibling_ids:
+                    return False
+                index = sibling_ids.index(target_project_id)
+                if drop_after:
+                    index += 1
+                db.move_project(source_project_id, parent_id, index)
+        except ValueError:
+            return False
+
+        with QSignalBlocker(self.list):
+            self._populate_for_mode(self._mode_name)
+
+        selected = None
+        for idx in range(self.list.count()):
+            item = self.list.item(idx)
+            data = item.data(Qt.UserRole) or {}
+            value = data.get("value") or {}
+            if data.get("kind") == "project" and value.get("id") == source_project_id:
+                selected = item
+                self.list.setCurrentRow(idx)
+                break
+        if selected is not None:
+            self._on_item_selected(selected, None)
+        return True
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""
