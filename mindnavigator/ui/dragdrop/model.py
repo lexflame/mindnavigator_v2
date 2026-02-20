@@ -38,6 +38,11 @@ class MotionConfig:
     max_step_px: int = 96
     ghost_opacity: float = 0.86
     ghost_scale: float = 1.0
+    ghost_invalid_opacity: float = 0.58
+    ghost_invalid_scale: float = 0.95
+    hover_scale_boost: float = 1.02
+    drop_success_duration_ms: int = 120
+    drop_failure_duration_ms: int = 180
 
     def validate(self) -> None:
         if self.profile not in {"linear", "ease_out", "spring_soft"}:
@@ -48,8 +53,18 @@ class MotionConfig:
             raise ValueError("max_step_px must be >= 1.")
         if not (0.0 <= self.ghost_opacity <= 1.0):
             raise ValueError("ghost_opacity must be in [0.0, 1.0].")
+        if not (0.0 <= self.ghost_invalid_opacity <= 1.0):
+            raise ValueError("ghost_invalid_opacity must be in [0.0, 1.0].")
         if self.ghost_scale <= 0.0:
             raise ValueError("ghost_scale must be > 0.0.")
+        if self.ghost_invalid_scale <= 0.0:
+            raise ValueError("ghost_invalid_scale must be > 0.0.")
+        if self.hover_scale_boost <= 0.0:
+            raise ValueError("hover_scale_boost must be > 0.0.")
+        if self.drop_success_duration_ms < 1:
+            raise ValueError("drop_success_duration_ms must be >= 1.")
+        if self.drop_failure_duration_ms < 1:
+            raise ValueError("drop_failure_duration_ms must be >= 1.")
 
 
 @dataclass(slots=True)
