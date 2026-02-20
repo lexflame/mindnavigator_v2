@@ -201,3 +201,6 @@
 [2026-02-20 18:16] ACTION: Allowed root move when dropping on pseudo-items (clear/section/empty) and added safer cleanup of drag source state.
 [2026-02-20 18:16] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 18:16] OUT: OK (projects_nav compiled).
+[2026-02-20 18:22] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: switched projects list drag mode to InternalMove and added selectedItems() fallback for drag source resolution.
+[2026-02-20 18:22] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:22] OUT: OK (projects_nav compiled).

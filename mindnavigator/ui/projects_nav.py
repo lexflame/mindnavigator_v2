@@ -29,6 +29,9 @@ class _ProjectsListWidget(QListWidget):
 
     def startDrag(self, supportedActions):
         current = self.currentItem()
+        if current is None:
+            selected = self.selectedItems()
+            current = selected[0] if selected else None
         payload = (current.data(Qt.UserRole) or {}) if current is not None else {}
         value = payload.get("value") or {}
         project_id = value.get("id") if payload.get("kind") == "project" else None
@@ -39,6 +42,9 @@ class _ProjectsListWidget(QListWidget):
         source_id = self._drag_source_project_id
         if not isinstance(source_id, int):
             source_item = self.currentItem()
+            if source_item is None:
+                selected = self.selectedItems()
+                source_item = selected[0] if selected else None
             source_data = source_item.data(Qt.UserRole) if source_item is not None else None
             source_payload = source_data if isinstance(source_data, dict) else {}
             source_kind = source_payload.get("kind")
@@ -128,7 +134,7 @@ class ProjectsNav(QWidget):
         self.list.setSelectionMode(QListWidget.SingleSelection)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.setDragDropMode(QAbstractItemView.DragDrop)
+        self.list.setDragDropMode(QAbstractItemView.InternalMove)
         self.list.setDefaultDropAction(Qt.MoveAction)
         self.list.setDragEnabled(True)
         self.list.viewport().setAcceptDrops(True)
