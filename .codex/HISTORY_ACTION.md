@@ -156,3 +156,8 @@
 [2026-02-20 16:52] CMD: python -m compileall mindnavigator/storage.py
 [2026-02-20 16:52] OUT: OK (storage compiled).
 [2026-02-20 16:53] ACTION: Added docs/sprints/TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91_ARCH.md and completed TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91.
+[2026-02-20 17:05] ACTION: Started TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88 (domain API for project tree operations).
+[2026-02-20 17:08] ACTION: Added storage domain API for tree fetch, child fetch, move/reparent and sibling reorder.
+[2026-02-20 17:09] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 17:09] OUT: OK (storage compiled).
+[2026-02-20 17:10] ACTION: Added docs/sprints/TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88_API.md and completed TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88.

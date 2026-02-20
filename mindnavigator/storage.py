@@ -1782,14 +1782,6 @@ class Database:
             raise ValueError("Дата задачи некорректна.")
 
         now = datetime.utcnow().isoformat(timespec="seconds")
-        if sort_order is None:
-            if current_row is None:
-                sort_order = 0
-            elif current_row["parent_project_id"] == parent_project_id:
-                sort_order = int(current_row["sort_order"] or 0)
-            else:
-                sort_order = self._next_project_sort_order(parent_project_id, exclude_id=project_id)
-        sort_order = max(0, int(sort_order))
 
         with self._conn:
             self._conn.execute(
@@ -2509,6 +2501,132 @@ class Database:
             linked_object_id=linked_object_id,
             sort_order=sort_order,
         )
+
+    def fetch_project_tree(self) -> List[ProjectData]:
+        """Возвращает проекты в порядке обхода по parent/sort_order."""
+        return self.fetch_projects()
+
+    def fetch_project_children(self, parent_project_id: Optional[int]) -> List[ProjectData]:
+        """Возвращает дочерние проекты для указанного родителя."""
+        rows = self._conn.execute(
+            """
+            SELECT
+                id, area, title, updated, priority, archived,
+                parent_project_id, default_task_priority, force_recurrence_kind,
+                linked_map_id, linked_note_id, linked_object_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            WHERE parent_project_id IS ?
+            ORDER BY sort_order, id;
+            """,
+            (parent_project_id,),
+        ).fetchall()
+        children: List[ProjectData] = []
+        for row in rows:
+            children.append(
+                ProjectData(
+                    id=row["id"],
+                    area=row["area"],
+                    title=row["title"],
+                    updated=date.fromisoformat(row["updated"]),
+                    priority=row["priority"],
+                    archived=bool(row["archived"]),
+                    parent_project_id=row["parent_project_id"],
+                    default_task_priority=row["default_task_priority"] or "",
+                    force_recurrence_kind=(row["force_recurrence_kind"] or "").strip().lower(),
+                    linked_map_id=row["linked_map_id"],
+                    linked_note_id=row["linked_note_id"],
+                    linked_object_id=row["linked_object_id"],
+                    sort_order=int(row["sort_order"] or 0),
+                )
+            )
+        return children
+
+    def _reindex_project_group(self, parent_project_id: Optional[int]) -> None:
+        """Пересобирает непрерывный sort_order для группы дочерних проектов."""
+        rows = self._conn.execute(
+            """
+            SELECT id
+            FROM projects
+            WHERE parent_project_id IS ?
+            ORDER BY COALESCE(sort_order, 0), id;
+            """,
+            (parent_project_id,),
+        ).fetchall()
+        for idx, row in enumerate(rows):
+            self._conn.execute(
+                "UPDATE projects SET sort_order = ? WHERE id = ?;",
+                (idx, row["id"]),
+            )
+
+    def move_project(self, project_id: int, new_parent_project_id: Optional[int], new_sort_order: Optional[int] = None) -> None:
+        """Перемещает проект в новую ветку и/или позицию среди siblings."""
+        if new_parent_project_id == project_id:
+            raise ValueError("Циклическая связь проектов не допускается.")
+
+        row = self._conn.execute(
+            """
+            SELECT parent_project_id, COALESCE(sort_order, 0) AS sort_order
+            FROM projects
+            WHERE id = ?;
+            """,
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Проект не найден.")
+        old_parent = row["parent_project_id"]
+
+        if new_parent_project_id is not None:
+            cursor = new_parent_project_id
+            seen: set[int] = set()
+            while cursor is not None and cursor not in seen:
+                if cursor == project_id:
+                    raise ValueError("Циклическая связь проектов не допускается.")
+                seen.add(cursor)
+                parent_row = self._conn.execute(
+                    "SELECT parent_project_id FROM projects WHERE id = ?;",
+                    (cursor,),
+                ).fetchone()
+                if parent_row is None:
+                    raise ValueError("Новый родительский проект не найден.")
+                cursor = parent_row["parent_project_id"]
+
+        siblings_count_row = self._conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM projects
+            WHERE parent_project_id IS ?
+              AND id != ?;
+            """,
+            (new_parent_project_id, project_id),
+        ).fetchone()
+        siblings_count = int(siblings_count_row["cnt"] if siblings_count_row is not None else 0)
+        if new_sort_order is None:
+            new_sort_order = siblings_count
+        else:
+            new_sort_order = max(0, min(int(new_sort_order), siblings_count))
+
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET parent_project_id = ?, sort_order = ?
+                WHERE id = ?;
+                """,
+                (new_parent_project_id, new_sort_order, project_id),
+            )
+            self._reindex_project_group(old_parent)
+            self._reindex_project_group(new_parent_project_id)
+
+    def reorder_project(self, project_id: int, new_sort_order: int) -> None:
+        """Меняет порядок проекта среди siblings без смены родителя."""
+        row = self._conn.execute(
+            "SELECT parent_project_id FROM projects WHERE id = ?;",
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Проект не найден.")
+        parent_project_id = row["parent_project_id"]
+        self.move_project(project_id, parent_project_id, new_sort_order=new_sort_order)
 
     def delete_project(self, project_id: int) -> None:
         """Удаляет проект по id."""
