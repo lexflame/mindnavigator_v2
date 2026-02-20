@@ -72,6 +72,8 @@ class ProjectRoles:
     Archived = Qt.UserRole + 6
     ProjectId = Qt.UserRole + 7
     UpdatedDate = Qt.UserRole + 8
+    Depth = Qt.UserRole + 9
+    HasChildren = Qt.UserRole + 10
 
 
 class ProjectsModel(QAbstractListModel):
@@ -82,6 +84,8 @@ class ProjectsModel(QAbstractListModel):
         self._all_rows: List[Row] = []
         self._rows: List[Row] = []
         self._project_title_cache: Dict[int, str] = {}
+        self._project_depth_cache: Dict[int, int] = {}
+        self._project_has_children_cache: Dict[int, bool] = {}
         self._filter_mode = "Все"      # Все | Активные | Архив
         self._search = ""
         self._area_focus: Optional[str] = None
@@ -141,7 +145,7 @@ class ProjectsModel(QAbstractListModel):
         if role == ProjectRoles.Area:
             return r.area
         if role == ProjectRoles.Title:
-            return self._project_title_cache.get(r.id, r.title)
+            return r.title
         if role == ProjectRoles.Updated:
             return format_project_date(r.updated)
         if role == ProjectRoles.UpdatedDate:
@@ -150,8 +154,12 @@ class ProjectsModel(QAbstractListModel):
             return r.priority
         if role == ProjectRoles.Archived:
             return r.archived
+        if role == ProjectRoles.Depth:
+            return self._project_depth_cache.get(r.id, 0)
+        if role == ProjectRoles.HasChildren:
+            return self._project_has_children_cache.get(r.id, False)
         if role == Qt.DisplayRole:
-            return self._project_title_cache.get(r.id, r.title)
+            return r.title
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
@@ -513,6 +521,14 @@ class ProjectsModel(QAbstractListModel):
             if isinstance(row, ProjectRow)
         }
         cache: Dict[int, str] = {}
+        depth_cache: Dict[int, int] = {}
+        has_children_cache: Dict[int, bool] = {}
+
+        for project in project_map.values():
+            has_children_cache[project.id] = False
+        for project in project_map.values():
+            if project.parent_project_id in project_map:
+                has_children_cache[project.parent_project_id] = True
 
         def resolve_title(project: ProjectRow, seen: Optional[set[int]] = None) -> str:
             cached = cache.get(project.id)
@@ -537,10 +553,32 @@ class ProjectsModel(QAbstractListModel):
             cache[project.id] = nested
             return nested
 
+        def resolve_depth(project: ProjectRow, seen: Optional[set[int]] = None) -> int:
+            cached = depth_cache.get(project.id)
+            if cached is not None:
+                return cached
+            seen_set = seen or set()
+            if project.id in seen_set:
+                depth_cache[project.id] = 0
+                return 0
+            if project.parent_project_id is None:
+                depth_cache[project.id] = 0
+                return 0
+            parent = project_map.get(project.parent_project_id)
+            if parent is None:
+                depth_cache[project.id] = 0
+                return 0
+            depth = resolve_depth(parent, seen_set | {project.id}) + 1
+            depth_cache[project.id] = depth
+            return depth
+
         for project in project_map.values():
             resolve_title(project)
+            resolve_depth(project)
 
         self._project_title_cache = cache
+        self._project_depth_cache = depth_cache
+        self._project_has_children_cache = has_children_cache
 
 
 class ProjectsItemDelegate(QStyledItemDelegate):
@@ -619,6 +657,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         updated: str = index.data(ProjectRoles.Updated) or ""
         priority: str = index.data(ProjectRoles.Priority) or "Medium"
         archived: bool = bool(index.data(ProjectRoles.Archived))
+        depth: int = int(index.data(ProjectRoles.Depth) or 0)
+        has_children: bool = bool(index.data(ProjectRoles.HasChildren))
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         if option.state & QStyle.State_Selected:
@@ -653,6 +693,16 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         icon_rect = QRect(x, cy - 8, 16, 16)
         self._icon_folder.paint(painter, icon_rect)
         x += 22
+
+        depth = max(0, min(depth, 6))
+        x += depth * 14
+
+        marker_rect = QRect(x, cy - 7, 14, 14)
+        painter.setFont(self._font_small)
+        painter.setPen(self.C_DIM)
+        marker_text = "▸" if has_children else "•"
+        painter.drawText(marker_rect, Qt.AlignCenter, marker_text)
+        x += 18
 
         painter.setFont(self._font)
         painter.setPen(self.C_TEXT if not archived else self.C_DIM)

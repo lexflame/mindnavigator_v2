@@ -241,3 +241,7 @@
 [2026-02-20 19:47] ACTION: Stabilized ProjectsWorkspace DnD source capture via mousePress, handled source==target fallback, and switched list drag/drop mode from InternalMove to DragDrop.
 [2026-02-20 19:47] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 19:47] OUT: OK (projects_workspace compiled).
+[2026-02-20 19:54] ACTION: Started TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 (visual hierarchy for nested projects in workspace list).
+[2026-02-20 19:55] ACTION: Added depth/children roles and delegate rendering with indentation and node markers (▸/•), switched row title to plain project title.
+[2026-02-20 19:55] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:55] OUT: OK (projects_workspace compiled).

@@ -71,5 +71,6 @@ Status: In Progress
 | TASK_04051FC3-09AF-4387-AA60-831861E32727 | hotfix | Startup DB migration: missing projects.sort_order on legacy DB | fix | Completed |
 | TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225 | hotfix | ProjectsNav DnD: project does not move on drop | fix | Completed |
 | TASK_0DE2B002-565F-4A74-9AD9-00668A7AA79A | hotfix | ProjectsWorkspace list: enable project drag&drop reorder | fix | Completed |
+| TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 | hotfix | ProjectsWorkspace visual hierarchy (indent + markers) | fix | Completed |
 
 
