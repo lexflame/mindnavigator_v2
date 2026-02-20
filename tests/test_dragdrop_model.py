@@ -29,6 +29,16 @@ def test_motion_config_validate_errors():
         MotionConfig(ghost_opacity=1.5).validate()
     with pytest.raises(ValueError):
         MotionConfig(ghost_scale=0).validate()
+    with pytest.raises(ValueError):
+        MotionConfig(ghost_invalid_opacity=2.0).validate()
+    with pytest.raises(ValueError):
+        MotionConfig(ghost_invalid_scale=0.0).validate()
+    with pytest.raises(ValueError):
+        MotionConfig(hover_scale_boost=0.0).validate()
+    with pytest.raises(ValueError):
+        MotionConfig(drop_success_duration_ms=0).validate()
+    with pytest.raises(ValueError):
+        MotionConfig(drop_failure_duration_ms=0).validate()
 
 
 def test_drag_session_transition_happy_path():

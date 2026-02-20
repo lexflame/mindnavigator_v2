@@ -50,6 +50,7 @@ class DragDropController:
         self.on_drop_requested: Callable[[DragPayload, str], None] | None = None
         self.on_drop_committed: Callable[[DragPayload, str], None] | None = None
         self.on_drag_canceled: Callable[[str], None] | None = None
+        self.on_drop_transition: Callable[[bool, int], None] | None = None
 
     def arm_drag(self, payload: DragPayload, start_pos_global: Point, now_ms: int) -> None:
         self.reset()
@@ -84,8 +85,8 @@ class DragDropController:
         self._render_drag_ghost(
             self.payload,
             smooth_pos,
-            self._motion.ghost_opacity,
-            self._motion.ghost_scale,
+            self._ghost_opacity(is_valid),
+            self._ghost_scale(is_valid),
         )
         self._render_zone_feedback(zone_id, is_valid)
         if self.on_drag_moved:
@@ -114,6 +115,9 @@ class DragDropController:
             if success and self.on_drop_committed:
                 self.on_drop_committed(self.payload, zone_id)
 
+        transition_ms = self._motion.drop_success_duration_ms if success else self._motion.drop_failure_duration_ms
+        if self.on_drop_transition:
+            self.on_drop_transition(success, transition_ms)
         self._play_drop_result(success)
         self.reset()
 
@@ -152,6 +156,14 @@ class DragDropController:
     def _emit_drag_started(self) -> None:
         if self.payload is not None and self.on_drag_started:
             self.on_drag_started(self.payload, self.state)
+
+    def _ghost_opacity(self, is_valid: bool) -> float:
+        return self._motion.ghost_opacity if is_valid else self._motion.ghost_invalid_opacity
+
+    def _ghost_scale(self, is_valid: bool) -> float:
+        if is_valid:
+            return self._motion.ghost_scale * self._motion.hover_scale_boost
+        return self._motion.ghost_invalid_scale
 
     def _compute_smooth_position(self, target: Point, now_ms: int) -> Point:
         dt_ms = max(0, now_ms - self._last_render_ms)

@@ -11,7 +11,7 @@ Status: Planned
 | TASK_2C33A47A-50D5-4A1A-8CFD-74FC0A3F4A62 | 1 | Core data model | feat | Completed (pytest missing in env) |
 | TASK_4DE11127-2AFA-42C4-B3D0-D83E4F89B8C4 | 1 | Class skeleton and API | feat | Completed (pytest missing in env) |
 | TASK_C4D406F4-3D37-43D8-A3BE-4D6B655B4A8A | 1 | Smooth motion engine | feat | Completed (pytest missing in env) |
-| TASK_B91FE4A6-8FA1-4978-A4FB-7E6F65A0E650 | 1 | Visual polish layer | feat | Planned |
+| TASK_B91FE4A6-8FA1-4978-A4FB-7E6F65A0E650 | 1 | Visual polish layer | feat | Completed (pytest missing in env) |
 | TASK_9D03E4C5-5A3D-4416-8A37-1D5CE2E0D61B | 1 | Hit testing and drop validation | feat | Planned |
 | TASK_83D9C1A2-88C9-45FA-9473-1EBECF58B2DA | 1 | Input and interaction edge cases | feat | Planned |
 | TASK_43F6DE9B-40D4-42CE-91E6-B65B1F42D96A | 1 | Performance and stability | feat | Planned |

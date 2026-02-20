@@ -46,3 +46,13 @@
 [2026-02-20 00:28] OUT: No module named pytest
 [2026-02-20 00:29] ACTION: Updated TASK_C4D406F4-3D37-43D8-A3BE-4D6B655B4A8A -> Completed (pytest missing in env).
 [2026-02-20 00:30] ACTION: Created docs/PARITY.md and added parity task for unexpected file .codex/manual/ERROR_GIT/git_runner.txt.
+[2026-02-20 00:31] CMD: git push -u origin sprint/1_smooth_dragdrop
+[2026-02-20 00:31] OUT: push successful, upstream set.
+[2026-02-20 00:32] ACTION: Started TASK_B91FE4A6-8FA1-4978-A4FB-7E6F65A0E650 (visual polish layer).
+[2026-02-20 00:33] ACTION: Added visual style config for valid/invalid hover and drop transition timing.
+[2026-02-20 00:34] ACTION: Added tests for visual style and transition hook.
+[2026-02-20 00:35] CMD: python -m compileall mindnavigator/ui/dragdrop tests/test_dragdrop_model.py tests/test_dragdrop_controller.py
+[2026-02-20 00:35] OUT: OK (files compiled)
+[2026-02-20 00:36] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py -q
+[2026-02-20 00:36] OUT: No module named pytest
+[2026-02-20 00:37] ACTION: Updated TASK_B91FE4A6-8FA1-4978-A4FB-7E6F65A0E650 -> Completed (pytest missing in env).
