@@ -65,3 +65,6 @@
 [2026-02-20 00:44] ACTION: Started TASK_43F6DE9B-40D4-42CE-91E6-B65B1F42D96A (performance/stability).
 [2026-02-20 00:45] ACTION: Added render throttling, lightweight profiling, and performance snapshots in controller.
 [2026-02-20 00:46] ACTION: Added performance tests and sprint notes for TASK_43F6....
+[2026-02-20 00:47] ACTION: Started TASK_D86A66D1-6A6D-44BB-87B5-73ED2371D4D5 (automated tests).
+[2026-02-20 00:48] ACTION: Added dragdrop integration tests for commit/reject lifecycles.
+[2026-02-20 00:49] ACTION: Added sprint notes for TASK_D86....
