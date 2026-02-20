@@ -33,7 +33,8 @@ class _ProjectsListWidget(QListWidget):
 
     def _dnd_log(self, message: str) -> None:
         try:
-            log_path = Path(".codex/manual/dnd.log")
+            root_dir = Path(__file__).resolve().parents[2]
+            log_path = root_dir / ".codex" / "manual" / "dnd.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as fp:
                 fp.write(message + "\n")
