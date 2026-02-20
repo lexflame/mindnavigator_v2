@@ -37,13 +37,21 @@ class _ProjectsListWidget(QListWidget):
         super().mousePressEvent(event)
 
     def dragEnterEvent(self, event):
-        if event.source() is self:
+        source = event.source()
+        if source is self or source is self.viewport():
+            event.acceptProposedAction()
+            return
+        if source is None:
             event.acceptProposedAction()
             return
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event):
-        if event.source() is self:
+        source = event.source()
+        if source is self or source is self.viewport():
+            event.acceptProposedAction()
+            return
+        if source is None:
             event.acceptProposedAction()
             return
         super().dragMoveEvent(event)
