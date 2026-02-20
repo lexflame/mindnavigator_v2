@@ -53,7 +53,7 @@ Status: In Progress
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 | 4 | Requirements and UX flow for nested projects | feat | Completed |
-| TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91 | 4 | Storage model and migration design | feat | Planned |
+| TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91 | 4 | Storage model and migration design | feat | Completed |
 | TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88 | 4 | Domain API for project tree operations | feat | Planned |
 | TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7 | 4 | ProjectsNav UI tree rendering | feat | Planned |
 | TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20 | 4 | Drag&Drop interaction for projects | feat | Planned |

@@ -150,3 +150,9 @@
 [2026-02-20 16:31] ACTION: Audited current ProjectsNav and storage capabilities (parent_project_id, cycle checks, flat rendering gaps).
 [2026-02-20 16:32] ACTION: Added docs/sprints/TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40_PLAN.md with hierarchy constraints, DnD matrix, and acceptance criteria.
 [2026-02-20 16:33] ACTION: Completed TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 and moved Sprint 4 status to In Progress.
+[2026-02-20 16:45] ACTION: Started TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91 (storage model and migration design).
+[2026-02-20 16:49] ACTION: Added projects.sort_order with migration path, normalization helper, and parent+order indexes.
+[2026-02-20 16:51] ACTION: Updated project storage API for deterministic sibling order (fetch/create/update).
+[2026-02-20 16:52] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 16:52] OUT: OK (storage compiled).
+[2026-02-20 16:53] ACTION: Added docs/sprints/TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91_ARCH.md and completed TASK_3F1B7D6E-2F8C-4C19-8D6A-B7E21A4D3C91.
