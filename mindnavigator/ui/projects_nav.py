@@ -61,6 +61,7 @@ class _ProjectsListWidget(QListWidget):
         if self._pressed_project_id is not None:
             self._drag_source_project_id = self._pressed_project_id
             self._pressed_project_id = None
+            print(f"[ProjectsNav DnD] startDrag source={self._drag_source_project_id}")
             super().startDrag(supportedActions)
             return
         if current is None:
@@ -70,6 +71,7 @@ class _ProjectsListWidget(QListWidget):
         value = payload.get("value") or {}
         project_id = value.get("id") if payload.get("kind") == "project" else None
         self._drag_source_project_id = project_id if isinstance(project_id, int) else None
+        print(f"[ProjectsNav DnD] startDrag source={self._drag_source_project_id}")
         super().startDrag(supportedActions)
 
     def dropEvent(self, event):
@@ -85,6 +87,7 @@ class _ProjectsListWidget(QListWidget):
             source_value = source_payload.get("value") or {}
             source_id = source_value.get("id")
             if source_kind != "project" or not isinstance(source_id, int):
+                print("[ProjectsNav DnD] dropEvent rejected: invalid source")
                 self._show_drop_reject(event, "Перемещать можно только проекты.")
                 event.ignore()
                 self._drag_source_project_id = None
@@ -101,16 +104,20 @@ class _ProjectsListWidget(QListWidget):
 
         # Drop to root is allowed on empty area and on pseudo-items (clear/section/empty).
         if target_item is None or target_kind in {"clear", "section", "empty"}:
+            print(f"[ProjectsNav DnD] dropEvent source={source_id} target=root")
             ok = self._owner._handle_project_drop(source_id, None, as_child=False, drop_after=True)
             if ok:
                 event.acceptProposedAction()
+                print("[ProjectsNav DnD] dropEvent accepted root move")
             else:
                 self._show_drop_reject(event, self._owner._last_drop_error)
                 event.ignore()
+                print(f"[ProjectsNav DnD] dropEvent rejected root move: {self._owner._last_drop_error}")
             self._drag_source_project_id = None
             return
 
         if target_kind != "project" or not isinstance(target_id, int):
+            print(f"[ProjectsNav DnD] dropEvent rejected: invalid target kind={target_kind}")
             self._show_drop_reject(event, "Перемещать можно только проекты.")
             event.ignore()
             self._drag_source_project_id = None
@@ -148,12 +155,17 @@ class _ProjectsListWidget(QListWidget):
             drop_after = direction > 0
 
         ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
+        print(
+            f"[ProjectsNav DnD] dropEvent source={source_id} target={target_id} "
+            f"as_child={as_child} drop_after={drop_after} ok={ok}"
+        )
         if ok:
             event.setDropAction(Qt.MoveAction)
             event.acceptProposedAction()
         else:
             self._show_drop_reject(event, self._owner._last_drop_error)
             event.ignore()
+            print(f"[ProjectsNav DnD] dropEvent rejected: {self._owner._last_drop_error}")
         self._drag_source_project_id = None
 
     def _show_drop_reject(self, event, message: str) -> None:
@@ -485,6 +497,10 @@ class ProjectsNav(QWidget):
         as_child: bool,
         drop_after: bool,
     ) -> bool:
+        print(
+            f"[ProjectsNav DnD] _handle_project_drop source={source_project_id} "
+            f"target={target_project_id} as_child={as_child} drop_after={drop_after}"
+        )
         db = get_database()
         self._last_drop_error = ""
         projects = db.fetch_projects()

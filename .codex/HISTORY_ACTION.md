@@ -216,3 +216,6 @@
 [2026-02-20 18:49] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: fixed internal drag enter/move acceptance for both list and viewport sources.
 [2026-02-20 18:49] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 18:49] OUT: OK (projects_nav compiled).
+[2026-02-20 18:56] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added runtime DnD diagnostics logs in startDrag/dropEvent/_handle_project_drop.
+[2026-02-20 18:56] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:56] OUT: OK (projects_nav compiled).
