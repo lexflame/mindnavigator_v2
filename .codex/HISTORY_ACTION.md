@@ -23,3 +23,13 @@
 [2026-02-20 00:14] CMD: python -m pytest tests/test_dragdrop_model.py -q
 [2026-02-20 00:14] OUT: No module named pytest
 [2026-02-20 00:15] ACTION: Updated TASK_2C33A47A-50D5-4A1A-8CFD-74FC0A3F4A62 status -> In Progress (pytest missing in env).
+[2026-02-20 00:16] ACTION: Started TASK_4DE11127-2AFA-42C4-B3D0-D83E4F89B8C4 (class skeleton and API).
+[2026-02-20 00:17] ACTION: Added mindnavigator/ui/dragdrop/controller.py and mindnavigator/ui/dragdrop/policy.py.
+[2026-02-20 00:18] ACTION: Added tests/test_dragdrop_controller.py.
+[2026-02-20 00:19] CMD: python -m compileall mindnavigator/ui/dragdrop tests/test_dragdrop_model.py tests/test_dragdrop_controller.py
+[2026-02-20 00:19] OUT: OK (files compiled)
+[2026-02-20 00:20] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py -q
+[2026-02-20 00:20] OUT: No module named pytest
+[2026-02-20 00:21] ACTION: Updated task statuses:
+  - TASK_2C33A47A-50D5-4A1A-8CFD-74FC0A3F4A62 -> Completed (pytest missing in env)
+  - TASK_4DE11127-2AFA-42C4-B3D0-D83E4F89B8C4 -> Completed (pytest missing in env)
