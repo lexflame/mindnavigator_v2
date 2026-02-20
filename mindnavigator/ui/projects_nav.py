@@ -82,7 +82,9 @@ class _ProjectsListWidget(QListWidget):
                 self._drag_source_project_id = None
                 return
 
-        target_item = self.itemAt(event.position().toPoint())
+        point = event.position().toPoint()
+        target_index = self.indexAt(point)
+        target_item = self.item(target_index.row()) if target_index.isValid() else None
         target_data = target_item.data(Qt.UserRole) if target_item is not None else None
         target_payload = target_data if isinstance(target_data, dict) else {}
         target_kind = target_payload.get("kind")
@@ -107,7 +109,6 @@ class _ProjectsListWidget(QListWidget):
             return
 
         target_rect = self.visualItemRect(target_item)
-        point = event.position().toPoint()
         margin = max(4, target_rect.height() // 4)
         drop_before_zone = point.y() <= target_rect.top() + margin
         drop_after_zone = point.y() >= target_rect.bottom() - margin
@@ -115,7 +116,7 @@ class _ProjectsListWidget(QListWidget):
         target_depth = int(target_payload.get("depth") or 0)
         indent_x = target_depth * 16 + 18
         # Reparent only when dropping in the middle of row and far enough to the right.
-        as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (indent_x + 42)
+        as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (indent_x + 72)
 
         if target_id == source_id:
             direction = 1 if drop_after else -1
@@ -140,6 +141,7 @@ class _ProjectsListWidget(QListWidget):
 
         ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
         if ok:
+            event.setDropAction(Qt.MoveAction)
             event.acceptProposedAction()
         else:
             self._show_drop_reject(event, self._owner._last_drop_error)
@@ -185,6 +187,7 @@ class ProjectsNav(QWidget):
         self.list.setDragDropMode(QAbstractItemView.InternalMove)
         self.list.setDefaultDropAction(Qt.MoveAction)
         self.list.setDragEnabled(True)
+        self.list.setAcceptDrops(True)
         self.list.viewport().setAcceptDrops(True)
         self.list.setDropIndicatorShown(True)
         self.list.currentItemChanged.connect(self._on_item_selected)
