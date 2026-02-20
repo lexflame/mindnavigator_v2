@@ -56,3 +56,6 @@
 [2026-02-20 00:36] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py -q
 [2026-02-20 00:36] OUT: No module named pytest
 [2026-02-20 00:37] ACTION: Updated TASK_B91FE4A6-8FA1-4978-A4FB-7E6F65A0E650 -> Completed (pytest missing in env).
+[2026-02-20 00:38] ACTION: Started TASK_9D03E4C5-5A3D-4416-8A37-1D5CE2E0D61B (hit testing and drop validation).
+[2026-02-20 00:39] ACTION: Added NestedHitTestService and RuleBasedDropValidator in dragdrop policy.
+[2026-02-20 00:40] ACTION: Added tests/test_dragdrop_policy.py and sprint notes for TASK_9D....
