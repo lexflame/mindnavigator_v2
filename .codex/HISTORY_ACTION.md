@@ -119,3 +119,8 @@
 [2026-02-20 14:39] CMD: python -m pytest tests/test_smooth_scroll.py -q -p no:cacheprovider
 [2026-02-20 14:39] OUT: 5 passed.
 [2026-02-20 14:40] ACTION: Completed TASK_A312E8B4-B507-4667-BB2C-B6D0D9CB571E and added test notes.
+[2026-02-20 14:42] ACTION: Started TASK_A2DA8B13-D8F5-44D5-88C0-5C95BFB4E1A0 (smooth-scroll demo and docs).
+[2026-02-20 14:43] ACTION: Added smooth-scroll demo helper widget and integration guide documentation.
+[2026-02-20 14:43] CMD: python -m compileall mindnavigator/ui/smooth_scroll_demo.py
+[2026-02-20 14:43] OUT: OK (smooth_scroll_demo compiled).
+[2026-02-20 14:44] ACTION: Completed TASK_A2DA8B13-D8F5-44D5-88C0-5C95BFB4E1A0 and added docs/demo notes.
