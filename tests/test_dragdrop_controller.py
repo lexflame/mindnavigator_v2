@@ -1,4 +1,4 @@
-from mindnavigator.ui.dragdrop.controller import DragDropController, DragSafetyConfig
+from mindnavigator.ui.dragdrop.controller import DragDropController, DragPerformanceConfig, DragSafetyConfig
 from mindnavigator.ui.dragdrop.model import DragPayload, DragPhase, MotionConfig
 from mindnavigator.ui.dragdrop.policy import DropZoneRect
 
@@ -239,3 +239,44 @@ def test_controller_fast_move_threshold_limits_jump():
     controller.on_pointer_move((1000, 1000), 60)
 
     assert controller.state.current_pos_global == (30, 30)
+
+
+def test_controller_performance_throttles_render_frames():
+    recorder = _Recorder()
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 5000, 5000)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+        performance=DragPerformanceConfig(min_render_interval_ms=50, sample_every_frames=100),
+    )
+
+    payload = DragPayload(entity_type="task", entity_id=11, source_workspace="tasks")
+    controller.arm_drag(payload, (0, 0), 0)
+    controller.on_pointer_move((20, 20), 60)  # render
+    controller.on_pointer_move((30, 30), 80)  # throttle
+
+    assert recorder.ghost_calls == 1
+
+
+def test_controller_performance_sample_hook():
+    recorder = _Recorder()
+    snapshots = []
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 5000, 5000)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+        performance=DragPerformanceConfig(min_render_interval_ms=0, sample_every_frames=2),
+    )
+    controller.on_performance_sample = lambda snap: snapshots.append(snap)
+
+    payload = DragPayload(entity_type="task", entity_id=12, source_workspace="tasks")
+    controller.arm_drag(payload, (0, 0), 0)
+    controller.on_pointer_move((20, 20), 60)
+    controller.on_pointer_move((25, 25), 70)
+
+    assert snapshots
+    assert snapshots[-1].frame_count == 2

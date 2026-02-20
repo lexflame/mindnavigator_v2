@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Callable
 
 from .model import DragPayload, DragPhase, DragSessionState, MotionConfig, Point
@@ -19,6 +20,20 @@ class DragSafetyConfig:
     fast_move_threshold_px: int = 480
 
 
+@dataclass(slots=True)
+class DragPerformanceConfig:
+    min_render_interval_ms: int = 8
+    sample_every_frames: int = 20
+
+
+@dataclass(slots=True)
+class DragPerformanceSnapshot:
+    frame_count: int
+    dropped_frames: int
+    avg_move_us: int
+    max_move_us: int
+
+
 class DragDropController:
     def __init__(
         self,
@@ -34,6 +49,7 @@ class DragDropController:
         motion: MotionConfig | None = None,
         threshold: DragStartThreshold | None = None,
         safety: DragSafetyConfig | None = None,
+        performance: DragPerformanceConfig | None = None,
         is_within_window: Callable[[Point], bool] | None = None,
         normalize_position: Callable[[Point], Point] | None = None,
     ) -> None:
@@ -48,6 +64,7 @@ class DragDropController:
         self._motion = motion or MotionConfig()
         self._threshold = threshold or DragStartThreshold()
         self._safety = safety or DragSafetyConfig()
+        self._performance = performance or DragPerformanceConfig()
         self._is_within_window = is_within_window
         self._normalize_position = normalize_position or (lambda p: p)
 
@@ -55,6 +72,11 @@ class DragDropController:
         self.payload: DragPayload | None = None
         self._visual_pos: Point = (0, 0)
         self._last_render_ms: int = 0
+        self._last_render_emit_ms: int = 0
+        self._frame_count: int = 0
+        self._dropped_frames: int = 0
+        self._move_total_us: int = 0
+        self._move_max_us: int = 0
         self._motion.validate()
 
         self.on_drag_started: Callable[[DragPayload, DragSessionState], None] | None = None
@@ -63,6 +85,7 @@ class DragDropController:
         self.on_drop_committed: Callable[[DragPayload, str], None] | None = None
         self.on_drag_canceled: Callable[[str], None] | None = None
         self.on_drop_transition: Callable[[bool, int], None] | None = None
+        self.on_performance_sample: Callable[[DragPerformanceSnapshot], None] | None = None
 
     def arm_drag(self, payload: DragPayload, start_pos_global: Point, now_ms: int) -> None:
         normalized_start = self._normalize_position(start_pos_global)
@@ -74,9 +97,15 @@ class DragDropController:
         self.state.last_frame_ms = now_ms
         self._visual_pos = normalized_start
         self._last_render_ms = now_ms
+        self._last_render_emit_ms = now_ms
+        self._frame_count = 0
+        self._dropped_frames = 0
+        self._move_total_us = 0
+        self._move_max_us = 0
         self.state.transition(DragPhase.ARMING)
 
     def on_pointer_move(self, pos_global: Point, now_ms: int) -> None:
+        started_ns = time.perf_counter_ns()
         if self.payload is None or self.state.phase == DragPhase.IDLE:
             return
 
@@ -100,6 +129,11 @@ class DragDropController:
         zone_id = self._resolve_zone(safe_pos)
         is_valid = bool(zone_id and self._validator.validate(self.payload, zone_id))
         self.state.set_target(zone_id, is_valid)
+        should_render = self._should_render_frame(now_ms)
+        if not should_render:
+            self._dropped_frames += 1
+            self._record_move_timing(started_ns)
+            return
         smooth_pos = self._compute_smooth_position(safe_pos, now_ms)
         self._render_drag_ghost(
             self.payload,
@@ -110,6 +144,7 @@ class DragDropController:
         self._render_zone_feedback(zone_id, is_valid)
         if self.on_drag_moved:
             self.on_drag_moved(self.state)
+        self._record_move_timing(started_ns)
 
     def on_pointer_release(self, pos_global: Point, now_ms: int) -> None:
         if self.payload is None:
@@ -157,6 +192,11 @@ class DragDropController:
         self.payload = None
         self._visual_pos = (0, 0)
         self._last_render_ms = 0
+        self._last_render_emit_ms = 0
+        self._frame_count = 0
+        self._dropped_frames = 0
+        self._move_total_us = 0
+        self._move_max_us = 0
         if self.state.phase != DragPhase.IDLE:
             self.state.reset()
         self._clear_drag_visuals()
@@ -226,6 +266,34 @@ class DragDropController:
         )
         self._visual_pos = self._clamp_step(self._visual_pos, next_pos, self._motion.max_step_px)
         return self._visual_pos
+
+    def _should_render_frame(self, now_ms: int) -> bool:
+        min_interval = self._performance.min_render_interval_ms
+        if min_interval <= 0:
+            self._last_render_emit_ms = now_ms
+            return True
+        if (now_ms - self._last_render_emit_ms) < min_interval:
+            return False
+        self._last_render_emit_ms = now_ms
+        return True
+
+    def _record_move_timing(self, started_ns: int) -> None:
+        elapsed_us = int((time.perf_counter_ns() - started_ns) / 1000)
+        self._frame_count += 1
+        self._move_total_us += elapsed_us
+        if elapsed_us > self._move_max_us:
+            self._move_max_us = elapsed_us
+        if self._frame_count % max(1, self._performance.sample_every_frames) == 0:
+            avg = int(self._move_total_us / self._frame_count)
+            if self.on_performance_sample:
+                self.on_performance_sample(
+                    DragPerformanceSnapshot(
+                        frame_count=self._frame_count,
+                        dropped_frames=self._dropped_frames,
+                        avg_move_us=avg,
+                        max_move_us=self._move_max_us,
+                    )
+                )
 
     def _apply_profile(self, alpha: float) -> float:
         if self._motion.profile == "linear":

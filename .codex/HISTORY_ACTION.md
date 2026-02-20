@@ -62,3 +62,6 @@
 [2026-02-20 00:41] ACTION: Started TASK_83D9C1A2-88C9-45FA-9473-1EBECF58B2DA (input/interaction edge cases).
 [2026-02-20 00:42] ACTION: Added DragSafetyConfig, out-of-window cancel handling, Escape key cancel, position normalization, fast-jump limiter.
 [2026-02-20 00:43] ACTION: Added edge-case tests and sprint notes for TASK_83D....
+[2026-02-20 00:44] ACTION: Started TASK_43F6DE9B-40D4-42CE-91E6-B65B1F42D96A (performance/stability).
+[2026-02-20 00:45] ACTION: Added render throttling, lightweight profiling, and performance snapshots in controller.
+[2026-02-20 00:46] ACTION: Added performance tests and sprint notes for TASK_43F6....
