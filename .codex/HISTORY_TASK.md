@@ -58,7 +58,7 @@ Status: In Progress
 | TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7 | 4 | ProjectsNav UI tree rendering | feat | Completed |
 | TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20 | 4 | Drag&Drop interaction for projects | feat | Completed |
 | TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11 | 4 | Validation and guardrails for DnD | feat | Completed |
-| TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 | 4 | Persistence, ordering, and reload consistency | feat | Planned |
+| TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 | 4 | Persistence, ordering, and reload consistency | feat | Completed |
 | TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 | 4 | Automated tests for tree and DnD logic | feat | Planned |
 | TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 | 4 | Build and release readiness | feat | Planned |
 

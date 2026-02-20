@@ -263,19 +263,12 @@ class ProjectsNav(QWidget):
             parent_id = project.parent_project_id if project.parent_project_id in by_id else None
             children.setdefault(parent_id, []).append(project)
 
-        def root_key(project: ProjectData) -> tuple:
-            priority = normalize_priority(project.priority)
-            return (project.area.lower(), priority_order.get(priority, 4), project.title.lower(), project.id)
-
-        def child_key(project: ProjectData) -> tuple:
+        def sibling_key(project: ProjectData) -> tuple:
             priority = normalize_priority(project.priority)
             return (project.sort_order, priority_order.get(priority, 4), project.title.lower(), project.id)
 
         for parent_id, items in children.items():
-            if parent_id is None:
-                items.sort(key=root_key)
-            else:
-                items.sort(key=child_key)
+            items.sort(key=sibling_key)
 
         entries: list[dict] = []
 

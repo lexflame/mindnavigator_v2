@@ -176,3 +176,8 @@
 [2026-02-20 17:44] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 17:44] OUT: OK (projects_nav compiled).
 [2026-02-20 17:45] ACTION: Added docs/sprints/TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11_GUARDRAILS.md and completed TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11.
+[2026-02-20 17:48] ACTION: Started TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33 (persistence/order/reload consistency).
+[2026-02-20 17:49] ACTION: Unified root and nested sibling sorting in ProjectsNav by persisted sort_order for deterministic post-reload ordering.
+[2026-02-20 17:49] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:49] OUT: OK (projects_nav compiled).
+[2026-02-20 17:50] ACTION: Added docs/sprints/TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33_PERSISTENCE.md and completed TASK_9A2F6D1C-3E47-4B8F-9C11-5D7A2E4B6F33.
