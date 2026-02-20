@@ -8,7 +8,15 @@
 """
 
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QAbstractItemView
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QAbstractItemView,
+    QToolTip,
+)
 
 from mindnavigator.storage import get_database, normalize_priority, ProjectData
 
@@ -26,6 +34,7 @@ class _ProjectsListWidget(QListWidget):
         source_value = source_payload.get("value") or {}
         source_id = source_value.get("id")
         if source_kind != "project" or not isinstance(source_id, int):
+            self._show_drop_reject(event, "Перемещать можно только проекты.")
             event.ignore()
             return
 
@@ -36,11 +45,17 @@ class _ProjectsListWidget(QListWidget):
         target_value = target_payload.get("value") or {}
         target_id = target_value.get("id")
 
+        if target_item is not None and (target_kind != "project" or not isinstance(target_id, int)):
+            self._show_drop_reject(event, "Эта зона не поддерживает перенос проекта.")
+            event.ignore()
+            return
+
         if target_kind != "project" or not isinstance(target_id, int):
             ok = self._owner._handle_project_drop(source_id, None, as_child=False, drop_after=True)
             if ok:
                 event.acceptProposedAction()
             else:
+                self._show_drop_reject(event, self._owner._last_drop_error)
                 event.ignore()
             return
 
@@ -53,7 +68,12 @@ class _ProjectsListWidget(QListWidget):
         if ok:
             event.acceptProposedAction()
         else:
+            self._show_drop_reject(event, self._owner._last_drop_error)
             event.ignore()
+
+    def _show_drop_reject(self, event, message: str) -> None:
+        text = (message or "").strip() or "Невалидный перенос проекта."
+        QToolTip.showText(event.globalPosition().toPoint(), text, self)
 
 
 class ProjectsNav(QWidget):
@@ -98,6 +118,7 @@ class ProjectsNav(QWidget):
         self._selected_key = None
         self._mode_name = "Задачи"
         self._collapsed_project_ids: set[int] = set()
+        self._last_drop_error = ""
 
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
@@ -376,25 +397,56 @@ class ProjectsNav(QWidget):
         drop_after: bool,
     ) -> bool:
         db = get_database()
+        self._last_drop_error = ""
+        projects = db.fetch_projects()
+        by_id = {project.id: project for project in projects}
+
+        if source_project_id not in by_id:
+            self._last_drop_error = "Проект-источник не найден."
+            return False
+        if target_project_id is not None and target_project_id not in by_id:
+            self._last_drop_error = "Целевой проект не найден."
+            return False
+
+        if target_project_id is None:
+            new_parent_id = None
+        elif as_child:
+            new_parent_id = target_project_id
+        else:
+            new_parent_id = by_id[target_project_id].parent_project_id
+
+        is_valid, reason = self._validate_project_relocation(
+            by_id=by_id,
+            source_project_id=source_project_id,
+            target_project_id=target_project_id,
+            new_parent_id=new_parent_id,
+        )
+        if not is_valid:
+            self._last_drop_error = reason
+            return False
+
         try:
             if target_project_id is None:
                 db.move_project(source_project_id, None, None)
             elif as_child:
                 db.move_project(source_project_id, target_project_id, None)
             else:
-                target = next((p for p in db.fetch_projects() if p.id == target_project_id), None)
+                target = by_id.get(target_project_id)
                 if target is None:
+                    self._last_drop_error = "Целевой проект не найден."
                     return False
                 parent_id = target.parent_project_id
                 siblings = db.fetch_project_children(parent_id)
                 sibling_ids = [p.id for p in siblings if p.id != source_project_id]
                 if target_project_id not in sibling_ids:
+                    self._last_drop_error = "Невалидная позиция переноса."
                     return False
                 index = sibling_ids.index(target_project_id)
                 if drop_after:
                     index += 1
                 db.move_project(source_project_id, parent_id, index)
-        except ValueError:
+        except ValueError as exc:
+            self._last_drop_error = str(exc)
             return False
 
         with QSignalBlocker(self.list):
@@ -412,6 +464,70 @@ class ProjectsNav(QWidget):
         if selected is not None:
             self._on_item_selected(selected, None)
         return True
+
+    def _validate_project_relocation(
+        self,
+        by_id: dict[int, ProjectData],
+        source_project_id: int,
+        target_project_id: int | None,
+        new_parent_id: int | None,
+    ) -> tuple[bool, str]:
+        max_depth_index = 3  # 4 levels in total (0..3)
+        children: dict[object, list[int]] = {}
+        for project in by_id.values():
+            parent_id = project.parent_project_id if project.parent_project_id in by_id else None
+            children.setdefault(parent_id, []).append(project.id)
+
+        descendants: set[int] = set()
+        stack = [source_project_id]
+        while stack:
+            current = stack.pop()
+            for child_id in children.get(current, []):
+                if child_id not in descendants:
+                    descendants.add(child_id)
+                    stack.append(child_id)
+
+        if new_parent_id == source_project_id:
+            return False, "Нельзя переместить проект внутрь самого себя."
+        if new_parent_id in descendants:
+            return False, "Нельзя переместить проект внутрь его потомка."
+
+        depth_cache: dict[int, int] = {}
+
+        def node_depth(project_id: int) -> int:
+            if project_id in depth_cache:
+                return depth_cache[project_id]
+            project = by_id.get(project_id)
+            if project is None or project.parent_project_id not in by_id:
+                depth_cache[project_id] = 0
+                return 0
+            depth = node_depth(project.parent_project_id) + 1
+            depth_cache[project_id] = depth
+            return depth
+
+        subtree_height_cache: dict[int, int] = {}
+
+        def subtree_height(project_id: int) -> int:
+            if project_id in subtree_height_cache:
+                return subtree_height_cache[project_id]
+            child_ids = children.get(project_id, [])
+            if not child_ids:
+                subtree_height_cache[project_id] = 0
+                return 0
+            height = 1 + max(subtree_height(child_id) for child_id in child_ids)
+            subtree_height_cache[project_id] = height
+            return height
+
+        parent_depth = -1 if new_parent_id is None else node_depth(new_parent_id)
+        projected_root_depth = parent_depth + 1
+        projected_max_depth = projected_root_depth + subtree_height(source_project_id)
+        if projected_max_depth > max_depth_index:
+            return False, "Превышена максимальная глубина вложенности проектов (4 уровня)."
+
+        if target_project_id is not None and target_project_id not in by_id:
+            return False, "Целевой проект не найден."
+
+        return True, ""
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""

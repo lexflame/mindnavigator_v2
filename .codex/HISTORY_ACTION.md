@@ -171,3 +171,8 @@
 [2026-02-20 17:34] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 17:34] OUT: OK (projects_nav compiled).
 [2026-02-20 17:35] ACTION: Added docs/sprints/TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20_DND.md and completed TASK_7E3A9B4D-0C11-4F8E-9D2F-6A1B8C3E5D20.
+[2026-02-20 17:42] ACTION: Started TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11 (DnD validation and guardrails).
+[2026-02-20 17:43] ACTION: Added DnD guardrails in ProjectsNav: pseudo-target blocking, cycle/descendant checks, and max-depth validation (4 levels).
+[2026-02-20 17:44] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:44] OUT: OK (projects_nav compiled).
+[2026-02-20 17:45] ACTION: Added docs/sprints/TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11_GUARDRAILS.md and completed TASK_1B4C8D2E-9F63-4A1B-B2E7-3D6A9C5F7E11.
