@@ -196,3 +196,8 @@
 [2026-02-20 18:07] ACTION: Fixed storage initialization order by guarding idx_projects_parent_order creation when projects.sort_order is absent.
 [2026-02-20 18:08] CMD: python -m compileall mindnavigator/storage.py
 [2026-02-20 18:08] OUT: OK (storage compiled).
+[2026-02-20 18:14] ACTION: Started TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225 (ProjectsNav DnD drop/move hotfix).
+[2026-02-20 18:15] ACTION: Improved drag source capture in ProjectsNav list and refined drop intent detection (reorder vs reparent).
+[2026-02-20 18:16] ACTION: Allowed root move when dropping on pseudo-items (clear/section/empty) and added safer cleanup of drag source state.
+[2026-02-20 18:16] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 18:16] OUT: OK (projects_nav compiled).

@@ -25,18 +25,30 @@ class _ProjectsListWidget(QListWidget):
     def __init__(self, owner: "ProjectsNav"):
         super().__init__(owner)
         self._owner = owner
+        self._drag_source_project_id: int | None = None
+
+    def startDrag(self, supportedActions):
+        current = self.currentItem()
+        payload = (current.data(Qt.UserRole) or {}) if current is not None else {}
+        value = payload.get("value") or {}
+        project_id = value.get("id") if payload.get("kind") == "project" else None
+        self._drag_source_project_id = project_id if isinstance(project_id, int) else None
+        super().startDrag(supportedActions)
 
     def dropEvent(self, event):
-        source_item = self.currentItem()
-        source_data = source_item.data(Qt.UserRole) if source_item is not None else None
-        source_payload = source_data if isinstance(source_data, dict) else {}
-        source_kind = source_payload.get("kind")
-        source_value = source_payload.get("value") or {}
-        source_id = source_value.get("id")
-        if source_kind != "project" or not isinstance(source_id, int):
-            self._show_drop_reject(event, "Перемещать можно только проекты.")
-            event.ignore()
-            return
+        source_id = self._drag_source_project_id
+        if not isinstance(source_id, int):
+            source_item = self.currentItem()
+            source_data = source_item.data(Qt.UserRole) if source_item is not None else None
+            source_payload = source_data if isinstance(source_data, dict) else {}
+            source_kind = source_payload.get("kind")
+            source_value = source_payload.get("value") or {}
+            source_id = source_value.get("id")
+            if source_kind != "project" or not isinstance(source_id, int):
+                self._show_drop_reject(event, "Перемещать можно только проекты.")
+                event.ignore()
+                self._drag_source_project_id = None
+                return
 
         target_item = self.itemAt(event.position().toPoint())
         target_data = target_item.data(Qt.UserRole) if target_item is not None else None
@@ -45,31 +57,40 @@ class _ProjectsListWidget(QListWidget):
         target_value = target_payload.get("value") or {}
         target_id = target_value.get("id")
 
-        if target_item is not None and (target_kind != "project" or not isinstance(target_id, int)):
-            self._show_drop_reject(event, "Эта зона не поддерживает перенос проекта.")
-            event.ignore()
-            return
-
-        if target_kind != "project" or not isinstance(target_id, int):
+        # Drop to root is allowed on empty area and on pseudo-items (clear/section/empty).
+        if target_item is None or target_kind in {"clear", "section", "empty"}:
             ok = self._owner._handle_project_drop(source_id, None, as_child=False, drop_after=True)
             if ok:
                 event.acceptProposedAction()
             else:
                 self._show_drop_reject(event, self._owner._last_drop_error)
                 event.ignore()
+            self._drag_source_project_id = None
+            return
+
+        if target_kind != "project" or not isinstance(target_id, int):
+            self._show_drop_reject(event, "Перемещать можно только проекты.")
+            event.ignore()
+            self._drag_source_project_id = None
             return
 
         target_rect = self.visualItemRect(target_item)
-        drop_after = event.position().toPoint().y() > target_rect.center().y()
+        point = event.position().toPoint()
+        margin = max(4, target_rect.height() // 4)
+        drop_before_zone = point.y() <= target_rect.top() + margin
+        drop_after_zone = point.y() >= target_rect.bottom() - margin
+        drop_after = point.y() > target_rect.center().y()
         target_depth = int(target_payload.get("depth") or 0)
         indent_x = target_depth * 16 + 18
-        as_child = event.position().toPoint().x() > (indent_x + 26)
+        # Reparent only when dropping in the middle of row and far enough to the right.
+        as_child = (not drop_before_zone and not drop_after_zone) and point.x() > (indent_x + 42)
         ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
         if ok:
             event.acceptProposedAction()
         else:
             self._show_drop_reject(event, self._owner._last_drop_error)
             event.ignore()
+        self._drag_source_project_id = None
 
     def _show_drop_reject(self, event, message: str) -> None:
         text = (message or "").strip() or "Невалидный перенос проекта."
