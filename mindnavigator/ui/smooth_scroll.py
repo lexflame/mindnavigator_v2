@@ -13,7 +13,17 @@ class SmoothScrollConfig:
     wheel_step_px: int = 42
     max_step_px: int = 120
     max_pending_px: int = 2400
+    min_effective_delta_px: int = 1
+    adaptive_step_from_page: bool = True
     horizontal: bool = False
+
+
+@dataclass(slots=True)
+class SmoothScrollStats:
+    wheel_events: int = 0
+    applied_steps: int = 0
+    clamped_targets: int = 0
+    stall_cancels: int = 0
 
 
 class SmoothScrollController(QObject):
@@ -23,6 +33,7 @@ class SmoothScrollController(QObject):
         super().__init__(target)
         self._target = target
         self._config = config or SmoothScrollConfig()
+        self._stats = SmoothScrollStats()
         self._pending_px: int = 0
         self._target_value: int | None = None
         self._stall_ticks: int = 0
@@ -64,6 +75,7 @@ class SmoothScrollController(QObject):
         delta = self._extract_delta_px(event)
         if delta == 0:
             return super().eventFilter(watched, event)
+        self._stats.wheel_events += 1
 
         self._queue_delta(delta)
         event.accept()
@@ -82,6 +94,8 @@ class SmoothScrollController(QObject):
         return int(step_units * self._config.wheel_step_px)
 
     def _queue_delta(self, delta_px: int) -> None:
+        if abs(delta_px) < max(1, self._config.min_effective_delta_px):
+            return
         pending = self._pending_px + delta_px
         cap = self._config.max_pending_px
         self._pending_px = max(-cap, min(cap, pending))
@@ -93,7 +107,10 @@ class SmoothScrollController(QObject):
         if self._target_value is None:
             self._target_value = current
         self._target_value = self._target_value - delta_px
-        self._target_value = max(scrollbar.minimum(), min(scrollbar.maximum(), self._target_value))
+        clamped = max(scrollbar.minimum(), min(scrollbar.maximum(), self._target_value))
+        if clamped != self._target_value:
+            self._stats.clamped_targets += 1
+        self._target_value = clamped
         self._stall_ticks = 0
         if not self._timer.isActive():
             self._timer.start()
@@ -110,7 +127,10 @@ class SmoothScrollController(QObject):
             self._timer.stop()
             return
 
-        self._target_value = max(scrollbar.minimum(), min(scrollbar.maximum(), self._target_value))
+        clamped = max(scrollbar.minimum(), min(scrollbar.maximum(), self._target_value))
+        if clamped != self._target_value:
+            self._stats.clamped_targets += 1
+        self._target_value = clamped
 
         current = scrollbar.value()
         diff = self._target_value - current
@@ -123,6 +143,8 @@ class SmoothScrollController(QObject):
         if raw_step == 0:
             raw_step = 1 if diff > 0 else -1
         cap = self._config.max_step_px
+        if self._config.adaptive_step_from_page:
+            cap = min(cap, max(24, scrollbar.pageStep() // 2))
         step = max(-cap, min(cap, raw_step))
         next_value = max(scrollbar.minimum(), min(scrollbar.maximum(), current + step))
         scrollbar.setValue(next_value)
@@ -131,9 +153,11 @@ class SmoothScrollController(QObject):
         if not moved:
             self._stall_ticks += 1
             if self._stall_ticks >= 2:
+                self._stats.stall_cancels += 1
                 self._cancel_animation()
                 return
         else:
+            self._stats.applied_steps += 1
             self._stall_ticks = 0
 
     def _scrollbar(self):
@@ -151,6 +175,17 @@ class SmoothScrollController(QObject):
         self._target_value = None
         self._pending_px = 0
         self._stall_ticks = 0
+
+    def snapshot_stats(self) -> SmoothScrollStats:
+        return SmoothScrollStats(
+            wheel_events=self._stats.wheel_events,
+            applied_steps=self._stats.applied_steps,
+            clamped_targets=self._stats.clamped_targets,
+            stall_cancels=self._stats.stall_cancels,
+        )
+
+    def reset_stats(self) -> None:
+        self._stats = SmoothScrollStats()
 
 
 def attach_smooth_scroll(target: QAbstractScrollArea, config: SmoothScrollConfig | None = None) -> SmoothScrollController:
