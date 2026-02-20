@@ -62,4 +62,12 @@ Status: Completed
 | TASK_4D8B1A6F-2E93-4C7A-A5D1-8F3E6B2C9A44 | 4 | Automated tests for tree and DnD logic | feat | Completed |
 | TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55 | 4 | Build and release readiness | feat | Completed |
 
+## Hotfixes
+Created: 2026-02-20
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_04051FC3-09AF-4387-AA60-831861E32727 | hotfix | Startup DB migration: missing projects.sort_order on legacy DB | fix | Completed |
+
 

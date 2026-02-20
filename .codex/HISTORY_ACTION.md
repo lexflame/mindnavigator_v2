@@ -192,3 +192,7 @@
 [2026-02-20 17:58] CMD: python -m pytest tests/test_project_tree_storage.py tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py -q -p no:cacheprovider
 [2026-02-20 17:58] OUT: 27 passed (16 deprecation warnings from datetime.utcnow in storage internals).
 [2026-02-20 17:59] ACTION: Added docs/sprints/TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55_RELEASE.md, completed TASK_6C1E9A4B-5D72-4F8C-8B3A-2A7D1E9C4F55, and marked Sprint 4 as Completed.
+[2026-02-20 18:06] ACTION: Started TASK_04051FC3-09AF-4387-AA60-831861E32727 (legacy DB startup migration hotfix).
+[2026-02-20 18:07] ACTION: Fixed storage initialization order by guarding idx_projects_parent_order creation when projects.sort_order is absent.
+[2026-02-20 18:08] CMD: python -m compileall mindnavigator/storage.py
+[2026-02-20 18:08] OUT: OK (storage compiled).

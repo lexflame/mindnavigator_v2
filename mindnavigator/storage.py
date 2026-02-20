@@ -819,9 +819,12 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
-            self._conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
-            )
+            project_columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
+            project_column_names = {row["name"] for row in project_columns}
+            if "sort_order" in project_column_names:
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
+                )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_overlays_map ON map_overlays(map_id);")
