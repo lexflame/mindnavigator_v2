@@ -30,7 +30,7 @@ Status: Planned
 | TASK_B5B10AB6-FD2F-4AA1-9157-8E7AA32EA0CD | 2 | Global scrollbar stylesheet | feat | Completed |
 | TASK_7F4A1A67-1967-4B56-8DAB-1A89F73A9AA4 | 2 | Smooth scroll controller | feat | Completed |
 | TASK_4414D168-37D5-414E-A3F6-0C4A5DA15B0A | 2 | Workspace integration | feat | Completed |
-| TASK_9B2D3373-C319-4D04-A97B-6F59F165A433 | 2 | Edge-case handling | feat | Planned |
+| TASK_9B2D3373-C319-4D04-A97B-6F59F165A433 | 2 | Edge-case handling | feat | Completed |
 | TASK_7F2D6F30-0E57-465F-BF6C-EA8F1ED9A148 | 2 | Performance and stability | feat | Planned |
 | TASK_A312E8B4-B507-4667-BB2C-B6D0D9CB571E | 2 | Automated tests | feat | Planned |
 | TASK_A2DA8B13-D8F5-44D5-88C0-5C95BFB4E1A0 | 2 | Demo and docs | feat | Planned |
