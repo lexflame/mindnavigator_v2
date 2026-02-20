@@ -19,6 +19,7 @@ from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle, QDialog,
+    QAbstractItemView,
     QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox
 )
 
@@ -160,7 +161,38 @@ class ProjectsModel(QAbstractListModel):
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
             return Qt.ItemIsEnabled
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        return (
+            Qt.ItemIsEnabled
+            | Qt.ItemIsSelectable
+            | Qt.ItemIsDragEnabled
+            | Qt.ItemIsDropEnabled
+        )
+
+    def move_project_by_drop(self, source_project_id: int, target_project_id: int, drop_after: bool) -> bool:
+        """Перемещает проект относительно target в пределах его sibling-группы."""
+        projects = self._db.fetch_projects()
+        by_id = {p.id: p for p in projects}
+        source = by_id.get(source_project_id)
+        target = by_id.get(target_project_id)
+        if source is None or target is None:
+            return False
+        if source_project_id == target_project_id:
+            return False
+
+        parent_id = target.parent_project_id
+        siblings = self._db.fetch_project_children(parent_id)
+        sibling_ids = [p.id for p in siblings if p.id != source_project_id]
+        if target_project_id not in sibling_ids:
+            return False
+        index = sibling_ids.index(target_project_id)
+        if drop_after:
+            index += 1
+        try:
+            self._db.move_project(source_project_id, parent_id, index)
+        except ValueError:
+            return False
+        self.refresh()
+        return True
 
     def set_filter_mode(self, mode: str):
         """Обновляет режим фильтрации."""
@@ -1171,6 +1203,48 @@ class ProjectAreaEditDialog(QDialog):
         }
 
 
+class _ProjectsListView(QListView):
+    def __init__(self, owner: "ProjectsWorkspace"):
+        super().__init__(owner)
+        self._owner = owner
+        self._drag_source_project_id: Optional[int] = None
+
+    def startDrag(self, supportedActions):
+        index = self.currentIndex()
+        row_type = index.data(ProjectRoles.RowType)
+        project_id = index.data(ProjectRoles.ProjectId) if row_type == "project" else None
+        self._drag_source_project_id = project_id if isinstance(project_id, int) else None
+        super().startDrag(supportedActions)
+
+    def dropEvent(self, event):
+        source_id = self._drag_source_project_id
+        if not isinstance(source_id, int):
+            event.ignore()
+            return
+
+        point = event.position().toPoint()
+        target_index = self.indexAt(point)
+        if not target_index.isValid() or target_index.data(ProjectRoles.RowType) != "project":
+            event.ignore()
+            self._drag_source_project_id = None
+            return
+
+        target_id = target_index.data(ProjectRoles.ProjectId)
+        if not isinstance(target_id, int):
+            event.ignore()
+            self._drag_source_project_id = None
+            return
+
+        rect = self.visualRect(target_index)
+        drop_after = point.y() > rect.center().y()
+        ok = self._owner._handle_project_drop(source_id, target_id, drop_after)
+        if ok:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+        self._drag_source_project_id = None
+
+
 class ProjectsWorkspace(QWidget):
     def __init__(self, parent=None):
         """Создает рабочую область проектов."""
@@ -1238,12 +1312,18 @@ class ProjectsWorkspace(QWidget):
 
         root.addWidget(top)
 
-        self.list = QListView()
+        self.list = _ProjectsListView(self)
         self.list.setObjectName("ProjectsList")
         self.list.setUniformItemSizes(True)
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setDragEnabled(True)
+        self.list.setAcceptDrops(True)
+        self.list.viewport().setAcceptDrops(True)
+        self.list.setDropIndicatorShown(True)
         root.addWidget(self.list, 1)
 
         self.model = ProjectsModel(self)
@@ -1310,6 +1390,17 @@ class ProjectsWorkspace(QWidget):
     def set_task_filter(self, task_id: Optional[int]) -> None:
         """Устанавливает фильтр по задаче для списка проектов."""
         self.model.set_task_filter(task_id)
+
+    def _handle_project_drop(self, source_project_id: int, target_project_id: int, drop_after: bool) -> bool:
+        ok = self.model.move_project_by_drop(source_project_id, target_project_id, drop_after)
+        if not ok:
+            return False
+        for row in range(self.model.rowCount()):
+            index = self.model.index(row, 0)
+            if index.data(ProjectRoles.ProjectId) == source_project_id:
+                self.list.setCurrentIndex(index)
+                break
+        return True
 
     def _refresh_area_combo(self, selected: Optional[str] = None):
         """Обновляет список областей проектов."""

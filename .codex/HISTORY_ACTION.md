@@ -228,3 +228,7 @@
 [2026-02-20 19:16] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: switched DnD log path to absolute project-root based path from projects_nav.py.
 [2026-02-20 19:16] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 19:16] OUT: OK (projects_nav compiled).
+[2026-02-20 19:24] ACTION: Started TASK_0DE2B002-565F-4A74-9AD9-00668A7AA79A (ProjectsWorkspace project drag&drop hotfix).
+[2026-02-20 19:25] ACTION: Added internal drag/drop handling to ProjectsWorkspace list view and model-level move_project_by_drop operation.
+[2026-02-20 19:26] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
+[2026-02-20 19:26] OUT: OK (projects_workspace compiled).
