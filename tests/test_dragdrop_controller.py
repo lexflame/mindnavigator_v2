@@ -101,6 +101,7 @@ def test_controller_motion_clamps_max_step():
         clear_drag_visuals=recorder.clear_drag_visuals,
         play_drop_result=recorder.play_drop_result,
         motion=MotionConfig(profile="linear", duration_ms=1, max_step_px=10),
+        performance=DragPerformanceConfig(min_render_interval_ms=0, sample_every_frames=100),
     )
 
     payload = DragPayload(entity_type="task", entity_id=4, source_workspace="tasks")

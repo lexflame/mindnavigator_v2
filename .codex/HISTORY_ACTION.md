@@ -75,3 +75,15 @@
 [2026-02-20 00:54] ACTION: Added build scripts for Win/*nix build and start flows under scripts/.
 [2026-02-20 00:55] ACTION: Added build sprint notes and completed TASK_0F17....
 [2026-02-20 00:56] ACTION: Added parity task TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB for restoring pytest runtime.
+[2026-02-20 00:57] CMD: python -m pip install pytest
+[2026-02-20 00:57] OUT: pytest installed (9.0.2)
+[2026-02-20 00:58] CMD: python -m pytest --version
+[2026-02-20 00:58] OUT: pytest 9.0.2
+[2026-02-20 00:59] CMD: python -m pytest tests/test_dragdrop_*.py -q
+[2026-02-20 00:59] OUT: invalid wildcard path + cache warning (Windows path expansion/caching)
+[2026-02-20 01:00] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py -q -p no:cacheprovider
+[2026-02-20 01:00] OUT: 1 failed, 22 passed (test_controller_motion_clamps_max_step)
+[2026-02-20 01:01] ACTION: Fixed test expectation for throttled controller by setting DragPerformanceConfig(min_render_interval_ms=0) in clamp test.
+[2026-02-20 01:02] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py -q -p no:cacheprovider
+[2026-02-20 01:02] OUT: 23 passed
+[2026-02-20 01:03] ACTION: Updated parity task TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB -> Done.

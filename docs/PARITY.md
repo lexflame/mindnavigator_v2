@@ -36,7 +36,7 @@ It also stores:
 - Type: parity
 - Title: Restore local automated test runner (`pytest`) in active Python environment
 - Sprint: 1
-- Status: Planned
+- Status: Done
 - Why:
   Multiple sprint tasks include tests, but runtime execution is blocked by missing dependency (`No module named pytest`).
 - Scope:
@@ -47,3 +47,24 @@ It also stores:
   - `python -m pytest tests/test_dragdrop_*.py -q` runs;
   - test execution report is recorded in `.codex/HISTORY_ACTION.md`;
   - any failing tests are tracked with new TASK_GUID entries.
+- Result:
+  - `pytest` installed (`pytest 9.0.2`);
+  - dragdrop suite executed with `-p no:cacheprovider`;
+  - discovered and fixed one regression in `tests/test_dragdrop_controller.py` related to frame throttling.
+
+### TASK_5743A7F2-2D90-41A8-9D25-663435E0B526
+- Type: parity
+- Title: Fix throttling-related regression in clamp motion test
+- Sprint: 1
+- Status: Done
+- Why:
+  `test_controller_motion_clamps_max_step` failed after performance throttling was added.
+- Scope:
+  - make test deterministic under throttling;
+  - rerun dragdrop suite.
+- Acceptance criteria:
+  - regression test passes;
+  - full dragdrop suite passes.
+- Result:
+  - updated test to use `DragPerformanceConfig(min_render_interval_ms=0)`;
+  - dragdrop suite: `23 passed`.
