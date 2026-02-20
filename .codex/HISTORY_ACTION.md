@@ -124,3 +124,9 @@
 [2026-02-20 14:43] CMD: python -m compileall mindnavigator/ui/smooth_scroll_demo.py
 [2026-02-20 14:43] OUT: OK (smooth_scroll_demo compiled).
 [2026-02-20 14:44] ACTION: Completed TASK_A2DA8B13-D8F5-44D5-88C0-5C95BFB4E1A0 and added docs/demo notes.
+[2026-02-20 14:46] ACTION: Started TASK_10A88701-DA0B-4FA8-85D8-CAECDA1A57E2 (build and release readiness).
+[2026-02-20 14:47] CMD: python -m compileall mindnavigator/ui/smooth_scroll.py mindnavigator/ui/smooth_scroll_demo.py mindnavigator/workspaces/tasks_workspace.py mindnavigator/workspaces/notes_workspace.py mindnavigator/workspaces/files_workspace.py mindnavigator/workspaces/objects_workspace.py mindnavigator/workspaces/purchases_workspace.py mindnavigator/workspaces/collections_workspace.py
+[2026-02-20 14:47] OUT: OK (target modules compiled).
+[2026-02-20 14:48] CMD: python -m pytest tests/test_dragdrop_model.py tests/test_dragdrop_controller.py tests/test_dragdrop_policy.py tests/test_dragdrop_integration.py tests/test_smooth_scroll.py -q -p no:cacheprovider
+[2026-02-20 14:48] OUT: 28 passed.
+[2026-02-20 14:49] ACTION: Completed TASK_10A88701-DA0B-4FA8-85D8-CAECDA1A57E2 and marked Sprint 2 as Completed.
