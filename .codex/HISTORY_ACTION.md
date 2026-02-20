@@ -109,3 +109,8 @@
 [2026-02-20 14:31] CMD: python -m compileall mindnavigator/ui/smooth_scroll.py
 [2026-02-20 14:31] OUT: OK (smooth_scroll compiled).
 [2026-02-20 14:32] ACTION: Completed TASK_9B2D3373-C319-4D04-A97B-6F59F165A433 and added edge-case notes.
+[2026-02-20 14:34] ACTION: Started TASK_7F2D6F30-0E57-465F-BF6C-EA8F1ED9A148 (performance and stability).
+[2026-02-20 14:35] ACTION: Added smooth-scroll runtime stats and adaptive step/low-delta guards.
+[2026-02-20 14:35] CMD: python -m compileall mindnavigator/ui/smooth_scroll.py
+[2026-02-20 14:35] OUT: OK (smooth_scroll compiled).
+[2026-02-20 14:36] ACTION: Completed TASK_7F2D6F30-0E57-465F-BF6C-EA8F1ED9A148 and added perf/stability notes.
