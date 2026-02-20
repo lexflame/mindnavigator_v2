@@ -161,3 +161,8 @@
 [2026-02-20 17:09] CMD: python -m compileall mindnavigator/storage.py
 [2026-02-20 17:09] OUT: OK (storage compiled).
 [2026-02-20 17:10] ACTION: Added docs/sprints/TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88_API.md and completed TASK_5A9E2C71-6D44-4B69-B193-0E4A3C1F2D88.
+[2026-02-20 17:18] ACTION: Started TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7 (ProjectsNav UI tree rendering).
+[2026-02-20 17:21] ACTION: Reworked projects navigation from flat list to hierarchy render with depth markers and collapsed-state memory.
+[2026-02-20 17:22] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 17:22] OUT: OK (projects_nav compiled).
+[2026-02-20 17:23] ACTION: Added docs/sprints/TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7_UI.md and completed TASK_2C6D1A9E-7B52-4E8D-8A10-19F2D3B4A5C7.

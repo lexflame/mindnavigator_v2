@@ -45,9 +45,11 @@ class ProjectsNav(QWidget):
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.currentItemChanged.connect(self._on_item_selected)
+        self.list.itemDoubleClicked.connect(self._on_item_double_clicked)
 
         self._selected_key = None
         self._mode_name = "Задачи"
+        self._collapsed_project_ids: set[int] = set()
 
         layout.addWidget(self.header)
         layout.addWidget(self.hint)
@@ -161,7 +163,7 @@ class ProjectsNav(QWidget):
             return
         for entry in entries:
             item = QListWidgetItem(entry["label"])
-            item.setData(Qt.UserRole, {"kind": entry["kind"], "value": entry["value"]})
+            item.setData(Qt.UserRole, entry)
             self.list.addItem(item)
 
     def _select_key(self, key):
@@ -184,21 +186,49 @@ class ProjectsNav(QWidget):
 
     def _project_entries(self) -> list[dict]:
         priority_order = {"High": 0, "Medium": 1, "Low": 2, "Отложенная": 3}
+        projects = get_database().fetch_projects()
+        by_id = {project.id: project for project in projects}
+        children: dict[object, list[ProjectData]] = {}
 
-        def project_key(project: ProjectData) -> tuple:
+        for project in projects:
+            parent_id = project.parent_project_id if project.parent_project_id in by_id else None
+            children.setdefault(parent_id, []).append(project)
+
+        def root_key(project: ProjectData) -> tuple:
             priority = normalize_priority(project.priority)
             return (project.area.lower(), priority_order.get(priority, 4), project.title.lower(), project.id)
 
-        projects = sorted(get_database().fetch_projects(), key=project_key)
-        entries = []
-        for project in projects:
-            entries.append(
-                {
-                    "label": self._project_item_label(project),
-                    "kind": "project",
-                    "value": {"id": project.id, "title": project.title, "area": project.area},
-                }
-            )
+        def child_key(project: ProjectData) -> tuple:
+            priority = normalize_priority(project.priority)
+            return (project.sort_order, priority_order.get(priority, 4), project.title.lower(), project.id)
+
+        for parent_id, items in children.items():
+            if parent_id is None:
+                items.sort(key=root_key)
+            else:
+                items.sort(key=child_key)
+
+        entries: list[dict] = []
+
+        def append_subtree(parent_id: object, depth: int) -> None:
+            for project in children.get(parent_id, []):
+                project_children = children.get(project.id, [])
+                has_children = bool(project_children)
+                is_expanded = project.id not in self._collapsed_project_ids
+                marker = "? " if (has_children and is_expanded) else ("? " if has_children else "  ")
+                entries.append(
+                    {
+                        "label": f"{'  ' * depth}{marker}{self._project_item_label(project)}",
+                        "kind": "project",
+                        "value": {"id": project.id, "title": project.title, "area": project.area},
+                        "has_children": has_children,
+                        "depth": depth,
+                    }
+                )
+                if has_children and is_expanded:
+                    append_subtree(project.id, depth + 1)
+
+        append_subtree(None, 0)
         return entries
 
     def _task_entries(self) -> list[dict]:
@@ -269,6 +299,24 @@ class ProjectsNav(QWidget):
         elif kind == "clear":
             self.project_filter_changed.emit(None)
         self.filter_changed.emit(kind or "clear", value)
+
+    def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
+        data = item.data(Qt.UserRole) or {}
+        if data.get("kind") != "project" or not data.get("has_children"):
+            return
+        value = data.get("value") or {}
+        project_id = value.get("id")
+        if not isinstance(project_id, int):
+            return
+        if project_id in self._collapsed_project_ids:
+            self._collapsed_project_ids.remove(project_id)
+        else:
+            self._collapsed_project_ids.add(project_id)
+        with QSignalBlocker(self.list):
+            self._populate_for_mode(self._mode_name)
+        current = self.list.currentItem()
+        if current is not None:
+            self._on_item_selected(current, None)
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""
