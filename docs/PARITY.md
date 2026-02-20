@@ -31,3 +31,19 @@ It also stores:
   - file origin is documented;
   - clear decision is made (`keep`/`remove`/`ignore`);
   - repository state is consistent with decision.
+
+### TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB
+- Type: parity
+- Title: Restore local automated test runner (`pytest`) in active Python environment
+- Sprint: 1
+- Status: Planned
+- Why:
+  Multiple sprint tasks include tests, but runtime execution is blocked by missing dependency (`No module named pytest`).
+- Scope:
+  - install/enable `pytest` in active interpreter;
+  - run dragdrop test suite end-to-end;
+  - capture failures (if any) and create follow-up fix tasks.
+- Acceptance criteria:
+  - `python -m pytest tests/test_dragdrop_*.py -q` runs;
+  - test execution report is recorded in `.codex/HISTORY_ACTION.md`;
+  - any failing tests are tracked with new TASK_GUID entries.

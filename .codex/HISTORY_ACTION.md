@@ -74,3 +74,4 @@
 [2026-02-20 00:53] ACTION: Started TASK_0F1733D2-3B9F-4E8D-BD6A-0C2F5F55189E (build/release readiness).
 [2026-02-20 00:54] ACTION: Added build scripts for Win/*nix build and start flows under scripts/.
 [2026-02-20 00:55] ACTION: Added build sprint notes and completed TASK_0F17....
+[2026-02-20 00:56] ACTION: Added parity task TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB for restoring pytest runtime.
