@@ -9,6 +9,8 @@ from .policy import (
     DropValidator,
     DropZoneRect,
     HitTestService,
+    NestedHitTestService,
+    RuleBasedDropValidator,
 )
 
 __all__ = [
@@ -23,6 +25,8 @@ __all__ = [
     "DropValidator",
     "DropZoneRect",
     "HitTestService",
+    "NestedHitTestService",
     "MotionConfig",
     "Point",
+    "RuleBasedDropValidator",
 ]
