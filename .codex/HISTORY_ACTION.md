@@ -222,3 +222,6 @@
 [2026-02-20 19:02] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added forced drag-start path in mouseMoveEvent based on startDragDistance.
 [2026-02-20 19:02] CMD: python -m compileall mindnavigator/ui/projects_nav.py
 [2026-02-20 19:02] OUT: OK (projects_nav compiled).
+[2026-02-20 19:10] ACTION: Follow-up for TASK_396C7C6F-FEAE-4E6F-86CB-59361FFDF225: added DnD trace logging to .codex/manual/dnd.log for non-console environments.
+[2026-02-20 19:10] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-20 19:10] OUT: OK (projects_nav compiled).
