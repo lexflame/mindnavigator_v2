@@ -143,3 +143,10 @@
 [2026-02-20 16:07] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py
 [2026-02-20 16:07] OUT: OK (tasks_workspace compiled).
 [2026-02-20 16:08] ACTION: TASK_6B4D8F2C-2A1E-4E96-B7A1-EDC5B6D1F2A4 completed; Sprint 3 marked as Completed.
+[2026-02-20 16:20] ACTION: Created sprint branch sprint/4_nested_projects_dragdrop for new sprint execution.
+[2026-02-20 16:21] ACTION: Added Sprint 4 planning file docs/sprints/4_SPRINT.md for nested projects and project Drag&Drop.
+[2026-02-20 16:22] ACTION: Registered Sprint 4 task backlog in .codex/HISTORY_TASK.md with TASK_GUID mapping.
+[2026-02-20 16:30] ACTION: Started TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 (requirements and UX flow for nested projects).
+[2026-02-20 16:31] ACTION: Audited current ProjectsNav and storage capabilities (parent_project_id, cycle checks, flat rendering gaps).
+[2026-02-20 16:32] ACTION: Added docs/sprints/TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40_PLAN.md with hierarchy constraints, DnD matrix, and acceptance criteria.
+[2026-02-20 16:33] ACTION: Completed TASK_8D2A4F9B-1B37-4A9B-9B8E-5A3D2E1C7F40 and moved Sprint 4 status to In Progress.
