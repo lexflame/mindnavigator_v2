@@ -92,3 +92,7 @@
 [2026-02-20 13:22] ACTION: Resolved TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0.
 [2026-02-20 13:22] ACTION: Identified source commit 4636c8d for .codex/manual/ERROR_GIT/git_runner.txt and classified as accidental debug artifact.
 [2026-02-20 13:23] ACTION: Removed .codex/manual/ERROR_GIT/git_runner.txt and added ignore rule for .codex/manual/ERROR_GIT/.
+[2026-02-20 13:40] ACTION: Created Sprint 2 planning file docs/sprints/2_SPRINT.md (Scrollbar Styling And Smooth Scroll).
+[2026-02-20 13:41] ACTION: Added Sprint 2 task backlog with TASK_GUID entries to .codex/HISTORY_TASK.md.
+[2026-02-20 13:50] ACTION: Created sprint branch sprint/2_scrollbar_smooth.
+[2026-02-20 13:51] ACTION: Completed TASK_5B2F6F11-0D53-487E-AF6A-442BFD0C8A61 baseline audit and documented scroll targets/requirements.
