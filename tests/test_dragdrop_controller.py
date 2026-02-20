@@ -1,4 +1,4 @@
-from mindnavigator.ui.dragdrop.controller import DragDropController
+from mindnavigator.ui.dragdrop.controller import DragDropController, DragSafetyConfig
 from mindnavigator.ui.dragdrop.model import DragPayload, DragPhase, MotionConfig
 from mindnavigator.ui.dragdrop.policy import DropZoneRect
 
@@ -159,3 +159,83 @@ def test_controller_visual_polish_drop_transition_hook():
     controller.on_pointer_release((15, 15), 100)
 
     assert transitions[-1] == (True, 111)
+
+
+def test_controller_cancel_when_pointer_leaves_window():
+    recorder = _Recorder()
+    canceled: list[str] = []
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 100, 100)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+        is_within_window=lambda p: 0 <= p[0] <= 100 and 0 <= p[1] <= 100,
+    )
+    controller.on_drag_canceled = lambda reason: canceled.append(reason)
+
+    payload = DragPayload(entity_type="task", entity_id=7, source_workspace="tasks")
+    controller.arm_drag(payload, (10, 10), 0)
+    controller.on_pointer_move((20, 20), 60)
+    controller.on_pointer_move((500, 500), 70)
+
+    assert canceled[-1] == "out_of_window"
+    assert controller.state.phase == DragPhase.IDLE
+
+
+def test_controller_escape_key_cancels_drag():
+    recorder = _Recorder()
+    canceled: list[str] = []
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 100, 100)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+    )
+    controller.on_drag_canceled = lambda reason: canceled.append(reason)
+
+    payload = DragPayload(entity_type="task", entity_id=8, source_workspace="tasks")
+    controller.arm_drag(payload, (10, 10), 0)
+    controller.on_pointer_move((20, 20), 60)
+    controller.on_key_event("Escape")
+
+    assert canceled[-1] == "escape_key"
+    assert controller.state.phase == DragPhase.IDLE
+
+
+def test_controller_normalize_position_for_multi_monitor_offset():
+    recorder = _Recorder()
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 200, 200)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+        normalize_position=lambda p: (p[0] - 1000, p[1] - 500),
+    )
+
+    payload = DragPayload(entity_type="task", entity_id=9, source_workspace="tasks")
+    controller.arm_drag(payload, (1010, 510), 0)
+    controller.on_pointer_move((1020, 520), 80)
+
+    assert controller.state.current_pos_global == (20, 20)
+    assert recorder.feedback_events[-1] == ("zone-a", True)
+
+
+def test_controller_fast_move_threshold_limits_jump():
+    recorder = _Recorder()
+    controller = DragDropController(
+        get_drop_zones=lambda: [DropZoneRect("zone-a", 0, 0, 5000, 5000)],
+        render_drag_ghost=recorder.render_drag_ghost,
+        render_zone_feedback=recorder.render_zone_feedback,
+        clear_drag_visuals=recorder.clear_drag_visuals,
+        play_drop_result=recorder.play_drop_result,
+        safety=DragSafetyConfig(fast_move_threshold_px=30),
+    )
+
+    payload = DragPayload(entity_type="task", entity_id=10, source_workspace="tasks")
+    controller.arm_drag(payload, (0, 0), 0)
+    controller.on_pointer_move((1000, 1000), 60)
+
+    assert controller.state.current_pos_global == (30, 30)

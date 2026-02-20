@@ -59,3 +59,6 @@
 [2026-02-20 00:38] ACTION: Started TASK_9D03E4C5-5A3D-4416-8A37-1D5CE2E0D61B (hit testing and drop validation).
 [2026-02-20 00:39] ACTION: Added NestedHitTestService and RuleBasedDropValidator in dragdrop policy.
 [2026-02-20 00:40] ACTION: Added tests/test_dragdrop_policy.py and sprint notes for TASK_9D....
+[2026-02-20 00:41] ACTION: Started TASK_83D9C1A2-88C9-45FA-9473-1EBECF58B2DA (input/interaction edge cases).
+[2026-02-20 00:42] ACTION: Added DragSafetyConfig, out-of-window cancel handling, Escape key cancel, position normalization, fast-jump limiter.
+[2026-02-20 00:43] ACTION: Added edge-case tests and sprint notes for TASK_83D....
