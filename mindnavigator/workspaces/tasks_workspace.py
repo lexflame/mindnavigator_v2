@@ -2649,7 +2649,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(quick_rect, 4, 4)
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM)
-                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Задачу")
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Добавить задачу")
             painter.restore()
             return
         if row_type == "sort_header":
