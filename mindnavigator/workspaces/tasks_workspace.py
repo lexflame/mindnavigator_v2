@@ -2581,6 +2581,24 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
             x += tag_width + self.TAG_GAP
 
+    def _header_quick_rect(self, row_rect: QRect, header_text: str) -> QRect:
+        metrics = QFontMetrics(self._font_header)
+        text_left = row_rect.left() + 10
+        text_width = metrics.horizontalAdvance(header_text)
+        quick_width = 116
+        quick_height = row_rect.height() - 12
+        quick_x = text_left + text_width + 14
+        max_right = row_rect.right() - 12
+        if quick_x + quick_width > max_right:
+            quick_x = max(text_left + 10, max_right - quick_width)
+        return QRect(quick_x, row_rect.top() + 6, quick_width, quick_height)
+
+    def _task_quick_rect(self, title_rect: QRect, row_rect: QRect) -> QRect:
+        quick_width = 22
+        quick_height = row_rect.height() - 14
+        quick_x = max(row_rect.left() + 8, title_rect.left())
+        return QRect(quick_x, row_rect.top() + 7, quick_width, quick_height)
+
     def paint(self, painter: QPainter, option, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
@@ -2601,7 +2619,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            quick_rect = QRect(r.right() - 128, r.top() + 6, 116, r.height() - 12)
+            quick_rect = self._header_quick_rect(r, txt)
             text_rect = QRect(r.left() + 10, r.top(), quick_rect.left() - r.left() - 18, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, txt)
 
@@ -2625,7 +2643,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(quick_rect, 4, 4)
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM)
-                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Задачу")
+                painter.drawText(quick_rect, Qt.AlignmentFlag.AlignCenter, "+")
             painter.restore()
             return
         if row_type == "sort_header":
@@ -2755,6 +2773,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         title_content_rect = title_rect
         if not parent_move_rect.isNull():
             title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
+        quick_rect = self._task_quick_rect(title_content_rect, r)
+        title_content_rect = title_content_rect.adjusted(quick_rect.width() + 6, 0, 0, 0)
         if expanded:
             title_box = QRect(
                 title_content_rect.left(),
@@ -2895,7 +2915,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(quick_rect, 4, 4)
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_small)
-            painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Подзадачу")
+            painter.drawText(quick_rect, Qt.AlignmentFlag.AlignCenter, "+")
 
         painter.restore()
 
@@ -2923,7 +2943,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
                 r = option.rect
-                quick_rect = QRect(r.right() - 128, r.top() + 6, 116, r.height() - 12)
+                header_day = index.data(TaskRoles.Day)
+                header_text = self._format_header(header_day) if isinstance(header_day, date) else ""
+                quick_rect = self._header_quick_rect(r, header_text)
                 if quick_rect.contains(pos) and hasattr(model, "quick_add_task_for_day"):
                     target_day = index.data(TaskRoles.Day)
                     if isinstance(target_day, date):
@@ -2943,9 +2965,13 @@ class TasksItemDelegate(QStyledItemDelegate):
             cb_rect = layout["checkbox"]
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
-            quick_rect = layout["quick"]
+            title_rect = layout["title"]
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
+            title_content_rect = title_rect
+            if not parent_move_rect.isNull():
+                title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
+            quick_rect = self._task_quick_rect(title_content_rect, r)
 
             if has_subtasks and toggle_rect and toggle_rect.contains(pos):
                 if hasattr(model, "toggle_subtasks_expanded_by_row"):

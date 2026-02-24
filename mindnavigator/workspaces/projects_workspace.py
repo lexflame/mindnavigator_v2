@@ -731,6 +731,24 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             return QSize(width, self.HEADER_H)
         return QSize(width, self.ROW_H)
 
+    def _area_quick_rect(self, row_rect: QRect, area: str) -> QRect:
+        left_pad = 10
+        menu_w = 24
+        text_left = row_rect.left() + left_pad + menu_w + 8
+        quick_w = 112
+        quick_h = row_rect.height() - 10
+        area_w = QFontMetrics(self._font_header).horizontalAdvance(area or "")
+        quick_x = text_left + area_w + 12
+        max_right = row_rect.right() - 12
+        if quick_x + quick_w > max_right:
+            quick_x = max(text_left + 10, max_right - quick_w)
+        return QRect(quick_x, row_rect.top() + 5, quick_w, quick_h)
+
+    def _project_quick_rect(self, title_rect: QRect) -> QRect:
+        quick_w = 120
+        quick_h = title_rect.height() - 14
+        return QRect(title_rect.left(), title_rect.top() + 7, quick_w, quick_h)
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         """Рисует строку проекта или заголовок области."""
         painter.save()
@@ -749,7 +767,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             left_pad = 10
             menu_w = 24
             menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
-            quick_rect = QRect(r.right() - 124, r.top() + 5, 112, r.height() - 10)
+            quick_rect = self._area_quick_rect(r, area)
             text_rect = QRect(menu_rect.right() + 8, r.top(), quick_rect.left() - menu_rect.right() - 12, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, area)
             if state & QStyle.StateFlag.State_MouseOver:
@@ -758,7 +776,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(quick_rect, 4, 4)
                 painter.setPen(self.C_DIM)
                 painter.setFont(self._font_small)
-                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Проект")
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ Проект")
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
             painter.setPen(self.C_BORDER)
@@ -845,6 +863,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
 
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
+        quick_rect = self._project_quick_rect(title_rect)
+        title_rect = title_rect.adjusted(quick_rect.width() + 8, 0, 0, 0)
         if marker_theme:
             title = f"{title} · {marker_theme.upper()}"
         elided = QFontMetrics(self._font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width())
@@ -885,7 +905,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             painter.setBrush(QColor("#1f2227"))
             painter.drawRoundedRect(quick_rect, 4, 4)
             painter.setPen(self.C_DIM)
-            painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Подпроект")
+            painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ Подпроект")
 
         painter.restore()
 
@@ -908,7 +928,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 left_pad = 10
                 menu_w = 24
                 menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
-                quick_rect = QRect(r.right() - 124, r.top() + 5, 112, r.height() - 10)
+                area = index.data(ProjectRoles.Area) or ""
+                quick_rect = self._area_quick_rect(r, area)
                 if menu_rect.contains(pos):
                     self._show_area_menu(index)
                     return True
@@ -947,6 +968,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             quick_w = 120
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
             quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
+            pr_w = 160
+            pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+            title_rect = QRect(x + 18, r.top(), pr_rect.left() - (x + 18) - 10, r.height())
+            quick_rect = self._project_quick_rect(title_rect)
 
             if marker_rect.contains(pos):
                 if hasattr(model, "toggle_project_collapsed_by_row"):
