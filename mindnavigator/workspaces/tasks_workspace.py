@@ -2593,10 +2593,16 @@ class TasksItemDelegate(QStyledItemDelegate):
             quick_x = max(text_left + 10, max_right - quick_width)
         return QRect(quick_x, row_rect.top() + 6, quick_width, quick_height)
 
-    def _task_quick_rect(self, title_rect: QRect, row_rect: QRect) -> QRect:
+    def _task_quick_rect(self, layout: dict, row_rect: QRect) -> QRect:
         quick_width = 22
         quick_height = row_rect.height() - 14
-        quick_x = max(row_rect.left() + 8, title_rect.left())
+        toggle_rect = layout.get("subtask_toggle")
+        if isinstance(toggle_rect, QRect) and not toggle_rect.isNull():
+            anchor_left = toggle_rect.left()
+        else:
+            doc_rect = layout.get("doc")
+            anchor_left = doc_rect.left() if isinstance(doc_rect, QRect) else row_rect.left() + 80
+        quick_x = max(row_rect.left() + 8, anchor_left - quick_width - 4)
         return QRect(quick_x, row_rect.top() + 7, quick_width, quick_height)
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
@@ -2643,7 +2649,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(quick_rect, 4, 4)
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM)
-                painter.drawText(quick_rect, Qt.AlignmentFlag.AlignCenter, "+")
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Задачу")
             painter.restore()
             return
         if row_type == "sort_header":
@@ -2773,8 +2779,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         title_content_rect = title_rect
         if not parent_move_rect.isNull():
             title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
-        quick_rect = self._task_quick_rect(title_content_rect, r)
-        title_content_rect = title_content_rect.adjusted(quick_rect.width() + 6, 0, 0, 0)
+        quick_rect = self._task_quick_rect(layout, r)
         if expanded:
             title_box = QRect(
                 title_content_rect.left(),
@@ -2971,7 +2976,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             title_content_rect = title_rect
             if not parent_move_rect.isNull():
                 title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
-            quick_rect = self._task_quick_rect(title_content_rect, r)
+            quick_rect = self._task_quick_rect(layout, r)
 
             if has_subtasks and toggle_rect and toggle_rect.contains(pos):
                 if hasattr(model, "toggle_subtasks_expanded_by_row"):
@@ -3235,11 +3240,10 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         right_pad = 20
         menu_w = 30
-        quick_w = 120
         pr_w = 140
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-        quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
-        pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+        quick_rect = QRect()
+        pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
 
         return {

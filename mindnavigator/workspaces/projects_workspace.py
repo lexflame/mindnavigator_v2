@@ -744,10 +744,15 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             quick_x = max(text_left + 10, max_right - quick_w)
         return QRect(quick_x, row_rect.top() + 5, quick_w, quick_h)
 
-    def _project_quick_rect(self, title_rect: QRect) -> QRect:
+    def _project_quick_rect(self, title_rect: QRect, display_title: str) -> QRect:
         quick_w = 120
         quick_h = title_rect.height() - 14
-        return QRect(title_rect.left(), title_rect.top() + 7, quick_w, quick_h)
+        title_w = QFontMetrics(self._font).horizontalAdvance(display_title or "")
+        quick_x = title_rect.left() + title_w + 10
+        max_x = title_rect.right() - quick_w
+        if quick_x > max_x:
+            quick_x = max(title_rect.left(), max_x)
+        return QRect(quick_x, title_rect.top() + 7, quick_w, quick_h)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         """Рисует строку проекта или заголовок области."""
@@ -863,12 +868,20 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
 
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
-        quick_rect = self._project_quick_rect(title_rect)
-        title_rect = title_rect.adjusted(quick_rect.width() + 8, 0, 0, 0)
-        if marker_theme:
-            title = f"{title} · {marker_theme.upper()}"
-        elided = QFontMetrics(self._font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width())
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
+        display_title = f"{title} · {marker_theme.upper()}" if marker_theme else title
+        quick_rect = self._project_quick_rect(title_rect, display_title)
+        title_text_rect = QRect(
+            title_rect.left(),
+            title_rect.top(),
+            max(10, quick_rect.left() - title_rect.left() - 8),
+            title_rect.height(),
+        )
+        elided = QFontMetrics(self._font).elidedText(
+            display_title,
+            Qt.TextElideMode.ElideRight,
+            title_text_rect.width(),
+        )
+        painter.drawText(title_text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         pr_color = self.C_ARCH if archived else self._prio_color(priority)
         painter.setFont(self._font_small)
@@ -971,7 +984,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             pr_w = 160
             pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
             title_rect = QRect(x + 18, r.top(), pr_rect.left() - (x + 18) - 10, r.height())
-            quick_rect = self._project_quick_rect(title_rect)
+            title = index.data(ProjectRoles.Title) or ""
+            marker_theme = (index.data(ProjectRoles.MarkerTheme) or "").strip()
+            display_title = f"{title} В· {marker_theme.upper()}" if marker_theme else title
+            quick_rect = self._project_quick_rect(title_rect, display_title)
 
             if marker_rect.contains(pos):
                 if hasattr(model, "toggle_project_collapsed_by_row"):
@@ -1793,7 +1809,4 @@ class ProjectsWorkspace(QWidget):
             self._refresh_area_combo(values["area"])
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
-
-
-
 
