@@ -10,3 +10,5 @@ __pycache__
 .codex/manual/ERROR_GIT/
 dist/MindNavigator (windows 11 x64)/_internal
 
+dist/MindNavigator (windows 11 x64)/_internal/base_library.zip
+/dist
