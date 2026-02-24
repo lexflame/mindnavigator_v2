@@ -1,5 +1,8 @@
 # Sprint 5: Debug And Static Analysis Hygiene
 
+## Sprint Status
+- Closed: 2026-02-24
+
 ## Sprint Goal
 Stabilize code quality after feature delivery by fixing PyCharm static-analysis issues, normalizing Qt6 API usage, and documenting durable coding rules for future changes.
 
