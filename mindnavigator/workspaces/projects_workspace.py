@@ -11,16 +11,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Union, Optional, Any, cast
 import json
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QEvent, QDate
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor
+from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle, QDialog,
-    QAbstractItemView,
+    QAbstractItemView, QStyleOptionViewItem,
     QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox
 )
 
@@ -54,6 +54,8 @@ class ProjectRow:
     linked_map_id: Optional[int] = None
     linked_note_id: Optional[int] = None
     linked_object_id: Optional[int] = None
+    marker_color: str = ""
+    marker_theme: str = ""
 
 
 @dataclass(frozen=True)
@@ -65,17 +67,19 @@ Row = Union[ProjectRow, HeaderRow]
 
 
 class ProjectRoles:
-    RowType = Qt.UserRole + 1   # header | project
-    Area = Qt.UserRole + 2
-    Title = Qt.UserRole + 3
-    Updated = Qt.UserRole + 4
-    Priority = Qt.UserRole + 5
-    Archived = Qt.UserRole + 6
-    ProjectId = Qt.UserRole + 7
-    UpdatedDate = Qt.UserRole + 8
-    Depth = Qt.UserRole + 9
-    HasChildren = Qt.UserRole + 10
-    IsCollapsed = Qt.UserRole + 11
+    RowType = int(Qt.ItemDataRole.UserRole) + 1   # header | project
+    Area = int(Qt.ItemDataRole.UserRole) + 2
+    Title = int(Qt.ItemDataRole.UserRole) + 3
+    Updated = int(Qt.ItemDataRole.UserRole) + 4
+    Priority = int(Qt.ItemDataRole.UserRole) + 5
+    Archived = int(Qt.ItemDataRole.UserRole) + 6
+    ProjectId = int(Qt.ItemDataRole.UserRole) + 7
+    UpdatedDate = int(Qt.ItemDataRole.UserRole) + 8
+    Depth = int(Qt.ItemDataRole.UserRole) + 9
+    HasChildren = int(Qt.ItemDataRole.UserRole) + 10
+    IsCollapsed = int(Qt.ItemDataRole.UserRole) + 11
+    MarkerColor = int(Qt.ItemDataRole.UserRole) + 12
+    MarkerTheme = int(Qt.ItemDataRole.UserRole) + 13
 
 
 class ProjectsModel(QAbstractListModel):
@@ -114,6 +118,8 @@ class ProjectsModel(QAbstractListModel):
                 p.linked_map_id,
                 p.linked_note_id,
                 p.linked_object_id,
+                p.marker_color,
+                p.marker_theme,
             )
             for p in projects
         ]
@@ -134,7 +140,11 @@ class ProjectsModel(QAbstractListModel):
             return 0
         return len(self._rows)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(
+        self,
+        index: QModelIndex,
+        role: int = int(Qt.ItemDataRole.DisplayRole),
+    ) -> Any:
         """Отдает данные для делегата по ролям."""
         if not index.isValid():
             return None
@@ -146,7 +156,7 @@ class ProjectsModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             if role == ProjectRoles.Area:
                 return r.area
-            if role == Qt.DisplayRole:
+            if role == Qt.ItemDataRole.DisplayRole:
                 return r.area
             return None
 
@@ -170,7 +180,11 @@ class ProjectsModel(QAbstractListModel):
             return self._project_has_children_cache.get(r.id, False)
         if role == ProjectRoles.IsCollapsed:
             return r.id in self._collapsed_project_ids
-        if role == Qt.DisplayRole:
+        if role == ProjectRoles.MarkerColor:
+            return r.marker_color
+        if role == ProjectRoles.MarkerTheme:
+            return r.marker_theme
+        if role == Qt.ItemDataRole.DisplayRole:
             return r.title
         return None
 
@@ -202,19 +216,18 @@ class ProjectsModel(QAbstractListModel):
         payload = sorted(self._collapsed_project_ids)
         self._db.set_setting(self._collapsed_state_key, json.dumps(payload, ensure_ascii=False))
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+    def flags(self, index: QModelIndex) -> Any:
         """Устанавливает флаги взаимодействия для строки."""
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
-            return Qt.ItemIsEnabled
-        return (
-            Qt.ItemIsEnabled
-            | Qt.ItemIsSelectable
-            | Qt.ItemIsDragEnabled
-            | Qt.ItemIsDropEnabled
-        )
+            return Qt.ItemFlag.ItemIsEnabled
+        flags = cast(Any, Qt.ItemFlag.ItemIsEnabled)
+        flags |= Qt.ItemFlag.ItemIsSelectable
+        flags |= Qt.ItemFlag.ItemIsDragEnabled
+        flags |= Qt.ItemFlag.ItemIsDropEnabled
+        return flags
 
     def move_project_by_drop(
         self,
@@ -289,6 +302,8 @@ class ProjectsModel(QAbstractListModel):
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        marker_color: str = "",
+        marker_theme: str = "",
     ):
         """Добавляет новый проект и пересобирает список."""
         project = self._db.create_project(
@@ -303,6 +318,8 @@ class ProjectsModel(QAbstractListModel):
             linked_map_id=linked_map_id,
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
         self._all_rows.append(
             ProjectRow(
@@ -318,9 +335,26 @@ class ProjectsModel(QAbstractListModel):
                 project.linked_map_id,
                 project.linked_note_id,
                 project.linked_object_id,
+                project.marker_color,
+                project.marker_theme,
             )
         )
         self._rebuild()
+
+    def quick_add_project(
+        self,
+        area: str,
+        parent_project_id: Optional[int] = None,
+        title: str = "Новый проект",
+    ) -> None:
+        self.add_project(
+            area=area,
+            title=title,
+            updated=date.today(),
+            priority="Medium",
+            archived=False,
+            parent_project_id=parent_project_id,
+        )
 
     def area_has_active(self, area: str) -> bool:
         """Проверяет наличие активных проектов в области."""
@@ -348,6 +382,8 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_map_id,
                     it.linked_note_id,
                     it.linked_object_id,
+                    it.marker_color,
+                    it.marker_theme,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -382,6 +418,8 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_map_id,
                     it.linked_note_id,
                     it.linked_object_id,
+                    it.marker_color,
+                    it.marker_theme,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -412,6 +450,8 @@ class ProjectsModel(QAbstractListModel):
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        marker_color: str = "",
+        marker_theme: str = "",
     ):
         """Обновляет проект по индексу строки."""
         r = self.project_at_row(row_idx)
@@ -430,6 +470,8 @@ class ProjectsModel(QAbstractListModel):
             linked_map_id=linked_map_id,
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
 
         new_all: List[Row] = []
@@ -448,6 +490,8 @@ class ProjectsModel(QAbstractListModel):
                     updated_project.linked_map_id,
                     updated_project.linked_note_id,
                     updated_project.linked_object_id,
+                    updated_project.marker_color,
+                    updated_project.marker_theme,
                 )
             new_all.append(it)
 
@@ -480,6 +524,8 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_map_id,
                     it.linked_note_id,
                     it.linked_object_id,
+                    it.marker_color,
+                    it.marker_theme,
                 )
             new_all.append(it)
 
@@ -583,57 +629,57 @@ class ProjectsModel(QAbstractListModel):
         depth_cache: Dict[int, int] = {}
         has_children_cache: Dict[int, bool] = {}
 
-        for project in project_map.values():
-            has_children_cache[project.id] = False
-        for project in project_map.values():
-            if project.parent_project_id in project_map:
-                has_children_cache[project.parent_project_id] = True
+        for project_row in project_map.values():
+            has_children_cache[project_row.id] = False
+        for project_row in project_map.values():
+            if project_row.parent_project_id in project_map:
+                has_children_cache[project_row.parent_project_id] = True
 
-        def resolve_title(project: ProjectRow, seen: Optional[set[int]] = None) -> str:
-            cached = cache.get(project.id)
+        def resolve_title(node: ProjectRow, seen: Optional[set[int]] = None) -> str:
+            cached = cache.get(node.id)
             if cached is not None:
                 return cached
 
             seen_set = seen or set()
-            if project.id in seen_set:
-                cache[project.id] = project.title
-                return project.title
+            if node.id in seen_set:
+                cache[node.id] = node.title
+                return node.title
 
-            if project.parent_project_id is None:
-                cache[project.id] = project.title
-                return project.title
+            if node.parent_project_id is None:
+                cache[node.id] = node.title
+                return node.title
 
-            parent = project_map.get(project.parent_project_id)
+            parent = project_map.get(node.parent_project_id)
             if parent is None:
-                cache[project.id] = project.title
-                return project.title
+                cache[node.id] = node.title
+                return node.title
 
-            nested = f"{resolve_title(parent, seen_set | {project.id})} / {project.title}"
-            cache[project.id] = nested
+            nested = f"{resolve_title(parent, seen_set | {node.id})} / {node.title}"
+            cache[node.id] = nested
             return nested
 
-        def resolve_depth(project: ProjectRow, seen: Optional[set[int]] = None) -> int:
-            cached = depth_cache.get(project.id)
+        def resolve_depth(node: ProjectRow, seen: Optional[set[int]] = None) -> int:
+            cached = depth_cache.get(node.id)
             if cached is not None:
                 return cached
             seen_set = seen or set()
-            if project.id in seen_set:
-                depth_cache[project.id] = 0
+            if node.id in seen_set:
+                depth_cache[node.id] = 0
                 return 0
-            if project.parent_project_id is None:
-                depth_cache[project.id] = 0
+            if node.parent_project_id is None:
+                depth_cache[node.id] = 0
                 return 0
-            parent = project_map.get(project.parent_project_id)
+            parent = project_map.get(node.parent_project_id)
             if parent is None:
-                depth_cache[project.id] = 0
+                depth_cache[node.id] = 0
                 return 0
-            depth = resolve_depth(parent, seen_set | {project.id}) + 1
-            depth_cache[project.id] = depth
+            depth = resolve_depth(parent, seen_set | {node.id}) + 1
+            depth_cache[node.id] = depth
             return depth
 
-        for project in project_map.values():
-            resolve_title(project)
-            resolve_depth(project)
+        for project_row in project_map.values():
+            resolve_title(project_row)
+            resolve_depth(project_row)
 
         self._project_title_cache = cache
         self._project_depth_cache = depth_cache
@@ -675,20 +721,25 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         self._font_header.setPointSize(9)
         self._font_header.setBold(True)
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         """Возвращает размер строки списка."""
+        opt = cast(Any, option)
+        rect = opt.rect
+        width = rect.width() if rect is not None else 0
         row_type = index.data(ProjectRoles.RowType)
         if row_type == "header":
-            return QSize(option.rect.width(), self.HEADER_H)
-        return QSize(option.rect.width(), self.ROW_H)
+            return QSize(width, self.HEADER_H)
+        return QSize(width, self.ROW_H)
 
-    def paint(self, painter: QPainter, option, index: QModelIndex):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         """Рисует строку проекта или заголовок области."""
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         row_type = index.data(ProjectRoles.RowType)
-        r = option.rect
+        opt = cast(Any, option)
+        r = opt.rect
+        state = opt.state
 
         if row_type == "header":
             area: str = index.data(ProjectRoles.Area) or ""
@@ -698,8 +749,16 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             left_pad = 10
             menu_w = 24
             menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
-            text_rect = QRect(menu_rect.right() + 8, r.top(), r.right() - menu_rect.right() - 18, r.height())
-            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, area)
+            quick_rect = QRect(r.right() - 124, r.top() + 5, 112, r.height() - 10)
+            text_rect = QRect(menu_rect.right() + 8, r.top(), quick_rect.left() - menu_rect.right() - 12, r.height())
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, area)
+            if state & QStyle.StateFlag.State_MouseOver:
+                painter.setPen(self.C_BORDER)
+                painter.setBrush(QColor("#1f2227"))
+                painter.drawRoundedRect(quick_rect, 4, 4)
+                painter.setPen(self.C_DIM)
+                painter.setFont(self._font_small)
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Проект")
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
             painter.setPen(self.C_BORDER)
@@ -719,10 +778,20 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         depth: int = int(index.data(ProjectRoles.Depth) or 0)
         has_children: bool = bool(index.data(ProjectRoles.HasChildren))
         is_collapsed: bool = bool(index.data(ProjectRoles.IsCollapsed))
+        marker_color: str = (index.data(ProjectRoles.MarkerColor) or "").strip()
+        marker_theme: str = (index.data(ProjectRoles.MarkerTheme) or "").strip()
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
-        if option.state & QStyle.State_Selected:
+        if state & QStyle.StateFlag.State_Selected:
             bg = QColor("#343844")
+        elif marker_color:
+            tint = QColor(marker_color)
+            if tint.isValid():
+                bg = QColor(
+                    int(bg.red() * 0.65 + tint.red() * 0.35),
+                    int(bg.green() * 0.65 + tint.green() * 0.35),
+                    int(bg.blue() * 0.65 + tint.blue() * 0.35),
+                )
 
         painter.fillRect(r, bg)
         painter.setPen(self.C_BORDER)
@@ -761,7 +830,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         painter.setFont(self._font_small)
         painter.setPen(self.C_DIM)
         marker_text = ">" if (has_children and is_collapsed) else ("v" if has_children else ".")
-        painter.drawText(marker_rect, Qt.AlignCenter, marker_text)
+        painter.drawText(marker_rect, Qt.AlignmentFlag.AlignCenter, marker_text)
         x += 18
 
         painter.setFont(self._font)
@@ -769,13 +838,17 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
         right_pad = 18
         menu_w = 30
+        quick_w = 120
         pr_w = 160
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-        pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+        quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
+        pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
 
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
-        elided = QFontMetrics(self._font).elidedText(title, Qt.ElideRight, title_rect.width())
-        painter.drawText(title_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+        if marker_theme:
+            title = f"{title} · {marker_theme.upper()}"
+        elided = QFontMetrics(self._font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width())
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         pr_color = self.C_ARCH if archived else self._prio_color(priority)
         painter.setFont(self._font_small)
@@ -793,11 +866,11 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             r.height(),
         )
 
-        painter.drawText(priority_rect, Qt.AlignVCenter | Qt.AlignRight,
+        painter.drawText(priority_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                          priority if not archived else "ARCH")
 
         painter.setPen(self.C_DIM)
-        painter.drawText(date_rect, Qt.AlignVCenter | Qt.AlignRight,
+        painter.drawText(date_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                          f"обновл. {updated}")
 
         pin_rect = QRect(pr_rect.right() - pin_w, cy - 8, pin_w, 16)
@@ -807,30 +880,56 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         painter.setBrush(QColor("#1f2227"))
         painter.drawRect(menu_rect)
         self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 7, menu_rect.center().y() - 7, 14, 14))
+        if state & QStyle.StateFlag.State_MouseOver:
+            painter.setPen(self.C_BORDER)
+            painter.setBrush(QColor("#1f2227"))
+            painter.drawRoundedRect(quick_rect, 4, 4)
+            painter.setPen(self.C_DIM)
+            painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Подпроект")
 
         painter.restore()
 
-    def editorEvent(self, event, model, option, index):
+    def editorEvent(
+        self,
+        event: QEvent,
+        model: QAbstractListModel,
+        option: QStyleOptionViewItem,
+        index: QModelIndex,
+    ) -> bool:
         """Обрабатывает клики по индикатору архивации и меню."""
         row_type = index.data(ProjectRoles.RowType)
         if row_type == "header":
-            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent):
+                if event.button() != Qt.MouseButton.LeftButton:
+                    return False
                 pos = event.position().toPoint()
-                r = option.rect
+                opt = cast(Any, option)
+                r = opt.rect
                 left_pad = 10
                 menu_w = 24
                 menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
+                quick_rect = QRect(r.right() - 124, r.top() + 5, 112, r.height() - 10)
                 if menu_rect.contains(pos):
                     self._show_area_menu(index)
+                    return True
+                if quick_rect.contains(pos):
+                    area = index.data(ProjectRoles.Area) or ""
+                    if hasattr(model, "quick_add_project"):
+                        typed_model = cast(ProjectsModel, model)
+                        typed_model.quick_add_project(area=area, title="Новый проект")
+                        self._refresh_area_combo(area)
                     return True
             return False
 
         if row_type != "project":
             return False
 
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+        if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent):
+            if event.button() != Qt.MouseButton.LeftButton:
+                return False
             pos = event.position().toPoint()
-            r = option.rect
+            opt = cast(Any, option)
+            r = opt.rect
             cy = r.center().y()
 
             x = r.left() + 10
@@ -845,7 +944,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
             right_pad = 18
             menu_w = 30
+            quick_w = 120
             menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+            quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
 
             if marker_rect.contains(pos):
                 if hasattr(model, "toggle_project_collapsed_by_row"):
@@ -853,11 +954,24 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     return True
 
             if box_rect.contains(pos):
-                model.toggle_archive_by_row(index.row())
+                typed_model = cast(ProjectsModel, model)
+                typed_model.toggle_archive_by_row(index.row())
                 return True
 
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
+                return True
+            if quick_rect.contains(pos):
+                project_id = index.data(ProjectRoles.ProjectId)
+                area = index.data(ProjectRoles.Area) or ""
+                if isinstance(project_id, int) and hasattr(model, "quick_add_project"):
+                    typed_model = cast(ProjectsModel, model)
+                    typed_model.quick_add_project(
+                        area=area,
+                        parent_project_id=project_id,
+                        title="Новый подпроект",
+                    )
+                    self._refresh_area_combo(area)
                 return True
 
         return False
@@ -898,7 +1012,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if chosen == act_archive:
             model = index.model()
             if hasattr(model, "toggle_archive_by_row"):
-                model.toggle_archive_by_row(index.row())
+                typed_model = cast(ProjectsModel, model)
+                typed_model.toggle_archive_by_row(index.row())
             return
         if chosen != act_delete:
             return
@@ -912,7 +1027,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         model = index.model()
@@ -973,7 +1088,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         if hasattr(model, "delete_area"):
@@ -984,7 +1099,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         """Открывает диалог редактирования области проектов."""
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = ProjectAreaEditDialog(area, parent=parent)
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         values = dialog.values()
@@ -997,17 +1112,18 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
     def _edit_project(self, index: QModelIndex):
         """Открывает диалог редактирования проекта."""
-        model = index.model()
-        if not hasattr(model, "project_at_row"):
+        raw_model = index.model()
+        if not isinstance(raw_model, ProjectsModel):
             return
 
+        model = raw_model
         project = model.project_at_row(index.row())
         if project is None:
             return
 
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = ProjectEditDialog(project, parent=parent)
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         values = dialog.values()
@@ -1026,6 +1142,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     linked_map_id=values["linked_map_id"],
                     linked_note_id=values["linked_note_id"],
                     linked_object_id=values["linked_object_id"],
+                    marker_color=values["marker_color"],
+                    marker_theme=values["marker_theme"],
                 )
                 self._refresh_area_combo(values["area"])
             except ValueError as exc:
@@ -1062,7 +1180,7 @@ class ProjectEditDialog(QDialog):
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(640, 560)
+        self.setFixedSize(640, 620)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1073,8 +1191,8 @@ class ProjectEditDialog(QDialog):
         layout.addWidget(title_label)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(12)
 
@@ -1148,6 +1266,30 @@ class ProjectEditDialog(QDialog):
         if linked_object_idx >= 0:
             self.linked_object_edit.setCurrentIndex(linked_object_idx)
 
+        self.marker_color_edit = QComboBox()
+        self.marker_color_edit.addItem("None", "")
+        self.marker_color_edit.addItem("Blue", "#4C78D0")
+        self.marker_color_edit.addItem("Green", "#3FAF72")
+        self.marker_color_edit.addItem("Orange", "#D68A3A")
+        self.marker_color_edit.addItem("Red", "#C95656")
+        self.marker_color_edit.addItem("Purple", "#8A63D2")
+        marker_color_idx = self.marker_color_edit.findData((project.marker_color if project else "") or "")
+        if marker_color_idx >= 0:
+            self.marker_color_edit.setCurrentIndex(marker_color_idx)
+
+        self.marker_theme_edit = QComboBox()
+        self.marker_theme_edit.addItem("None", "")
+        self.marker_theme_edit.addItem("Movies", "movies")
+        self.marker_theme_edit.addItem("Games", "games")
+        self.marker_theme_edit.addItem("Books", "books")
+        self.marker_theme_edit.addItem("Music", "music")
+        self.marker_theme_edit.addItem("Work", "work")
+        self.marker_theme_edit.addItem("Personal", "personal")
+        self.marker_theme_edit.addItem("Dev", "dev")
+        marker_theme_idx = self.marker_theme_edit.findData((project.marker_theme if project else "") or "")
+        if marker_theme_idx >= 0:
+            self.marker_theme_edit.setCurrentIndex(marker_theme_idx)
+
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
 
@@ -1161,11 +1303,15 @@ class ProjectEditDialog(QDialog):
         form.addRow("Linked map", self.linked_map_edit)
         form.addRow("Linked note", self.linked_note_edit)
         form.addRow("Linked object", self.linked_object_edit)
+        form.addRow("Маркер (цвет)", self.marker_color_edit)
+        form.addRow("Тема маркера", self.marker_theme_edit)
         form.addRow("", self.archived_edit)
 
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1246,6 +1392,8 @@ class ProjectEditDialog(QDialog):
             "linked_map_id": self.linked_map_edit.currentData(),
             "linked_note_id": self.linked_note_edit.currentData(),
             "linked_object_id": self.linked_object_edit.currentData(),
+            "marker_color": self.marker_color_edit.currentData() or "",
+            "marker_theme": self.marker_theme_edit.currentData() or "",
             "archived": self.archived_edit.isChecked(),
         }
 
@@ -1268,8 +1416,8 @@ class ProjectAreaEditDialog(QDialog):
         layout.addWidget(title_label)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(12)
 
@@ -1279,7 +1427,9 @@ class ProjectAreaEditDialog(QDialog):
 
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1352,7 +1502,7 @@ class _ProjectsListView(QListView):
         self._pressed_project_id = project_id if isinstance(project_id, int) else None
         super().mousePressEvent(event)
 
-    def startDrag(self, supportedActions):
+    def startDrag(self, supported_actions):
         if isinstance(self._pressed_project_id, int):
             self._drag_source_project_id = self._pressed_project_id
         else:
@@ -1360,7 +1510,7 @@ class _ProjectsListView(QListView):
             row_type = index.data(ProjectRoles.RowType)
             project_id = index.data(ProjectRoles.ProjectId) if row_type == "project" else None
             self._drag_source_project_id = project_id if isinstance(project_id, int) else None
-        super().startDrag(supportedActions)
+        super().startDrag(supported_actions)
         self._pressed_project_id = None
 
     def dropEvent(self, event):
@@ -1408,7 +1558,7 @@ class _ProjectsListView(QListView):
             target_id = fallback_id
             as_child = False
 
-        ok = self._owner._handle_project_drop(source_id, target_id, drop_after, as_child)
+        ok = self._owner.handle_project_drop(source_id, target_id, drop_after, as_child)
         if ok:
             event.acceptProposedAction()
         else:
@@ -1437,13 +1587,13 @@ class ProjectsWorkspace(QWidget):
 
         def tab_btn(text: str) -> QToolButton:
             """Создает кнопку вкладки фильтра."""
-            b = QToolButton()
-            b.setText(text)
-            b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setAutoRaise(True)
-            self.tabs_group.addButton(b)
-            return b
+            tab_button = QToolButton()
+            tab_button.setText(text)
+            tab_button.setCheckable(True)
+            tab_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            tab_button.setAutoRaise(True)
+            self.tabs_group.addButton(tab_button)
+            return tab_button
 
         self.tab_all = tab_btn("Все")
         self.tab_active = tab_btn("Активные")
@@ -1469,7 +1619,7 @@ class ProjectsWorkspace(QWidget):
 
         self.btn_create = QToolButton()
         self.btn_create.setText("Создать")
-        self.btn_create.setCursor(Qt.PointingHandCursor)
+        self.btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
 
         top_layout.addWidget(self.cmb_priority)
         top_layout.addWidget(self.btn_create)
@@ -1486,13 +1636,14 @@ class ProjectsWorkspace(QWidget):
         self.list = _ProjectsListView(self)
         self.list.setObjectName("ProjectsList")
         self.list.setUniformItemSizes(True)
-        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SingleSelection)
-        self.list.setDragDropMode(QAbstractItemView.DragDrop)
-        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.list.setDragEnabled(True)
         self.list.setAcceptDrops(True)
+        self.list.setMouseTracking(True)
         self.list.viewport().setAcceptDrops(True)
         self.list.setDropIndicatorShown(True)
         root.addWidget(self.list, 1)
@@ -1503,8 +1654,8 @@ class ProjectsWorkspace(QWidget):
         self.delegate = ProjectsItemDelegate(self.list)
         self.list.setItemDelegate(self.delegate)
 
-        for b in self.tabs_group.buttons():
-            b.clicked.connect(self._on_tab_changed)
+        for button in self.tabs_group.buttons():
+            button.clicked.connect(self._on_tab_changed)
 
         self.search.textChanged.connect(self.model.set_search)
         self.cmb_area.currentTextChanged.connect(self._on_area_changed)
@@ -1562,7 +1713,7 @@ class ProjectsWorkspace(QWidget):
         """Устанавливает фильтр по задаче для списка проектов."""
         self.model.set_task_filter(task_id)
 
-    def _handle_project_drop(
+    def handle_project_drop(
         self,
         source_project_id: int,
         target_project_id: int,
@@ -1594,7 +1745,7 @@ class ProjectsWorkspace(QWidget):
     def _on_create_project(self):
         """Открывает диалог создания проекта."""
         dialog = ProjectEditDialog(parent=self)
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
 
         values = dialog.values()
@@ -1611,10 +1762,13 @@ class ProjectsWorkspace(QWidget):
                 linked_map_id=values["linked_map_id"],
                 linked_note_id=values["linked_note_id"],
                 linked_object_id=values["linked_object_id"],
+                marker_color=values["marker_color"],
+                marker_theme=values["marker_theme"],
             )
             self._refresh_area_combo(values["area"])
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
+
 
 
 

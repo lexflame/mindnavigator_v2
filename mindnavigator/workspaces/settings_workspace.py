@@ -13,10 +13,11 @@ from datetime import datetime
 import json
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import zipfile
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,
@@ -40,6 +41,8 @@ from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 class SettingsWorkspace(QWidget):
     """Рабочая область настроек приложения."""
 
+    setting_changed = Signal(str, str)
+
     CLOUD_STORAGE_KEY = "cloud_storage_path"
     BACKUP_DIR_KEY = "backup_dir"
     BACKUP_INCLUDE_CLOUD_KEY = "backup_include_cloud"
@@ -47,6 +50,9 @@ class SettingsWorkspace(QWidget):
     BACKUP_FREQUENCY_KEY = "backup_frequency"
     BACKUP_RETENTION_KEY = "backup_retention"
     BACKUP_LAST_RUN_KEY = "backup_last_run"
+    APP_MINIMIZE_ON_FOCUS_LOST_KEY = "app.minimize_on_focus_lost"
+    APP_AUTOSTART_WINDOWS_KEY = "app.autostart_windows"
+    APP_SINGLE_INSTANCE_KEY = "app.single_instance"
     BACKUP_PREFIX = "mindnavigator_backup_"
     BACKUP_MANIFEST_NAME = "backup_manifest.json"
 
@@ -237,6 +243,33 @@ class SettingsWorkspace(QWidget):
         backup_layout.addWidget(self.backup_status)
 
         layout.addWidget(backup_card)
+        behavior_card = QFrame()
+        behavior_card.setObjectName("SettingsCard")
+        behavior_layout = QVBoxLayout(behavior_card)
+        behavior_layout.setContentsMargins(20, 18, 20, 18)
+        behavior_layout.setSpacing(10)
+
+        behavior_title = QLabel("Поведение приложения")
+        behavior_title.setObjectName("SettingsSectionTitle")
+        behavior_layout.addWidget(behavior_title)
+
+        self.minimize_on_focus_lost_checkbox = QCheckBox("Убирать в трей при потере фокуса окна приложения")
+        self.minimize_on_focus_lost_checkbox.setObjectName("SettingsToggle")
+        self.minimize_on_focus_lost_checkbox.toggled.connect(self._on_behavior_option_changed)
+        behavior_layout.addWidget(self.minimize_on_focus_lost_checkbox)
+
+        self.autostart_windows_checkbox = QCheckBox("Автостарт приложения при запуске Windows")
+        self.autostart_windows_checkbox.setObjectName("SettingsToggle")
+        self.autostart_windows_checkbox.toggled.connect(self._on_behavior_option_changed)
+        behavior_layout.addWidget(self.autostart_windows_checkbox)
+
+        self.single_instance_checkbox = QCheckBox(
+            "Запретить запуск нескольких экземпляров приложения, при повторном запуске вызвать из трея"
+        )
+        self.single_instance_checkbox.setObjectName("SettingsToggle")
+        self.single_instance_checkbox.toggled.connect(self._on_behavior_option_changed)
+        behavior_layout.addWidget(self.single_instance_checkbox)
+        layout.addWidget(behavior_card)
         layout.addStretch(1)
 
         self.setStyleSheet(
@@ -327,6 +360,19 @@ class SettingsWorkspace(QWidget):
         self._set_combo_value(self.frequency_combo, frequency)
         retention = self._db.get_setting(self.BACKUP_RETENTION_KEY, default="7")
         self.retention_spin.setValue(max(1, int(retention) if retention.isdigit() else 7))
+        minimize_on_focus_lost = self._db.get_setting(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, default="1") == "1"
+        autostart_windows = self._db.get_setting(self.APP_AUTOSTART_WINDOWS_KEY, default="0") == "1"
+        single_instance = self._db.get_setting(self.APP_SINGLE_INSTANCE_KEY, default="1") == "1"
+        self.minimize_on_focus_lost_checkbox.blockSignals(True)
+        self.autostart_windows_checkbox.blockSignals(True)
+        self.single_instance_checkbox.blockSignals(True)
+        self.minimize_on_focus_lost_checkbox.setChecked(minimize_on_focus_lost)
+        self.autostart_windows_checkbox.setChecked(autostart_windows)
+        self.single_instance_checkbox.setChecked(single_instance)
+        self.minimize_on_focus_lost_checkbox.blockSignals(False)
+        self.autostart_windows_checkbox.blockSignals(False)
+        self.single_instance_checkbox.blockSignals(False)
+        self._apply_windows_autostart(autostart_windows)
         self._refresh_backup_list()
         self._maybe_run_auto_backup()
         self._update_backup_status()
@@ -383,6 +429,48 @@ class SettingsWorkspace(QWidget):
             self._db.set_setting(self.BACKUP_FREQUENCY_KEY, frequency)
         self._db.set_setting(self.BACKUP_RETENTION_KEY, str(self.retention_spin.value()))
         self._update_backup_status()
+
+    def _on_behavior_option_changed(self) -> None:
+        minimize_on_focus_lost = "1" if self.minimize_on_focus_lost_checkbox.isChecked() else "0"
+        autostart_windows = "1" if self.autostart_windows_checkbox.isChecked() else "0"
+        single_instance = "1" if self.single_instance_checkbox.isChecked() else "0"
+        self._db.set_setting(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, minimize_on_focus_lost)
+        self._db.set_setting(self.APP_AUTOSTART_WINDOWS_KEY, autostart_windows)
+        self._db.set_setting(self.APP_SINGLE_INSTANCE_KEY, single_instance)
+        self._apply_windows_autostart(self.autostart_windows_checkbox.isChecked())
+        self.setting_changed.emit(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, minimize_on_focus_lost)
+        self.setting_changed.emit(self.APP_AUTOSTART_WINDOWS_KEY, autostart_windows)
+        self.setting_changed.emit(self.APP_SINGLE_INSTANCE_KEY, single_instance)
+
+    def _autostart_command(self) -> str:
+        if getattr(sys, "frozen", False):
+            return f"\"{Path(sys.executable)}\""
+        main_py = Path(__file__).resolve().parents[2] / "main.py"
+        return f"\"{Path(sys.executable)}\" \"{main_py}\""
+
+    def _apply_windows_autostart(self, enabled: bool) -> None:
+        if sys.platform != "win32":
+            return
+        try:
+            import winreg
+            run_key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0,
+                winreg.KEY_SET_VALUE,
+            )
+            try:
+                if enabled:
+                    winreg.SetValueEx(run_key, "MindNavigatorV2", 0, winreg.REG_SZ, self._autostart_command())
+                else:
+                    try:
+                        winreg.DeleteValue(run_key, "MindNavigatorV2")
+                    except FileNotFoundError:
+                        pass
+            finally:
+                winreg.CloseKey(run_key)
+        except OSError:
+            pass
 
     def _set_combo_value(self, combo: QComboBox, value: str) -> None:
         for index in range(combo.count()):
@@ -637,3 +725,5 @@ class SettingsWorkspace(QWidget):
             delta = 30
         if not last_run or (now - last_run).days >= delta:
             self._create_backup(silent=True)
+
+

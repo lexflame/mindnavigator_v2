@@ -531,7 +531,7 @@ class PurchasesWorkspace(BaseWorkspace):
 
     def _open_add_url_dialog(self) -> None:
         dialog = PurchaseAddByUrlDialog(self._db, self)
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         result = dialog.result_payload()
         if result is None:
@@ -549,7 +549,7 @@ class PurchasesWorkspace(BaseWorkspace):
                 item = self.items_table.item(index.row(), 0)
                 if item is None:
                     continue
-                item_id = item.data(Qt.UserRole)
+                item_id = item.data(Qt.ItemDataRole.UserRole)
                 if item_id is not None:
                     item_ids.append(int(item_id))
             if len(item_ids) == 2:
@@ -562,7 +562,7 @@ class PurchasesWorkspace(BaseWorkspace):
                 item = self.items_table.item(index.row(), 0)
                 if item is None:
                     continue
-                item_id = item.data(Qt.UserRole)
+                item_id = item.data(Qt.ItemDataRole.UserRole)
                 if item_id is None:
                     continue
                 item_row = self._db.get_shop_item(int(item_id))
@@ -586,7 +586,7 @@ class PurchasesWorkspace(BaseWorkspace):
             self._set_status("Товар не найден")
             return
         dialog = PurchaseEditDialog(self._db, item, parent=self)
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         payload = dialog.payload()
         self._db.update_shop_item(
@@ -611,7 +611,7 @@ class PurchasesWorkspace(BaseWorkspace):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         self._db.delete_shop_item(self._current_item_id)
         self._current_item_id = None
@@ -626,7 +626,7 @@ class PurchasesWorkspace(BaseWorkspace):
         item = self.items_table.item(row, 0)
         if item is None:
             return
-        item_id = item.data(Qt.UserRole)
+        item_id = item.data(Qt.ItemDataRole.UserRole)
         if item_id is None:
             return
         if not self.items_table.selectionModel().isRowSelected(row, self.items_table.rootIndex()):
@@ -733,7 +733,7 @@ class PurchasesWorkspace(BaseWorkspace):
         for col, value in enumerate([title, category, best_price, sources, freshness]):
             item = QTableWidgetItem(value)
             if col == 0 and item_id is not None:
-                item.setData(Qt.UserRole, item_id)
+                item.setData(Qt.ItemDataRole.UserRole, item_id)
             if col == 3 and value == "0":
                 item.setForeground(QColor("#ff6b6b"))
             if col == 4:
@@ -747,7 +747,7 @@ class PurchasesWorkspace(BaseWorkspace):
     def refresh(self) -> None:
         self.items_table.setSortingEnabled(False)
         current = self.category_tree.currentItem()
-        category_id = current.data(0, Qt.UserRole) if current is not None else None
+        category_id = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
         items = self._db.fetch_shop_items_with_stats(
             search_text=self.search_input.text(),
             category_id=category_id,
@@ -780,14 +780,14 @@ class PurchasesWorkspace(BaseWorkspace):
             item = self.items_table.item(row, 0)
             if item is None:
                 continue
-            if item.data(Qt.UserRole) == item_id:
+            if item.data(Qt.ItemDataRole.UserRole) == item_id:
                 self.items_table.selectRow(row)
                 return
 
     def _load_categories(self) -> None:
         self.category_tree.clear()
         root_all = QTreeWidgetItem(["Все товары"])
-        root_all.setData(0, Qt.UserRole, None)
+        root_all.setData(0, Qt.ItemDataRole.UserRole, None)
         self.category_tree.addTopLevelItem(root_all)
         categories = self._db.fetch_shop_categories()
         by_parent: dict[Optional[int], list] = {}
@@ -797,13 +797,13 @@ class PurchasesWorkspace(BaseWorkspace):
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
             for cat in sorted(by_parent.get(parent_id, []), key=lambda c: c.title.lower()):
                 item = QTreeWidgetItem([cat.title])
-                item.setData(0, Qt.UserRole, cat.id)
+                item.setData(0, Qt.ItemDataRole.UserRole, cat.id)
                 parent_item.addChild(item)
                 add_children(item, cat.id)
 
         for cat in sorted(by_parent.get(None, []), key=lambda c: c.title.lower()):
             item = QTreeWidgetItem([cat.title])
-            item.setData(0, Qt.UserRole, cat.id)
+            item.setData(0, Qt.ItemDataRole.UserRole, cat.id)
             self.category_tree.addTopLevelItem(item)
             add_children(item, cat.id)
         self.category_tree.expandAll()
@@ -819,7 +819,7 @@ class PurchasesWorkspace(BaseWorkspace):
         parent_id = None
         current = self.category_tree.currentItem()
         if current is not None:
-            parent_id = current.data(0, Qt.UserRole)
+            parent_id = current.data(0, Qt.ItemDataRole.UserRole)
         self._db.create_shop_category(title, parent_id=parent_id)
         self._load_categories()
 
@@ -827,7 +827,7 @@ class PurchasesWorkspace(BaseWorkspace):
         current = self.category_tree.currentItem()
         if current is None:
             return
-        category_id = current.data(0, Qt.UserRole)
+        category_id = current.data(0, Qt.ItemDataRole.UserRole)
         if category_id is None:
             self._set_status("Нельзя переименовать корневую категорию")
             return
@@ -844,7 +844,7 @@ class PurchasesWorkspace(BaseWorkspace):
         current = self.category_tree.currentItem()
         if current is None:
             return
-        category_id = current.data(0, Qt.UserRole)
+        category_id = current.data(0, Qt.ItemDataRole.UserRole)
         if category_id is None:
             self._set_status("Нельзя удалить корневую категорию")
             return
@@ -862,7 +862,7 @@ class PurchasesWorkspace(BaseWorkspace):
         current = self.category_tree.currentItem()
         if current is None:
             return
-        category_id = current.data(0, Qt.UserRole)
+        category_id = current.data(0, Qt.ItemDataRole.UserRole)
         if category_id is None:
             self._set_status("Фильтр: все товары")
         else:
@@ -898,7 +898,7 @@ class PurchasesWorkspace(BaseWorkspace):
             for index in selected:
                 item = self.items_table.item(index.row(), 0)
                 if item is not None:
-                    item_id = item.data(Qt.UserRole)
+                    item_id = item.data(Qt.ItemDataRole.UserRole)
                     if item_id is not None:
                         item_ids.append(int(item_id))
         else:
@@ -939,7 +939,7 @@ class PurchasesWorkspace(BaseWorkspace):
         if item is None:
             self._clear_details()
             return
-        item_id = item.data(Qt.UserRole)
+        item_id = item.data(Qt.ItemDataRole.UserRole)
         if item_id is None:
             self._clear_details()
             return
@@ -991,7 +991,7 @@ class PurchasesWorkspace(BaseWorkspace):
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if col == 0:
-                    item.setData(Qt.UserRole, source.id)
+                    item.setData(Qt.ItemDataRole.UserRole, source.id)
                 self.sources_table.setItem(row, col, item)
         if sources:
             self.sources_table.selectRow(0)
@@ -1010,7 +1010,7 @@ class PurchasesWorkspace(BaseWorkspace):
             self._current_source_id = None
             self._load_properties(self._current_item_id, None)
             return
-        source_id = item.data(Qt.UserRole)
+        source_id = item.data(Qt.ItemDataRole.UserRole)
         self._current_source_id = int(source_id) if source_id is not None else None
         self._load_properties(self._current_item_id, self._current_source_id)
         self._update_price_history(self._current_source_id)
@@ -1043,7 +1043,7 @@ class PurchasesWorkspace(BaseWorkspace):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         self._db.delete_shop_source(self._current_source_id)
         if self._current_item_id is not None:
@@ -1115,7 +1115,7 @@ class PurchasesWorkspace(BaseWorkspace):
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if col == 0:
-                    item.setData(Qt.UserRole, prop.id)
+                    item.setData(Qt.ItemDataRole.UserRole, prop.id)
                 self.item_props_table.setItem(row, col, item)
 
         if source_id is None:
@@ -1129,7 +1129,7 @@ class PurchasesWorkspace(BaseWorkspace):
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if col == 0:
-                    item.setData(Qt.UserRole, prop.id)
+                    item.setData(Qt.ItemDataRole.UserRole, prop.id)
                 self.source_props_table.setItem(row, col, item)
 
     def _normalize_key(self, name: str) -> str:
@@ -1193,7 +1193,7 @@ class PurchasesWorkspace(BaseWorkspace):
         item = self.item_props_table.item(row, 0)
         if item is None:
             return
-        prop_id = item.data(Qt.UserRole)
+        prop_id = item.data(Qt.ItemDataRole.UserRole)
         if prop_id is None:
             return
         self._db.delete_shop_item_property(int(prop_id))

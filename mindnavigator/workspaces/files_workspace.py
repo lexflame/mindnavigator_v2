@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 import mimetypes
@@ -194,15 +194,15 @@ class ImagePreviewDialog(QDialog):
 
         self.path_label = QLabel()
         self.path_label.setObjectName("FilesImagePath")
-        self.path_label.setAlignment(Qt.AlignCenter)
+        self.path_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.image_label = QLabel()
         self.image_label.setObjectName("FilesImagePreview")
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.description_label = QLabel()
         self.description_label.setObjectName("FilesImageDescription")
-        self.description_label.setAlignment(Qt.AlignCenter)
+        self.description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.description_label.setWordWrap(True)
 
         layout.addWidget(self.path_label)
@@ -368,9 +368,9 @@ class FileWorkspace(QWidget):
         mode_layout.addWidget(self.log_mode_button)
         mode_layout.addWidget(self.nav_mode_button)
 
-        header.addWidget(self.sync_button, 0, Qt.AlignLeft)
-        header.addWidget(self.reindex_button, 0, Qt.AlignLeft)
-        header.addWidget(self.status_label, 1, Qt.AlignLeft)
+        header.addWidget(self.sync_button, 0, Qt.AlignmentFlag.AlignLeft)
+        header.addWidget(self.reindex_button, 0, Qt.AlignmentFlag.AlignLeft)
+        header.addWidget(self.status_label, 1, Qt.AlignmentFlag.AlignLeft)
         header.addStretch(1)
         header.addLayout(mode_layout)
 
@@ -406,7 +406,7 @@ class FileWorkspace(QWidget):
         empty_layout.setContentsMargins(0, 0, 0, 0)
         self.empty_label = QLabel("В базе пока нет данных о файлах. Запустите синхронизацию.")
         self.empty_label.setObjectName("FilesNavEmpty")
-        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(self.empty_label, 1)
 
         content_page = QWidget()
@@ -646,7 +646,7 @@ class FileWorkspace(QWidget):
             self.mode_stack.setCurrentIndex(1)
             self._default_mode_applied = True
         root_item = QTreeWidgetItem(["Облако"])
-        root_item.setData(0, Qt.UserRole, "")
+        root_item.setData(0, Qt.ItemDataRole.UserRole, "")
         self.folder_tree.addTopLevelItem(root_item)
         root_item.setIcon(0, self._icon_folder)
         self._tree_items[""] = root_item
@@ -660,7 +660,7 @@ class FileWorkspace(QWidget):
         for child_path in folders:
             name = child_path.split("/")[-1]
             child_item = QTreeWidgetItem([name])
-            child_item.setData(0, Qt.UserRole, child_path)
+            child_item.setData(0, Qt.ItemDataRole.UserRole, child_path)
             parent_item.addChild(child_item)
             child_item.setIcon(0, self._icon_folder)
             self._tree_items[child_path] = child_item
@@ -669,7 +669,7 @@ class FileWorkspace(QWidget):
     def _on_tree_selection(self, current: Optional[QTreeWidgetItem], _previous: Optional[QTreeWidgetItem]) -> None:
         if not current:
             return
-        folder_path = current.data(0, Qt.UserRole) or ""
+        folder_path = current.data(0, Qt.ItemDataRole.UserRole) or ""
         self._set_current_folder(folder_path)
 
     def _set_current_folder(self, folder_path: str) -> None:
@@ -691,7 +691,7 @@ class FileWorkspace(QWidget):
         for child_path in folders:
             name = child_path.split("/")[-1]
             item = QListWidgetItem()
-            item.setData(Qt.UserRole, ("folder", child_path))
+            item.setData(Qt.ItemDataRole.UserRole, ("folder", child_path))
             item.setToolTip(name)
             collection_id = None
             if cloud_root_path:
@@ -704,7 +704,7 @@ class FileWorkspace(QWidget):
             size = self._format_size(file_item.size)
             label = f"{file_item.name}\n{size} • {description}"
             item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, ("file", file_item.rel_path))
+            item.setData(Qt.ItemDataRole.UserRole, ("file", file_item.rel_path))
             item.setIcon(self._file_icon_for(file_item, cloud_root_path))
             item.setToolTip(file_item.rel_path)
             self.file_grid.addItem(item)
@@ -751,7 +751,7 @@ class FileWorkspace(QWidget):
         return f"{size / (1024 * 1024 * 1024):.1f} ГБ"
 
     def _on_file_grid_double_clicked(self, item: QListWidgetItem) -> None:
-        payload = item.data(Qt.UserRole)
+        payload = item.data(Qt.ItemDataRole.UserRole)
         if not payload:
             return
         if payload[0] == "folder":
@@ -768,7 +768,7 @@ class FileWorkspace(QWidget):
         item = self.file_grid.itemAt(position)
         if item is None:
             return
-        payload = item.data(Qt.UserRole)
+        payload = item.data(Qt.ItemDataRole.UserRole)
         if not payload:
             return
 
@@ -838,12 +838,12 @@ class FileWorkspace(QWidget):
             self._db.fetch_collection_categories(),
             parent=self,
         )
-        if exec_with_overlay(category_dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(category_dialog, self) != QDialog.DialogCode.Accepted:
             return
         category_id = category_dialog.selected_category_id()
 
         import_dialog = CollectionImportDialog(default_title=folder_path.name or "Коллекция", parent=self)
-        if exec_with_overlay(import_dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(import_dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = import_dialog.values()
         title = values.get("title") or folder_path.name or "Коллекция"
@@ -863,7 +863,7 @@ class FileWorkspace(QWidget):
             return
 
         importer = FolderCollectionImporter()
-        files, list_errors = importer.list_files(folder_path, include_subfolders=include_subfolders)
+        files, list_errors = list_files(folder_path, include_subfolders=include_subfolders)
         if not self._confirm_large_folder(len(files)):
             return
         items, errors = self._scan_with_progress(importer, folder_path, files)
@@ -914,7 +914,7 @@ class FileWorkspace(QWidget):
             confirm_text="Продолжить",
             cancel_text="Отмена",
         )
-        return show_dialog_standard(dialog, self) == QDialog.Accepted
+        return show_dialog_standard(dialog, self) == QDialog.DialogCode.Accepted
 
     def _scan_with_progress(
         self,
@@ -952,16 +952,16 @@ class FileWorkspace(QWidget):
         log_path = Path.home() / ".mindnavigator" / "collection_import_errors.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(f"\n[{datetime.utcnow().isoformat(timespec='seconds')}] {context}\n")
+            handle.write(f"\n[{datetime.now(timezone.utc).isoformat(timespec='seconds')}] {context}\n")
             for line in errors:
                 handle.write(f"{line}\n")
         box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
+        box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle("FileTransfer")
         box.setText(f"Импорт завершен с ошибками ({len(errors)}).")
         box.setInformativeText(f"Лог: {log_path}")
-        open_btn = box.addButton("Открыть лог", QMessageBox.ActionRole)
-        box.addButton("Ок", QMessageBox.AcceptRole)
+        open_btn = box.addButton("Открыть лог", QMessageBox.ButtonRole.ActionRole)
+        box.addButton("Ок", QMessageBox.ButtonRole.AcceptRole)
         box.exec()
         if box.clickedButton() == open_btn:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path)))
@@ -1011,7 +1011,7 @@ class FileWorkspace(QWidget):
                 continue
             try:
                 norm = str(Path(path).resolve())
-            except Exception:
+            except (OSError, RuntimeError):
                 norm = path
             mapping[norm] = int(row.get("id") or 0)
         return mapping
@@ -1028,11 +1028,11 @@ class FileWorkspace(QWidget):
         grid.setSpacing(0)
 
         icon_label = QLabel()
-        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setFixedSize(self.file_grid.iconSize())
         icon_pixmap = self._icon_folder.pixmap(self.file_grid.iconSize())
         icon_label.setPixmap(icon_pixmap)
-        grid.addWidget(icon_label, 0, 0, Qt.AlignCenter)
+        grid.addWidget(icon_label, 0, 0, Qt.AlignmentFlag.AlignCenter)
 
         if collection_id:
             dot = QToolButton()
@@ -1052,10 +1052,10 @@ class FileWorkspace(QWidget):
                 """
             )
             dot.clicked.connect(lambda _=None, cid=collection_id: self._open_collection(cid))
-            grid.addWidget(dot, 0, 0, Qt.AlignRight | Qt.AlignBottom)
+            grid.addWidget(dot, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         name_label = QLabel(name)
-        name_label.setAlignment(Qt.AlignCenter)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setWordWrap(True)
         name_label.setStyleSheet("color: #d6d6d6;")
 

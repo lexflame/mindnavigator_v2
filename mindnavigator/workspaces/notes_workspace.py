@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Any
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QTimer, QObject, Signal
@@ -64,16 +64,16 @@ class NoteWorkspaceState:
 
 
 class NoteRoles:
-    RowType = Qt.UserRole + 1
-    NoteId = Qt.UserRole + 2
-    Title = Qt.UserRole + 3
-    Preview = Qt.UserRole + 4
-    Tags = Qt.UserRole + 5
-    Updated = Qt.UserRole + 6
-    Project = Qt.UserRole + 7
-    Favorite = Qt.UserRole + 8
-    Attachment = Qt.UserRole + 9
-    Locked = Qt.UserRole + 10
+    RowType = Qt.ItemDataRole.UserRole + 1
+    NoteId = Qt.ItemDataRole.UserRole + 2
+    Title = Qt.ItemDataRole.UserRole + 3
+    Preview = Qt.ItemDataRole.UserRole + 4
+    Tags = Qt.ItemDataRole.UserRole + 5
+    Updated = Qt.ItemDataRole.UserRole + 6
+    Project = Qt.ItemDataRole.UserRole + 7
+    Favorite = Qt.ItemDataRole.UserRole + 8
+    Attachment = Qt.ItemDataRole.UserRole + 9
+    Locked = Qt.ItemDataRole.UserRole + 10
 
 
 class NotesModel(QAbstractListModel):
@@ -114,7 +114,7 @@ class NotesModel(QAbstractListModel):
             return 6
         return len(self._rows)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         if not index.isValid():
             return None
         if self._loading:
@@ -144,7 +144,7 @@ class NotesModel(QAbstractListModel):
             return note.attachment
         if role == NoteRoles.Locked:
             return note.locked
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return note.title
         return None
 
@@ -388,7 +388,7 @@ class NoteCardDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index):
         row_type = index.data(NoteRoles.RowType)
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = option.rect.adjusted(6, 6, -6, -6)
         if row_type == "skeleton":
@@ -396,8 +396,8 @@ class NoteCardDelegate(QStyledItemDelegate):
             painter.restore()
             return
 
-        is_selected = option.state & QStyle.State_Selected
-        is_hover = option.state & QStyle.State_MouseOver
+        is_selected = option.state & QStyle.StateFlag.State_Selected
+        is_hover = option.state & QStyle.StateFlag.State_MouseOver
 
         bg = QColor("#1b1d22")
         border = QColor("#2b2f36")
@@ -426,19 +426,19 @@ class NoteCardDelegate(QStyledItemDelegate):
         title_font.setPointSize(10)
         title_font.setBold(True)
         painter.setFont(title_font)
-        painter.drawText(title_rect, Qt.TextSingleLine, title)
+        painter.drawText(title_rect, Qt.TextFlag.TextSingleLine, title)
 
         painter.setPen(QColor("#a0a3a8"))
         preview_font = QFont()
         preview_font.setPointSize(9)
         painter.setFont(preview_font)
-        painter.drawText(preview_rect, Qt.TextWordWrap, preview)
+        painter.drawText(preview_rect, Qt.TextFlag.TextWordWrap, preview)
 
         painter.setPen(QColor("#7d828a"))
         tag_font = QFont()
         tag_font.setPointSize(8)
         painter.setFont(tag_font)
-        painter.drawText(tags_rect, Qt.TextSingleLine, "  ".join(f"#{t}" for t in tags[:3]))
+        painter.drawText(tags_rect, Qt.TextFlag.TextSingleLine, "  ".join(f"#{t}" for t in tags[:3]))
 
         painter.setPen(QColor("#6b7078"))
         meta_font = QFont()
@@ -447,7 +447,7 @@ class NoteCardDelegate(QStyledItemDelegate):
         meta_text = project
         if isinstance(updated, datetime):
             meta_text = f"{project} · {updated:%d %b %H:%M}"
-        painter.drawText(meta_rect, Qt.TextSingleLine, meta_text)
+        painter.drawText(meta_rect, Qt.TextFlag.TextSingleLine, meta_text)
 
         icon_y = rect.top() + 12
         icon_x = rect.right() - 18
@@ -504,17 +504,17 @@ class NoteWorkspace(QWidget):
         self.btn_toggle_left = QToolButton()
         self.btn_toggle_left.setIcon(qta.icon("fa5s.columns", color="#cfcfcf"))
         self.btn_toggle_left.setAutoRaise(True)
-        self.btn_toggle_left.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle_left.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self.btn_toggle_right = QToolButton()
         self.btn_toggle_right.setIcon(qta.icon("fa5s.align-right", color="#cfcfcf"))
         self.btn_toggle_right.setAutoRaise(True)
-        self.btn_toggle_right.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle_right.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self.btn_zen = QToolButton()
         self.btn_zen.setIcon(qta.icon("fa5s.eye", color="#cfcfcf"))
         self.btn_zen.setAutoRaise(True)
-        self.btn_zen.setCursor(Qt.PointingHandCursor)
+        self.btn_zen.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_zen.setCheckable(True)
 
         header_layout.addWidget(self.btn_toggle_left)
@@ -531,7 +531,7 @@ class NoteWorkspace(QWidget):
         self.btn_new_note.setIcon(qta.icon("fa5s.plus", color="#ffffff"))
         self.btn_new_note.setText("Новая")
         self.btn_new_note.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.btn_new_note.setCursor(Qt.PointingHandCursor)
+        self.btn_new_note.setCursor(Qt.CursorShape.PointingHandCursor)
 
         header_layout.addWidget(self.btn_new_note)
         root.addWidget(header)
@@ -650,7 +650,7 @@ class NoteWorkspace(QWidget):
             btn = QToolButton()
             btn.setText(text)
             btn.setCheckable(True)
-            btn.setCursor(Qt.PointingHandCursor)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setAutoRaise(True)
             btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
             self.filters_group.addButton(btn)
@@ -705,7 +705,7 @@ class NoteWorkspace(QWidget):
         quick_layout.addStretch(1)
         quick_btn = QToolButton()
         quick_btn.setIcon(qta.icon("fa5s.plus", color="#cfcfcf"))
-        quick_btn.setCursor(Qt.PointingHandCursor)
+        quick_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         quick_btn.setAutoRaise(True)
         self.quick_new_btn = quick_btn
         quick_layout.addWidget(quick_btn)
@@ -753,7 +753,7 @@ class NoteWorkspace(QWidget):
         self.empty_state = QFrame()
         empty_layout = QVBoxLayout(self.empty_state)
         empty_layout.setContentsMargins(0, 0, 0, 0)
-        empty_layout.setAlignment(Qt.AlignCenter)
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_title = QLabel("Нет заметок")
         empty_title.setStyleSheet("color:#c7cbd3; font-size:14px; font-weight:600;")
         empty_desc = QLabel(
@@ -761,7 +761,7 @@ class NoteWorkspace(QWidget):
         )
         empty_desc.setStyleSheet("color:#7b7f86; font-size:11px;")
         empty_desc.setWordWrap(True)
-        empty_desc.setAlignment(Qt.AlignCenter)
+        empty_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_desc.setMaximumWidth(220)
         empty_layout.addWidget(empty_title)
         empty_layout.addWidget(empty_desc)
@@ -782,7 +782,7 @@ class NoteWorkspace(QWidget):
 
         empty = QFrame()
         empty_layout = QVBoxLayout(empty)
-        empty_layout.setAlignment(Qt.AlignCenter)
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_title = QLabel("Выберите заметку")
         empty_title.setStyleSheet("color:#c7cbd3; font-size:14px; font-weight:600;")
         empty_hint = QLabel(
@@ -790,7 +790,7 @@ class NoteWorkspace(QWidget):
         )
         empty_hint.setStyleSheet("color:#7b7f86; font-size:11px;")
         empty_hint.setWordWrap(True)
-        empty_hint.setAlignment(Qt.AlignCenter)
+        empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_hint.setMaximumWidth(260)
         empty_layout.addWidget(empty_title)
         empty_layout.addWidget(empty_hint)

@@ -117,11 +117,13 @@ class MainWindow(QMainWindow):
         self._map_fullscreen_restore: dict[str, bool] = {}
         self._task_reminder_timer: QTimer | None = None
         self._task_remind_next_at: dict[int, datetime] = {}
+        self._minimize_on_focus_lost = True
 
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
         self._wire_modes()
         self._init_tray()
+        self._load_behavior_settings()
         self._init_task_reminders()
         self._init_hotkeys()
         self._register_system_restore_hotkey()
@@ -132,6 +134,14 @@ class MainWindow(QMainWindow):
 
         # Выставляем стартовый режим.
         self.set_mode(self.MODE_TASKS)
+
+    def _load_behavior_settings(self) -> None:
+        value = get_database().get_setting("app.minimize_on_focus_lost", "1")
+        self._minimize_on_focus_lost = value == "1"
+
+    def _on_setting_changed(self, key: str, value: str) -> None:
+        if key == "app.minimize_on_focus_lost":
+            self._minimize_on_focus_lost = value == "1"
 
     def _register_system_restore_hotkey(self) -> None:
         self._system_restore_hotkey_registered = False
@@ -459,6 +469,7 @@ class MainWindow(QMainWindow):
         self.page_files = FileWorkspace()
         self.page_objects = ObjectWorkspace()
         self.page_settings = SettingsWorkspace()
+        self.page_settings.setting_changed.connect(self._on_setting_changed)
 
         # Регистрируем страницы и сохраняем их индексы.
         self._page_index = {
@@ -754,6 +765,7 @@ class MainWindow(QMainWindow):
             app_inactive = app is None or app.applicationState() != Qt.ApplicationActive
             if (
                 app_inactive
+                and self._minimize_on_focus_lost
                 and self._tray_icon is not None
                 and self.isVisible()
                 and not self.isHidden()

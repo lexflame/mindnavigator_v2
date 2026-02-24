@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import qtawesome as qta
 from PySide6.QtCore import (
@@ -109,13 +109,13 @@ class MapRow:
 
 
 class MapRoles:
-    Id = Qt.UserRole + 1
-    Title = Qt.UserRole + 2
-    Description = Qt.UserRole + 3
-    Project = Qt.UserRole + 4
-    TilesPath = Qt.UserRole + 5
-    TilesHeight = Qt.UserRole + 6
-    TilesWidth = Qt.UserRole + 7
+    Id = Qt.ItemDataRole.UserRole + 1
+    Title = Qt.ItemDataRole.UserRole + 2
+    Description = Qt.ItemDataRole.UserRole + 3
+    Project = Qt.ItemDataRole.UserRole + 4
+    TilesPath = Qt.ItemDataRole.UserRole + 5
+    TilesHeight = Qt.ItemDataRole.UserRole + 6
+    TilesWidth = Qt.ItemDataRole.UserRole + 7
 
 
 class MapsModel(QAbstractListModel):
@@ -155,7 +155,7 @@ class MapsModel(QAbstractListModel):
             return 0
         return len(self._items)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         # Возвращаем данные по ролям для списка.
         if not index.isValid():
             return None
@@ -174,7 +174,7 @@ class MapsModel(QAbstractListModel):
             return item.tiles_h
         if role == MapRoles.TilesWidth:
             return item.tiles_w
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
 
@@ -325,10 +325,10 @@ class MapsItemDelegate(QStyledItemDelegate):
 
         title_metrics = QFontMetrics(self._font_title)
         desc_metrics = QFontMetrics(self._font_desc)
-        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, "X").height()
+        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, "X").height()
         desc_height = 0
         if desc:
-            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, desc).height()
+            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, desc).height()
 
         total_height = title_height + desc_height + 96
         return QSize(option.rect.width(), max(self.ROW_H_MIN, total_height))
@@ -336,11 +336,11 @@ class MapsItemDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index: QModelIndex):
         # Основная отрисовка карточки карты.
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         r = option.rect
         row_color = self.C_ROW_ALT if index.row() % 2 else self.C_ROW
-        if option.state & QStyle.State_Selected:
+        if option.state & QStyle.StateFlag.State_Selected:
             row_color = QColor("#34373e")
 
         painter.fillRect(r, self.C_BG)
@@ -357,17 +357,17 @@ class MapsItemDelegate(QStyledItemDelegate):
         tiles_w = index.data(MapRoles.TilesWidth) or 0
 
         icon_rect = layout["icon"]
-        self._icon_map.paint(painter, icon_rect, Qt.AlignCenter)
+        self._icon_map.paint(painter, icon_rect, Qt.AlignmentFlag.AlignCenter)
 
         # Рисуем заголовок и описание.
         painter.setPen(self.C_TEXT)
         painter.setFont(self._font_title)
-        painter.drawText(layout["title"], Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, title)
+        painter.drawText(layout["title"], Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, title)
 
         if desc:
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_desc)
-            painter.drawText(layout["desc"], Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, desc)
+            painter.drawText(layout["desc"], Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, desc)
 
         # Дополнительные блоки и кнопки.
         self._draw_pill(painter, layout["project"], project)
@@ -415,7 +415,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(rect, 6, 6)
         painter.setPen(self.C_TEXT)
         painter.setFont(self._font_pill)
-        painter.drawText(rect.adjusted(8, 0, -8, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+        painter.drawText(rect.adjusted(8, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
         painter.restore()
 
     def _draw_button(self, painter: QPainter, rect: QRect, text: str) -> None:
@@ -426,7 +426,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(rect, 6, 6)
         painter.setPen(self.C_BTN_TEXT)
         painter.setFont(self._font_button)
-        painter.drawText(rect.adjusted(8, 0, -8, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+        painter.drawText(rect.adjusted(8, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
         painter.restore()
 
 
@@ -476,8 +476,8 @@ class MapEditDialog(QDialog):
 
         # Форма с полями карты.
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(12)
 
@@ -498,7 +498,7 @@ class MapEditDialog(QDialog):
 
         self.tiles_path_btn = QToolButton()
         self.tiles_path_btn.setText("…")
-        self.tiles_path_btn.setCursor(Qt.PointingHandCursor)
+        self.tiles_path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tiles_path_btn.clicked.connect(self._on_pick_tiles_path)
 
         tiles_path_row = QFrame()
@@ -537,7 +537,9 @@ class MapEditDialog(QDialog):
         layout.addLayout(form)
 
         # Кнопки сохранения/отмены.
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -715,7 +717,7 @@ class MapImagePreviewDialog(QDialog):
         # Виджет предпросмотра.
         self.image_label = QLabel()
         self.image_label.setObjectName("MapImagePreviewLabel")
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.image_label, 1)
 
         # Стили диалога.
@@ -824,8 +826,8 @@ class OverlayEditDialog(QDialog):
         layout.setSpacing(12)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
 
@@ -858,7 +860,9 @@ class OverlayEditDialog(QDialog):
         form.addRow("Цвет", color_row)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1207,7 +1211,7 @@ class MapCanvas(QWidget):
             add_row("Хэш", item.hash_value or "—", wrap=True)
 
         layout.addLayout(form)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
@@ -1295,7 +1299,7 @@ class MapCanvas(QWidget):
     def paintEvent(self, event):
         # Отрисовка содержимого канвы.
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         painter.fillRect(self.rect(), QColor("#1a1c20"))
 
@@ -1820,7 +1824,7 @@ class MapCanvas(QWidget):
             self._open_context_menu(event.pos())
             return
 
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
                 self._append_overlay_point(self._map_to_world(event.position()))
                 return
@@ -1984,7 +1988,7 @@ class MapCanvas(QWidget):
 
     def mouseReleaseEvent(self, event):
         # Сбрасываем состояния после отпускания кнопки мыши.
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._panning = False
             self._dragging_marker_id = None
             self._active_resize_handle = None
@@ -1992,7 +1996,7 @@ class MapCanvas(QWidget):
 
     def mouseDoubleClickEvent(self, event):
         # Двойной клик по маркеру — фокусируем и увеличиваем. В режимах рисования завершает контур.
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
                 self._append_overlay_point(self._map_to_world(event.position()))
                 self._finalize_overlay()
@@ -2122,7 +2126,7 @@ class MapCanvas(QWidget):
     def _edit_overlay(self, overlay: MapOverlay) -> None:
         # Редактируем параметры области/пути через отдельный диалог.
         dialog = OverlayEditDialog(overlay, self)
-        if dialog.exec() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         title, kind, color = dialog.values()
         self._set_overlay(
@@ -2238,7 +2242,7 @@ class MapCanvas(QWidget):
         )
 
         # Пример использования результата: dialog.result_marker(), dialog.image_path(), dialog.parent_path().
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             updated = dialog.result_marker()
             self._set_marker(updated)
             if dialog.resize_requested():
@@ -2291,7 +2295,7 @@ class MapCanvas(QWidget):
         header_layout.addItem(QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         edit_btn = QPushButton("Редактировать")
-        edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         edit_btn.clicked.connect(lambda _checked=False: (dialog.accept(), self._edit_marker(marker)))
 
         close_btn = QToolButton()
@@ -2320,7 +2324,7 @@ class MapCanvas(QWidget):
         preview_title.setObjectName("MapLabelSectionTitle")
         preview_label = QLabel("Нет изображения")
         preview_label.setObjectName("MapLabelPreview")
-        preview_label.setAlignment(Qt.AlignCenter)
+        preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_label.setFixedHeight(168)
         preview_size = QSize(left_panel.width() - 24, 168)
         preview_pixmap = self._load_marker_preview(marker, preview_size)
@@ -2337,7 +2341,7 @@ class MapCanvas(QWidget):
         marker_type_preview = QLabel()
         marker_type_preview.setObjectName("MapLabelMarkerPreview")
         marker_type_preview.setFixedSize(28, 28)
-        marker_type_preview.setAlignment(Qt.AlignCenter)
+        marker_type_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         marker_type_value = QLabel()
         marker_type_value.setObjectName("MapLabelValue")
         marker_type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -2399,8 +2403,8 @@ class MapCanvas(QWidget):
 
         main_form = QFormLayout()
         main_form.setSpacing(10)
-        main_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        main_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        main_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        main_form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         name_label = QLabel("Название")
         name_label.setObjectName("MapLabelFormLabel")
@@ -2429,7 +2433,7 @@ class MapCanvas(QWidget):
         links_layout.addWidget(links_title)
         links_form = QFormLayout()
         links_form.setSpacing(10)
-        links_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
+        links_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         def handle_link(link: str) -> None:
             # Обрабатываем клики по ссылкам привязок.
@@ -2727,7 +2731,7 @@ class MapCanvas(QWidget):
 
 
 class MarkerSearchModel(QAbstractListModel):
-    MarkerRole = Qt.UserRole + 1
+    MarkerRole = Qt.ItemDataRole.UserRole + 1
 
     def __init__(self, parent=None):
         # Инициализируем модель для поиска маркеров.
@@ -2741,12 +2745,12 @@ class MarkerSearchModel(QAbstractListModel):
             return 0
         return len(self._items)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         # Возвращаем строку отображения и сам маркер.
         if not index.isValid():
             return None
         marker = self._items[index.row()]
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             title = marker.name or "Метка"
             marker_type = marker.type or "—"
             return f"{title} · {marker_type} ({marker.x:.0f}, {marker.y:.0f})"
@@ -2805,7 +2809,7 @@ class MapEditorWorkspace(QWidget):
         toolbar_layout = QVBoxLayout(self.toolbar)
         toolbar_layout.setContentsMargins(6, 8, 6, 8)
         toolbar_layout.setSpacing(8)
-        toolbar_layout.setAlignment(Qt.AlignTop)
+        toolbar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
@@ -2817,7 +2821,7 @@ class MapEditorWorkspace(QWidget):
             btn.setIconSize(QSize(20, 20))
             btn.setCheckable(True)
             btn.setToolTip(tooltip)
-            btn.setCursor(Qt.PointingHandCursor)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             if tool is not None:
                 self.tool_group.addButton(btn)
                 btn.clicked.connect(lambda checked=False, t=tool: self._set_tool(t))
@@ -2915,7 +2919,7 @@ class MapEditorWorkspace(QWidget):
         self.info_preview_title.setObjectName("MapInfoSectionTitle")
         self.info_preview = QLabel("Нет изображения")
         self.info_preview.setObjectName("MapInfoPreview")
-        self.info_preview.setAlignment(Qt.AlignCenter)
+        self.info_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_preview.setFixedHeight(140)
 
         self.info_marker_type_title = QLabel("Тип метки")
@@ -2923,7 +2927,7 @@ class MapEditorWorkspace(QWidget):
         self.info_marker_type_preview = QLabel()
         self.info_marker_type_preview.setObjectName("MapInfoMarkerPreview")
         self.info_marker_type_preview.setFixedSize(28, 28)
-        self.info_marker_type_preview.setAlignment(Qt.AlignCenter)
+        self.info_marker_type_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_marker_type_value = QLabel("—")
         self.info_marker_type_value.setObjectName("MapInfoValue")
 
@@ -2958,7 +2962,7 @@ class MapEditorWorkspace(QWidget):
 
         main_form = QFormLayout()
         main_form.setSpacing(8)
-        main_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        main_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         self.info_name = QLabel("—")
         self.info_type = QLabel("—")
@@ -2997,7 +3001,7 @@ class MapEditorWorkspace(QWidget):
 
         links_form = QFormLayout()
         links_form.setSpacing(8)
-        links_form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
+        links_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         self.info_task = QLabel("—")
         self.info_project = QLabel("—")
@@ -3676,7 +3680,7 @@ class MapsListWorkspace(QWidget):
 
         self.btn_tiles_path = QToolButton()
         self.btn_tiles_path.setText("…")
-        self.btn_tiles_path.setCursor(Qt.PointingHandCursor)
+        self.btn_tiles_path.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_tiles_path.clicked.connect(self._on_pick_tiles_path)
 
         # Блок выбора размеров тайлов.
@@ -3707,7 +3711,7 @@ class MapsListWorkspace(QWidget):
 
         self.btn_add = QToolButton()
         self.btn_add.setText("Создать")
-        self.btn_add.setCursor(Qt.PointingHandCursor)
+        self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
 
         create_layout.addWidget(self.new_title, 1)
         create_layout.addWidget(self.new_desc, 1)
@@ -3734,7 +3738,7 @@ class MapsListWorkspace(QWidget):
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setAutoRaise(True)
             self.tabs_group.addButton(b)
             return b
@@ -3799,7 +3803,7 @@ class MapsListWorkspace(QWidget):
 
         self.btn_back = QToolButton()
         self.btn_back.setText("Назад к списку")
-        self.btn_back.setCursor(Qt.PointingHandCursor)
+        self.btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(list_page))
         self.map_title = QLabel("Редактор карты")
         self.map_title.setObjectName("MapEditorTitle")
@@ -3867,7 +3871,7 @@ class MapsListWorkspace(QWidget):
         self.loading_title.setObjectName("MapsLoadingTitle")
         self.loading_hint = QLabel("Подготавливаем тайлы и маркеры")
         self.loading_hint.setObjectName("MapsLoadingHint")
-        self.loading_hint.setAlignment(Qt.AlignCenter)
+        self.loading_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.loading_bar = QProgressBar()
         self.loading_bar.setObjectName("MapsLoadingBar")
@@ -3875,11 +3879,11 @@ class MapsListWorkspace(QWidget):
         self.loading_bar.setTextVisible(False)
         self.loading_bar.setFixedHeight(8)
 
-        overlay_card_layout.addWidget(self.loading_title, alignment=Qt.AlignCenter)
-        overlay_card_layout.addWidget(self.loading_hint, alignment=Qt.AlignCenter)
+        overlay_card_layout.addWidget(self.loading_title, alignment=Qt.AlignmentFlag.AlignCenter)
+        overlay_card_layout.addWidget(self.loading_hint, alignment=Qt.AlignmentFlag.AlignCenter)
         overlay_card_layout.addWidget(self.loading_bar)
 
-        overlay_layout.addWidget(overlay_card, alignment=Qt.AlignCenter)
+        overlay_layout.addWidget(overlay_card, alignment=Qt.AlignmentFlag.AlignCenter)
         overlay_layout.addStretch(1)
 
         # Стили рабочей области.
@@ -4132,7 +4136,7 @@ class MapsListWorkspace(QWidget):
             tiles_w=index.data(MapRoles.TilesWidth) or 0,
         )
         dialog = MapEditDialog(map_row, parent=self)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             values = dialog.values()
             self.model.update_map(
                 map_row.id,

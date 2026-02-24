@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -41,13 +41,13 @@ try:
     from PySide6.QtMultimediaWidgets import QVideoWidget  # type: ignore
 
     _MULTIMEDIA_AVAILABLE = True
-except Exception:
+except ImportError:
     QMediaPlayer = None
     QAudioOutput = None
     QVideoWidget = None
     _MULTIMEDIA_AVAILABLE = False
 
-from mindnavigator.collections_importer import FolderCollectionImporter
+from mindnavigator.collections_importer import FolderCollectionImporter, list_files, scan_files
 from mindnavigator.storage import (
     CollectionCategoryData,
     CollectionEntryData,
@@ -125,20 +125,21 @@ class _EntryThumbWorker(QRunnable):
                 image = QImage(self.source_path)
             if image.isNull():
                 return
-            scaled = image.scaled(self.size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            scaled = image.scaled(self.size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             x = max(0, (scaled.width() - self.size.width()) // 2)
             y = max(0, (scaled.height() - self.size.height()) // 2)
             cropped = scaled.copy(x, y, self.size.width(), self.size.height())
             self.thumb_path.parent.mkdir(parents=True, exist_ok=True)
-            cropped.save(str(self.thumb_path), "PNG")
+            cropped.save(str(self.thumb_path), b"PNG")
             self.signals.ready.emit(self.entry_id, str(self.thumb_path))
-        except Exception:
+        except (OSError, ValueError):
             return
 
     def _load_video_frame(self) -> QImage:
         try:
+            # noinspection PyPackageRequirements
             import cv2  # type: ignore
-        except Exception:
+        except ImportError:
             return QImage()
         cap = cv2.VideoCapture(self.source_path)
         if not cap.isOpened():
@@ -149,7 +150,7 @@ class _EntryThumbWorker(QRunnable):
             return QImage()
         try:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        except Exception:
+        except (cv2.error, ValueError, TypeError):
             return QImage()
         h, w, _ = frame.shape
         bytes_per_line = 3 * w
@@ -168,7 +169,7 @@ class CollectionMediaPreviewDialog(QDialog):
         self._index = max(0, min(start_index, len(entries) - 1))
         self.setWindowTitle("Просмотр")
         self.setMinimumSize(720, 520)
-        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.installEventFilter(self)
 
         layout = QVBoxLayout(self)
@@ -177,11 +178,11 @@ class CollectionMediaPreviewDialog(QDialog):
 
         self.title_label = QLabel("")
         self.title_label.setObjectName("CollectionPreviewTitle")
-        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
 
         self.content = QLabel()
-        self.content.setAlignment(Qt.AlignCenter)
+        self.content.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.content, 1)
 
         nav = QHBoxLayout()
@@ -220,17 +221,17 @@ class CollectionMediaPreviewDialog(QDialog):
 
     def _show_image(self, path: Path) -> None:
         if not path.is_file():
-            self.content.setText("Изображение недоступно.")
+            self._set_content_text("Изображение недоступно.")
             return
         pixmap = QPixmap(str(path))
         if pixmap.isNull():
-            self.content.setText("Изображение недоступно.")
+            self._set_content_text("Изображение недоступно.")
             return
         self._set_pixmap(pixmap)
 
     def _show_video(self, path: Path) -> None:
         if not path.is_file():
-            self.content.setText("Видео недоступно.")
+            self._set_content_text("Видео недоступно.")
             return
         if _MULTIMEDIA_AVAILABLE and QVideoWidget is not None and QMediaPlayer is not None:
             self._video_widget = QVideoWidget()
@@ -244,23 +245,23 @@ class CollectionMediaPreviewDialog(QDialog):
             self.content = self._video_widget
             self._player.play()
         else:
-            self.content.setText("Проигрывание видео недоступно.")
+            self._set_content_text("Проигрывание видео недоступно.")
 
     def _show_document(self, path: Path) -> None:
         if not path.is_file():
-            self.content.setText("Документ недоступен.")
+            self._set_content_text("Документ недоступен.")
             return
         try:
             from mindnavigator.workspaces.objects_workspace import extract_text_from_document
-        except Exception:
-            self.content.setText("Предпросмотр документа недоступен.")
+        except ImportError:
+            self._set_content_text("Предпросмотр документа недоступен.")
             return
         text = extract_text_from_document(path)
         if not text:
-            self.content.setText("Не удалось извлечь текст из документа.")
+            self._set_content_text("Не удалось извлечь текст из документа.")
             return
         preview = "\n".join(text.splitlines()[:80])
-        self.content.setText(preview)
+        self._set_content_text(preview)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -271,8 +272,25 @@ class CollectionMediaPreviewDialog(QDialog):
         if pixmap.isNull():
             return
         target = self.content.size()
-        scaled = pixmap.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.content.setPixmap(scaled)
+        scaled = pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self._set_content_pixmap(scaled)
+
+    def _ensure_label_content(self) -> QLabel:
+        if isinstance(self.content, QLabel):
+            return self.content
+        old_widget = self.content
+        label = QLabel()
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.layout().replaceWidget(old_widget, label)
+        old_widget.deleteLater()
+        self.content = label
+        return label
+
+    def _set_content_text(self, text: str) -> None:
+        self._ensure_label_content().setText(text)
+
+    def _set_content_pixmap(self, pixmap: QPixmap) -> None:
+        self._ensure_label_content().setPixmap(pixmap)
 
     def closeEvent(self, event) -> None:
         if self._player:
@@ -280,19 +298,19 @@ class CollectionMediaPreviewDialog(QDialog):
         super().closeEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key.Key_Left:
             self._show_prev()
             return
-        if event.key() == Qt.Key_Right:
+        if event.key() == Qt.Key.Key_Right:
             self._show_next()
             return
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.close()
             return
         super().keyPressEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.KeyPress:
+        if event.type() == QEvent.Type.KeyPress:
             self.keyPressEvent(event)
             return True
         return super().eventFilter(watched, event)
@@ -312,7 +330,7 @@ class CollectionMediaPreviewDialog(QDialog):
     def _update_content(self) -> None:
         if not self._entries:
             self.title_label.setText("Нет элементов")
-            self.content.setText("Нет встроенного предпросмотра.")
+            self._set_content_text("Нет встроенного предпросмотра.")
             return
         entry = self._entries[self._index]
         self.title_label.setText(entry.rel_path)
@@ -320,12 +338,15 @@ class CollectionMediaPreviewDialog(QDialog):
         if self._player:
             self._player.stop()
         if self._video_widget:
-            self.layout().replaceWidget(self._video_widget, self.content)
+            layout_obj = self.layout()
+            if isinstance(layout_obj, QVBoxLayout):
+                layout_obj.replaceWidget(self._video_widget, self.content)
             self._video_widget.deleteLater()
             self._video_widget = None
             self.content = QLabel()
-            self.content.setAlignment(Qt.AlignCenter)
-            self.layout().insertWidget(1, self.content, 1)
+            self.content.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if isinstance(layout_obj, QVBoxLayout):
+                layout_obj.insertWidget(1, self.content, 1)
         kind = FolderCollectionImporter.classify_extension(entry.ext)
         if kind == "document":
             self._show_document(path)
@@ -334,7 +355,7 @@ class CollectionMediaPreviewDialog(QDialog):
         elif kind == "video":
             self._show_video(path)
         else:
-            self.content.setText("Нет встроенного предпросмотра.")
+            self._set_content_text("Нет встроенного предпросмотра.")
 
 
 class CollectionItemEditDialog(QDialog):
@@ -358,7 +379,7 @@ class CollectionItemEditDialog(QDialog):
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
 
@@ -404,8 +425,9 @@ class CollectionItemEditDialog(QDialog):
         form.addRow("Категория", self.category_combo)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
+        buttons = QDialogButtonBox()
+        save_btn = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         if save_btn is not None:
             save_btn.setText("Создать" if item is None else "Сохранить")
         buttons.accepted.connect(self._accept)
@@ -478,7 +500,7 @@ class CollectionRelationDialog(QDialog):
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
 
@@ -505,8 +527,9 @@ class CollectionRelationDialog(QDialog):
         form.addRow("Пользовательский тип", self.kind_edit)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
+        buttons = QDialogButtonBox()
+        save_btn = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         if save_btn is not None:
             save_btn.setText("Создать связь")
         buttons.accepted.connect(self._accept)
@@ -665,7 +688,7 @@ class CollectionsWorkspace(QWidget):
         category_label.setObjectName("CollectionsCategoriesTitle")
         self.category_tree = QTreeWidget()
         self.category_tree.setHeaderHidden(True)
-        self.category_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.category_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.category_tree.customContextMenuRequested.connect(self._open_category_menu)
         self.category_tree.currentItemChanged.connect(lambda *_: self.refresh_collections())
         category_layout.addWidget(category_label)
@@ -691,7 +714,7 @@ class CollectionsWorkspace(QWidget):
         self.details_category = QLabel("")
         self.details_topic = QLabel("")
         self.details_links = QLabel("")
-        self.details_links.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.details_links.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.details_links.setOpenExternalLinks(True)
         self.details_description = QLabel("")
         self.details_description.setWordWrap(True)
@@ -760,7 +783,7 @@ class CollectionsWorkspace(QWidget):
         right_layout.addLayout(actions)
         right_layout.addWidget(rel_title)
         right_layout.addWidget(self.relations_list, 1)
-        right_layout.addWidget(self.remove_relation_button, 0, Qt.AlignRight)
+        right_layout.addWidget(self.remove_relation_button, 0, Qt.AlignmentFlag.AlignRight)
         right_layout.addWidget(entries_title)
         right_layout.addLayout(entries_filters)
         right_layout.addWidget(self.entries_list, 2)
@@ -901,8 +924,8 @@ class CollectionsWorkspace(QWidget):
                 groups.setdefault(folder, []).append(entry)
             for folder in sorted(groups.keys()):
                 header = QListWidgetItem(folder)
-                header.setFlags(Qt.ItemIsEnabled)
-                header.setData(Qt.UserRole, ("header", folder))
+                header.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                header.setData(Qt.ItemDataRole.UserRole, ("header", folder))
                 self.entries_list.addItem(header)
                 for entry in groups[folder]:
                     self._add_entry_item(entry)
@@ -913,8 +936,8 @@ class CollectionsWorkspace(QWidget):
 
         if not entries:
             empty = QListWidgetItem("Нет элементов по текущим фильтрам.")
-            empty.setFlags(Qt.ItemIsEnabled)
-            empty.setData(Qt.UserRole, ("empty", None))
+            empty.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            empty.setData(Qt.ItemDataRole.UserRole, ("empty", None))
             self.entries_list.addItem(empty)
 
     def _add_entry_item(self, entry: CollectionEntryData) -> None:
@@ -922,7 +945,7 @@ class CollectionsWorkspace(QWidget):
         if entry.is_missing:
             label = f"[нет файла] {label}"
         item = QListWidgetItem(label)
-        item.setData(Qt.UserRole, ("entry", entry.id))
+        item.setData(Qt.ItemDataRole.UserRole, ("entry", entry.id))
         kind = FolderCollectionImporter.classify_extension(entry.ext)
         icon = self._entry_icon_for(entry, kind)
         item.setIcon(icon)
@@ -965,9 +988,9 @@ class CollectionsWorkspace(QWidget):
         pixmap = QPixmap(self._entry_thumb_size)
         pixmap.fill(QColor(color))
         painter = QPainter(pixmap)
-        painter.setPen(Qt.white)
+        painter.setPen(Qt.GlobalColor.white)
         painter.drawRect(0, 0, self._entry_thumb_size.width() - 1, self._entry_thumb_size.height() - 1)
-        painter.setBrush(Qt.white)
+        painter.setBrush(Qt.GlobalColor.white)
         if kind == "video":
             w = self._entry_thumb_size.width()
             h = self._entry_thumb_size.height()
@@ -993,7 +1016,7 @@ class CollectionsWorkspace(QWidget):
     def _on_entry_thumb_ready(self, entry_id: int, thumb_path: str) -> None:
         for row in range(self.entries_list.count()):
             item = self.entries_list.item(row)
-            payload = item.data(Qt.UserRole)
+            payload = item.data(Qt.ItemDataRole.UserRole)
             if not payload or payload[0] != "entry":
                 continue
             if payload[1] == entry_id:
@@ -1001,7 +1024,7 @@ class CollectionsWorkspace(QWidget):
                 break
 
     def _open_entry(self, item: QListWidgetItem) -> None:
-        payload = item.data(Qt.UserRole)
+        payload = item.data(Qt.ItemDataRole.UserRole)
         if not payload or payload[0] != "entry":
             return
         entry = self._entries_by_id.get(payload[1])
@@ -1037,7 +1060,7 @@ class CollectionsWorkspace(QWidget):
         item = self.category_tree.currentItem()
         if item is None:
             return None
-        return item.data(0, Qt.UserRole)
+        return item.data(0, Qt.ItemDataRole.UserRole)
 
     def _category_children_map(self) -> Dict[Optional[int], List[CollectionCategoryData]]:
         children: Dict[Optional[int], List[CollectionCategoryData]] = {}
@@ -1090,7 +1113,7 @@ class CollectionsWorkspace(QWidget):
         self._rebuild_category_tree(selected_category_id)
 
     def _find_category_tree_item(self, root: QTreeWidgetItem, category_id: int) -> Optional[QTreeWidgetItem]:
-        if root.data(0, Qt.UserRole) == category_id:
+        if root.data(0, Qt.ItemDataRole.UserRole) == category_id:
             return root
         for idx in range(root.childCount()):
             child = root.child(idx)
@@ -1105,14 +1128,14 @@ class CollectionsWorkspace(QWidget):
         self.category_tree.blockSignals(True)
         self.category_tree.clear()
         root = QTreeWidgetItem(["Все коллекции"])
-        root.setData(0, Qt.UserRole, None)
+        root.setData(0, Qt.ItemDataRole.UserRole, None)
         self.category_tree.addTopLevelItem(root)
         children_map = self._category_children_map()
 
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
             for category in children_map.get(parent_id, []):
                 item = QTreeWidgetItem([category.title])
-                item.setData(0, Qt.UserRole, category.id)
+                item.setData(0, Qt.ItemDataRole.UserRole, category.id)
                 parent_item.addChild(item)
                 add_children(item, category.id)
 
@@ -1128,7 +1151,7 @@ class CollectionsWorkspace(QWidget):
 
     def _open_category_menu(self, pos) -> None:
         item = self.category_tree.itemAt(pos)
-        current_id = item.data(0, Qt.UserRole) if item is not None else None
+        current_id = item.data(0, Qt.ItemDataRole.UserRole) if item is not None else None
         menu = QMenu(self)
         create_action = menu.addAction("Создать категорию")
         create_child_action = menu.addAction("Создать подкатегорию")
@@ -1222,7 +1245,7 @@ class CollectionsWorkspace(QWidget):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
         try:
             self._db.delete_collection_category(category_id)
@@ -1234,7 +1257,7 @@ class CollectionsWorkspace(QWidget):
                 confirm_text="Перенести и удалить",
                 cancel_text="Отмена",
             )
-            if show_dialog_standard(dialog, self) != QDialog.Accepted:
+            if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
                 return
             self._db.delete_collection_category(
                 category_id,
@@ -1274,7 +1297,7 @@ class CollectionsWorkspace(QWidget):
             if item.topic:
                 label = f"{label}\n#{item.topic}"
             list_item = QListWidgetItem(label)
-            list_item.setData(Qt.UserRole, item.id)
+            list_item.setData(Qt.ItemDataRole.UserRole, item.id)
             list_item.setIcon(self._placeholder_icon())
             list_item.setSizeHint(QSize(220, 64))
             self.items_list.addItem(list_item)
@@ -1289,7 +1312,7 @@ class CollectionsWorkspace(QWidget):
         select_row = 0
         if selected_id is not None:
             for row in range(self.items_list.count()):
-                if self.items_list.item(row).data(Qt.UserRole) == selected_id:
+                if self.items_list.item(row).data(Qt.ItemDataRole.UserRole) == selected_id:
                     select_row = row
                     break
         self.items_list.setCurrentRow(select_row)
@@ -1300,7 +1323,7 @@ class CollectionsWorkspace(QWidget):
             self._current_item_id = None
             self._set_action_state(False)
             return
-        item_id = current.data(Qt.UserRole)
+        item_id = current.data(Qt.ItemDataRole.UserRole)
         item = self._items_by_id.get(item_id)
         if item is None:
             self._set_action_state(False)
@@ -1334,14 +1357,14 @@ class CollectionsWorkspace(QWidget):
                 continue
             text = f"{item.title} {rel.relation_kind} {other.title}"
             row = QListWidgetItem(text)
-            row.setData(Qt.UserRole, rel.id)
+            row.setData(Qt.ItemDataRole.UserRole, rel.id)
             self.relations_list.addItem(row)
         self._set_action_state(True)
         self._refresh_entries()
 
     def _add_item(self) -> None:
         dialog = CollectionItemEditDialog(parent=self, category_options=self._category_options())
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         try:
             self._db.create_collection_item(**dialog.values())
@@ -1360,7 +1383,7 @@ class CollectionsWorkspace(QWidget):
         if item is None:
             return
         dialog = CollectionItemEditDialog(item=item, parent=self, category_options=self._category_options())
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         try:
             self._db.update_collection_item(item.id, **dialog.values())
@@ -1380,7 +1403,7 @@ class CollectionsWorkspace(QWidget):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
         self._db.delete_collection_item(item.id)
         self.refresh_collections()
@@ -1404,11 +1427,10 @@ class CollectionsWorkspace(QWidget):
             except json.JSONDecodeError:
                 options = {}
         include_subfolders = bool(options.get("include_subfolders", True))
-        importer = FolderCollectionImporter()
-        files, list_errors = importer.list_files(folder, include_subfolders=include_subfolders)
+        files, list_errors = list_files(folder, include_subfolders=include_subfolders)
         if not self._confirm_large_folder(len(files)):
             return
-        entries, errors = self._scan_with_progress(importer, folder, files)
+        entries, errors = self._scan_with_progress(folder, files)
         errors = list_errors + errors
         payload = [
             {
@@ -1449,18 +1471,17 @@ class CollectionsWorkspace(QWidget):
             confirm_text="Продолжить",
             cancel_text="Отмена",
         )
-        return show_dialog_standard(dialog, self) == QDialog.Accepted
+        return show_dialog_standard(dialog, self) == QDialog.DialogCode.Accepted
 
     def _scan_with_progress(
         self,
-        importer: FolderCollectionImporter,
         folder_path: Path,
         files: List[Path],
     ) -> tuple[list, list]:
         progress = QProgressDialog("Сканирование файлов...", "Отмена", 0, max(1, len(files)), self)
         progress.setWindowTitle("Импорт коллекции")
         progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
 
         def progress_cb(index: int, total: int | None, _path: Path) -> None:
             progress.setMaximum(total or max(1, len(files)))
@@ -1470,7 +1491,7 @@ class CollectionsWorkspace(QWidget):
         def cancel_cb() -> bool:
             return progress.wasCanceled()
 
-        items, errors, cancelled = importer.scan_files(
+        items, errors, cancelled = scan_files(
             folder_path,
             files,
             progress_cb=progress_cb,
@@ -1487,16 +1508,16 @@ class CollectionsWorkspace(QWidget):
         log_path = Path.home() / ".mindnavigator" / "collection_import_errors.txt"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(f"\n[{datetime.utcnow().isoformat(timespec='seconds')}] {context}\n")
+            handle.write(f"\n[{datetime.now(timezone.utc).isoformat(timespec='seconds')}] {context}\n")
             for line in errors:
                 handle.write(f"{line}\n")
         box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
+        box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle("Коллекции")
         box.setText(f"Обновление завершено с ошибками ({len(errors)}).")
         box.setInformativeText(f"Лог: {log_path}")
-        open_btn = box.addButton("Открыть лог", QMessageBox.ActionRole)
-        box.addButton("Ок", QMessageBox.AcceptRole)
+        open_btn = box.addButton("Открыть лог", QMessageBox.ButtonRole.ActionRole)
+        box.addButton("Ок", QMessageBox.ButtonRole.AcceptRole)
         box.exec()
         if box.clickedButton() == open_btn:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path)))
@@ -1510,7 +1531,7 @@ class CollectionsWorkspace(QWidget):
             QMessageBox.information(self, "Связи", "Нет доступных элементов для связывания.")
             return
         dialog = CollectionRelationDialog(item, candidates, parent=self)
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
         try:
@@ -1527,7 +1548,7 @@ class CollectionsWorkspace(QWidget):
         if current is None:
             QMessageBox.information(self, "Связи", "Выберите связь для удаления.")
             return
-        relation_id = current.data(Qt.UserRole)
+        relation_id = current.data(Qt.ItemDataRole.UserRole)
         self._db.delete_collection_relation(int(relation_id))
         self.refresh_collections()
 
@@ -1535,7 +1556,7 @@ class CollectionsWorkspace(QWidget):
         self.refresh_collections()
         for row in range(self.items_list.count()):
             item = self.items_list.item(row)
-            if item.data(Qt.UserRole) == item_id:
+            if item.data(Qt.ItemDataRole.UserRole) == item_id:
                 self.items_list.setCurrentRow(row)
                 self._on_item_selected(item, None)
                 break
@@ -1579,17 +1600,17 @@ class CollectionsWorkspace(QWidget):
         if url:
             self._thumb_pending_urls.discard(url)
         icon: Optional[QIcon] = None
-        if reply.error() == QNetworkReply.NoError:
+        if reply.error() == QNetworkReply.NetworkError.NoError:
             data = reply.readAll().data()
             pixmap = QPixmap()
             if pixmap.loadFromData(data):
                 scaled = pixmap.scaled(
                     self._thumb_size,
-                    Qt.KeepAspectRatioByExpanding,
-                    Qt.SmoothTransformation,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
                 )
                 cropped = QPixmap(self._thumb_size)
-                cropped.fill(Qt.transparent)
+                cropped.fill(Qt.GlobalColor.transparent)
                 painter = QPainter(cropped)
                 x = (scaled.width() - self._thumb_size.width()) // 2
                 y = (scaled.height() - self._thumb_size.height()) // 2
@@ -1606,6 +1627,15 @@ class CollectionsWorkspace(QWidget):
     def _apply_thumbnail_icon(self, item_id: int, icon: QIcon) -> None:
         for row in range(self.items_list.count()):
             item = self.items_list.item(row)
-            if item.data(Qt.UserRole) == item_id:
+            if item.data(Qt.ItemDataRole.UserRole) == item_id:
                 item.setIcon(icon)
                 break
+
+
+
+
+
+
+
+
+

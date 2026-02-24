@@ -1,0 +1,180 @@
+# CLASS Map
+
+Purpose: function/class map for AGENTS.md and SKILL.md workflow.
+
+## Core Entrypoints
+- `main.py`: process entry.
+- `mindnavigator/__main__.py`: startup sequence and splash lifecycle.
+- `mindnavigator/main_window.py`: root UI composition, tray logic, mode switching, event routing.
+
+## Workspace Classes
+- `mindnavigator/workspaces/tasks_workspace.py`: `TasksWorkspace`, `TasksModel`, `TasksItemDelegate`.
+- `mindnavigator/workspaces/projects_workspace.py`: `ProjectsWorkspace`, `ProjectsModel`, `ProjectsItemDelegate`.
+- `mindnavigator/workspaces/settings_workspace.py`: `SettingsWorkspace`.
+- `mindnavigator/workspaces/maps_workspace.py`: `MapsListWorkspace`, `MapEditorWorkspace`, `MapsModel`, `MapCanvas`.
+- `mindnavigator/workspaces/notes_workspace.py`: `NoteWorkspace`, `NotesModel`, `NotesController`.
+- `mindnavigator/workspaces/objects_workspace.py`: `ObjectWorkspace`, `ObjectsModel`.
+- `mindnavigator/workspaces/files_workspace.py`: `FileWorkspace`.
+- `mindnavigator/workspaces/collections_workspace.py`: `CollectionsWorkspace`.
+- `mindnavigator/workspaces/ideas_workspace.py`: `IdeasWorkspace`, `IdeasListModel`.
+- `mindnavigator/workspaces/purchases_workspace.py`: `PurchasesWorkspace`.
+
+## Dialog Classes
+- `AttachFileSelectNav`: `mindnavigator/ui/dialogs/attach_file_select_nav.py:39`
+- `MNBaseDialog`: `mindnavigator/ui/dialogs/base_dialog.py:8`
+- `CollectionCategorySelectDialog`: `mindnavigator/ui/dialogs/collection_category_dialog.py:24`
+- `CollectionImportDialog`: `mindnavigator/ui/dialogs/collection_import_dialog.py:19`
+- `EntityPickerDialog`: `mindnavigator/ui/dialogs/entity_picker_dialog.py:38`
+- `MapLabelEditDialog`: `mindnavigator/ui/dialogs/map_label_edit_dialog.py:573`
+- `PurchaseAddByUrlDialog`: `mindnavigator/ui/dialogs/purchase_add_dialog.py:45`
+- `PurchaseCompareDialog`: `mindnavigator/ui/dialogs/purchase_compare_dialog.py:23`
+- `PurchaseEditDialog`: `mindnavigator/ui/dialogs/purchase_edit_dialog.py:21`
+- `ConfirmDialog`: `mindnavigator/ui/modals.py:59`
+- `CollectionMediaPreviewDialog`: `mindnavigator/workspaces/collections_workspace.py:159`
+- `CollectionItemEditDialog`: `mindnavigator/workspaces/collections_workspace.py:340`
+- `CollectionRelationDialog`: `mindnavigator/workspaces/collections_workspace.py:465`
+- `ImagePreviewDialog`: `mindnavigator/workspaces/files_workspace.py:171`
+- `MapEditDialog`: `mindnavigator/workspaces/maps_workspace.py:455`
+- `MapImagePreviewDialog`: `mindnavigator/workspaces/maps_workspace.py:690`
+- `OverlayEditDialog`: `mindnavigator/workspaces/maps_workspace.py:812`
+- `ObjectEditDialog`: `mindnavigator/workspaces/objects_workspace.py:318`
+- `CloudDocPickerDialog`: `mindnavigator/workspaces/objects_workspace.py:414`
+- `CloudImagePickerDialog`: `mindnavigator/workspaces/objects_workspace.py:484`
+- `ProjectEditDialog`: `mindnavigator/workspaces/projects_workspace.py:1055`
+- `ProjectAreaEditDialog`: `mindnavigator/workspaces/projects_workspace.py:1253`
+- `QuickProjectCreateDialog`: `mindnavigator/workspaces/tasks_workspace.py:127`
+- `TaskImagePreviewDialog`: `mindnavigator/workspaces/tasks_workspace.py:1018`
+- `TaskDetailsDialog`: `mindnavigator/workspaces/tasks_workspace.py:1125`
+- `TaskEditDialog`: `mindnavigator/workspaces/tasks_workspace.py:1548`
+- `TaskCreateDialog`: `mindnavigator/workspaces/tasks_workspace.py:2316`
+
+## Module Index (sampled)
+- `mindnavigator/collections_importer.py`
+  - classes: CollectionImportItem, FolderCollectionImporter
+  - functions: -
+- `mindnavigator/hotkeys/event_filter.py`
+  - classes: HotkeyEventFilter
+  - functions: is_editable_widget
+- `mindnavigator/hotkeys/manager.py`
+  - classes: HotkeyManager, HotkeyOverridesStore
+  - functions: load_commands_from_json, normalize_sequence
+- `mindnavigator/hotkeys/models.py`
+  - classes: HotkeyCommand, HotkeyBinding, Conflict
+  - functions: -
+- `mindnavigator/http_client.py`
+  - classes: HttpResponse, HttpCacheEntry, HttpClientError, HttpCache, DomainRateLimiter, HttpClient
+  - functions: _decode_content
+- `mindnavigator/main_window.py`
+  - classes: MainWindow
+  - functions: -
+- `mindnavigator/marker_types.py`
+  - classes: MarkerTypeOption
+  - functions: marker_type_options, default_marker_type, marker_type_by_key, marker_type_by_label, marker_type_for_color, marker_type_icon, ...
+- `mindnavigator/shop_parsers.py`
+  - classes: BaseShopParser, E2E4Parser, ChipDipParser, DNSParser, WildberriesParser
+  - functions: _normalize_price, _extract_title, _extract_jsonld, _find_product_ld, _extract_product_from_ld, _strip_html, ...
+- `mindnavigator/shop_parsing.py`
+  - classes: ParsedShopProperty, ParsedShopResult, IShopParser, ShopParseService
+  - functions: -
+- `mindnavigator/storage.py`
+  - classes: TaskData, ProjectData, MapData, MapMarkerData, MapOverlayData, TaskAttachmentData, ...
+  - functions: default_db_path, validate_title, validate_area, normalize_priority, validate_time_text, parse_project_date, ...
+- `mindnavigator/ui/dialogs/attach_file_select_nav.py`
+  - classes: AttachFileSelectNav
+  - functions: -
+- `mindnavigator/ui/dialogs/base_dialog.py`
+  - classes: MNBaseDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/collection_category_dialog.py`
+  - classes: CollectionCategorySelectDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/collection_import_dialog.py`
+  - classes: CollectionImportDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/entity_picker_dialog.py`
+  - classes: ChipItem, EntityPickerDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/map_label_edit_dialog.py`
+  - classes: MapLabelEntitySource, FlowLayout, Chip, EntityLinkItem, TagChipsInput, LinkChip, ...
+  - functions: _parse_marker_properties_blob, _serialize_marker_properties_blob
+- `mindnavigator/ui/dialogs/purchase_add_dialog.py`
+  - classes: PurchaseAddResult, PurchaseAddByUrlDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/purchase_compare_dialog.py`
+  - classes: PurchaseCompareDialog
+  - functions: -
+- `mindnavigator/ui/dialogs/purchase_edit_dialog.py`
+  - classes: PurchaseEditDialog
+  - functions: -
+- `mindnavigator/ui/dragdrop/controller.py`
+  - classes: DragStartThreshold, DragSafetyConfig, DragPerformanceConfig, DragPerformanceSnapshot, DragDropController
+  - functions: -
+- `mindnavigator/ui/dragdrop/demo.py`
+  - classes: DemoTrace
+  - functions: build_demo_controller
+- `mindnavigator/ui/dragdrop/model.py`
+  - classes: DragPhase, DragPayload, MotionConfig, DragSessionState
+  - functions: -
+- `mindnavigator/ui/dragdrop/policy.py`
+  - classes: DropZoneRect, DropValidator, DropExecutor, HitTestService, DefaultHitTestService, NestedHitTestService, ...
+  - functions: -
+- `mindnavigator/ui/leftrail.py`
+  - classes: LeftRail
+  - functions: -
+- `mindnavigator/ui/modals.py`
+  - classes: ModalOverlay, ConfirmDialog
+  - functions: exec_with_overlay, show_dialog_standard
+- `mindnavigator/ui/projects_nav.py`
+  - classes: _ProjectsListWidget, ProjectsNav
+  - functions: -
+- `mindnavigator/ui/search_nav.py`
+  - classes: SearchNav
+  - functions: -
+- `mindnavigator/ui/smooth_scroll.py`
+  - classes: SmoothScrollConfig, SmoothScrollStats, SmoothScrollController
+  - functions: attach_smooth_scroll
+- `mindnavigator/ui/splash.py`
+  - classes: SplashWidget
+  - functions: show_splash
+- `mindnavigator/ui/styles.py`
+  - classes: ScrollbarStyleTokens
+  - functions: build_scrollbar_stylesheet, compose_app_stylesheet, apply_scrollbar_stylesheet
+- `mindnavigator/ui/titlebar.py`
+  - classes: TitleBar
+  - functions: -
+- `mindnavigator/ui/workspaces/base_workspace.py`
+  - classes: BaseWorkspace
+  - functions: -
+- `mindnavigator/windowing.py`
+  - classes: ResizeEdge
+  - functions: -
+- `mindnavigator/workspaces/collections_workspace.py`
+  - classes: _EntryThumbSignals, _EntryThumbWorker, CollectionMediaPreviewDialog, CollectionItemEditDialog, CollectionRelationDialog, CollectionsWorkspace
+  - functions: -
+- `mindnavigator/workspaces/files_workspace.py`
+  - classes: ScanSummary, CloudScanWorker, ImagePreviewDialog, FileWorkspace
+  - functions: -
+- `mindnavigator/workspaces/ideas_workspace.py`
+  - classes: IdeaItem, IdeaRoles, IdeasListModel, IdeasDelegate, IdeasWorkspace
+  - functions: -
+- `mindnavigator/workspaces/maps_workspace.py`
+  - classes: MapRow, MapRoles, MapsModel, MapsItemDelegate, MapsListView, MapEditDialog, ...
+  - functions: _parse_marker_properties_blob, _format_marker_properties_text
+- `mindnavigator/workspaces/notes_workspace.py`
+  - classes: NoteItem, NoteWorkspaceState, NoteRoles, NotesModel, NotesController, NoteCardDelegate, ...
+  - functions: -
+- `mindnavigator/workspaces/objects_workspace.py`
+  - classes: ObjectRow, ObjectRoles, ObjectsModel, ObjectCardDelegate, ObjectEditDialog, CloudDocPickerDialog, ...
+  - functions: _load_scaled_pixmap, extract_text_from_document, _read_text_file, _read_docx, _read_doc_binary, _score_text, ...
+- `mindnavigator/workspaces/projects_workspace.py`
+  - classes: ProjectRow, HeaderRow, ProjectRoles, ProjectsModel, ProjectsItemDelegate, ProjectEditDialog, ...
+  - functions: -
+- `mindnavigator/workspaces/purchases_workspace.py`
+  - classes: PurchasesWorkspace, _ShopParseWorkerSignals, _ShopParseWorker
+  - functions: -
+- `mindnavigator/workspaces/settings_workspace.py`
+  - classes: SettingsWorkspace
+  - functions: -
+- `mindnavigator/workspaces/tasks_workspace.py`
+  - classes: TaskRow, HeaderRow, SortHeaderRow, TaskRoles, QuickProjectCreateDialog, TasksModel, ...
+  - functions: attachment_kind_label, _linkify_description_text, collect_task_image_attachments

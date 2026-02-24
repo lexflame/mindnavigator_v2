@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -41,6 +41,8 @@ class TaskData:
     completion_delay_minutes: int = 0
     gantt_estimate_minutes: int = 0
     gantt_forecasted: bool = False
+    marker_color: str = ""
+    marker_theme: str = ""
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,8 @@ class ProjectData:
     linked_note_id: Optional[int] = None
     linked_object_id: Optional[int] = None
     sort_order: int = 0
+    marker_color: str = ""
+    marker_theme: str = ""
 
 
 @dataclass(frozen=True)
@@ -417,6 +421,8 @@ class Database:
                     parent_id INTEGER REFERENCES tasks(id),
                     recurrence_kind TEXT NOT NULL DEFAULT '',
                     recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                    marker_color TEXT NOT NULL DEFAULT '',
+                    marker_theme TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -437,7 +443,9 @@ class Database:
                     force_recurrence_kind TEXT NOT NULL DEFAULT '',
                     linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
                     linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
-                    linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL
+                    linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL,
+                    marker_color TEXT NOT NULL DEFAULT '',
+                    marker_theme TEXT NOT NULL DEFAULT ''
                 );
                 """
             )
@@ -867,10 +875,12 @@ class Database:
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
         self._ensure_task_recurrence_columns()
+        self._ensure_task_marker_columns()
         self._ensure_task_completion_delay_column()
         self._ensure_task_gantt_columns()
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
+        self._ensure_project_marker_columns()
         self._ensure_marker_attachment_columns()
         self._ensure_marker_parent_path_column()
         self._ensure_marker_image_column()
@@ -983,6 +993,16 @@ class Database:
                     "ALTER TABLE tasks ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1;"
                 )
 
+    def _ensure_task_marker_columns(self) -> None:
+        """Добавляет колонки визуального маркера задачи, если они отсутствуют."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "marker_color" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_color TEXT NOT NULL DEFAULT '';")
+            if "marker_theme" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
+
     def _ensure_task_completion_delay_column(self) -> None:
         """Добавляет колонку расхождения по времени выполнения, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
@@ -1006,6 +1026,16 @@ class Database:
                 self._conn.execute(
                     "ALTER TABLE tasks ADD COLUMN gantt_forecasted INTEGER NOT NULL DEFAULT 0;"
                 )
+
+    def _ensure_project_marker_columns(self) -> None:
+        """Добавляет колонки визуального маркера проекта, если они отсутствуют."""
+        columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "marker_color" not in names:
+                self._conn.execute("ALTER TABLE projects ADD COLUMN marker_color TEXT NOT NULL DEFAULT '';")
+            if "marker_theme" not in names:
+                self._conn.execute("ALTER TABLE projects ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
 
     def _ensure_priority_values(self) -> None:
         """Обновляет ограничения приоритета до актуального списка значений."""
@@ -1194,7 +1224,7 @@ class Database:
             """
         )
         rows = self._conn.execute("SELECT * FROM map_markers_old;").fetchall()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         for row in rows:
             row_keys = set(row.keys())
 
@@ -1293,6 +1323,10 @@ class Database:
                 gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
                 project_id INTEGER REFERENCES projects(id),
                 parent_id INTEGER REFERENCES tasks(id),
+                recurrence_kind TEXT NOT NULL DEFAULT '',
+                recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                marker_color TEXT NOT NULL DEFAULT '',
+                marker_theme TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -1301,9 +1335,13 @@ class Database:
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, title, description, day, time_text, priority, done, completion_delay_minutes, gantt_estimate_minutes, gantt_forecasted, project_id, parent_id, created_at, updated_at
+                id, title, description, day, time_text, priority, done, completion_delay_minutes, gantt_estimate_minutes,
+                gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
             )
-            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0), COALESCE(gantt_estimate_minutes, 0), COALESCE(gantt_forecasted, 0), project_id, parent_id, created_at, updated_at
+            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0),
+                   COALESCE(gantt_estimate_minutes, 0), COALESCE(gantt_forecasted, 0), project_id, parent_id,
+                   COALESCE(recurrence_kind, ''), COALESCE(recurrence_interval, 1),
+                   COALESCE(marker_color, ''), COALESCE(marker_theme, ''), created_at, updated_at
             FROM tasks_old;
             """
         )
@@ -1326,7 +1364,9 @@ class Database:
                 force_recurrence_kind TEXT NOT NULL DEFAULT '',
                 linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
                 linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
-                linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL
+                linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL,
+                marker_color TEXT NOT NULL DEFAULT '',
+                marker_theme TEXT NOT NULL DEFAULT ''
             );
             """
         )
@@ -1479,7 +1519,7 @@ class Database:
             (days[3], "22:00", "Stygian · Reign of the Old Ones", "High", 0),
             (days[3], "23:00", "The Council", "High", 1),
         ]
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             for day, time_text, title, priority, done in examples:
                 self._conn.execute(
@@ -1516,7 +1556,7 @@ class Database:
             ("Sector 12", "Зоны контроля и минные поля.", "TACMap", "", 32, 32),
             ("Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", "", 12, 20),
         ]
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             for title, description, project, tiles_path, tiles_h, tiles_w in examples:
                 self._conn.execute(
@@ -1528,7 +1568,7 @@ class Database:
                 )
 
     def _seed_notes(self) -> None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         examples = [
             (
                 "Онбординг продукта",
@@ -1618,6 +1658,8 @@ class Database:
                 t.gantt_estimate_minutes,
                 t.gantt_forecasted,
                 t.project_id,
+                t.marker_color,
+                t.marker_theme,
                 CASE
                     WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
                     ELSE COALESCE(p.title, '')
@@ -1651,12 +1693,14 @@ class Database:
                     parent_id=row["parent_id"],
                     recurrence_kind=row["recurrence_kind"] or "",
                     recurrence_interval=max(1, int(row["recurrence_interval"] or 1)),
+                    marker_color=(row["marker_color"] or "").strip(),
+                    marker_theme=(row["marker_theme"] or "").strip(),
                 )
             )
         return tasks
 
     def _seed_objects(self) -> None:
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         examples = [
             (
                 "Центральный офис",
@@ -1694,6 +1738,8 @@ class Database:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -1702,18 +1748,20 @@ class Database:
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
                 INSERT INTO tasks (
                     title, description, day, time_text, priority, done, project_id, parent_id,
-                    recurrence_kind, recurrence_interval, created_at, updated_at
+                    recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -1725,6 +1773,8 @@ class Database:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    marker_color,
+                    marker_theme,
                     now,
                     now,
                 ),
@@ -1753,6 +1803,10 @@ class Database:
             parent_id,
             recurrence_kind,
             recurrence_interval,
+            0,
+            0,
+            marker_color,
+            marker_theme,
         )
 
     def update_task(
@@ -1768,6 +1822,8 @@ class Database:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
@@ -1781,17 +1837,19 @@ class Database:
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
-                    recurrence_kind = ?, recurrence_interval = ?, updated_at = ?
+                    recurrence_kind = ?, recurrence_interval = ?, marker_color = ?, marker_theme = ?, updated_at = ?
                 WHERE id = ?;
                 """,
                 (
@@ -1805,6 +1863,8 @@ class Database:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    marker_color,
+                    marker_theme,
                     now,
                     task_id,
                 ),
@@ -1853,6 +1913,10 @@ class Database:
             parent_id,
             recurrence_kind,
             recurrence_interval,
+            0,
+            0,
+            marker_color,
+            marker_theme,
         )
 
     def create_task(
@@ -1866,6 +1930,8 @@ class Database:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -1874,6 +1940,8 @@ class Database:
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
@@ -1910,15 +1978,15 @@ class Database:
                     if ref_id is not None:
                         project_links.append((kind, int(ref_id)))
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
                 INSERT INTO tasks (
                     title, description, day, time_text, priority, done, project_id, parent_id,
-                    recurrence_kind, recurrence_interval, created_at, updated_at
+                    recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -1930,6 +1998,8 @@ class Database:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    marker_color,
+                    marker_theme,
                     now,
                     now,
                 ),
@@ -1950,6 +2020,10 @@ class Database:
             parent_id,
             recurrence_kind,
             recurrence_interval,
+            0,
+            0,
+            marker_color,
+            marker_theme,
         )
 
     def update_task(
@@ -1965,6 +2039,8 @@ class Database:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
@@ -1978,6 +2054,8 @@ class Database:
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
@@ -2021,13 +2099,13 @@ class Database:
                     if ref_id is not None:
                         project_links.append((kind, int(ref_id)))
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
-                    recurrence_kind = ?, recurrence_interval = ?, updated_at = ?
+                    recurrence_kind = ?, recurrence_interval = ?, marker_color = ?, marker_theme = ?, updated_at = ?
                 WHERE id = ?;
                 """,
                 (
@@ -2041,6 +2119,8 @@ class Database:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    marker_color,
+                    marker_theme,
                     now,
                     task_id,
                 ),
@@ -2081,13 +2161,19 @@ class Database:
             parent_id,
             recurrence_kind,
             recurrence_interval,
+            0,
+            0,
+            marker_color,
+            marker_theme,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
         """Обновляет статус выполнения задачи."""
         row = self._conn.execute(
             """
-            SELECT id, title, description, day, time_text, priority, done, project_id, parent_id, recurrence_kind, recurrence_interval
+            SELECT
+                id, title, description, day, time_text, priority, done, project_id, parent_id,
+                recurrence_kind, recurrence_interval, marker_color, marker_theme
             FROM tasks
             WHERE id = ?;
             """,
@@ -2098,7 +2184,7 @@ class Database:
         prev_done = bool(row["done"])
         recurrence_kind = (row["recurrence_kind"] or "").strip().lower()
         recurrence_interval = max(1, int(row["recurrence_interval"] or 1))
-        now_utc = datetime.utcnow().isoformat(timespec="seconds")
+        now_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
         completed_local = datetime.now()
         planned_day = date.fromisoformat(row["day"])
         planned_time_text = (row["time_text"] or "").strip()
@@ -2150,9 +2236,9 @@ class Database:
                     """
                     INSERT INTO tasks (
                         title, description, day, time_text, priority, done, project_id, parent_id,
-                        recurrence_kind, recurrence_interval, created_at, updated_at
+                        recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         row["title"],
@@ -2164,6 +2250,8 @@ class Database:
                         row["parent_id"],
                         recurrence_kind,
                         recurrence_interval,
+                        row["marker_color"] or "",
+                        row["marker_theme"] or "",
                         now_utc,
                         now_utc,
                     ),
@@ -2171,7 +2259,7 @@ class Database:
 
     def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:
         """Сохраняет оценку времени задачи для режима диаграммы Ганта."""
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         safe_minutes = max(0, int(minutes or 0))
         with self._conn:
             self._conn.execute(
@@ -2250,7 +2338,7 @@ class Database:
 
     def add_task_attachment(self, task_id: int, kind: str, ref_id: int) -> TaskAttachmentData:
         """Добавляет вложение к задаче."""
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -2287,7 +2375,9 @@ class Database:
             SELECT
                 id, area, title, updated, priority, archived,
                 parent_project_id, default_task_priority, force_recurrence_kind,
-                linked_map_id, linked_note_id, linked_object_id, COALESCE(sort_order, 0) AS sort_order
+                linked_map_id, linked_note_id, linked_object_id,
+                marker_color, marker_theme,
+                COALESCE(sort_order, 0) AS sort_order
             FROM projects
             ORDER BY parent_project_id, sort_order, id;
             """
@@ -2309,6 +2399,8 @@ class Database:
                     linked_note_id=row["linked_note_id"],
                     linked_object_id=row["linked_object_id"],
                     sort_order=int(row["sort_order"] or 0),
+                    marker_color=(row["marker_color"] or "").strip(),
+                    marker_theme=(row["marker_theme"] or "").strip(),
                 )
             )
         return projects
@@ -2327,6 +2419,8 @@ class Database:
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> ProjectData:
         """Создает проект в базе данных."""
         area = validate_area(area)
@@ -2334,6 +2428,8 @@ class Database:
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
             raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
@@ -2349,9 +2445,9 @@ class Database:
                 INSERT INTO projects (
                     area, title, updated, priority, archived,
                     parent_project_id, sort_order, default_task_priority, force_recurrence_kind,
-                    linked_map_id, linked_note_id, linked_object_id
+                    linked_map_id, linked_note_id, linked_object_id, marker_color, marker_theme
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     area,
@@ -2366,6 +2462,8 @@ class Database:
                     linked_map_id,
                     linked_note_id,
                     linked_object_id,
+                    marker_color,
+                    marker_theme,
                 ),
             )
         return ProjectData(
@@ -2382,6 +2480,8 @@ class Database:
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
             sort_order=sort_order,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
 
     def update_project(
@@ -2426,6 +2526,8 @@ class Database:
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        marker_color: str = "",
+        marker_theme: str = "",
     ) -> ProjectData:
         """Обновляет данные проекта."""
         area = validate_area(area)
@@ -2433,6 +2535,8 @@ class Database:
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        marker_color = (marker_color or "").strip()
+        marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
             raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
@@ -2470,7 +2574,7 @@ class Database:
                 UPDATE projects
                 SET area = ?, title = ?, updated = ?, priority = ?, archived = ?,
                     parent_project_id = ?, sort_order = ?, default_task_priority = ?, force_recurrence_kind = ?,
-                    linked_map_id = ?, linked_note_id = ?, linked_object_id = ?
+                    linked_map_id = ?, linked_note_id = ?, linked_object_id = ?, marker_color = ?, marker_theme = ?
                 WHERE id = ?;
                 """,
                 (
@@ -2486,6 +2590,8 @@ class Database:
                     linked_map_id,
                     linked_note_id,
                     linked_object_id,
+                    marker_color,
+                    marker_theme,
                     project_id,
                 ),
             )
@@ -2503,6 +2609,8 @@ class Database:
             linked_note_id=linked_note_id,
             linked_object_id=linked_object_id,
             sort_order=sort_order,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
 
     def fetch_project_tree(self) -> List[ProjectData]:
@@ -2516,7 +2624,9 @@ class Database:
             SELECT
                 id, area, title, updated, priority, archived,
                 parent_project_id, default_task_priority, force_recurrence_kind,
-                linked_map_id, linked_note_id, linked_object_id, COALESCE(sort_order, 0) AS sort_order
+                linked_map_id, linked_note_id, linked_object_id,
+                marker_color, marker_theme,
+                COALESCE(sort_order, 0) AS sort_order
             FROM projects
             WHERE parent_project_id IS ?
             ORDER BY sort_order, id;
@@ -2540,6 +2650,8 @@ class Database:
                     linked_note_id=row["linked_note_id"],
                     linked_object_id=row["linked_object_id"],
                     sort_order=int(row["sort_order"] or 0),
+                    marker_color=(row["marker_color"] or "").strip(),
+                    marker_theme=(row["marker_theme"] or "").strip(),
                 )
             )
         return children
@@ -2711,7 +2823,7 @@ class Database:
         if tiles_h <= 0 or tiles_w <= 0:
             raise ValueError("Размер сетки должен быть больше нуля.")
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -2740,7 +2852,7 @@ class Database:
         if tiles_h <= 0 or tiles_w <= 0:
             raise ValueError("Размер сетки должен быть больше нуля.")
 
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -2864,7 +2976,7 @@ class Database:
         image_path: str = "",
     ) -> MapMarkerData:
         """Создает или обновляет метку карты."""
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         task_ids = task_ids or []
         project_ids = project_ids or []
         note_ids = note_ids or []
@@ -3077,7 +3189,7 @@ class Database:
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
             raise ValueError("Недостаточно точек для сохранения геометрии.")
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
         with self._conn:
@@ -3130,7 +3242,7 @@ class Database:
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
             raise ValueError("Недостаточно точек для сохранения геометрии.")
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
         with self._conn:
@@ -3238,7 +3350,7 @@ class Database:
         preview = (preview or "").strip()
         project = (project or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -3280,7 +3392,7 @@ class Database:
         title = validate_title(title, field_name="Название заметки")
         preview = (preview or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3471,7 +3583,7 @@ class Database:
         value_score = int(value_score or 3)
         effort_score = int(effort_score or 3)
         source = (source or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -3534,7 +3646,7 @@ class Database:
         value_score = int(value_score or 3)
         effort_score = int(effort_score or 3)
         source = (source or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3590,11 +3702,11 @@ class Database:
 
     def set_idea_archived(self, idea_id: int, archived: bool) -> None:
         """Архивирует или восстанавливает идею."""
-        archived_at = datetime.utcnow().isoformat(timespec="seconds") if archived else None
+        archived_at = datetime.now(timezone.utc).isoformat(timespec="seconds") if archived else None
         with self._conn:
             self._conn.execute(
                 "UPDATE ideas SET archived_at = ?, updated_at = ? WHERE id = ?;",
-                (archived_at, datetime.utcnow().isoformat(timespec="seconds"), idea_id),
+                (archived_at, datetime.now(timezone.utc).isoformat(timespec="seconds"), idea_id),
             )
 
     def delete_idea(self, idea_id: int) -> None:
@@ -3626,7 +3738,7 @@ class Database:
 
     def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
         """Создает связь идеи с сущностью."""
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3649,7 +3761,7 @@ class Database:
         if not row:
             raise ValueError("Заметка не найдена.")
         favorite = not bool(row["favorite"])
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3714,7 +3826,7 @@ class Database:
         object_type = (object_type or "").strip()
         status = (status or "").strip()
         description = (description or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -3740,7 +3852,7 @@ class Database:
         object_type = (object_type or "").strip()
         status = (status or "").strip()
         description = (description or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3806,7 +3918,7 @@ class Database:
         if not rel_path:
             raise ValueError("Путь к изображению не должен быть пустым.")
         description = (description or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3835,7 +3947,7 @@ class Database:
     def update_object_image(self, image_id: int, description: str) -> ObjectImageData:
         """Обновляет описание изображения объекта."""
         description = (description or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -3980,7 +4092,7 @@ class Database:
         description = (description or "").strip()
         source_folder_path = (source_folder_path or "").strip()
         import_options_json = (import_options_json or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -4056,7 +4168,7 @@ class Database:
                 import_options_json = existing["import_options_json"] or ""
         source_folder_path = (source_folder_path or "").strip()
         import_options_json = (import_options_json or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -4117,7 +4229,7 @@ class Database:
         sort_index: int = 0,
     ) -> CollectionCategoryData:
         title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -4208,7 +4320,7 @@ class Database:
 
     def update_collection_category_title(self, category_id: int, title: str) -> CollectionCategoryData:
         title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -4238,7 +4350,7 @@ class Database:
         )
 
     def move_collection_category(self, category_id: int, parent_id: Optional[int]) -> CollectionCategoryData:
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -4341,7 +4453,7 @@ class Database:
             raise ValueError("Нельзя связать элемент сам с собой.")
         left_id, right_id = sorted((int(left_item_id), int(right_item_id)))
         relation_kind = (relation_kind or "=").strip() or "="
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -4379,7 +4491,7 @@ class Database:
         collection_id: int,
         entries: Iterable[dict],
     ) -> None:
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         payload = []
         for entry in entries:
             payload.append(
@@ -4452,7 +4564,7 @@ class Database:
             (collection_id,),
         ).fetchall()
         existing_by_rel = {row["rel_path"]: row["id"] for row in existing_rows}
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         incoming_rel = set()
         with self._conn:
             for entry in entries:
@@ -4597,7 +4709,7 @@ class Database:
         item_id: int,
         category_id: Optional[int],
     ) -> ShopItemData:
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -5112,7 +5224,7 @@ class Database:
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -5135,7 +5247,7 @@ class Database:
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
@@ -5261,7 +5373,7 @@ class Database:
         currency = (currency or "").strip()
         captured_at = (captured_at or "").strip()
         if not captured_at:
-            captured_at = datetime.utcnow().isoformat(timespec="seconds")
+            captured_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -5505,7 +5617,7 @@ class Database:
         description = (description or "").strip()
         hash_value = (hash_value or "").strip()
         size = max(0, int(size))
-        now = datetime.utcnow().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         with self._conn:
             self._conn.execute(
@@ -5610,3 +5722,5 @@ class Database:
 def get_database() -> Database:
     """Возвращает singleton базы данных."""
     return Database()
+
+

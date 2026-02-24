@@ -14,7 +14,7 @@ from pathlib import Path
 import html
 import re
 import zipfile
-from typing import List, Optional
+from typing import List, Optional, Any
 from PySide6.QtCore import Qt, QSize, QRect, QModelIndex, QAbstractListModel
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QImageReader
 from PySide6.QtWidgets import (
@@ -60,12 +60,12 @@ class ObjectRow:
 
 
 class ObjectRoles:
-    Id = Qt.UserRole + 1
-    Title = Qt.UserRole + 2
-    Catalog = Qt.UserRole + 3
-    ObjectType = Qt.UserRole + 4
-    Status = Qt.UserRole + 5
-    Description = Qt.UserRole + 6
+    Id = Qt.ItemDataRole.UserRole + 1
+    Title = Qt.ItemDataRole.UserRole + 2
+    Catalog = Qt.ItemDataRole.UserRole + 3
+    ObjectType = Qt.ItemDataRole.UserRole + 4
+    Status = Qt.ItemDataRole.UserRole + 5
+    Description = Qt.ItemDataRole.UserRole + 6
 
 
 class ObjectsModel(QAbstractListModel):
@@ -104,7 +104,7 @@ class ObjectsModel(QAbstractListModel):
             return 0
         return len(self._items)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         if not index.isValid():
             return None
         item = self._items[index.row()]
@@ -120,7 +120,7 @@ class ObjectsModel(QAbstractListModel):
             return item.status
         if role == ObjectRoles.Description:
             return item.description
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
 
@@ -272,9 +272,9 @@ class ObjectCardDelegate(QStyledItemDelegate):
         rect = option.rect.adjusted(8, 8, -8, -8)
         radius = 12
 
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         bg = QColor(self.C_BG)
-        if option.state & QStyle.State_Selected:
+        if option.state & QStyle.StateFlag.State_Selected:
             bg = QColor("#232833")
         painter.setBrush(bg)
         painter.setPen(self.C_BORDER)
@@ -293,8 +293,8 @@ class ObjectCardDelegate(QStyledItemDelegate):
         painter.setPen(self.C_TEXT)
         painter.setFont(self._font_title)
         title_metrics = QFontMetrics(self._font_title)
-        title_text = title_metrics.elidedText(title, Qt.ElideRight, w)
-        painter.drawText(QRect(x, y, w, 20), Qt.AlignLeft | Qt.AlignVCenter, title_text)
+        title_text = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, w)
+        painter.drawText(QRect(x, y, w, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title_text)
 
         meta_y = y + 24
         painter.setFont(self._font_meta)
@@ -302,15 +302,15 @@ class ObjectCardDelegate(QStyledItemDelegate):
         meta_parts = [part for part in [catalog, object_type, status] if part]
         meta_text = " · ".join(meta_parts) if meta_parts else "Без каталога"
         meta_metrics = QFontMetrics(self._font_meta)
-        meta_text = meta_metrics.elidedText(meta_text, Qt.ElideRight, w)
-        painter.drawText(QRect(x, meta_y, w, 18), Qt.AlignLeft | Qt.AlignVCenter, meta_text)
+        meta_text = meta_metrics.elidedText(meta_text, Qt.TextElideMode.ElideRight, w)
+        painter.drawText(QRect(x, meta_y, w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, meta_text)
 
         desc_y = meta_y + 20
         painter.setFont(self._font_desc)
         painter.setPen(self.C_TEXT)
         desc_rect = QRect(x, desc_y, w, rect.height() - 46)
         desc_text = description.strip() or "Описание пока не добавлено."
-        painter.drawText(desc_rect, Qt.TextWordWrap, desc_text)
+        painter.drawText(desc_rect, Qt.TextFlag.TextWordWrap, desc_text)
 
         painter.restore()
 
@@ -353,7 +353,9 @@ class ObjectEditDialog(QDialog):
         tools.addStretch(1)
         layout.addLayout(tools)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -399,7 +401,7 @@ class ObjectEditDialog(QDialog):
 
     def _import_description(self) -> None:
         dialog = CloudDocPickerDialog(self)
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
         rel_path = dialog.selected_rel_path()
         if not rel_path:
@@ -429,12 +431,14 @@ class CloudDocPickerDialog(QDialog):
         for item in self._files:
             label = f"{item.name}"
             list_item = QListWidgetItem(label)
-            list_item.setData(Qt.UserRole, item.rel_path)
+            list_item.setData(Qt.ItemDataRole.UserRole, item.rel_path)
             self.list_widget.addItem(list_item)
 
         layout.addWidget(self.list_widget, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -462,7 +466,7 @@ class CloudDocPickerDialog(QDialog):
         if current is None:
             QMessageBox.warning(self, "Импорт", "Выберите файл для импорта.")
             return
-        self._selected_rel_path = current.data(Qt.UserRole)
+        self._selected_rel_path = current.data(Qt.ItemDataRole.UserRole)
         self.accept()
 
     def selected_rel_path(self) -> Optional[str]:
@@ -509,7 +513,7 @@ class CloudImagePickerDialog(QDialog):
         for item in self._files:
             label = item.name
             list_item = QListWidgetItem(label)
-            list_item.setData(Qt.UserRole, item.rel_path)
+            list_item.setData(Qt.ItemDataRole.UserRole, item.rel_path)
             if cloud_path:
                 file_path = cloud_path / item.rel_path
                 pixmap = _load_scaled_pixmap(file_path, QSize(72, 72))
@@ -519,7 +523,9 @@ class CloudImagePickerDialog(QDialog):
 
         layout.addWidget(self.list_widget, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -547,7 +553,7 @@ class CloudImagePickerDialog(QDialog):
         if not items:
             QMessageBox.warning(self, "Изображения", "Выберите изображения для добавления.")
             return
-        self._selected_rel_paths = [item.data(Qt.UserRole) for item in items]
+        self._selected_rel_paths = [item.data(Qt.ItemDataRole.UserRole) for item in items]
         self.accept()
 
     def selected_rel_paths(self) -> List[str]:
@@ -689,7 +695,7 @@ class ObjectWorkspace(QWidget):
         self.thumbnail_list.currentRowChanged.connect(self._on_thumbnail_selected)
 
         self.image_label = QLabel("Нет изображений")
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setMinimumHeight(220)
         self.image_label.setObjectName("ObjectsImage")
 
@@ -705,7 +711,7 @@ class ObjectWorkspace(QWidget):
         image_layout.addWidget(self.thumbnail_list)
         image_layout.addWidget(self.image_label)
         image_layout.addWidget(self.image_comment)
-        image_layout.addWidget(self.save_comment_button, 0, Qt.AlignRight)
+        image_layout.addWidget(self.save_comment_button, 0, Qt.AlignmentFlag.AlignRight)
 
         details_layout.addWidget(self.details_title)
         details_layout.addWidget(self.details_meta)
@@ -838,11 +844,11 @@ class ObjectWorkspace(QWidget):
 
     def _refresh_catalogs(self) -> None:
         current = self.catalog_tree.currentItem()
-        current_name = current.data(0, Qt.UserRole) if current else None
+        current_name = current.data(0, Qt.ItemDataRole.UserRole) if current else None
         self.catalog_tree.clear()
 
         root = QTreeWidgetItem(["Все объекты"])
-        root.setData(0, Qt.UserRole, None)
+        root.setData(0, Qt.ItemDataRole.UserRole, None)
         self.catalog_tree.addTopLevelItem(root)
 
         tree_items: dict[tuple[str, ...], QTreeWidgetItem] = {(): root}
@@ -855,7 +861,7 @@ class ObjectWorkspace(QWidget):
                 if item is None:
                     parent = tree_items[parent_key]
                     item = QTreeWidgetItem([part])
-                    item.setData(0, Qt.UserRole, "/".join(key))
+                    item.setData(0, Qt.ItemDataRole.UserRole, "/".join(key))
                     parent.addChild(item)
                     tree_items[key] = item
                 parent_key = key
@@ -866,7 +872,7 @@ class ObjectWorkspace(QWidget):
             return
 
         for item in tree_items.values():
-            if item.data(0, Qt.UserRole) == current_name:
+            if item.data(0, Qt.ItemDataRole.UserRole) == current_name:
                 self.catalog_tree.setCurrentItem(item)
                 return
 
@@ -901,7 +907,7 @@ class ObjectWorkspace(QWidget):
 
     def _on_catalog_selected(self) -> None:
         item = self.catalog_tree.currentItem()
-        catalog = item.data(0, Qt.UserRole) if item else None
+        catalog = item.data(0, Qt.ItemDataRole.UserRole) if item else None
         self.model.set_catalog_filter(catalog)
 
     def _on_object_selected(self, current: QModelIndex, _previous: QModelIndex) -> None:
@@ -941,7 +947,7 @@ class ObjectWorkspace(QWidget):
 
     def _add_object(self) -> None:
         dialog = ObjectEditDialog(self)
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
         try:
@@ -960,7 +966,7 @@ class ObjectWorkspace(QWidget):
         if not obj:
             return
         dialog = ObjectEditDialog(self, initial=obj)
-        if show_dialog_standard(dialog, self) != QDialog.Accepted:
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
         try:
@@ -998,7 +1004,7 @@ class ObjectWorkspace(QWidget):
         if self._current_object_id is None:
             return
         dialog = CloudImagePickerDialog(self)
-        if dialog.exec() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         rel_paths = dialog.selected_rel_paths()
         for rel_path in rel_paths:
@@ -1020,7 +1026,7 @@ class ObjectWorkspace(QWidget):
         cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
         for idx, image in enumerate(self._images):
             item = QListWidgetItem()
-            item.setData(Qt.UserRole, idx)
+            item.setData(Qt.ItemDataRole.UserRole, idx)
             item.setToolTip(image.rel_path)
             if cloud_root:
                 file_path = Path(cloud_root) / image.rel_path
@@ -1105,7 +1111,7 @@ class ObjectWorkspace(QWidget):
         dialog.setMinimumSize(800, 600)
         layout = QVBoxLayout(dialog)
         label = QLabel()
-        label.setAlignment(Qt.AlignCenter)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         pixmap = _load_scaled_pixmap(file_path, QSize(760, 540))
         if not pixmap.isNull():
             label.setPixmap(pixmap)

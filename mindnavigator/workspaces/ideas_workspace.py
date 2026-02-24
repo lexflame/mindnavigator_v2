@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
+from typing import Optional, Any
 
 from PySide6.QtCore import Qt, QSize, QAbstractListModel, QModelIndex
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QCursor
@@ -97,16 +97,16 @@ class IdeaItem:
 
 
 class IdeaRoles:
-    IdeaId = Qt.UserRole + 1
-    Title = Qt.UserRole + 2
-    Summary = Qt.UserRole + 3
-    Body = Qt.UserRole + 4
-    Status = Qt.UserRole + 5
-    Type = Qt.UserRole + 6
-    ValueScore = Qt.UserRole + 7
-    EffortScore = Qt.UserRole + 8
-    ProjectTitle = Qt.UserRole + 9
-    Archived = Qt.UserRole + 10
+    IdeaId = Qt.ItemDataRole.UserRole + 1
+    Title = Qt.ItemDataRole.UserRole + 2
+    Summary = Qt.ItemDataRole.UserRole + 3
+    Body = Qt.ItemDataRole.UserRole + 4
+    Status = Qt.ItemDataRole.UserRole + 5
+    Type = Qt.ItemDataRole.UserRole + 6
+    ValueScore = Qt.ItemDataRole.UserRole + 7
+    EffortScore = Qt.ItemDataRole.UserRole + 8
+    ProjectTitle = Qt.ItemDataRole.UserRole + 9
+    Archived = Qt.ItemDataRole.UserRole + 10
 
 
 class IdeasListModel(QAbstractListModel):
@@ -119,7 +119,7 @@ class IdeasListModel(QAbstractListModel):
             return 0
         return len(self._items)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         if not index.isValid():
             return None
         item = self._items[index.row()]
@@ -143,7 +143,7 @@ class IdeasListModel(QAbstractListModel):
             return item.project_title
         if role == IdeaRoles.Archived:
             return item.archived
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
 
@@ -173,9 +173,9 @@ class IdeasDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
         painter.save()
         rect = option.rect.adjusted(10, 6, -10, -6)
-        selected = option.state & QStyle.State_Selected
+        selected = option.state & QStyle.StateFlag.State_Selected
         background = QColor("#2f3036" if selected else "#1f2024")
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(background)
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(rect, 10, 10)
@@ -192,18 +192,18 @@ class IdeasDelegate(QStyledItemDelegate):
         title_font.setBold(True)
         painter.setFont(title_font)
         painter.setPen(QColor("#f2f2f2"))
-        painter.drawText(rect.adjusted(12, 8, -12, -36), Qt.TextSingleLine | Qt.AlignLeft, title)
+        painter.drawText(rect.adjusted(12, 8, -12, -36), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, title)
 
         meta_font = QFont(option.font)
         meta_font.setPointSize(meta_font.pointSize() - 1)
         painter.setFont(meta_font)
         painter.setPen(QColor("#c0c0c0"))
         meta_text = f"{project} • {status} • {idea_type}"
-        painter.drawText(rect.adjusted(12, 30, -12, -16), Qt.TextSingleLine | Qt.AlignLeft, meta_text)
+        painter.drawText(rect.adjusted(12, 30, -12, -16), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, meta_text)
 
         score_text = f"⭐ {value_score}  ⚙ {effort_score}"
         painter.setPen(QColor("#a8d4ff"))
-        painter.drawText(rect.adjusted(12, 52, -12, -4), Qt.TextSingleLine | Qt.AlignLeft, score_text)
+        painter.drawText(rect.adjusted(12, 52, -12, -4), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, score_text)
 
         painter.restore()
 
@@ -275,7 +275,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_stack.setObjectName("IdeasInspectorStack")
         self.inspector_empty = QLabel("Выберите идею слева")
         self.inspector_empty.setObjectName("IdeasEmpty")
-        self.inspector_empty.setAlignment(Qt.AlignCenter)
+        self.inspector_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.inspector_stack.addWidget(self.inspector_empty)
 
         self.inspector_tabs = QTabWidget()
@@ -283,8 +283,8 @@ class IdeasWorkspace(BaseWorkspace):
 
         content_tab = QWidget()
         content_layout = QFormLayout(content_tab)
-        content_layout.setLabelAlignment(Qt.AlignLeft)
-        content_layout.setFormAlignment(Qt.AlignTop)
+        content_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        content_layout.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         content_layout.setContentsMargins(14, 12, 14, 12)
         content_layout.setSpacing(10)
 
@@ -627,7 +627,7 @@ class IdeasWorkspace(BaseWorkspace):
             cancel_text="Отменить",
         )
         result = exec_with_overlay(dialog, self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             return self._save_current()
         self._dirty = False
         return True
@@ -693,7 +693,7 @@ class IdeasWorkspace(BaseWorkspace):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         self._db.delete_idea(idea_id)
         self._current_idea_id = None

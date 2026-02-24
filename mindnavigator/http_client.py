@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
@@ -27,8 +26,10 @@ class HttpResponse:
 
 
 @dataclass(frozen=True)
+# noinspection SpellCheckingInspection
 class HttpCacheEntry:
     url: str
+    # noinspection SpellCheckingInspection,GrazieInspection
     etag: str
     last_modified: str
     body_hash: str
@@ -49,6 +50,7 @@ class HttpCache:
 
     def _init_db(self) -> None:
         with self._conn:
+            # noinspection SpellCheckingInspection
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS http_cache (
@@ -63,6 +65,7 @@ class HttpCache:
             )
 
     def get(self, url: str) -> Optional[HttpCacheEntry]:
+        # noinspection SpellCheckingInspection
         row = self._conn.execute(
             """
             SELECT url, etag, last_modified, body_hash, saved_at, content
@@ -75,6 +78,7 @@ class HttpCache:
             return None
         return HttpCacheEntry(
             row["url"],
+            # noinspection SpellCheckingInspection,GrazieInspection
             row["etag"] or "",
             row["last_modified"] or "",
             row["body_hash"] or "",
@@ -84,6 +88,7 @@ class HttpCache:
 
     def set(self, entry: HttpCacheEntry) -> None:
         with self._conn:
+            # noinspection SpellCheckingInspection
             self._conn.execute(
                 """
                 INSERT INTO http_cache (url, etag, last_modified, body_hash, saved_at, content)
@@ -147,7 +152,7 @@ class HttpClient:
             cache_path = base / "http_cache.db"
         self.cache = HttpCache(cache_path)
 
-    def fetch(self, url: str, *, use_cache: bool = True) -> HttpResponse:
+    def fetch(self, url: str, *, use_cache: bool = True) -> HttpResponse | None:
         url = (url or "").strip()
         if not url:
             raise HttpClientError("URL не должен быть пустым.")
@@ -187,8 +192,9 @@ class HttpClient:
                         )
                     body = response.read()
                     text = _decode_content(body, resp_headers)
-                    fetched_at = datetime.utcnow().isoformat(timespec="seconds")
+                    fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
                     if use_cache:
+                        # noinspection SpellCheckingInspection
                         etag = resp_headers.get("ETag", "")
                         last_modified = resp_headers.get("Last-Modified", "")
                         body_hash = hashlib.sha256(body).hexdigest()

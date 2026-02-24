@@ -15,7 +15,7 @@ import html
 import json
 from pathlib import Path
 import re
-from typing import Dict, List, Union, Optional, Set, Tuple
+from typing import Dict, List, Union, Optional, Set, Tuple, Any
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
@@ -85,6 +85,8 @@ class TaskRow:
     recurrence_kind: str = ""
     recurrence_interval: int = 1
     completion_delay_minutes: int = 0
+    marker_color: str = ""
+    marker_theme: str = ""
 
 
 @dataclass(frozen=True)
@@ -101,27 +103,29 @@ Row = Union[TaskRow, HeaderRow, SortHeaderRow]
 
 
 class TaskRoles:
-    RowType = Qt.UserRole + 1  # header | task
-    Day = Qt.UserRole + 2
-    TimeText = Qt.UserRole + 3
-    Title = Qt.UserRole + 4
-    Description = Qt.UserRole + 5
-    Priority = Qt.UserRole + 6
-    Done = Qt.UserRole + 7
-    TaskId = Qt.UserRole + 8
-    SortKey = Qt.UserRole + 9
-    SortDirection = Qt.UserRole + 10
-    DisplayTime = Qt.UserRole + 11
-    ProjectTitle = Qt.UserRole + 12
-    Expanded = Qt.UserRole + 13
-    HasSubtasks = Qt.UserRole + 14
-    SubtasksExpanded = Qt.UserRole + 15
-    SubtaskDepth = Qt.UserRole + 16
-    ProjectArea = Qt.UserRole + 17
-    AttachmentSummary = Qt.UserRole + 18
-    RecurrenceKind = Qt.UserRole + 19
-    CompletionDelayMinutes = Qt.UserRole + 20
-    ParentTaskId = Qt.UserRole + 21
+    RowType = Qt.ItemDataRole.UserRole + 1  # header | task
+    Day = Qt.ItemDataRole.UserRole + 2
+    TimeText = Qt.ItemDataRole.UserRole + 3
+    Title = Qt.ItemDataRole.UserRole + 4
+    Description = Qt.ItemDataRole.UserRole + 5
+    Priority = Qt.ItemDataRole.UserRole + 6
+    Done = Qt.ItemDataRole.UserRole + 7
+    TaskId = Qt.ItemDataRole.UserRole + 8
+    SortKey = Qt.ItemDataRole.UserRole + 9
+    SortDirection = Qt.ItemDataRole.UserRole + 10
+    DisplayTime = Qt.ItemDataRole.UserRole + 11
+    ProjectTitle = Qt.ItemDataRole.UserRole + 12
+    Expanded = Qt.ItemDataRole.UserRole + 13
+    HasSubtasks = Qt.ItemDataRole.UserRole + 14
+    SubtasksExpanded = Qt.ItemDataRole.UserRole + 15
+    SubtaskDepth = Qt.ItemDataRole.UserRole + 16
+    ProjectArea = Qt.ItemDataRole.UserRole + 17
+    AttachmentSummary = Qt.ItemDataRole.UserRole + 18
+    RecurrenceKind = Qt.ItemDataRole.UserRole + 19
+    CompletionDelayMinutes = Qt.ItemDataRole.UserRole + 20
+    ParentTaskId = Qt.ItemDataRole.UserRole + 21
+    MarkerColor = Qt.ItemDataRole.UserRole + 22
+    MarkerTheme = Qt.ItemDataRole.UserRole + 23
 
 
 class QuickProjectCreateDialog(QDialog):
@@ -142,8 +146,8 @@ class QuickProjectCreateDialog(QDialog):
         layout.addWidget(title_label)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(12)
 
@@ -174,7 +178,9 @@ class QuickProjectCreateDialog(QDialog):
 
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -261,6 +267,8 @@ class TasksModel(QAbstractListModel):
                 t.recurrence_kind,
                 t.recurrence_interval,
                 t.completion_delay_minutes,
+                t.marker_color,
+                t.marker_theme,
             )
             for t in tasks
         ]
@@ -284,7 +292,7 @@ class TasksModel(QAbstractListModel):
             return 0
         return len(self._rows)
 
-    def data(self, index: QModelIndex, role: int):
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         """Отдает данные для делегата в зависимости от роли."""
         if not index.isValid():
             return None
@@ -300,7 +308,7 @@ class TasksModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             if role == TaskRoles.Day:
                 return r.day
-            if role == Qt.DisplayRole:
+            if role == Qt.ItemDataRole.DisplayRole:
                 return r.day.isoformat()
             return None
 
@@ -309,7 +317,7 @@ class TasksModel(QAbstractListModel):
                 return self._sort_key
             if role == TaskRoles.SortDirection:
                 return "asc" if self._sort_asc else "desc"
-            if role == Qt.DisplayRole:
+            if role == Qt.ItemDataRole.DisplayRole:
                 return "sort_header"
             return None
 
@@ -349,7 +357,11 @@ class TasksModel(QAbstractListModel):
             return r.completion_delay_minutes
         if role == TaskRoles.ParentTaskId:
             return r.parent_id
-        if role == Qt.DisplayRole:
+        if role == TaskRoles.MarkerColor:
+            return r.marker_color
+        if role == TaskRoles.MarkerTheme:
+            return r.marker_theme
+        if role == Qt.ItemDataRole.DisplayRole:
             return r.title
         return None
 
@@ -408,8 +420,11 @@ class TasksModel(QAbstractListModel):
         priority: str,
         description: str = "",
         project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
     ):
         """Добавляет новую задачу и пересобирает текущий список."""
         task = self._db.create_task(
@@ -419,9 +434,11 @@ class TasksModel(QAbstractListModel):
             time_text=time_text,
             priority=priority,
             project_id=project_id,
-            parent_id=None,
+            parent_id=parent_id,
             recurrence_kind=recurrence_kind,
             recurrence_interval=recurrence_interval,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
         self._all_rows.append(
             TaskRow(
@@ -438,9 +455,42 @@ class TasksModel(QAbstractListModel):
                 task.parent_id,
                 task.recurrence_kind,
                 task.recurrence_interval,
+                task.completion_delay_minutes,
+                task.marker_color,
+                task.marker_theme,
             )
         )
         self._rebuild()
+
+    def quick_add_subtask(self, parent_task_id: int) -> None:
+        parent_task = next(
+            (it for it in self._all_rows if isinstance(it, TaskRow) and it.id == parent_task_id),
+            None,
+        )
+        if parent_task is None:
+            return
+        self.add_task(
+            title="Новая подзадача",
+            description="",
+            day=parent_task.day,
+            time_text=parent_task.time_text,
+            priority=parent_task.priority or "Medium",
+            project_id=parent_task.project_id,
+            parent_id=parent_task.id,
+            recurrence_kind="",
+            recurrence_interval=1,
+            marker_color=parent_task.marker_color,
+            marker_theme=parent_task.marker_theme,
+        )
+
+    def quick_add_task_for_day(self, target_day: date) -> None:
+        self.add_task(
+            title="Новая задача",
+            description="",
+            day=target_day,
+            time_text="",
+            priority="Medium",
+        )
 
     def set_sort(self, key: str):
         """Устанавливает сортировку для режима «Все»."""
@@ -472,6 +522,8 @@ class TasksModel(QAbstractListModel):
         project_id: Optional[int],
         recurrence_kind: str,
         recurrence_interval: int,
+        marker_color: str = "",
+        marker_theme: str = "",
     ):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
@@ -489,6 +541,8 @@ class TasksModel(QAbstractListModel):
             parent_id=r.parent_id,
             recurrence_kind=recurrence_kind,
             recurrence_interval=recurrence_interval,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
         priority_changed = r.priority != updated.priority
         cascade_needed = (
@@ -516,6 +570,9 @@ class TasksModel(QAbstractListModel):
                     updated.parent_id,
                     updated.recurrence_kind,
                     updated.recurrence_interval,
+                    updated.completion_delay_minutes,
+                    updated.marker_color,
+                    updated.marker_theme,
                 )
             new_all.append(it)
 
@@ -566,6 +623,8 @@ class TasksModel(QAbstractListModel):
             parent_id=current_parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -584,6 +643,9 @@ class TasksModel(QAbstractListModel):
                     updated.parent_id,
                     updated.recurrence_kind,
                     updated.recurrence_interval,
+                    updated.completion_delay_minutes,
+                    updated.marker_color,
+                    updated.marker_theme,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -611,6 +673,7 @@ class TasksModel(QAbstractListModel):
             return False
 
         parent_task = None
+        target_project_id = task.project_id
         if parent_id is not None:
             parent_task = next(
                 (it for it in self._all_rows if isinstance(it, TaskRow) and it.id == parent_id),
@@ -620,6 +683,7 @@ class TasksModel(QAbstractListModel):
                 return False
             if self._is_descendant(parent_id, task.id):
                 return False
+            target_project_id = self._resolve_top_parent_project_id(parent_task)
 
         updated = self._db.update_task(
             task_id=task.id,
@@ -629,10 +693,12 @@ class TasksModel(QAbstractListModel):
             time_text=task.time_text,
             priority=task.priority,
             done=task.done,
-            project_id=task.project_id,
+            project_id=target_project_id,
             parent_id=parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -651,6 +717,9 @@ class TasksModel(QAbstractListModel):
                     updated.parent_id,
                     updated.recurrence_kind,
                     updated.recurrence_interval,
+                    updated.completion_delay_minutes,
+                    updated.marker_color,
+                    updated.marker_theme,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -660,6 +729,16 @@ class TasksModel(QAbstractListModel):
     def task_by_id(self, task_id: int) -> Optional[TaskRow]:
         """Возвращает задачу по идентификатору или None."""
         return next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
+
+    def _resolve_top_parent_project_id(self, parent_task: TaskRow) -> Optional[int]:
+        """Возвращает project_id верхнего родителя в цепочке parent_id."""
+        by_id = {it.id: it for it in self._all_rows if isinstance(it, TaskRow)}
+        current = parent_task
+        seen: set[int] = set()
+        while current.parent_id is not None and current.parent_id in by_id and current.id not in seen:
+            seen.add(current.id)
+            current = by_id[current.parent_id]
+        return current.project_id
 
     def move_task_to_parent_schedule(self, task_id: int, parent_task_id: int) -> bool:
         """Переносит задачу на дату и время родительской задачи."""
@@ -684,6 +763,8 @@ class TasksModel(QAbstractListModel):
             parent_id=task.parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -702,6 +783,9 @@ class TasksModel(QAbstractListModel):
                     updated.parent_id,
                     updated.recurrence_kind,
                     updated.recurrence_interval,
+                    updated.completion_delay_minutes,
+                    updated.marker_color,
+                    updated.marker_theme,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -791,7 +875,7 @@ class TasksModel(QAbstractListModel):
             """Преобразует строку времени в ключ сортировки."""
             try:
                 return datetime.strptime(t, "%H:%M").time()
-            except Exception:
+            except ValueError:
                 return datetime.min.time()
 
         priority_order = {"high": 0, "medium": 1, "low": 2, "отложенная": 3}
@@ -947,7 +1031,7 @@ class TasksModel(QAbstractListModel):
 
     def supportedDropActions(self) -> Qt.DropActions:
         """Разрешает перенос с изменением позиции."""
-        return Qt.MoveAction
+        return Qt.DropAction.MoveAction
 
     def dropMimeData(self, data, action, row, column, parent) -> bool:
         """Обрабатывает перенос задачи между днями."""
@@ -1040,7 +1124,7 @@ class TaskImagePreviewDialog(QDialog):
 
         self.image_label = QLabel()
         self.image_label.setObjectName("TaskImagePreviewLabel")
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.image_label, 1)
 
         self.setStyleSheet(
@@ -1186,8 +1270,8 @@ class TaskDetailsDialog(QDialog):
         props_layout.addWidget(props_title)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(8)
 
@@ -1237,7 +1321,7 @@ class TaskDetailsDialog(QDialog):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
@@ -1491,7 +1575,7 @@ class TaskDetailsDialog(QDialog):
             form.addRow(label, value_label)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
@@ -1568,8 +1652,8 @@ class TaskEditDialog(QDialog):
         layout.addWidget(title_label)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(12)
 
@@ -1586,7 +1670,7 @@ class TaskEditDialog(QDialog):
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
         self.project_create_btn.setFixedSize(24, 24)
-        self.project_create_btn.setCursor(Qt.PointingHandCursor)
+        self.project_create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.project_create_btn.setToolTip("Создать проект")
         self.project_create_btn.clicked.connect(self._open_project_create_dialog)
 
@@ -1609,14 +1693,14 @@ class TaskEditDialog(QDialog):
         self.time_edit.setKeyboardTracking(False)
 
         self.time_toggle = QCheckBox("Указать")
-        self.time_toggle.setCursor(Qt.PointingHandCursor)
+        self.time_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
 
         if task.time_text:
             try:
                 parsed = datetime.strptime(task.time_text, "%H:%M").time()
                 self.time_edit.setTime(QTime(parsed.hour, parsed.minute))
                 self.time_toggle.setChecked(True)
-            except Exception:
+            except ValueError:
                 self.time_toggle.setChecked(False)
         else:
             self.time_toggle.setChecked(False)
@@ -1634,7 +1718,7 @@ class TaskEditDialog(QDialog):
         time_block_layout.addWidget(self.time_edit)
 
         self.recurrence_toggle = QCheckBox("По расписанию")
-        self.recurrence_toggle.setCursor(Qt.PointingHandCursor)
+        self.recurrence_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.recurrence_type_edit = QComboBox()
         self.recurrence_type_edit.addItem("Ежедневно", "daily")
         self.recurrence_type_edit.addItem("Еженедельно", "weekly")
@@ -1657,6 +1741,30 @@ class TaskEditDialog(QDialog):
         self.priority_edit.addItems(["Low", "Medium", "High", "Отложенная"])
         self.priority_edit.setCurrentText(task.priority or "Medium")
 
+        self.marker_color_edit = QComboBox()
+        self.marker_color_edit.addItem("Нет", "")
+        self.marker_color_edit.addItem("Синий", "#2f6edb")
+        self.marker_color_edit.addItem("Зеленый", "#2f9f63")
+        self.marker_color_edit.addItem("Оранжевый", "#d68a2f")
+        self.marker_color_edit.addItem("Красный", "#b74a4a")
+        self.marker_color_edit.addItem("Фиолетовый", "#6b5ad4")
+        marker_color_idx = self.marker_color_edit.findData((task.marker_color or "").strip())
+        if marker_color_idx >= 0:
+            self.marker_color_edit.setCurrentIndex(marker_color_idx)
+
+        self.marker_theme_edit = QComboBox()
+        self.marker_theme_edit.addItem("Нет", "")
+        self.marker_theme_edit.addItem("Фильмы", "movies")
+        self.marker_theme_edit.addItem("Игры", "games")
+        self.marker_theme_edit.addItem("Книги", "books")
+        self.marker_theme_edit.addItem("Музыка", "music")
+        self.marker_theme_edit.addItem("Работа", "work")
+        self.marker_theme_edit.addItem("Личное", "personal")
+        self.marker_theme_edit.addItem("Разработка", "dev")
+        marker_theme_idx = self.marker_theme_edit.findData((task.marker_theme or "").strip().lower())
+        if marker_theme_idx >= 0:
+            self.marker_theme_edit.setCurrentIndex(marker_theme_idx)
+
         self.done_edit = QCheckBox("Выполнено")
         self.done_edit.setChecked(task.done)
 
@@ -1666,6 +1774,8 @@ class TaskEditDialog(QDialog):
         form.addRow("Дата и время", time_block)
         form.addRow("Повтор", recurrence_row)
         form.addRow("Приоритет", self.priority_edit)
+        form.addRow("Маркер (цвет)", self.marker_color_edit)
+        form.addRow("Тема маркера", self.marker_theme_edit)
         form.addRow("", self.done_edit)
 
         layout.addLayout(form)
@@ -1689,7 +1799,7 @@ class TaskEditDialog(QDialog):
         attachments_title.setObjectName("TaskAttachmentsTitle")
         self.attachments_add_btn = QToolButton()
         self.attachments_add_btn.setText("Добавить")
-        self.attachments_add_btn.setCursor(Qt.PointingHandCursor)
+        self.attachments_add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attachments_add_btn.clicked.connect(self._open_attachment_dialog)
         attachments_header.addWidget(attachments_title)
         attachments_header.addStretch(1)
@@ -1704,7 +1814,9 @@ class TaskEditDialog(QDialog):
         self._load_attachment_sources()
         self._refresh_attachments()
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1916,7 +2028,7 @@ class TaskEditDialog(QDialog):
 
     def _open_project_create_dialog(self) -> None:
         dialog = QuickProjectCreateDialog(parent=self)
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
         try:
@@ -1992,7 +2104,7 @@ class TaskEditDialog(QDialog):
             remove_btn = QToolButton()
             remove_btn.setObjectName("TaskAttachmentRemove")
             remove_btn.setIcon(qta.icon("fa5s.times", color="#cfcfcf"))
-            remove_btn.setCursor(Qt.PointingHandCursor)
+            remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             remove_btn.clicked.connect(lambda _checked=False, att=attachment: self._remove_attachment(att))
 
             row_layout.addWidget(kind_label)
@@ -2108,7 +2220,9 @@ class TaskEditDialog(QDialog):
         form.addRow("Элемент", item_combo)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(self)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -2136,7 +2250,7 @@ class TaskEditDialog(QDialog):
             }}
         """)
 
-        if dialog.exec() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         kind = kind_combo.currentData()
         ref_id = item_combo.currentData()
@@ -2242,7 +2356,7 @@ class TaskEditDialog(QDialog):
             form.addRow(label, value_label)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
@@ -2310,6 +2424,8 @@ class TaskEditDialog(QDialog):
             "project_id": self.project_edit.currentData(),
             "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
             "recurrence_interval": 1,
+            "marker_color": self.marker_color_edit.currentData() or "",
+            "marker_theme": self.marker_theme_edit.currentData() or "",
         }
 
 
@@ -2351,7 +2467,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     ROW_H = 42
     HEADER_H = 32
     TIME_W = 140
-    PROJECT_W = 320
+    PROJECT_W = 420
     TEXT_VPAD = 8
     TEXT_GAP = 6
     ROW_H_EXPANDED_MIN = 82
@@ -2416,10 +2532,10 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         title_metrics = QFontMetrics(self._font)
         desc_metrics = QFontMetrics(self._font_small)
-        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, title).height()
+        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, title).height()
         desc_height = 0
         if description:
-            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextWordWrap, description).height()
+            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, description).height()
 
         tags = index.data(TaskRoles.AttachmentSummary) or []
         total_height = title_height + desc_height
@@ -2462,13 +2578,13 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setBrush(QColor("#1f2227"))
             painter.drawRoundedRect(rect, 8, 8)
             painter.setPen(self.C_DIM)
-            painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignVCenter | Qt.AlignLeft, tag)
+            painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
             x += tag_width + self.TAG_GAP
 
     def paint(self, painter: QPainter, option, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         row_type = index.data(TaskRoles.RowType)
         r = option.rect
@@ -2485,8 +2601,9 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            text_rect = r.adjusted(10, 0, -10, 0)
-            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, txt)
+            quick_rect = QRect(r.right() - 128, r.top() + 6, 116, r.height() - 12)
+            text_rect = QRect(r.left() + 10, r.top(), quick_rect.left() - r.left() - 18, r.height())
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, txt)
 
             if show_today:
                 metrics = QFontMetrics(self._font_header)
@@ -2498,10 +2615,17 @@ class TasksItemDelegate(QStyledItemDelegate):
                     text_rect.height(),
                 )
                 painter.setPen(self.C_TODAY)
-                painter.drawText(today_rect, Qt.AlignVCenter | Qt.AlignLeft, "СЕГОДНЯ")
+                painter.drawText(today_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "СЕГОДНЯ")
 
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
+            if option.state & QStyle.StateFlag.State_MouseOver:
+                painter.setPen(self.C_BORDER)
+                painter.setBrush(QColor("#1f2227"))
+                painter.drawRoundedRect(quick_rect, 4, 4)
+                painter.setFont(self._font_small)
+                painter.setPen(self.C_DIM)
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Задачу")
             painter.restore()
             return
         if row_type == "sort_header":
@@ -2513,11 +2637,11 @@ class TasksItemDelegate(QStyledItemDelegate):
             layout = self._row_layout(r)
             painter.setFont(self._font_header)
             painter.setPen(self.C_DIM)
-            painter.drawText(layout["date"], Qt.AlignVCenter | Qt.AlignLeft,
+            painter.drawText(layout["date"], Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                              f"Дата {arrow}" if sort_key == "date" else "Дата")
-            painter.drawText(layout["title"], Qt.AlignVCenter | Qt.AlignLeft,
+            painter.drawText(layout["title"], Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                              f"Название {arrow}" if sort_key == "title" else "Название")
-            painter.drawText(layout["priority"], Qt.AlignVCenter | Qt.AlignRight,
+            painter.drawText(layout["priority"], Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                              f"Приоритет {arrow}" if sort_key == "priority" else "Приоритет")
 
             painter.setPen(self.C_BORDER)
@@ -2532,6 +2656,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         project_area: str = index.data(TaskRoles.ProjectArea) or ""
         recurrence_kind: str = (index.data(TaskRoles.RecurrenceKind) or "").strip().lower()
+        marker_color: str = (index.data(TaskRoles.MarkerColor) or "").strip()
+        marker_theme: str = (index.data(TaskRoles.MarkerTheme) or "").strip()
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         done: bool = bool(index.data(TaskRoles.Done))
         completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
@@ -2544,8 +2670,16 @@ class TasksItemDelegate(QStyledItemDelegate):
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
-        if option.state & QStyle.State_Selected:
+        if option.state & QStyle.StateFlag.State_Selected:
             bg = QColor("#343844")
+        elif marker_color:
+            tint = QColor(marker_color)
+            if tint.isValid():
+                bg = QColor(
+                    int(bg.red() * 0.65 + tint.red() * 0.35),
+                    int(bg.green() * 0.65 + tint.green() * 0.35),
+                    int(bg.blue() * 0.65 + tint.blue() * 0.35),
+                )
 
         painter.fillRect(r, bg)
         painter.setPen(self.C_BORDER)
@@ -2572,7 +2706,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setFont(self._font_small)
         painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)
         time_rect = layout["date"]
-        painter.drawText(time_rect, Qt.AlignVCenter | Qt.AlignLeft, time_text)
+        painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, time_text)
 
         tomorrow_rect = layout["tomorrow"]
         painter.setPen(self.C_BORDER)
@@ -2587,12 +2721,14 @@ class TasksItemDelegate(QStyledItemDelegate):
             display_project = f"{project_area} / {project_title}" if project_area else project_title
             if recurrence_kind in {"daily", "weekly", "monthly"}:
                 display_project = f"{display_project} · REC"
+            if marker_theme:
+                display_project = f"{display_project} · {marker_theme.upper()}"
             elided_project = QFontMetrics(self._font_small).elidedText(
                 display_project,
-                Qt.ElideRight,
+                Qt.TextElideMode.ElideRight,
                 project_rect.width(),
             )
-            painter.drawText(project_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_project)
+            painter.drawText(project_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_project)
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
@@ -2612,6 +2748,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setPen(title_color)
 
         menu_rect = layout["menu"]
+        quick_rect = layout["quick"]
         pr_rect = layout["priority"]
         title_rect = layout["title"]
         parent_move_rect, parent_move_target, parent_move_text = self._parent_schedule_action(index, r)
@@ -2625,11 +2762,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 title_content_rect.width(),
                 r.height() - self.TEXT_VPAD * 2,
             )
-            painter.drawText(title_box, Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap, title)
+            painter.drawText(title_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, title)
 
             title_metrics = QFontMetrics(self._font)
             title_height = title_metrics.boundingRect(
-                0, 0, title_content_rect.width(), 1000, Qt.TextWordWrap, title
+                0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, title
             ).height()
             current_y = r.top() + self.TEXT_VPAD + title_height
 
@@ -2641,7 +2778,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                     title_metrics.height(),
                 )
                 painter.setPen(self.C_OVERDUE)
-                painter.drawText(delay_box, Qt.AlignLeft | Qt.AlignTop, completion_delay_text)
+                painter.drawText(delay_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, completion_delay_text)
                 painter.setPen(title_color)
                 current_y += self.TEXT_GAP + title_metrics.height()
 
@@ -2654,11 +2791,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 )
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM if not overdue else self.C_OVERDUE)
-                painter.drawText(desc_box, Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap, description)
+                painter.drawText(desc_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, description)
                 painter.setFont(self._font)
                 desc_metrics = QFontMetrics(self._font_small)
                 desc_height = desc_metrics.boundingRect(
-                    0, 0, title_content_rect.width(), 1000, Qt.TextWordWrap, description
+                    0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, description
                 ).height()
                 current_y += self.TEXT_GAP + desc_height
 
@@ -2672,7 +2809,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 delay_text = f" {completion_delay_text}"
                 delay_width = title_metrics.horizontalAdvance(delay_text)
                 title_width = max(40, title_content_rect.width() - delay_width)
-                title_part = title_metrics.elidedText(title, Qt.ElideRight, title_width)
+                title_part = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, title_width)
                 title_part_rect = QRect(title_content_rect.left(), title_content_rect.top(), title_width, title_content_rect.height())
                 delay_part_rect = QRect(
                     title_part_rect.right(),
@@ -2681,13 +2818,13 @@ class TasksItemDelegate(QStyledItemDelegate):
                     title_content_rect.height(),
                 )
                 painter.setPen(title_color)
-                painter.drawText(title_part_rect, Qt.AlignVCenter | Qt.AlignLeft, title_part)
+                painter.drawText(title_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title_part)
                 painter.setPen(self.C_OVERDUE)
-                painter.drawText(delay_part_rect, Qt.AlignVCenter | Qt.AlignLeft, delay_text)
+                painter.drawText(delay_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, delay_text)
                 painter.setPen(title_color)
             else:
-                elided = title_metrics.elidedText(title, Qt.ElideRight, title_content_rect.width())
-                painter.drawText(title_content_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+                elided = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, title_content_rect.width())
+                painter.drawText(title_content_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         if not parent_move_rect.isNull() and parent_move_target is not None:
             painter.setPen(QColor("#8a6a15"))
@@ -2701,8 +2838,8 @@ class TasksItemDelegate(QStyledItemDelegate):
                 -self.PARENT_MOVE_BUTTON_PAD_X,
                 0,
             )
-            text = QFontMetrics(self._font_small).elidedText(parent_move_text, Qt.ElideRight, text_rect.width())
-            painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
+            text = QFontMetrics(self._font_small).elidedText(parent_move_text, Qt.TextElideMode.ElideRight, text_rect.width())
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
 
         # --- PRIORITY BLOCK (fixed layout) ---
         value_text = "OVERDUE" if overdue else priority
@@ -2739,11 +2876,11 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         # label
         painter.setPen(self.C_DIM)
-        # painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "приоритет")
+        # painter.drawText(label_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "приоритет")
 
         # value
         painter.setPen(value_color)
-        painter.drawText(value_rect, Qt.AlignVCenter | Qt.AlignRight, value_text)
+        painter.drawText(value_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, value_text)
 
         # icon
         self._icon_fire.paint(painter, icon_rect)
@@ -2752,6 +2889,13 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setBrush(QColor("#1f2227"))
         painter.drawRect(menu_rect)
         self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
+        if option.state & QStyle.StateFlag.State_MouseOver:
+            painter.setPen(self.C_BORDER)
+            painter.setBrush(QColor("#1f2227"))
+            painter.drawRoundedRect(quick_rect, 4, 4)
+            painter.setPen(self.C_DIM)
+            painter.setFont(self._font_small)
+            painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "+ | Подзадачу")
 
         painter.restore()
 
@@ -2759,7 +2903,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Обрабатывает клики по чекбоксу и меню строки."""
         row_type = index.data(TaskRoles.RowType)
         if row_type == "sort_header":
-            if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
                 layout = self._row_layout(option.rect)
                 if layout["title"].contains(pos):
@@ -2775,10 +2919,21 @@ class TasksItemDelegate(QStyledItemDelegate):
                         model.set_sort("priority")
                     return True
             return False
+        if row_type == "header":
+            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                pos = event.position().toPoint()
+                r = option.rect
+                quick_rect = QRect(r.right() - 128, r.top() + 6, 116, r.height() - 12)
+                if quick_rect.contains(pos) and hasattr(model, "quick_add_task_for_day"):
+                    target_day = index.data(TaskRoles.Day)
+                    if isinstance(target_day, date):
+                        model.quick_add_task_for_day(target_day)
+                        return True
+            return False
         if row_type != "task":
             return False
 
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
             pos = event.position().toPoint()
             r = option.rect
 
@@ -2788,6 +2943,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             cb_rect = layout["checkbox"]
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
+            quick_rect = layout["quick"]
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
 
@@ -2821,7 +2977,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                         confirm_text="Да",
                         cancel_text="Отмена",
                     )
-                    if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+                    if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
                         return True  # событие обработали, но действие отменили
 
                 model.toggle_done_by_row(index.row())
@@ -2830,6 +2986,11 @@ class TasksItemDelegate(QStyledItemDelegate):
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
                 return True
+            if quick_rect.contains(pos):
+                task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
+                if task is not None and hasattr(model, "quick_add_subtask"):
+                    model.quick_add_subtask(task.id)
+                    return True
 
         return False
 
@@ -2883,7 +3044,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, parent) != QDialog.Accepted:
+        if show_dialog_standard(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         m = index.model()
@@ -2902,7 +3063,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = TaskEditDialog(task, parent=parent)
-        if exec_with_overlay(dialog, parent) != QDialog.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
         values = dialog.values()
@@ -2919,6 +3080,8 @@ class TasksItemDelegate(QStyledItemDelegate):
                     project_id=values["project_id"],
                     recurrence_kind=values["recurrence_kind"],
                     recurrence_interval=values["recurrence_interval"],
+                    marker_color=values["marker_color"],
+                    marker_theme=values["marker_theme"],
                 )
             except ValueError as exc:
                 QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
@@ -3046,9 +3209,11 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         right_pad = 20
         menu_w = 30
+        quick_w = 120
         pr_w = 140
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-        pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+        quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
+        pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
 
         return {
@@ -3061,6 +3226,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             "doc": doc_rect,
             "title": title_rect,
             "priority": pr_rect,
+            "quick": quick_rect,
             "menu": menu_rect,
         }
 
@@ -3255,7 +3421,7 @@ class TasksWorkspace(BaseWorkspace):
         self.new_time.setKeyboardTracking(False)
 
         self.new_time_toggle = QCheckBox("Время")
-        self.new_time_toggle.setCursor(Qt.PointingHandCursor)
+        self.new_time_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_time_toggle.setChecked(False)
         self.new_time.setEnabled(False)
         self.new_time_toggle.toggled.connect(self.new_time.setEnabled)
@@ -3276,7 +3442,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.btn_add = QToolButton()
         self.btn_add.setText("Создать")
-        self.btn_add.setCursor(Qt.PointingHandCursor)
+        self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
 
         create_layout.addWidget(self.new_title, 1)
         create_layout.addWidget(datetime_block)
@@ -3292,6 +3458,8 @@ class TasksWorkspace(BaseWorkspace):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
         self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
+        self.list.setMouseTracking(True)
+        self.list.viewport().setMouseTracking(True)
 
         self.model = TasksModel(self)
         self.list.setModel(self.model)
@@ -3302,7 +3470,7 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header.setObjectName("TasksStickyHeader")
         self._sticky_header.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self._sticky_header.setAttribute(Qt.WA_StyledBackground, True)
-        self._sticky_header.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self._sticky_header.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._sticky_header.hide()
 
         self.btn_add.clicked.connect(self._on_create_task)
@@ -3419,7 +3587,7 @@ class TasksWorkspace(BaseWorkspace):
                     label = f"{hour:02d}"
                     label_rect = QRect(x - 10, baseline_y + 1, 20, 8)
                     painter.setPen(label_color)
-                    painter.drawText(label_rect, Qt.AlignHCenter | Qt.AlignTop, label)
+                    painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, label)
 
             start_clamped = min(max(self._start, self._day_start), self._day_end)
             end_clamped = min(max(self._end, self._day_start), self._day_end)
@@ -3448,7 +3616,7 @@ class TasksWorkspace(BaseWorkspace):
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setAutoRaise(True)
             b.setProperty("tab", tab_value)
             self.tabs_group.addButton(b)
@@ -3464,18 +3632,18 @@ class TasksWorkspace(BaseWorkspace):
 
         self.btn_prev_day = QToolButton()
         self.btn_prev_day.setIcon(qta.icon("fa5s.chevron-left", color="#cfcfcf"))
-        self.btn_prev_day.setCursor(Qt.PointingHandCursor)
+        self.btn_prev_day.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_prev_day.setAutoRaise(True)
 
         self.btn_next_day = QToolButton()
         self.btn_next_day.setIcon(qta.icon("fa5s.chevron-right", color="#cfcfcf"))
-        self.btn_next_day.setCursor(Qt.PointingHandCursor)
+        self.btn_next_day.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_next_day.setAutoRaise(True)
 
         self.btn_gantt = QToolButton()
         self.btn_gantt.setText("Гант")
         self.btn_gantt.setCheckable(True)
-        self.btn_gantt.setCursor(Qt.PointingHandCursor)
+        self.btn_gantt.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_gantt.setAutoRaise(True)
         self.btn_gantt.setVisible(False)
 
@@ -3599,7 +3767,7 @@ class TasksWorkspace(BaseWorkspace):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         model = index.model()
         if hasattr(model, "delete_task_by_row"):
@@ -3653,7 +3821,7 @@ class TasksWorkspace(BaseWorkspace):
 
     def open_create_task_dialog(self) -> None:
         dialog = TaskCreateDialog(parent=self)
-        if exec_with_overlay(dialog, self) != QDialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
         try:
@@ -3666,6 +3834,8 @@ class TasksWorkspace(BaseWorkspace):
                 project_id=values["project_id"],
                 recurrence_kind=values["recurrence_kind"],
                 recurrence_interval=values["recurrence_interval"],
+                marker_color=values["marker_color"],
+                marker_theme=values["marker_theme"],
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
@@ -3677,7 +3847,7 @@ class TasksWorkspace(BaseWorkspace):
         if obj is self.list.viewport() and event.type() == QEvent.Resize:
             self._update_sticky_day_header()
         if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:
-            if event.button() == Qt.LeftButton:
+            if event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
                 index = self.list.indexAt(pos)
                 if not index.isValid() or index.data(TaskRoles.RowType) != "task":
@@ -4008,7 +4178,7 @@ class TasksWorkspace(BaseWorkspace):
             self.list.setDragEnabled(True)
             self.list.setAcceptDrops(True)
             self.list.setDropIndicatorShown(True)
-            self.list.setDefaultDropAction(Qt.MoveAction)
+            self.list.setDefaultDropAction(Qt.DropAction.MoveAction)
             self.list.setDragDropMode(QAbstractItemView.DragDrop)
         else:
             self.list.setDragEnabled(False)

@@ -15,6 +15,25 @@ It also stores:
 
 ## Tasks
 
+### TASK_5D95A5AE-2E6D-4A7B-9C4E-8F4C4E7A3B12
+- Type: parity
+- Title: Register Sprint 5 debug summary and environment constraint
+- Sprint: 5
+- Status: Done
+- Why:
+  Sprint 5 summary was created in `docs/sprints/5_SPRINT.md` and must be explicitly linked from parity tracking for end-of-sprint visibility.
+- Scope:
+  - add parity record with link to sprint summary;
+  - capture test environment limitation (`pytest tmpdir` ACL cleanup issue on current machine).
+- Acceptance criteria:
+  - parity entry exists and references `docs/sprints/5_SPRINT.md`;
+  - environment constraint is documented with current fallback test command.
+- Result:
+  - sprint summary file added: `docs/sprints/5_SPRINT.md`;
+  - validated fallback test command in this environment:
+    `PYTHONPATH=. pytest tests -q -p no:cacheprovider -p no:tmpdir -k "not test_persistence_round_trip"`
+    with result `37 passed, 1 deselected`.
+
 ### TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0
 - Type: parity
 - Title: Review unexpected file `.codex/manual/ERROR_GIT/git_runner.txt`
