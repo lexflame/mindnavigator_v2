@@ -136,6 +136,7 @@ Purpose: entity property map and UI role map.
 ## Maps Workspace Properties
 - `MapsWorkspace` and map-preview dialogs use Qt6 enum namespaces for map rendering/input surfaces:
   `Qt.WindowState.*`, `Qt.Key.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`, `Qt.BrushStyle.*`, `Qt.PenStyle.*`, `Qt.MouseButton.*`, `Qt.WidgetAttribute.*`, `Qt.ScrollBarPolicy.*`, `Qt.WindowType.*`.
+- Map preview open behavior is unchanged: dialog enters fullscreen and renders the initial image immediately.
 
 ## Notes Workspace Properties
 - `NoteWorkspace` list surface uses Qt6 UI policy enums:

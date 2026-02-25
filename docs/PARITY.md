@@ -171,3 +171,5 @@ It also stores:
   - fixed `HttpUrlsUsage` warning in purchase URL parser by validating scheme via `urlparse` (`http`/`https`) instead of hardcoded `http://` literal checks.
   - fixed `PyProtectedMemberInspection` by introducing public bridge methods and wrappers for cross-component calls (`MainWindow.restore_from_tray`, `MainWindow.snap_to_screen_edges`, `ProjectsNav.handle_project_drop`, `ProjectsNav.last_drop_error`, `MapCanvas.edit_marker`, `MapCanvas.open_attachment_view`, delegate/model safe accessors).
   - validated protected-member cleanup with focused compile + regression suite (`tests/test_tray_task_navigation.py`, `tests/test_maps_simple_mouse_mode.py`, `tests/test_notes_multiline_save.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_workspace_category_layout.py`, `tests/test_project_tree_storage.py`): `19 passed`.
+  - fixed `GrazieInspection` in `workspaces/maps_workspace.py` by normalizing fullscreen-preview comment wording (no runtime behavior changes).
+  - validated grammar-fix safety with targeted compile and map regression tests (`tests/test_maps_simple_mouse_mode.py`): `2 passed`.

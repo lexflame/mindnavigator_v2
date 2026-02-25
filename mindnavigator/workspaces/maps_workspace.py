@@ -738,7 +738,7 @@ class MapImagePreviewDialog(QDialog):
             """
         )
 
-        # Открываем в полноэкранном режиме и показываем стартовое изображение.
+        # Open fullscreen and render the initial image immediately.
         self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
         self._update_image()
 
