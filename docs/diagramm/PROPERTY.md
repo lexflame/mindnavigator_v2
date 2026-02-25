@@ -101,6 +101,8 @@ Purpose: entity property map and UI role map.
 ## Window Resize/Native Event Properties
 - `MainWindow.nativeEvent` compares platform event channel via normalized `event_name` text extracted from Qt payload (`QByteArray`/bytes-like or string).
 - Resize edge processing uses explicit `ResizeEdge` flag comparisons (`!= ResizeEdge.NONE`) and diagonal edge sets for cursor mapping.
+- Main-window runtime flags and key/mouse handling are bound to Qt6 enum namespaces:
+  `Qt.WindowType.*`, `Qt.WidgetAttribute.*`, `Qt.WindowState.*`, `Qt.ApplicationState.*`, `Qt.Key.*`, `Qt.CursorShape.*`, `Qt.MouseButton.*`, `QEvent.Type.*`.
 
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.

@@ -153,6 +153,7 @@ It also stores:
   - fixed `PyTypeCheckerInspection`/Qt6 enum warnings in `ui/projects_nav.py`: migrated drag/drop/item roles to Qt6 namespaces and hardened drop-tooltip position resolution for typed drop events.
   - fixed `PyTypeCheckerInspection` in cloud-file navigation (`attach_file_select_nav`, `files_workspace`) by adding explicit runtime type guards for `folders/files` buckets before `sorted(...)`.
   - fixed `PyTypeCheckerInspection` in `main_window.py`: normalized `nativeEvent` type matching through decoded `event_name` and replaced ambiguous `ResizeEdge` checks with explicit flag comparisons/diagonal sets.
+  - continued `PyUnresolvedReferencesInspection` cleanup in `main_window.py`: switched legacy Qt constants to Qt6 enums (`WindowType`, `WidgetAttribute`, `WindowState`, `ApplicationState`, `Key`, `CursorShape`, `MouseButton`, `QEvent.Type`).
   - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
   - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
   - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.

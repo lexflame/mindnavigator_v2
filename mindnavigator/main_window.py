@@ -109,12 +109,12 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # РќР°СЃС‚СЂР°РёРІР°РµРј Р±Р°Р·РѕРІС‹Рµ С„Р»Р°РіРё РѕРєРЅР° Рё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ.
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
 
         # Р’РєР»СЋС‡Р°РµРј Р°РІС‚РѕР·Р°Р»РёРІРєСѓ, С‡С‚РѕР±С‹ РєРѕСЂСЂРµРєС‚РЅРѕ СЂРёСЃРѕРІР°С‚СЊ С„РѕРЅ.
         self.setAutoFillBackground(True)
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
         # РћРїСЂРµРґРµР»СЏРµРј РјРёРЅРёРјР°Р»СЊРЅС‹Рµ СЂР°Р·РјРµСЂС‹ Рё РёРєРѕРЅРєСѓ РїСЂРёР»РѕР¶РµРЅРёСЏ.
         self.setMinimumSize(1100, 700)
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
             geom = self.normalGeometry() if self.isMinimized() else self.geometry()
             if not geom.isNull() and geom.width() > 0 and geom.height() > 0:
                 self._restore_geom = QRect(geom)
-        self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
         # РџСЂСЏС‡РµРј РѕРєРЅРѕ Рё РїРѕРєР°Р·С‹РІР°РµРј СѓРІРµРґРѕРјР»РµРЅРёРµ.
         self.hide()
         self._tray_message_task_id = None
@@ -893,13 +893,13 @@ class MainWindow(QMainWindow):
         """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ СЃРІРѕСЂР°С‡РёРІР°РЅРёРµ РѕРєРЅР° РґР»СЏ РѕС‚РїСЂР°РІРєРё РІ С‚СЂРµР№."""
         # РћС‚СЃР»РµР¶РёРІР°РµРј СЃРІРѕСЂР°С‡РёРІР°РЅРёРµ Рё РѕС‚РїСЂР°РІР»СЏРµРј РѕРєРЅРѕ РІ С‚СЂРµР№.
         super().changeEvent(event)
-        if event.type() == QEvent.WindowStateChange and self.isMinimized():
-            self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowMaximized)
+        if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
+            self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowState.WindowMaximized)
             self._minimize_to_tray()
             return
-        if event.type() == QEvent.ActivationChange:
+        if event.type() == QEvent.Type.ActivationChange:
             app = QApplication.instance()
-            app_inactive = app is None or app.applicationState() != Qt.ApplicationActive
+            app_inactive = app is None or app.applicationState() != Qt.ApplicationState.ApplicationActive
             if (
                 app_inactive
                 and self._minimize_on_focus_lost
@@ -913,12 +913,12 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РіРѕСЂСЏС‡РёРµ РєР»Р°РІРёС€Рё РѕРєРЅР°."""
         # Esc Р·Р°РєСЂС‹РІР°РµС‚ РїРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ СЂРµР¶РёРј РєР°СЂС‚С‹.
-        if event.key() == Qt.Key_Escape and self._map_fullscreen_active:
+        if event.key() == Qt.Key.Key_Escape and self._map_fullscreen_active:
             self.set_map_fullscreen(False)
             event.accept()
             return
         # F11 РїРµСЂРµРєР»СЋС‡Р°РµС‚ РїРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ СЂРµР¶РёРј РѕРєРЅР°.
-        if event.key() == Qt.Key_F11:
+        if event.key() == Qt.Key.Key_F11:
             if self.isFullScreen():
                 if self._was_maximized_before_fullscreen:
                     self.showMaximized()
@@ -1031,14 +1031,14 @@ class MainWindow(QMainWindow):
             ResizeEdge.BOTTOM | ResizeEdge.LEFT,
         }
         if edge in (ResizeEdge.LEFT, ResizeEdge.RIGHT):
-            return Qt.SizeHorCursor
+            return Qt.CursorShape.SizeHorCursor
         if edge in (ResizeEdge.TOP, ResizeEdge.BOTTOM):
-            return Qt.SizeVerCursor
+            return Qt.CursorShape.SizeVerCursor
         if edge in diagonal_forward:
-            return Qt.SizeFDiagCursor
+            return Qt.CursorShape.SizeFDiagCursor
         if edge in diagonal_backward:
-            return Qt.SizeBDiagCursor
-        return Qt.ArrowCursor
+            return Qt.CursorShape.SizeBDiagCursor
+        return Qt.CursorShape.ArrowCursor
 
     def _start_resize(self, edge: ResizeEdge, global_pos: QPoint):
         """РЎС‚Р°СЂС‚СѓРµС‚ РѕРїРµСЂР°С†РёСЋ РёР·РјРµРЅРµРЅРёСЏ СЂР°Р·РјРµСЂРѕРІ РѕРєРЅР°."""
@@ -1124,7 +1124,7 @@ class MainWindow(QMainWindow):
                 return False
 
             if event.type() == event.Type.MouseButtonPress:
-                if event.button() == Qt.LeftButton:
+                if event.button() == Qt.MouseButton.LeftButton:
                     pos = event.position().toPoint()
                     edge = self._hit_test_edges(pos)
                     if edge != ResizeEdge.NONE:
