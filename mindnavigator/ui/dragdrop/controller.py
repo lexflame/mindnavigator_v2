@@ -177,8 +177,9 @@ class DragDropController:
                 on_drop_committed(payload, zone_id)
 
         transition_ms = self._motion.drop_success_duration_ms if success else self._motion.drop_failure_duration_ms
-        if self.on_drop_transition:
-            self.on_drop_transition(success, transition_ms)
+        on_drop_transition = self.on_drop_transition
+        if callable(on_drop_transition):
+            on_drop_transition(success, transition_ms)
         self._play_drop_result(success)
         self.reset()
 

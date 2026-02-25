@@ -265,3 +265,5 @@ Purpose: entity property map and UI role map.
   `Qt.ItemDataRole.*`, `QDialogButtonBox.StandardButton.*`, `QSizePolicy.Policy.*`.
 - Map label edit dialog icon typing is PyCharm-safe with explicit optional Qt types:
   `Optional[QIcon]` for image-icon state and cloud-image assignment API.
+- Dragdrop controller callback properties are invoked through callable guards:
+  `on_drop_requested`, `on_drop_committed`, `on_drop_transition`, `on_drag_started`.

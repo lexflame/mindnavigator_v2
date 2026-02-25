@@ -223,3 +223,5 @@ It also stores:
   - validated unresolved batch-11 with compile + focused workspace/task/map regressions (`tests/test_workspace_category_layout.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_maps_simple_mouse_mode.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_tray_task_navigation.py`): `17 passed`.
   - started `PyTypeHintsInspection` cleanup (batch-1): normalized `QIcon | None` type hints to `Optional[QIcon]` in `map_label_edit_dialog` for PyCharm-compatible Qt typing.
   - validated typehints batch-1 with compile + focused maps/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
+  - continued `PyCallingNonCallableInspection` cleanup (batch-2): hardened drag-drop transition callback execution in `ui/dragdrop/controller.py` with explicit `callable(...)` guard.
+  - validated calling-non-callable batch-2 with compile + focused dragdrop regressions (`tests/test_dragdrop_policy.py`, `tests/test_dragdrop_model.py`, `tests/test_dragdrop_integration.py`, `tests/test_dragdrop_controller.py`): `23 passed`.

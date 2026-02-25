@@ -519,3 +519,10 @@
 [2026-02-25 19:03] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_workspace_category_layout.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 19:03] OUT: 6 passed.
 [2026-02-25 19:03] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyTypeHintsInspection batch-1.
+[2026-02-25 19:07] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 remediation (error type: PyCallingNonCallableInspection, batch-2).
+[2026-02-25 19:07] ACTION: Hardened drag-drop transition callback call path in ui/dragdrop/controller.py via explicit callable guard.
+[2026-02-25 19:07] CMD: python -m compileall mindnavigator/ui/dragdrop/controller.py
+[2026-02-25 19:07] OUT: OK.
+[2026-02-25 19:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_dragdrop_policy.py tests/test_dragdrop_model.py tests/test_dragdrop_integration.py tests/test_dragdrop_controller.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 19:07] OUT: 23 passed.
+[2026-02-25 19:07] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyCallingNonCallableInspection batch-2.
