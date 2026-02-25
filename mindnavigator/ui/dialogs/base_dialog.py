@@ -60,7 +60,8 @@ class MNBaseDialog(QDialog):
             anchor = QApplication.activeWindow()
         return anchor
 
-    def _resolve_screen(self, anchor: QWidget | None):
+    @staticmethod
+    def _resolve_screen(anchor: QWidget | None):
         if anchor is not None and anchor.windowHandle() is not None:
             screen = anchor.windowHandle().screen()
             if screen is not None:

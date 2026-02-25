@@ -40,7 +40,8 @@ class HitTestService(Protocol):
 
 
 class DefaultHitTestService:
-    def resolve_zone(self, pos_global: Point, zones: list[DropZoneRect]) -> str | None:
+    @staticmethod
+    def resolve_zone(pos_global: Point, zones: list[DropZoneRect]) -> str | None:
         for zone in zones:
             if zone.contains(pos_global):
                 return zone.zone_id
@@ -50,7 +51,8 @@ class DefaultHitTestService:
 class NestedHitTestService:
     """Resolves the most specific zone among nested/overlapping candidates."""
 
-    def resolve_zone(self, pos_global: Point, zones: list[DropZoneRect]) -> str | None:
+    @staticmethod
+    def resolve_zone(pos_global: Point, zones: list[DropZoneRect]) -> str | None:
         candidates = [zone for zone in zones if zone.contains(pos_global)]
         if not candidates:
             return None
@@ -61,7 +63,8 @@ class NestedHitTestService:
 
 
 class AcceptAllValidator:
-    def validate(self, _payload: DragPayload, _zone_id: str) -> bool:
+    @staticmethod
+    def validate(_payload: DragPayload, _zone_id: str) -> bool:
         return True
 
 

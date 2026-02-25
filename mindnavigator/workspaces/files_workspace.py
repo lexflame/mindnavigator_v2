@@ -136,18 +136,21 @@ class CloudScanWorker(QObject):
         self.progress.emit("Переиндексация базы данных завершена.", total, total)
         self.finished.emit(ScanSummary(total, valid, invalid, skipped))
 
-    def _hash_file(self, file_path: Path) -> str:
+    @staticmethod
+    def _hash_file(file_path: Path) -> str:
         digest = sha256()
         with file_path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def _hash_from_path(self, rel_path: str) -> Optional[str]:
+    @staticmethod
+    def _hash_from_path(rel_path: str) -> Optional[str]:
         match = HASH_RE.search(rel_path)
         return match.group(0) if match else None
 
-    def _description_from_path(self, rel_path: str) -> str:
+    @staticmethod
+    def _description_from_path(rel_path: str) -> str:
         path = Path(rel_path)
         folder_parts = list(path.parent.parts) if path.parent != Path(".") else []
         stem = path.stem
@@ -161,7 +164,8 @@ class CloudScanWorker(QObject):
         }
         return json.dumps(payload, ensure_ascii=False)
 
-    def _is_image(self, file_path: Path) -> bool:
+    @staticmethod
+    def _is_image(file_path: Path) -> bool:
         if file_path.suffix.lower() in IMAGE_EXTENSIONS:
             return True
         mime = mimetypes.guess_type(file_path.name)[0] or ""
@@ -582,7 +586,8 @@ class FileWorkspace(QWidget):
         self._folder_index = self._build_folder_index(self._cloud_files)
         self._rebuild_navigation()
 
-    def _file_matches_project(self, item: CloudFileData, project) -> bool:
+    @staticmethod
+    def _file_matches_project(item: CloudFileData, project) -> bool:
         project_tokens = [project.title.lower(), project.area.lower()]
         rel_path = (item.rel_path or "").lower()
         if any(token and token in rel_path for token in project_tokens):
@@ -602,7 +607,8 @@ class FileWorkspace(QWidget):
                     return True
         return False
 
-    def _build_folder_index(self, files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
+    @staticmethod
+    def _build_folder_index(files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
         index: Dict[str, Dict[str, object]] = {"": {"folders": set(), "files": []}}
         for item in files:
             rel_path = (item.rel_path or "").strip().strip("/")
@@ -744,7 +750,8 @@ class FileWorkspace(QWidget):
         self._icon_cache[cache_key] = icon
         return icon
 
-    def _format_size(self, size: int) -> str:
+    @staticmethod
+    def _format_size(size: int) -> str:
         size = max(0, int(size))
         if size < 1024:
             return f"{size} Б"
@@ -806,7 +813,8 @@ class FileWorkspace(QWidget):
 
         menu.exec(self.file_grid.mapToGlobal(position))
 
-    def _copy_path(self, rel_path: str) -> None:
+    @staticmethod
+    def _copy_path(rel_path: str) -> None:
         clipboard = QApplication.clipboard()
         if clipboard:
             clipboard.setText(rel_path)
@@ -991,7 +999,8 @@ class FileWorkspace(QWidget):
             f"Создана заметка: {note.title}",
         )
 
-    def _format_description(self, raw_description: str) -> str:
+    @staticmethod
+    def _format_description(raw_description: str) -> str:
         description = (raw_description or "").strip()
         if not description:
             return "Без описания"

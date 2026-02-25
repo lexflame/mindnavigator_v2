@@ -148,7 +148,8 @@ class HotkeyManager:
             raise KeyError(f"Unknown command: {command_id}")
         return self._commands[command_id]
 
-    def _best_context_priority(self, command: HotkeyCommand, active_contexts: list[str]) -> int:
+    @staticmethod
+    def _best_context_priority(command: HotkeyCommand, active_contexts: list[str]) -> int:
         priorities: list[int] = []
         for context in command.contexts:
             if context == "Global":
@@ -164,7 +165,8 @@ class HotkeyManager:
                 priorities.append(_CONTEXT_PRIORITY["Workspace"])
         return min(priorities) if priorities else 99
 
-    def _command_context_active(self, command: HotkeyCommand, active_contexts: list[str]) -> bool:
+    @staticmethod
+    def _command_context_active(command: HotkeyCommand, active_contexts: list[str]) -> bool:
         for context in command.contexts:
             if context == "Global":
                 return True

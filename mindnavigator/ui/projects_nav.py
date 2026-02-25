@@ -33,7 +33,8 @@ class _ProjectsListWidget(QListWidget):
         self._pressed_project_id: int | None = None
         self._press_pos = None
 
-    def _dnd_log(self, message: str) -> None:
+    @staticmethod
+    def _dnd_log(message: str) -> None:
         try:
             root_dir = Path(__file__).resolve().parents[2]
             log_path = root_dir / ".codex" / "manual" / "dnd.log"
@@ -403,7 +404,8 @@ class ProjectsNav(QWidget):
                 return
         self.list.setCurrentRow(fallback_index)
 
-    def _project_item_label(self, project: ProjectData) -> str:
+    @staticmethod
+    def _project_item_label(project: ProjectData) -> str:
         suffix = " · архив" if project.archived else ""
         return f"{project.area} · {project.title}{suffix}"
 
@@ -449,7 +451,8 @@ class ProjectsNav(QWidget):
         append_subtree(None, 0)
         return entries
 
-    def _task_entries(self) -> list[dict]:
+    @staticmethod
+    def _task_entries() -> list[dict]:
         tasks = sorted(
             get_database().fetch_tasks(),
             key=lambda t: (t.day, t.time_text or "", t.title.lower()),
@@ -464,7 +467,8 @@ class ProjectsNav(QWidget):
             )
         return entries
 
-    def _map_entries(self) -> list[dict]:
+    @staticmethod
+    def _map_entries() -> list[dict]:
         maps = sorted(get_database().fetch_maps(), key=lambda m: m.title.lower())
         entries = []
         for item in maps:
@@ -476,7 +480,8 @@ class ProjectsNav(QWidget):
             )
         return entries
 
-    def _marker_entries(self) -> list[dict]:
+    @staticmethod
+    def _marker_entries() -> list[dict]:
         maps = {m.id: m.title for m in get_database().fetch_maps()}
         markers = sorted(
             get_database().fetch_map_markers(),
@@ -635,8 +640,8 @@ class ProjectsNav(QWidget):
     ) -> bool:
         return self._handle_project_drop(source_project_id, target_project_id, as_child=as_child, drop_after=drop_after)
 
+    @staticmethod
     def _validate_project_relocation(
-        self,
         by_id: dict[int, ProjectData],
         source_project_id: int,
         target_project_id: int | None,

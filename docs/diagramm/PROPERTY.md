@@ -97,6 +97,7 @@ Purpose: entity property map and UI role map.
   - `Qt.Key.*` for modifier/system-key skip list;
   - `QKeySequence.SequenceFormat.NativeText` for platform-native sequence text.
 - Sequence normalization helper `_to_sequence` is static and side-effect free.
+- `HotkeyManager` context-evaluation helpers (`_best_context_priority`, `_command_context_active`) are static and side-effect free.
 
 ## Projects DnD Properties
 - `ProjectsNav` project list uses Qt6 role/action enums:
@@ -200,3 +201,7 @@ Purpose: entity property map and UI role map.
 ## Shadowing Names Properties
 - Lambda/local variables in UI callbacks and tree-build loops are named uniquely per scope (`target_task_id`, `project_row`, `child_node_id`, `item_title`, `category_row`, `cloud_file`) to avoid outer-scope shadowing.
 - Renames are behavior-preserving: only symbol names were adjusted in sorting, rendering, and delayed-callback paths.
+
+## Static Helper Properties
+- Dialog/navigation/dragdrop/workspace helper methods that do not use instance state are explicitly static:
+  `_resolve_screen`, `_build_folder_index`, `_dnd_log`, `_project_item_label`, `_task_entries`, `_map_entries`, `_marker_entries`, `_validate_project_relocation`, `_hash_file`, `_hash_from_path`, `_description_from_path`, `_is_image`, `_file_matches_project`, `_format_size`, `_copy_path`, `_format_description`, `_format_freshness`, `_normalize_key`.

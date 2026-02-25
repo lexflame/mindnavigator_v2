@@ -870,7 +870,8 @@ class PurchasesWorkspace(BaseWorkspace):
         super()._on_search_changed(text)
         self.refresh()
 
-    def _format_freshness(self, parsed_at: str) -> tuple[str, QColor | None, str]:
+    @staticmethod
+    def _format_freshness(parsed_at: str) -> tuple[str, QColor | None, str]:
         if not parsed_at:
             return "—", None, "Нет данных обновления"
         try:
@@ -1129,7 +1130,8 @@ class PurchasesWorkspace(BaseWorkspace):
                     item.setData(Qt.ItemDataRole.UserRole, prop.id)
                 self.source_props_table.setItem(row, col, item)
 
-    def _normalize_key(self, name: str) -> str:
+    @staticmethod
+    def _normalize_key(name: str) -> str:
         raw = (name or "").strip().lower()
         raw = raw.replace("ё", "е")
         for token in ["/", "\\", ":", ";", ",", ".", "(", ")", "[", "]"]:

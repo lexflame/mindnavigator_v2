@@ -156,7 +156,8 @@ class AttachFileSelectNav(QDialog):
         self._folder_index = self._build_folder_index(self._files)
         self._rebuild_navigation()
 
-    def _build_folder_index(self, files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
+    @staticmethod
+    def _build_folder_index(files: List[CloudFileData]) -> Dict[str, Dict[str, object]]:
         index: Dict[str, Dict[str, object]] = {"": {"folders": set(), "files": []}}
         for item in files:
             rel_path = (item.rel_path or "").strip().strip("/")
