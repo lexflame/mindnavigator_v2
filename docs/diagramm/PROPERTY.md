@@ -211,3 +211,4 @@ Purpose: entity property map and UI role map.
 - Notes/ideas delegates keep category paint helpers static (`_paint_category`), and ideas form selection helper `_set_combo_value` is static.
 - Maps workspace static helpers include row/layout and formatting primitives:
   `_row_layout`, `_project_titles`, `_resize_handle_cursor`, `_resize_scale_delta`, `_load_marker_preview`, `_format_value`, `_format_links`, `_format_file_links`.
+- Base workspace lifecycle stubs are static no-ops: `on_leave`, `teardown`.

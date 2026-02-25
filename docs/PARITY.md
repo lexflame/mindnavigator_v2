@@ -187,3 +187,5 @@ It also stores:
   - validated staticmethod batch-4 with focused workspace regressions (`tests/test_workspace_category_layout.py`, `tests/test_notes_multiline_save.py`, `tests/test_workspace_csv_transfer.py`): `10 passed`.
   - continued `PyMethodMayBeStaticInspection` cleanup (batch-5): converted self-free maps helpers (row/layout math, project-title providers, resize helpers, marker preview loader, info-format helpers) to `@staticmethod`.
   - validated staticmethod batch-5 with focused map/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
+  - continued `PyMethodMayBeStaticInspection` cleanup (batch-6): converted `BaseWorkspace` no-op lifecycle hooks (`on_leave`, `teardown`) to static.
+  - validated staticmethod batch-6 with focused workspace regressions (`tests/test_workspace_visibility_settings.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_workspace_category_layout.py`): `11 passed`.

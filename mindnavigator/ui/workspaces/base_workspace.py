@@ -225,8 +225,10 @@ class BaseWorkspace(QWidget):
         self.apply_filters(self.get_filters())
         self.update_action_states()
 
-    def on_leave(self) -> None:
+    @staticmethod
+    def on_leave() -> None:
         return None
 
-    def teardown(self) -> None:
+    @staticmethod
+    def teardown() -> None:
         return None
