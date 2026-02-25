@@ -79,6 +79,12 @@ Purpose: entity property map and UI role map.
   - consumed and cleared in `_on_tray_message_clicked`.
 - Task reveal contract: `TasksWorkspace.focus_task(task_id) -> bool` returns whether target task row was found and focused.
 
+## Hotkey Filter Properties
+- `HotkeyEventFilter` uses Qt6 enum namespaces for key-event normalization:
+  - `QEvent.Type.KeyPress` for filter gate;
+  - `Qt.Key.*` for modifier/system-key skip list;
+  - `QKeySequence.SequenceFormat.NativeText` for platform-native sequence text.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.

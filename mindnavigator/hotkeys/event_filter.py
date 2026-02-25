@@ -16,7 +16,7 @@ class HotkeyEventFilter(QObject):
         self._callback_resolver = callback_resolver
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if event.type() != QEvent.KeyPress:
+        if event.type() != QEvent.Type.KeyPress:
             return False
         key_event = event
         if not isinstance(key_event, QKeyEvent):
@@ -47,9 +47,15 @@ class HotkeyEventFilter(QObject):
 
     def _to_sequence(self, event: QKeyEvent) -> str:
         key = event.key()
-        if key in {Qt.Key_unknown, Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta}:
+        if key in {
+            Qt.Key.Key_unknown,
+            Qt.Key.Key_Control,
+            Qt.Key.Key_Shift,
+            Qt.Key.Key_Alt,
+            Qt.Key.Key_Meta,
+        }:
             return ""
-        seq = QKeySequence(event.keyCombination()).toString(QKeySequence.NativeText)
+        seq = QKeySequence(event.keyCombination()).toString(QKeySequence.SequenceFormat.NativeText)
         return normalize_sequence(seq)
 
 

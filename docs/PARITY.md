@@ -148,6 +148,7 @@ It also stores:
   - fixed remaining `PyBroadExceptionInspection` in `storage.reset_database`: now closes cached singleton only when present and ignores only `sqlite3.Error` on close.
   - fixed `PyTypeHintsInspection` warnings by importing `QIcon` for dialog annotations and replacing `callable` with `Callable[[], bool]` in purchases parser worker signatures.
   - fixed `PyCallingNonCallableInspection` in dragdrop controller by switching callback dispatch to explicit `callable(...)` guards and stable local payload binding.
+  - started `PyUnresolvedReferencesInspection` cleanup from hotkeys layer: migrated `hotkeys/event_filter.py` to Qt6 enum namespaces (`QEvent.Type`, `Qt.Key`, `QKeySequence.SequenceFormat`).
   - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
   - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
   - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.
