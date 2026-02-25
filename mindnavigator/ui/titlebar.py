@@ -157,8 +157,8 @@ class TitleBar(QWidget):
             self._press_initiated = False
             self._dragging = False
 
-            if hasattr(self._window, "_snap_to_screen_edges"):
-                self._window._snap_to_screen_edges(global_pos)
+            if hasattr(self._window, "snap_to_screen_edges"):
+                self._window.snap_to_screen_edges(global_pos)
 
             e.accept()
             return

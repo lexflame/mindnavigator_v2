@@ -79,6 +79,16 @@ Purpose: entity property map and UI role map.
   - set to `None` for non-task tray notifications (for example minimize-to-tray notice);
   - consumed and cleared in `_on_tray_message_clicked`.
 - Task reveal contract: `TasksWorkspace.focus_task(task_id) -> bool` returns whether target task row was found and focused.
+- Public restore contract: external callers (single-instance bridge, tray shell) use `MainWindow.restore_from_tray()` instead of direct protected access.
+
+## Protected Member Bridge Properties
+- Cross-component calls are exposed via stable public wrappers:
+  - `MainWindow.snap_to_screen_edges(global_pos)`.
+  - `ProjectsNav.handle_project_drop(...)` + `ProjectsNav.last_drop_error`.
+  - `_ProjectsListWidget.log_dnd(message)`.
+  - `MapCanvas.edit_marker(marker)` and `MapCanvas.open_attachment_view(kind, item_id)`.
+  - `TasksItemDelegate.edit_task/open_task_view/row_layout/format_header`.
+  - `NotesModel.is_loading()`.
 
 ## Hotkey Filter Properties
 - `HotkeyEventFilter` uses Qt6 enum namespaces for key-event normalization:

@@ -93,7 +93,7 @@ def main() -> None:
 
     window = MainWindow()
     if single_instance_bridge is not None:
-        single_instance_bridge.set_callback(lambda _msg: window._restore_from_tray())
+        single_instance_bridge.set_callback(lambda _msg: window.restore_from_tray())
     startup_steps = [
         "Подготовка модулей…",
         "Загрузка проекта…",

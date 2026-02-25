@@ -406,6 +406,9 @@ class MapsItemDelegate(QStyledItemDelegate):
             "open_btn": open_rect,
         }
 
+    def row_layout(self, rect: QRect) -> dict:
+        return self._row_layout(rect)
+
     def _draw_pill(self, painter: QPainter, rect: QRect, text: str) -> None:
         # Рисуем "плашку" с текстом.
         painter.save()
@@ -440,7 +443,7 @@ class MapsListView(QListView):
             delegate = self.itemDelegate()
             if isinstance(delegate, MapsItemDelegate):
                 rect = self.visualRect(index)
-                layout = delegate._row_layout(rect)
+                layout = delegate.row_layout(rect)
                 if layout["edit_btn"].contains(event.pos()):
                     self.editRequested.emit(index)
                     return
@@ -1237,6 +1240,9 @@ class MapCanvas(QWidget):
             }}
         """)
         dialog.exec()
+
+    def open_attachment_view(self, kind: str, item_id: int) -> None:
+        self._open_attachment_view(kind, item_id)
 
 
     def set_tool(self, tool: MapTool) -> None:
@@ -2265,6 +2271,9 @@ class MapCanvas(QWidget):
             self._set_marker(updated)
             if dialog.resize_requested():
                 self._enable_resize_mode(updated.id)
+
+    def edit_marker(self, marker: Marker) -> None:
+        self._edit_marker(marker)
 
     def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
         # Загружаем превью изображения маркера для карточки.
@@ -3337,7 +3346,7 @@ class MapEditorWorkspace(QWidget):
     def _on_marker_double_clicked(self, marker: Optional[Marker]) -> None:
         if not marker:
             return
-        self.canvas._edit_marker(marker)
+        self.canvas.edit_marker(marker)
 
     def _apply_marker_info(self, marker: Marker) -> None:
         # Обновляем значения в инфо-панели.
@@ -3649,7 +3658,10 @@ class MapEditorWorkspace(QWidget):
 
     def _open_attachment_view(self, kind: str, item_id: int) -> None:
         # Делегируем открытие вложения канве карты.
-        self.canvas._open_attachment_view(kind, item_id)
+        self.canvas.open_attachment_view(kind, item_id)
+
+    def open_attachment_view(self, kind: str, item_id: int) -> None:
+        self._open_attachment_view(kind, item_id)
 
 
 class MapsListWorkspace(QWidget):

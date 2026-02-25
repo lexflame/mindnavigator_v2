@@ -43,6 +43,9 @@ class _ProjectsListWidget(QListWidget):
         except (OSError, IndexError):
             pass
 
+    def log_dnd(self, message: str) -> None:
+        self._dnd_log(message)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         item = self.itemAt(event.position().toPoint())
         payload = (item.data(Qt.ItemDataRole.UserRole) or {}) if item is not None else {}
@@ -143,16 +146,16 @@ class _ProjectsListWidget(QListWidget):
         if target_item is None or target_kind in {"clear", "section", "empty"}:
             print(f"[ProjectsNav DnD] dropEvent source={source_id} target=root")
             self._dnd_log(f"dropEvent source={source_id} target=root")
-            ok = self._owner._handle_project_drop(source_id, None, as_child=False, drop_after=True)
+            ok = self._owner.handle_project_drop(source_id, None, as_child=False, drop_after=True)
             if ok:
                 event.acceptProposedAction()
                 print("[ProjectsNav DnD] dropEvent accepted root move")
                 self._dnd_log("dropEvent accepted root move")
             else:
-                self._show_drop_reject(event, self._owner._last_drop_error)
+                self._show_drop_reject(event, self._owner.last_drop_error)
                 event.ignore()
-                print(f"[ProjectsNav DnD] dropEvent rejected root move: {self._owner._last_drop_error}")
-                self._dnd_log(f"dropEvent rejected root move: {self._owner._last_drop_error}")
+                print(f"[ProjectsNav DnD] dropEvent rejected root move: {self._owner.last_drop_error}")
+                self._dnd_log(f"dropEvent rejected root move: {self._owner.last_drop_error}")
             self._drag_source_project_id = None
             return
 
@@ -195,7 +198,7 @@ class _ProjectsListWidget(QListWidget):
             as_child = False
             drop_after = direction > 0
 
-        ok = self._owner._handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
+        ok = self._owner.handle_project_drop(source_id, target_id, as_child=as_child, drop_after=drop_after)
         print(
             f"[ProjectsNav DnD] dropEvent source={source_id} target={target_id} "
             f"as_child={as_child} drop_after={drop_after} ok={ok}"
@@ -208,10 +211,10 @@ class _ProjectsListWidget(QListWidget):
             event.setDropAction(Qt.DropAction.MoveAction)
             event.acceptProposedAction()
         else:
-            self._show_drop_reject(event, self._owner._last_drop_error)
+            self._show_drop_reject(event, self._owner.last_drop_error)
             event.ignore()
-            print(f"[ProjectsNav DnD] dropEvent rejected: {self._owner._last_drop_error}")
-            self._dnd_log(f"dropEvent rejected: {self._owner._last_drop_error}")
+            print(f"[ProjectsNav DnD] dropEvent rejected: {self._owner.last_drop_error}")
+            self._dnd_log(f"dropEvent rejected: {self._owner.last_drop_error}")
         self._drag_source_project_id = None
 
     def _show_drop_reject(self, event: QDropEvent, message: str) -> None:
@@ -544,7 +547,7 @@ class ProjectsNav(QWidget):
             f"[ProjectsNav DnD] _handle_project_drop source={source_project_id} "
             f"target={target_project_id} as_child={as_child} drop_after={drop_after}"
         )
-        self.list._dnd_log(
+        self.list.log_dnd(
             f"_handle_project_drop source={source_project_id} "
             f"target={target_project_id} as_child={as_child} drop_after={drop_after}"
         )
@@ -618,6 +621,19 @@ class ProjectsNav(QWidget):
         if selected is not None:
             self._on_item_selected(selected, None)
         return True
+
+    @property
+    def last_drop_error(self) -> str:
+        return self._last_drop_error
+
+    def handle_project_drop(
+        self,
+        source_project_id: int,
+        target_project_id: int | None,
+        as_child: bool,
+        drop_after: bool,
+    ) -> bool:
+        return self._handle_project_drop(source_project_id, target_project_id, as_child=as_child, drop_after=drop_after)
 
     def _validate_project_relocation(
         self,

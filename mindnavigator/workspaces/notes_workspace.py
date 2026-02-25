@@ -212,6 +212,9 @@ class NotesModel(QAbstractListModel):
         self._loading = loading
         self.endResetModel()
 
+    def is_loading(self) -> bool:
+        return self._loading
+
     def set_filter_mode(self, mode: str):
         self._filter_mode = mode
         self._rebuild()
@@ -1168,7 +1171,7 @@ class NoteWorkspace(QWidget):
         self._refresh_empty_state()
 
     def _refresh_empty_state(self):
-        if self.model.rowCount() == 0 and not self.model._loading:
+        if self.model.rowCount() == 0 and not self.model.is_loading():
             self.empty_state.show()
         else:
             self.empty_state.hide()

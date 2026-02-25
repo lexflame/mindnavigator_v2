@@ -1624,8 +1624,11 @@ class MapLabelEditDialog(QDialog):
         except ValueError:
             return
         parent = self.parent()
-        if parent and hasattr(parent, "_open_attachment_view"):
-            parent._open_attachment_view(kind, parsed_id)
+        if parent is None:
+            return
+        open_attachment_view = getattr(parent, "open_attachment_view", None) or getattr(parent, "_open_attachment_view", None)
+        if callable(open_attachment_view):
+            open_attachment_view(kind, parsed_id)
 
     def _open_picker(self, key: str, query: str = "") -> None:
         # Открываем общий диалог выбора сущностей.

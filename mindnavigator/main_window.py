@@ -291,7 +291,7 @@ class MainWindow(QMainWindow):
         action_quit = menu.addAction("Р’С‹С…РѕРґ")
 
         # РЎРІСЏР·С‹РІР°РµРј РґРµР№СЃС‚РІРёСЏ РјРµРЅСЋ.
-        action_show.triggered.connect(self._restore_from_tray)
+        action_show.triggered.connect(self.restore_from_tray)
         action_quit.triggered.connect(QApplication.instance().quit)
 
         # РџРѕРґРєР»СЋС‡Р°РµРј РјРµРЅСЋ Рё РѕР±СЂР°Р±РѕС‚С‡РёРє РєР»РёРєРѕРІ РїРѕ РёРєРѕРЅРєРµ.
@@ -304,12 +304,20 @@ class MainWindow(QMainWindow):
         """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РєР»РёРєРё РїРѕ РёРєРѕРЅРєРµ РІ С‚СЂРµРµ."""
         # РќР° РѕРґРёРЅРѕС‡РЅС‹Р№ РєР»РёРє РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РѕРєРЅРѕ.
         if reason == QSystemTrayIcon.Trigger:
-            self._restore_from_tray()
+            restore = getattr(self, "restore_from_tray", None)
+            if callable(restore):
+                restore()
+            else:
+                self._restore_from_tray()
 
     def _on_tray_message_clicked(self) -> None:
         task_id = self._tray_message_task_id
         self._tray_message_task_id = None
-        self._restore_from_tray()
+        restore = getattr(self, "restore_from_tray", None)
+        if callable(restore):
+            restore()
+        else:
+            self._restore_from_tray()
         if task_id is not None:
             self._open_task_from_tray_notification(task_id)
 
@@ -334,6 +342,9 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
         self.title_bar.sync_max_button()
+
+    def restore_from_tray(self) -> None:
+        self._restore_from_tray()
 
     def _minimize_to_tray(self):
         """РЎРІРѕСЂР°С‡РёРІР°РµС‚ РѕРєРЅРѕ РІ С‚СЂРµР№."""
@@ -481,10 +492,14 @@ class MainWindow(QMainWindow):
         workspace = self.workspace_stack.currentWidget()
         if workspace is None:
             return
-        if direction > 0 and hasattr(workspace, "_show_next"):
-            workspace._show_next()
-        elif direction < 0 and hasattr(workspace, "_show_previous"):
-            workspace._show_previous()
+        if direction > 0:
+            show_next = getattr(workspace, "show_next", None) or getattr(workspace, "_show_next", None)
+            if callable(show_next):
+                show_next()
+        elif direction < 0:
+            show_previous = getattr(workspace, "show_previous", None) or getattr(workspace, "_show_previous", None)
+            if callable(show_previous):
+                show_previous()
 
     def _hotkey_create_task(self) -> None:
         self.set_mode(self.MODE_TASKS)
@@ -964,6 +979,9 @@ class MainWindow(QMainWindow):
             self.setGeometry(QRect(geo.left() + geo.width() // 2, geo.top(), geo.width() // 2, geo.height()))
             self._restore_geom = self.geometry()
             return
+
+    def snap_to_screen_edges(self, global_pos: QPoint) -> None:
+        self._snap_to_screen_edges(global_pos)
 
     def _begin_restore_on_drag(self, global_pos: QPoint):
         """Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ РЅРѕСЂРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїСЂРё РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёРё РёР· maximize."""

@@ -5,8 +5,10 @@ __all__ = [
     "Conflict",
     "HotkeyBinding",
     "HotkeyCommand",
+    "HotkeyEventFilter",
     "HotkeyManager",
     "HotkeyOverridesStore",
+    "is_editable_widget",
     "load_commands_from_json",
     "normalize_sequence",
 ]

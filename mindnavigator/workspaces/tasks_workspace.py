@@ -3238,6 +3238,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             except ValueError as exc:
                 QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
+    def edit_task(self, index: QModelIndex) -> None:
+        self._edit_task(index)
+
     def _open_task_view(self, index: QModelIndex) -> None:
         model = index.model()
         if not hasattr(model, "task_at_row"):
@@ -3248,6 +3251,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = TaskDetailsDialog(task, parent=parent)
         show_dialog_standard(dialog, parent)
+
+    def open_task_view(self, index: QModelIndex) -> None:
+        self._open_task_view(index)
 
     def _prio_color(self, p: str) -> QColor:
         """Возвращает цвет для приоритета."""
@@ -3268,6 +3274,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Формирует подпись для заголовка дня."""
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
+
+    def format_header(self, d: date) -> str:
+        return self._format_header(d)
 
     def _format_completion_delay(self, delay_minutes: int) -> str:
         """Формирует подпись расхождения по факту выполнения."""
@@ -3380,6 +3389,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             "quick": quick_rect,
             "menu": menu_rect,
         }
+
+    def row_layout(self, rect: QRect, depth: int = 0, has_subtasks: bool = False) -> dict:
+        return self._row_layout(rect, depth, has_subtasks)
 
 
 class TasksWorkspace(BaseWorkspace):
@@ -4028,7 +4040,7 @@ class TasksWorkspace(BaseWorkspace):
         index = self._selected_task_index()
         if index is None:
             return
-        self.delegate._edit_task(index)
+        self.delegate.edit_task(index)
 
     def _delete_selected_task(self) -> None:
         index = self._selected_task_index()
@@ -4130,16 +4142,16 @@ class TasksWorkspace(BaseWorkspace):
                 rect = self.list.visualRect(index)
                 depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
                 has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
-                layout = self.delegate._row_layout(rect, depth, has_subtasks)
+                layout = self.delegate.row_layout(rect, depth, has_subtasks)
                 if has_subtasks and layout["title"].contains(pos):
                     self.model.toggle_subtasks_expanded_by_row(index.row())
                 elif layout["doc"].contains(pos):
-                    self.delegate._open_task_view(index)
+                    self.delegate.open_task_view(index)
                 else:
                     if has_subtasks:
                         self.model.toggle_subtasks_expanded_by_row(index.row())
                     else:
-                        self.delegate._open_task_view(index)
+                        self.delegate.open_task_view(index)
                 return True
         return super().eventFilter(obj, event)
 
@@ -4313,7 +4325,7 @@ class TasksWorkspace(BaseWorkspace):
             self._sticky_header.hide()
             return
 
-        text = self.delegate._format_header(active_day)
+        text = self.delegate.format_header(active_day)
         if active_day == date.today():
             text = f"{text}  СЕГОДНЯ"
         self._sticky_header.setText(text)
