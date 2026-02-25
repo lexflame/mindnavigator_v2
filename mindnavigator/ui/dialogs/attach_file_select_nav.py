@@ -80,7 +80,7 @@ class AttachFileSelectNav(QDialog):
         header_layout.addWidget(self.count_label)
 
         self.empty_label = QLabel("В базе нет файлов. Запустите синхронизацию.")
-        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.content_frame = QWidget()
         content_layout = QVBoxLayout(self.content_frame)
@@ -101,7 +101,7 @@ class AttachFileSelectNav(QDialog):
         self.file_grid.setWordWrap(True)
         self.file_grid.setSelectionMode(QAbstractItemView.SingleSelection)
         self.file_grid.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-        self.file_grid.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.file_grid.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.file_grid.currentItemChanged.connect(self._on_grid_selection)
         self.file_grid.itemDoubleClicked.connect(self._on_grid_double_clicked)
 
@@ -190,7 +190,7 @@ class AttachFileSelectNav(QDialog):
         self._tree_items.clear()
 
         root_item = QTreeWidgetItem(["Облако"])
-        root_item.setData(0, Qt.UserRole, "")
+        root_item.setData(0, Qt.ItemDataRole.UserRole, "")
         self.folder_tree.addTopLevelItem(root_item)
         self._tree_items[""] = root_item
         self._populate_tree(root_item, "")
@@ -204,7 +204,7 @@ class AttachFileSelectNav(QDialog):
         for child_path in folders:
             name = child_path.split("/")[-1]
             child_item = QTreeWidgetItem([name])
-            child_item.setData(0, Qt.UserRole, child_path)
+            child_item.setData(0, Qt.ItemDataRole.UserRole, child_path)
             parent_item.addChild(child_item)
             self._tree_items[child_path] = child_item
             self._populate_tree(child_item, child_path)
@@ -216,7 +216,7 @@ class AttachFileSelectNav(QDialog):
     ) -> None:
         if not current:
             return
-        folder_path = current.data(0, Qt.UserRole) or ""
+        folder_path = current.data(0, Qt.ItemDataRole.UserRole) or ""
         self._set_current_folder(folder_path)
 
     def _set_current_folder(self, folder_path: str) -> None:
@@ -242,14 +242,14 @@ class AttachFileSelectNav(QDialog):
             name = child_path.split("/")[-1]
             item = QListWidgetItem(name)
             item.setIcon(self._icon_folder)
-            item.setData(Qt.UserRole, ("folder", child_path))
+            item.setData(Qt.ItemDataRole.UserRole, ("folder", child_path))
             item.setToolTip(name)
             self.file_grid.addItem(item)
 
         for file_item in files:
             label = file_item.name
             item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, ("file", file_item.rel_path, file_item))
+            item.setData(Qt.ItemDataRole.UserRole, ("file", file_item.rel_path, file_item))
             item.setIcon(self._file_icon_for(file_item, cloud_root_path))
             item.setToolTip(file_item.rel_path)
             self.file_grid.addItem(item)
@@ -266,8 +266,8 @@ class AttachFileSelectNav(QDialog):
                 if not pixmap.isNull():
                     scaled = pixmap.scaled(
                         self.file_grid.iconSize(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
                     )
                     return QIcon(scaled)
         if cache_key in self._icon_cache:
@@ -292,7 +292,7 @@ class AttachFileSelectNav(QDialog):
             self._selected_icon = None
             self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
             return
-        payload = current.data(Qt.UserRole)
+        payload = current.data(Qt.ItemDataRole.UserRole)
         if not payload:
             self._selected_rel_path = None
             self._selected_icon = None
@@ -311,7 +311,7 @@ class AttachFileSelectNav(QDialog):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def _on_grid_double_clicked(self, item: QListWidgetItem) -> None:
-        payload = item.data(Qt.UserRole)
+        payload = item.data(Qt.ItemDataRole.UserRole)
         if not payload:
             return
         if payload[0] == "folder":

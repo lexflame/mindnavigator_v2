@@ -110,6 +110,10 @@ Purpose: entity property map and UI role map.
 ## Framed Dialog Patch Properties
 - `enable_frameless_qdialogs` patched init path normalizes `(parent, flags)` from incoming args/kwargs and forwards to original `QDialog.__init__` without star-arg passthrough.
 
+## Attach File Selector Properties
+- `AttachFileSelectNav` uses Qt6 enum namespaces for selection payloads and icon scaling:
+  `Qt.ItemDataRole.*`, `Qt.AlignmentFlag.*`, `Qt.ScrollBarPolicy.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`.
+
 ## Workspace State Properties
 - `BaseWorkspace.restore_state` normalizes `QSettings.value(...)` results to string-safe values before:
   - assigning `search_text`;
