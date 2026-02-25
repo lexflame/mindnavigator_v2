@@ -376,7 +376,8 @@ class MapsItemDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def _row_layout(self, r: QRect) -> dict:
+    @staticmethod
+    def _row_layout(r: QRect) -> dict:
         # Рассчитываем положение и размеры всех блоков строки.
         left = r.left() + 14
         right = r.right() - 14
@@ -611,7 +612,8 @@ class MapEditDialog(QDialog):
             }}
         """)
 
-    def _project_titles(self) -> List[str]:
+    @staticmethod
+    def _project_titles() -> List[str]:
         # Список проектов для комбобокса.
         projects = get_database().fetch_projects()
         titles = sorted({p.title for p in projects})
@@ -1731,7 +1733,8 @@ class MapCanvas(QWidget):
                 return direction
         return None
 
-    def _resize_handle_cursor(self, handle: str) -> Qt.CursorShape:
+    @staticmethod
+    def _resize_handle_cursor(handle: str) -> Qt.CursorShape:
         # Возвращаем курсор для конкретной ручки изменения размера.
         if handle in ("nw", "se"):
             return Qt.SizeFDiagCursor
@@ -1743,7 +1746,8 @@ class MapCanvas(QWidget):
             return Qt.SizeHorCursor
         return Qt.SizeAllCursor
 
-    def _resize_scale_delta(self, handle: str, delta: QPointF) -> float:
+    @staticmethod
+    def _resize_scale_delta(handle: str, delta: QPointF) -> float:
         # Преобразуем смещение мыши в изменение масштаба маркера.
         dirs = {
             "n": (0, -1),
@@ -2275,7 +2279,8 @@ class MapCanvas(QWidget):
     def edit_marker(self, marker: Marker) -> None:
         self._edit_marker(marker)
 
-    def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
+    @staticmethod
+    def _load_marker_preview(marker: Marker, target: QSize) -> QPixmap | None:
         # Загружаем превью изображения маркера для карточки.
         image_path = (marker.image_path or "").strip()
         if not image_path:
@@ -3412,7 +3417,8 @@ class MapEditorWorkspace(QWidget):
                 self.info_preview.setText("Нет изображения")
         self.info_preview.setToolTip(marker.image_path or "")
 
-    def _load_marker_preview(self, marker: Marker, target: QSize) -> QPixmap | None:
+    @staticmethod
+    def _load_marker_preview(marker: Marker, target: QSize) -> QPixmap | None:
         # Загружаем превью изображения маркера для инфо-панели.
         image_path = (marker.image_path or "").strip()
         if not image_path:
@@ -3606,12 +3612,14 @@ class MapEditorWorkspace(QWidget):
             return
         self._db.delete_map_overlay(overlay_id)
 
-    def _format_value(self, value: str) -> str:
+    @staticmethod
+    def _format_value(value: str) -> str:
         # Приводим значение к отображаемому виду.
         text = (value or "").strip()
         return text if text else "—"
 
-    def _format_links(self, item_ids: List[int], source: dict) -> str:
+    @staticmethod
+    def _format_links(item_ids: List[int], source: dict) -> str:
         # Формируем строку с названиями привязанных сущностей.
         if not item_ids:
             return "—"
@@ -3625,7 +3633,8 @@ class MapEditorWorkspace(QWidget):
             titles.append(item_title)
         return ", ".join(titles)
 
-    def _format_file_links(self, item_ids: List[int], source: dict) -> str:
+    @staticmethod
+    def _format_file_links(item_ids: List[int], source: dict) -> str:
         # Формируем кликабельные ссылки для изображений.
         if not item_ids:
             return "—"
@@ -4075,7 +4084,8 @@ class MapsListWorkspace(QWidget):
         if hasattr(self, "marker_search_results") and self.marker_search_results.isVisible():
             self._position_marker_search_results()
 
-    def _project_titles(self) -> List[str]:
+    @staticmethod
+    def _project_titles() -> List[str]:
         # Получаем список названий проектов для фильтра.
         projects = get_database().fetch_projects()
         titles = sorted({p.title for p in projects})

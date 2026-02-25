@@ -185,3 +185,5 @@ It also stores:
   - validated staticmethod batch-3 with targeted compile + task regressions (`tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_tray_task_navigation.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
   - continued `PyMethodMayBeStaticInspection` cleanup (batch-4): converted self-free notes/ideas helpers (`_paint_category` delegates and ideas `_set_combo_value`) to `@staticmethod`.
   - validated staticmethod batch-4 with focused workspace regressions (`tests/test_workspace_category_layout.py`, `tests/test_notes_multiline_save.py`, `tests/test_workspace_csv_transfer.py`): `10 passed`.
+  - continued `PyMethodMayBeStaticInspection` cleanup (batch-5): converted self-free maps helpers (row/layout math, project-title providers, resize helpers, marker preview loader, info-format helpers) to `@staticmethod`.
+  - validated staticmethod batch-5 with focused map/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.

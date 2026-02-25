@@ -209,3 +209,5 @@ Purpose: entity property map and UI role map.
 - Tasks workspace static helpers include attachment/list formatting and mode mapping primitives:
   `_clear_layout`, `_cloud_file_link_text`, `_attachment_kind_label`, `_task_quick_rect`, `_is_overdue`, `_format_header`, `_format_completion_delay`, `_format_parent_schedule_text`, `_tab_from_mode`, `_estimate_task_minutes`.
 - Notes/ideas delegates keep category paint helpers static (`_paint_category`), and ideas form selection helper `_set_combo_value` is static.
+- Maps workspace static helpers include row/layout and formatting primitives:
+  `_row_layout`, `_project_titles`, `_resize_handle_cursor`, `_resize_scale_delta`, `_load_marker_preview`, `_format_value`, `_format_links`, `_format_file_links`.
