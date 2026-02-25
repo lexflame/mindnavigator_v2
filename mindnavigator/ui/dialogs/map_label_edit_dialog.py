@@ -207,13 +207,13 @@ class Chip(QWidget):
         # Текст чипа.
         self.label = QLabel(item.title)
         self.label.setObjectName("ChipLabel")
-        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         # Кнопка удаления чипа.
         remove_btn = QToolButton()
         remove_btn.setObjectName("ChipRemove")
         remove_btn.setText("✕")
-        remove_btn.setCursor(Qt.PointingHandCursor)
+        remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         remove_btn.setAutoRaise(True)
         remove_btn.clicked.connect(lambda: self.removeRequested.emit(item.id))
 
@@ -258,7 +258,7 @@ class TagChipsInput(QWidget):
         self.add_button = QToolButton()
         self.add_button.setObjectName("ChipAddButton")
         self.add_button.setText("+")
-        self.add_button.setCursor(Qt.PointingHandCursor)
+        self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_button.clicked.connect(self.addRequested.emit)
 
         layout.addWidget(self.flow_container, 1)
@@ -322,8 +322,8 @@ class LinkChip(QWidget):
         # Текстовая ссылка.
         self.label = QLabel(item.title)
         self.label.setObjectName("EntityChipLabel")
-        self.label.setTextFormat(Qt.RichText)
-        self.label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.label.setTextFormat(Qt.TextFormat.RichText)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.label.setOpenExternalLinks(False)
         self.label.setText(f"<a href='{item.link}'>{item.title}</a>")
         self.label.linkActivated.connect(self.linkActivated.emit)
@@ -332,7 +332,7 @@ class LinkChip(QWidget):
         remove_btn = QToolButton()
         remove_btn.setObjectName("EntityChipRemove")
         remove_btn.setText("✕")
-        remove_btn.setCursor(Qt.PointingHandCursor)
+        remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         remove_btn.setAutoRaise(True)
         remove_btn.clicked.connect(lambda: self.removeRequested.emit(item.id))
 
@@ -386,7 +386,7 @@ class EntityLinksInput(QWidget):
         self.add_button = QToolButton()
         self.add_button.setObjectName("EntityLinksAdd")
         self.add_button.setIcon(qta.icon("fa5s.plus", color="#cfcfcf"))
-        self.add_button.setCursor(Qt.PointingHandCursor)
+        self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_button.setAutoRaise(True)
         self.add_button.setToolTip("Добавить привязки")
         self.add_button.clicked.connect(self.addRequested.emit)
@@ -395,14 +395,14 @@ class EntityLinksInput(QWidget):
         self.clear_button = QToolButton()
         self.clear_button.setObjectName("EntityLinksClear")
         self.clear_button.setIcon(qta.icon("fa5s.times", color="#cfcfcf"))
-        self.clear_button.setCursor(Qt.PointingHandCursor)
+        self.clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_button.setAutoRaise(True)
         self.clear_button.clicked.connect(self._on_clear_requested)
 
-        layout.addWidget(self.icon_label, 0, Qt.AlignVCenter)
+        layout.addWidget(self.icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.flow_container, 1)
-        layout.addWidget(self.add_button, 0, Qt.AlignVCenter)
-        layout.addWidget(self.clear_button, 0, Qt.AlignVCenter)
+        layout.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.clear_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def set_items(self, items: Iterable[EntityLinkItem]) -> None:
         # Полностью заменяем список привязок.
@@ -481,12 +481,12 @@ class CompleterPopupSync(QObject):
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
         # Отслеживаем изменения размеров/позиции для синхронизации popup.
         if watched in (self._line_edit, self._popup) and event.type() in {
-            QEvent.Resize,
-            QEvent.Move,
-            QEvent.Show,
-            QEvent.FontChange,
-            QEvent.StyleChange,
-            QEvent.ScreenChangeInternal,
+            QEvent.Type.Resize,
+            QEvent.Type.Move,
+            QEvent.Type.Show,
+            QEvent.Type.FontChange,
+            QEvent.Type.StyleChange,
+            QEvent.Type.ScreenChangeInternal,
         }:
             self._sync_popup()
         return super().eventFilter(watched, event)
@@ -497,8 +497,8 @@ class CompleterPopupSync(QObject):
             return
         self._popup.setObjectName("CompleterPopup")
         self._popup.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-        self._popup.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._popup.setTextElideMode(Qt.ElideRight)
+        self._popup.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._popup.setTextElideMode(Qt.TextElideMode.ElideRight)
         self._completer.setMaxVisibleItems(self._max_visible_items)
         self._sync_popup()
 
@@ -533,7 +533,7 @@ class ImageDropLabel(QLabel):
         # Включаем drag-n-drop и готовим плейсхолдер.
         self.setAcceptDrops(True)
         self.setObjectName("ImageDrop")
-        self.setAlignment(Qt.AlignCenter)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._has_image = False
         self._placeholder = "Перетащите изображение\\nили выберите файл"
         self.setText(self._placeholder)
@@ -584,7 +584,7 @@ class MapLabelEditDialog(QDialog):
         super().__init__(parent)
         # Сохраняем исходные данные и состояние диалога.
         self.setObjectName("MapLabelEditDialog")
-        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._db = get_database()
         self._marker = marker
         self._entity_sources = entity_sources
@@ -626,7 +626,7 @@ class MapLabelEditDialog(QDialog):
         # Горячие клавиши диалога.
         QShortcut(QKeySequence("Ctrl+Return"), self, self._on_save)
         QShortcut(QKeySequence("Ctrl+Enter"), self, self._on_save)
-        QShortcut(QKeySequence(Qt.Key_Escape), self, self.reject)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.reject)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         # При показе разворачиваем и вписываем диалог в экран.
@@ -703,7 +703,7 @@ class MapLabelEditDialog(QDialog):
         self.form_scroll.setObjectName("MapLabelFormScroll")
         self.form_scroll.setWidgetResizable(True)
         self.form_scroll.setFrameShape(QFrame.NoFrame)
-        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.form_scroll.setWidget(right)
 
         body_layout.addWidget(left, 0)
@@ -744,7 +744,7 @@ class MapLabelEditDialog(QDialog):
         self.marker_type_preview = QLabel()
         self.marker_type_preview.setObjectName("MapLabelMarkerPreview")
         self.marker_type_preview.setFixedSize(36, 36)
-        self.marker_type_preview.setAlignment(Qt.AlignCenter)
+        self.marker_type_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.marker_type_combo = QComboBox()
         self.marker_type_combo.setObjectName("MapLabelMarkerType")
         self.marker_type_combo.setIconSize(QSize(20, 20))
@@ -795,8 +795,8 @@ class MapLabelEditDialog(QDialog):
 
         form = QFormLayout()
         form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Название метки")
@@ -808,7 +808,7 @@ class MapLabelEditDialog(QDialog):
         if type_suggestions:
             # Настраиваем автодополнение по типу.
             completer = QCompleter(sorted({t for t in type_suggestions if t}), self)
-            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
             self.type_combo.setCompleter(completer)
             self._register_completer_popup(self.type_combo.lineEdit(), completer)
 
@@ -875,7 +875,7 @@ class MapLabelEditDialog(QDialog):
 
         form = QFormLayout()
         form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         for key, source in self._entity_sources.items():
             # Создаем поле привязки для каждой сущности.
@@ -893,11 +893,11 @@ class MapLabelEditDialog(QDialog):
                 # Для файлов открываем отдельный пикер.
                 link_input.search_input.setReadOnly(True)
                 link_input.search_input.setPlaceholderText("Выбрать файл…")
-                link_input.search_input.setCursor(Qt.PointingHandCursor)
+                link_input.search_input.setCursor(Qt.CursorShape.PointingHandCursor)
 
                 def _open_file_dialog(event, k=key, field=link_input.search_input):
                     # Обработчик клика для открытия файла.
-                    if event.button() == Qt.LeftButton:
+                    if event.button() == Qt.MouseButton.LeftButton:
                         self._open_picker(k)
                     QLineEdit.mousePressEvent(field, event)
 
@@ -907,15 +907,15 @@ class MapLabelEditDialog(QDialog):
                 labels = {source.label_fn(item): item.id for item in source.items}
                 self._link_title_maps[key] = labels
                 completer = QCompleter(list(labels.keys()), link_input.search_input)
-                completer.setCaseSensitivity(Qt.CaseInsensitive)
-                completer.setFilterMode(Qt.MatchContains)
+                completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                completer.setFilterMode(Qt.MatchFlag.MatchContains)
                 completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
                 link_input.search_input.setCompleter(completer)
                 self._register_completer_popup(link_input.search_input, completer)
 
                 def _open_picker_on_empty_click(event, field=link_input.search_input, button=link_input.add_button):
                     # Открываем пикер кликом по пустому полю.
-                    if event.button() == Qt.LeftButton and not field.text().strip():
+                    if event.button() == Qt.MouseButton.LeftButton and not field.text().strip():
                         button.click()
                         return
                     QLineEdit.mousePressEvent(field, event)
@@ -1281,7 +1281,7 @@ class MapLabelEditDialog(QDialog):
         if not screen:
             return
         available = screen.availableGeometry()
-        margin = 0 if self.windowState() & Qt.WindowMaximized else 24
+        margin = 0 if self.windowState() & Qt.WindowState.WindowMaximized else 24
         max_width = max(available.width() - margin, 320)
         max_height = max(available.height() - margin, 240)
         self.setMaximumSize(max_width, max_height)
@@ -1463,8 +1463,8 @@ class MapLabelEditDialog(QDialog):
         if pixmap is not None:
             scaled = pixmap.scaled(
                 self.preview.size(),
-                Qt.KeepAspectRatioByExpanding,
-                Qt.SmoothTransformation,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
             )
             self.preview.set_image(scaled)
         else:
@@ -1504,7 +1504,7 @@ class MapLabelEditDialog(QDialog):
         if pixmap.isNull():
             QMessageBox.warning(self, "Изображение", "Не удалось загрузить изображение.")
             return
-        scaled = pixmap.scaled(self.preview.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        scaled = pixmap.scaled(self.preview.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
         self.preview.set_image(scaled)
         self._image_path = file_path
         self._image_icon = None
@@ -1528,7 +1528,7 @@ class MapLabelEditDialog(QDialog):
     def _choose_image(self) -> None:
         # Открываем навигатор выбора файла из облака.
         dialog = AttachFileSelectNav(self)
-        if dialog.exec() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         rel_path = dialog.selected_rel_path()
         if not rel_path:
@@ -1547,8 +1547,8 @@ class MapLabelEditDialog(QDialog):
             if not pixmap.isNull():
                 scaled = pixmap.scaled(
                     self.preview.size(),
-                    Qt.KeepAspectRatioByExpanding,
-                    Qt.SmoothTransformation,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
                 )
                 self.preview.set_image(scaled)
                 self._image_path = rel_path
@@ -1590,7 +1590,7 @@ class MapLabelEditDialog(QDialog):
         # Обрезаем длинный путь с помощью эллипсиса.
         metrics = QFontMetrics(self.parent_path_edit.font())
         width = max(120, self.parent_path_edit.width() - 40)
-        return metrics.elidedText(path, Qt.ElideMiddle, width)
+        return metrics.elidedText(path, Qt.TextElideMode.ElideMiddle, width)
 
     def _clear_links(self, key: str) -> None:
         # Очищаем привязки для конкретной сущности.
@@ -1656,7 +1656,7 @@ class MapLabelEditDialog(QDialog):
             initial_query=query,
             anchor_widget=link_input,
         )
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             to_add = [
                 EntityLinkItem(item.id, item.title, f"{source.item_prefix}:{item.id}")
                 for item in dialog.selected_items()
@@ -1668,7 +1668,7 @@ class MapLabelEditDialog(QDialog):
     def _open_file_picker(self, source: MapLabelEntitySource, link_input: EntityLinksInput) -> None:
         # Открываем файл-пикер и добавляем выбранный файл.
         dialog = AttachFileSelectNav(self)
-        if dialog.exec() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         rel_path = dialog.selected_rel_path()
         if not rel_path:
@@ -1686,3 +1686,4 @@ class MapLabelEditDialog(QDialog):
         )
         link_input.clear_search()
         self._mark_dirty()
+

@@ -112,6 +112,10 @@ Purpose: entity property map and UI role map.
   - assigning `search_text`;
   - JSON-decoding stored filter payload.
 
+## Map Label Dialog Properties
+- `MapLabelEditDialog` runtime/UI constants are aligned to Qt6 enum namespaces for static-analysis parity:
+  `Qt.AlignmentFlag.*`, `Qt.CursorShape.*`, `Qt.TextInteractionFlag.*`, `QEvent.Type.*`, `Qt.ScrollBarPolicy.*`, `Qt.CaseSensitivity.*`, `Qt.MatchFlag.*`, `Qt.MouseButton.*`, `Qt.WindowState.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`, `QDialog.DialogCode.*`.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
