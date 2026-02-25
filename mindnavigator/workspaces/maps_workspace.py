@@ -2340,7 +2340,14 @@ class MapCanvas(QWidget):
         title = QLabel("Метка на карте")
         title.setObjectName("MapLabelTitle")
         header_layout.addWidget(title)
-        header_layout.addItem(QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        header_layout.addItem(
+            QSpacerItem(
+                20,
+                0,
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Minimum,
+            )
+        )
 
         edit_btn = QPushButton("Редактировать")
         edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2392,7 +2399,7 @@ class MapCanvas(QWidget):
         marker_type_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         marker_type_value = QLabel()
         marker_type_value.setObjectName("MapLabelValue")
-        marker_type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        marker_type_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         marker_type = marker_type_for_color(marker.color)
         marker_type_value.setText(marker_type.label)
         marker_type_icon_pixmap = marker_type_pixmap(marker_type, marker_type_preview.size())
@@ -2412,13 +2419,13 @@ class MapCanvas(QWidget):
         coords_title.setObjectName("MapLabelSectionTitle")
         coords_value = QLabel(f"{marker.x:.0f}, {marker.y:.0f}")
         coords_value.setObjectName("MapLabelValue")
-        coords_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        coords_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         size_title = QLabel("Размер")
         size_title.setObjectName("MapLabelSectionTitle")
         size_value = QLabel(f"{marker.size:.1f}")
         size_value.setObjectName("MapLabelValue")
-        size_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        size_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         left_layout.addWidget(preview_title)
         left_layout.addWidget(preview_label)
@@ -2435,7 +2442,7 @@ class MapCanvas(QWidget):
         # Правая панель с подробностями и привязками.
         right_panel = QFrame()
         right_panel.setObjectName("MapLabelFormContainer")
-        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(16)
@@ -2458,13 +2465,13 @@ class MapCanvas(QWidget):
         name_label.setObjectName("MapLabelFormLabel")
         name_value = QLabel(marker.name)
         name_value.setObjectName("MapLabelValue")
-        name_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        name_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         type_label = QLabel("Тип")
         type_label.setObjectName("MapLabelFormLabel")
         type_value = QLabel(marker.type or "—")
         type_value.setObjectName("MapLabelValue")
-        type_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        type_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         main_form.addRow(name_label, name_value)
         main_form.addRow(type_label, type_value)
@@ -2499,7 +2506,7 @@ class MapCanvas(QWidget):
             label = QLabel()
             label.setObjectName("MapLabelValue")
             label.setTextFormat(Qt.RichText)
-            label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             label.setOpenExternalLinks(False)
             label.setStyleSheet(
                 "QLabel a {"
@@ -2562,7 +2569,7 @@ class MapCanvas(QWidget):
         desc_value = QLabel(marker.description or "—")
         desc_value.setObjectName("MapLabelValue")
         desc_value.setWordWrap(True)
-        desc_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        desc_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         props_wrap = QFrame()
         props_wrap.setObjectName("MapLabelImportant")
@@ -2582,7 +2589,7 @@ class MapCanvas(QWidget):
         props_value = QLabel(_format_marker_properties_text(marker.properties))
         props_value.setObjectName("MapLabelValue")
         props_value.setWordWrap(True)
-        props_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        props_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         props_layout.addLayout(props_header)
         props_layout.addWidget(props_value)
@@ -3020,7 +3027,7 @@ class MapEditorWorkspace(QWidget):
         for label in [self.info_name, self.info_type, self.info_size, self.info_coords, self.info_parent]:
             label.setObjectName("MapInfoValue")
             label.setWordWrap(True)
-            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         name_label = QLabel("Название")
         type_label = QLabel("Тип")
@@ -3069,9 +3076,9 @@ class MapEditorWorkspace(QWidget):
         ]:
             label.setObjectName("MapInfoValue")
             label.setWordWrap(True)
-            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.info_file.setTextFormat(Qt.RichText)
-        self.info_file.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.info_file.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.info_file.setOpenExternalLinks(False)
         self.info_file.linkActivated.connect(self._handle_info_link)
 
@@ -3109,7 +3116,7 @@ class MapEditorWorkspace(QWidget):
         self.info_description = QLabel("—")
         self.info_description.setObjectName("MapInfoText")
         self.info_description.setWordWrap(True)
-        self.info_description.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.info_description.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         text_layout.addWidget(desc_label)
         text_layout.addWidget(self.info_description)
@@ -3132,7 +3139,7 @@ class MapEditorWorkspace(QWidget):
         self.info_important = QLabel("—")
         self.info_important.setObjectName("MapInfoText")
         self.info_important.setWordWrap(True)
-        self.info_important.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.info_important.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         important_layout.addLayout(important_header)
         important_layout.addWidget(self.info_important)
@@ -3826,9 +3833,9 @@ class MapsListWorkspace(QWidget):
         self.list = MapsListView()
         self.list.setObjectName("MapsList")
         self.list.setUniformItemSizes(False)
-        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SingleSelection)
+        self.list.setSelectionMode(QListView.SelectionMode.SingleSelection)
         list_layout.addWidget(self.list, 1)
 
         self.model = MapsModel(self)

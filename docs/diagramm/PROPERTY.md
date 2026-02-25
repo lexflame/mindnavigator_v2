@@ -253,3 +253,8 @@ Purpose: entity property map and UI role map.
 - Tasks workspace details/Gantt UI uses Qt6 enums for text interaction and table policies:
   `Qt.TextFormat.*`, `Qt.TextInteractionFlag.*`, `QDialogButtonBox.StandardButton.*`,
   `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.EditTrigger.*`, `QHeaderView.ResizeMode.*`.
+- Maps workspace and map-label edit dialog use Qt6 enum namespaces for inspector/forms:
+  `Qt.TextInteractionFlag.*`, `QSizePolicy.Policy.*`, `QListView.ScrollMode.*`,
+  `QListView.SelectionMode.*`, `QAbstractItemView.ScrollMode.*`.
+- Ideas delegate/list typing uses explicit `QStyleOptionViewItem` and Qt6 list-mode enums:
+  `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.ScrollMode.*`.

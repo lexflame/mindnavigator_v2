@@ -252,7 +252,7 @@ class TagChipsInput(QWidget):
         self.flow_container.setObjectName("ChipFlow")
         self.flow_layout = FlowLayout(self.flow_container, spacing=6)
         self.flow_container.setLayout(self.flow_layout)
-        self.flow_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.flow_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         # Кнопка добавления новых чипов.
         self.add_button = QToolButton()
@@ -374,7 +374,7 @@ class EntityLinksInput(QWidget):
         self.flow_container.setObjectName("EntityChipFlow")
         self.flow_layout = FlowLayout(self.flow_container, spacing=6)
         self.flow_container.setLayout(self.flow_layout)
-        self.flow_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.flow_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.search_input = QLineEdit()
         self.search_input.setObjectName("EntityLinksSearch")
@@ -496,7 +496,7 @@ class CompleterPopupSync(QObject):
         if not self._popup:
             return
         self._popup.setObjectName("CompleterPopup")
-        self._popup.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._popup.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self._popup.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._popup.setTextElideMode(Qt.TextElideMode.ElideRight)
         self._completer.setMaxVisibleItems(self._max_visible_items)
@@ -669,7 +669,9 @@ class MapLabelEditDialog(QDialog):
 
         header_layout.addWidget(title)
         header_layout.addWidget(self.dirty_indicator)
-        header_layout.addItem(QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        header_layout.addItem(
+            QSpacerItem(20, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        )
 
         self.save_button = QPushButton("Сохранить")
         self.save_button.setObjectName("MapLabelPrimary")
@@ -770,7 +772,7 @@ class MapLabelEditDialog(QDialog):
         # Правая панель с секциями формы.
         container = QFrame()
         container.setObjectName("MapLabelFormContainer")
-        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         form_layout = QVBoxLayout(container)
         form_layout.setContentsMargins(0, 0, 8, 0)
         form_layout.setSpacing(16)
@@ -880,7 +882,7 @@ class MapLabelEditDialog(QDialog):
         for key, source in self._entity_sources.items():
             # Создаем поле привязки для каждой сущности.
             link_input = EntityLinksInput(source.placeholder, source.icon_name)
-            link_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            link_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             link_input.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
             link_input.clearRequested.connect(lambda k=key: self._clear_links(k))
             link_input.addRequested.connect(lambda k=key: self._open_picker(k))

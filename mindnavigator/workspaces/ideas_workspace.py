@@ -16,6 +16,7 @@ from typing import Optional, Any, List, Union, Dict
 from PySide6.QtCore import Qt, QSize, QAbstractListModel, QModelIndex
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QCursor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QListView,
     QStyledItemDelegate,
     QStyle,
+    QStyleOptionViewItem,
     QSplitter,
     QTabWidget,
     QFormLayout,
@@ -234,7 +236,7 @@ class IdeasListModel(QAbstractListModel):
 
 
 class IdeasDelegate(QStyledItemDelegate):
-    def paint(self, painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
         row_type = index.data(IdeaRoles.RowType)
         if row_type == "category":
@@ -276,13 +278,13 @@ class IdeasDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def sizeHint(self, option: QStyle.OptionViewItem, index: QModelIndex) -> QSize:
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         if index.data(IdeaRoles.RowType) == "category":
             return QSize(option.rect.width(), 30)
         return QSize(option.rect.width(), 86)
 
     @staticmethod
-    def _paint_category(painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
+    def _paint_category(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         rect = option.rect.adjusted(10, 3, -10, -3)
         title = (index.data(IdeaRoles.Title) or "").strip() or "Без категории"
         font = QFont(option.font)
@@ -367,8 +369,8 @@ class IdeasWorkspace(BaseWorkspace):
         self.list_view.setObjectName("IdeasList")
         self.list_view.setModel(IdeasListModel(self.list_view))
         self.list_view.setItemDelegate(IdeasDelegate(self.list_view))
-        self.list_view.setSelectionMode(QListView.SingleSelection)
-        self.list_view.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list_view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         self.list_view.doubleClicked.connect(self._open_selected)

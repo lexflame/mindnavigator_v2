@@ -498,3 +498,10 @@
 [2026-02-25 18:53] CMD: $env:PYTHONPATH='.'; pytest tests/test_tray_task_navigation.py tests/test_tasks_marker_refresh.py tests/test_task_attachment_class.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:53] OUT: 16 passed.
 [2026-02-25 18:53] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-9.
+[2026-02-25 18:56] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-10).
+[2026-02-25 18:56] ACTION: Migrated Qt6 enum usage in map/idea UI modules: maps workspace inspector text flags, map-label edit dialog size/scroll enums, and ideas delegate/list typing.
+[2026-02-25 18:56] CMD: python -m compileall mindnavigator/workspaces/maps_workspace.py mindnavigator/ui/dialogs/map_label_edit_dialog.py mindnavigator/workspaces/ideas_workspace.py
+[2026-02-25 18:56] OUT: OK.
+[2026-02-25 18:56] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:56] OUT: 10 passed.
+[2026-02-25 18:56] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-10.
