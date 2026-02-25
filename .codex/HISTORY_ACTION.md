@@ -484,3 +484,10 @@
 [2026-02-25 18:48] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:48] OUT: 7 passed.
 [2026-02-25 18:48] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-7.
+[2026-02-25 18:51] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-8).
+[2026-02-25 18:51] ACTION: Migrated Qt6 list/item enum namespaces in projects navigation (selection/scroll/drag-drop modes, item flags, global colors).
+[2026-02-25 18:51] CMD: python -m compileall mindnavigator/ui/projects_nav.py
+[2026-02-25 18:51] OUT: OK.
+[2026-02-25 18:51] CMD: $env:PYTHONPATH='.'; pytest tests/test_project_tree_storage.py tests/test_tray_task_navigation.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:51] OUT: 8 passed.
+[2026-02-25 18:51] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-8.

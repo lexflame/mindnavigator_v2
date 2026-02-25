@@ -245,3 +245,6 @@ Purpose: entity property map and UI role map.
 - Purchases workspace list/table controls use Qt6 enum namespaces:
   `Qt.Orientation.*`, `Qt.ContextMenuPolicy.*`, `QAbstractItemView.SelectionBehavior.*`,
   `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.EditTrigger.*`, `QMessageBox.StandardButton.*`.
+- Projects navigation list rendering uses Qt6 enum namespaces for interaction and row state:
+  `Qt.ItemFlag.*`, `Qt.GlobalColor.*`, `QAbstractItemView.SelectionMode.*`,
+  `QAbstractItemView.ScrollMode.*`, `QAbstractItemView.DragDropMode.*`.

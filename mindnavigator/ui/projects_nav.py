@@ -252,10 +252,10 @@ class ProjectsNav(QWidget):
 
         self.list = _ProjectsListWidget(self)
         self.list.setObjectName("ProjectsFilterList")
-        self.list.setSelectionMode(QListWidget.SingleSelection)
-        self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.list.setDragEnabled(True)
         self.list.setAcceptDrops(True)
@@ -351,15 +351,15 @@ class ProjectsNav(QWidget):
 
     def _add_clear_item(self, label: str) -> None:
         item = QListWidgetItem(label)
-        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         item.setData(Qt.ItemDataRole.UserRole, {"kind": "clear", "value": None})
         self.list.addItem(item)
 
     def _add_section(self, title: str, entries: list[dict]) -> None:
         if title:
             header_item = QListWidgetItem(title)
-            header_item.setFlags(Qt.ItemIsEnabled)
-            header_item.setForeground(Qt.gray)
+            header_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            header_item.setForeground(Qt.GlobalColor.gray)
             header_item.setData(Qt.ItemDataRole.UserRole, {"kind": "section", "value": None})
             self.list.addItem(header_item)
         self._add_entries(entries)
@@ -367,8 +367,8 @@ class ProjectsNav(QWidget):
     def _add_entries(self, entries: list[dict]) -> None:
         if not entries:
             empty = QListWidgetItem("— нет данных —")
-            empty.setFlags(Qt.ItemIsEnabled)
-            empty.setForeground(Qt.gray)
+            empty.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            empty.setForeground(Qt.GlobalColor.gray)
             empty.setData(Qt.ItemDataRole.UserRole, {"kind": "empty", "value": None})
             self.list.addItem(empty)
             return
@@ -376,13 +376,13 @@ class ProjectsNav(QWidget):
             item = QListWidgetItem(entry["label"])
             if entry.get("kind") == "project":
                 item.setFlags(
-                    Qt.ItemIsEnabled
-                    | Qt.ItemIsSelectable
-                    | Qt.ItemIsDragEnabled
-                    | Qt.ItemIsDropEnabled
+                    Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsSelectable
+                    | Qt.ItemFlag.ItemIsDragEnabled
+                    | Qt.ItemFlag.ItemIsDropEnabled
                 )
             else:
-                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.list.addItem(item)
 
