@@ -267,3 +267,7 @@ Purpose: entity property map and UI role map.
   `Optional[QIcon]` for image-icon state and cloud-image assignment API.
 - Dragdrop controller callback properties are invoked through callable guards:
   `on_drop_requested`, `on_drop_committed`, `on_drop_transition`, `on_drag_started`.
+- Tasks workspace delegate/model safety properties:
+  `TasksItemDelegate.editorEvent` now uses typed `QMouseEvent` gates and `TasksModel` narrowing, so row actions (`set_sort`, `quick_add_task_for_day`, `toggle_done_by_row`, `move_task_to_day`, `quick_add_subtask`) execute only on validated model/event payloads.
+- Tasks workspace legacy enum cleanup is complete for inspected paths:
+  `Qt.ItemDataRole.SizeHintRole`, `Qt.DropAction.*`, `Qt.WindowState.WindowFullScreen`, `QFrame.Shape.NoFrame`, `QPalette.ColorRole.*`, `Qt.PenStyle.NoPen`, `QAbstractItemView.DragDropMode.DragDrop`.

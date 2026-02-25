@@ -18,12 +18,12 @@ import re
 from typing import Dict, List, Union, Optional, Set, Tuple, Any
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
-from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
+from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
-    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea,
+    QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea, QStyleOptionViewItem,
     QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog
 )
 
@@ -415,22 +415,22 @@ class TasksModel(QAbstractListModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Задает флаги взаимодействия для строки."""
         if not index.isValid():
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlags(Qt.ItemFlag.NoItemFlags)
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
-            flags = Qt.ItemFlag.ItemIsEnabled
+            flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
             if self._drag_enabled:
-                flags |= Qt.ItemFlag.ItemIsDropEnabled
+                flags |= Qt.ItemFlags(Qt.ItemFlag.ItemIsDropEnabled)
             return flags
         if isinstance(r, SortHeaderRow):
-            return Qt.ItemFlag.ItemIsEnabled
-        flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         if self._drag_enabled:
-            flags |= Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled
+            flags |= Qt.ItemFlags(Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled)
         return flags
 
     def set_filter_mode(self, mode: str):
-        """Устанавливает фильтр по режиму и пересобирает список."""
+        """Устанавливает фильтр по режиму и перестраивает список."""
         self._filter_mode = mode
         self._drag_enabled = (mode == "План")
         self._rebuild()
@@ -440,7 +440,7 @@ class TasksModel(QAbstractListModel):
         return self._filter_mode
 
     def set_search(self, text: str):
-        """Обновляет строку поиска и пересобирает список."""
+        """Обновляет строку поиска и перестраивает список."""
         self._search = (text or "").strip().lower()
         self._rebuild()
 
@@ -473,7 +473,7 @@ class TasksModel(QAbstractListModel):
         marker_color: str = "",
         marker_theme: str = "",
     ):
-        """Добавляет новую задачу и пересобирает текущий список."""
+        """Добавляет новую задачу и перестраивает текущий список."""
         task = self._db.create_task(
             title=title,
             description=description,
@@ -742,7 +742,6 @@ class TasksModel(QAbstractListModel):
         if parent_id == task.id:
             return False
 
-        parent_task = None
         target_project_id = task.project_id
         if parent_id is not None:
             parent_task = next(
@@ -887,7 +886,7 @@ class TasksModel(QAbstractListModel):
         return count
 
     def _rebuild(self):
-        """Пересобирает список задач с учетом фильтров и поиска."""
+        """Перестраивает список задач с учетом фильтров и поиска."""
         today = date.today()
 
         def is_today(d: date) -> bool:
@@ -950,32 +949,32 @@ class TasksModel(QAbstractListModel):
 
         priority_order = {"high": 0, "medium": 1, "low": 2, "отложенная": 3}
 
-        def sort_key(task_row: TaskRow):
+        def sort_key(task_item: TaskRow):
             if self._sort_key == "title":
-                return task_row.title.lower(), task_row.day, time_key(task_row.time_text), task_row.id
+                return task_item.title.lower(), task_item.day, time_key(task_item.time_text), task_item.id
             if self._sort_key == "priority":
                 if self._filter_mode == "Все":
                     return (
-                        priority_order.get(task_row.priority.lower(), 4),
-                        task_row.day,
-                        time_key(task_row.time_text),
-                        task_row.id,
+                        priority_order.get(task_item.priority.lower(), 4),
+                        task_item.day,
+                        time_key(task_item.time_text),
+                        task_item.id,
                     )
                 return (
-                    task_row.day,
-                    priority_order.get(task_row.priority.lower(), 4),
-                    time_key(task_row.time_text),
-                    task_row.id,
+                    task_item.day,
+                    priority_order.get(task_item.priority.lower(), 4),
+                    time_key(task_item.time_text),
+                    task_item.id,
                 )
-            return task_row.day, time_key(task_row.time_text), task_row.id
+            return task_item.day, time_key(task_item.time_text), task_item.id
 
         task_ids = {t.id for t in base_tasks}
         children_map: dict[Optional[int], List[TaskRow]] = {}
-        for task_row in base_tasks:
-            parent_id = task_row.parent_id if task_row.parent_id in task_ids else None
-            children_map.setdefault(parent_id, []).append(task_row)
-        for parent_id, child_rows in children_map.items():
-            if parent_id is None or not child_rows:
+        for base_task in base_tasks:
+            parent_id = base_task.parent_id if base_task.parent_id in task_ids else None
+            children_map.setdefault(parent_id, []).append(base_task)
+        for parent_id, parent_children in children_map.items():
+            if parent_id is None or not parent_children:
                 continue
             if parent_id not in self._subtask_state_initialized:
                 self._collapsed_subtask_ids.add(parent_id)
@@ -983,38 +982,38 @@ class TasksModel(QAbstractListModel):
 
         include_cache: dict[int, bool] = {}
 
-        def should_include(task_row: TaskRow) -> bool:
+        def should_include(task_item: TaskRow) -> bool:
             if not search:
                 return True
-            cached = include_cache.get(task_row.id)
+            cached = include_cache.get(task_item.id)
             if cached is not None:
                 return cached
-            if task_row.id in search_hits:
-                include_cache[task_row.id] = True
+            if task_item.id in search_hits:
+                include_cache[task_item.id] = True
                 return True
-            for child in children_map.get(task_row.id, []):
+            for child in children_map.get(task_item.id, []):
                 if should_include(child):
-                    include_cache[task_row.id] = True
+                    include_cache[task_item.id] = True
                     return True
-            include_cache[task_row.id] = False
+            include_cache[task_item.id] = False
             return False
 
-        def sorted_children(task_row: TaskRow) -> List[TaskRow]:
-            child_rows = [child for child in children_map.get(task_row.id, []) if should_include(child)]
-            child_rows.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
-            return child_rows
+        def sorted_children(task_item: TaskRow) -> List[TaskRow]:
+            children = [child for child in children_map.get(task_item.id, []) if should_include(child)]
+            children.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
+            return children
 
         new_rows: List[Row] = []
         self._task_children = {}
         self._task_depths = {}
 
-        def append_task(task_row: TaskRow, depth: int) -> None:
-            self._task_depths[task_row.id] = depth
-            child_rows = sorted_children(task_row)
+        def append_task(task_item: TaskRow, depth: int) -> None:
+            self._task_depths[task_item.id] = depth
+            child_rows = sorted_children(task_item)
             if child_rows:
-                self._task_children[task_row.id] = child_rows
-            new_rows.append(task_row)
-            if task_row.id in self._collapsed_subtask_ids:
+                self._task_children[task_item.id] = child_rows
+            new_rows.append(task_item)
+            if task_item.id in self._collapsed_subtask_ids:
                 return
             for child in child_rows:
                 append_task(child, depth + 1)
@@ -1031,7 +1030,7 @@ class TasksModel(QAbstractListModel):
             roots.sort(key=sort_key)
             if self._filter_mode == "Выполнено":
                 # Показываем свежие завершенные дни сверху, сохраняя порядок задач внутри дня.
-                roots.sort(key=lambda task_row: task_row.day, reverse=True)
+                roots.sort(key=lambda task_item: task_item.day, reverse=True)
             for root_task in roots:
                 if current_day != root_task.day:
                     current_day = root_task.day
@@ -1080,7 +1079,7 @@ class TasksModel(QAbstractListModel):
             self._expanded_task_ids.add(task.id)
         idx = self.index(row_idx)
         if idx.isValid():
-            self.dataChanged.emit(idx, idx, [TaskRoles.Expanded, Qt.SizeHintRole])
+            self.dataChanged.emit(idx, idx, [TaskRoles.Expanded, Qt.ItemDataRole.SizeHintRole])
 
     def toggle_subtasks_expanded_by_row(self, row_idx: int) -> None:
         """Переключает раскрытие списка подзадач."""
@@ -1109,13 +1108,13 @@ class TasksModel(QAbstractListModel):
         mime_data.setData("application/x-mindnavigator-task-id", str(task.id).encode("utf-8"))
         return mime_data
 
-    def supportedDropActions(self) -> Qt.DropActions:
+    def supportedDropActions(self) -> Qt.DropAction:
         """Разрешает перенос с изменением позиции."""
         return Qt.DropAction.MoveAction
 
     def dropMimeData(self, data, action, row, column, parent) -> bool:
         """Обрабатывает перенос задачи между днями."""
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
         if not self._drag_enabled:
             return False
@@ -1197,7 +1196,7 @@ class TaskImagePreviewDialog(QDialog):
 
         self.setObjectName("TaskImagePreview")
         self.setWindowTitle("Просмотр изображения")
-        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1320,7 +1319,7 @@ class TaskDetailsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setObjectName("TaskDetailsScroll")
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         content = QFrame()
         content.setObjectName("TaskDetailsContent")
         content_layout = QVBoxLayout(content)
@@ -1337,8 +1336,10 @@ class TaskDetailsDialog(QDialog):
         desc_text.setWordWrap(True)
         desc_text.setTextFormat(Qt.TextFormat.RichText)
         desc_text.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextBrowserInteraction
-            | Qt.TextInteractionFlag.TextSelectableByMouse
+            Qt.TextInteractionFlags(
+                Qt.TextInteractionFlag.TextBrowserInteraction
+                | Qt.TextInteractionFlag.TextSelectableByMouse
+            )
         )
         desc_text.setOpenExternalLinks(True)
         desc_layout.addWidget(desc_title)
@@ -1653,7 +1654,7 @@ class TaskDetailsDialog(QDialog):
                 ("Название", map_item.title),
                 ("Проект", map_item.project or "—"),
                 ("Описание", map_item.description or "—"),
-                ("Тайлы", f"{map_item.tiles_w} × {map_item.tiles_h}"),
+                ("Плитки", f"{map_item.tiles_w} × {map_item.tiles_h}"),
             ]
             self._open_info_dialog("Карта", rows, wrap_rows={"Описание"})
             return
@@ -2472,7 +2473,7 @@ class TaskEditDialog(QDialog):
                 ("Название", map_item.title),
                 ("Проект", map_item.project or "—"),
                 ("Описание", map_item.description or "—"),
-                ("Тайлы", f"{map_item.tiles_w} × {map_item.tiles_h}"),
+                ("Плитки", f"{map_item.tiles_w} × {map_item.tiles_h}"),
             ]
             self._open_info_dialog("Карта", rows, wrap_rows={"Описание"})
             return
@@ -2620,7 +2621,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     HEADER_H = 32
     TIME_W = 140
     PROJECT_W = 420
-    TEXT_VPAD = 8
+    TEXT_V_PAD = 8
     TEXT_GAP = 6
     ROW_H_EXPANDED_MIN = 82
     TAG_H = 20
@@ -2666,20 +2667,27 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header.setPointSize(9)
         self._font_header.setBold(True)
 
-    def sizeHint(self, option, index):
+    @staticmethod
+    def _tasks_model(model: QAbstractItemModel | None) -> Optional[TasksModel]:
+        if isinstance(model, TasksModel):
+            return model
+        return None
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         """Возвращает размер строки списка."""
+        option_rect = getattr(option, "rect", QRect())
         row_type = index.data(TaskRoles.RowType)
         if row_type in ("header", "sort_header"):
-            return QSize(option.rect.width(), self.HEADER_H)
+            return QSize(option_rect.width(), self.HEADER_H)
         expanded = bool(index.data(TaskRoles.Expanded))
         if not expanded:
-            return QSize(option.rect.width(), self.ROW_H)
+            return QSize(option_rect.width(), self.ROW_H)
 
         title = index.data(TaskRoles.Title) or ""
         description = index.data(TaskRoles.Description) or ""
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
-        layout = self._row_layout(option.rect, depth, has_subtasks)
+        layout = self._row_layout(option_rect, depth, has_subtasks)
         text_width = max(10, layout["title"].width())
 
         title_metrics = QFontMetrics(self._font)
@@ -2695,9 +2703,9 @@ class TasksItemDelegate(QStyledItemDelegate):
             total_height += self.TEXT_GAP
         if tags:
             total_height += self.TEXT_GAP + self._tags_height(tags, text_width)
-        total_height += self.TEXT_VPAD * 2
+        total_height += self.TEXT_V_PAD * 2
         total_height = max(total_height, self.ROW_H_EXPANDED_MIN)
-        return QSize(option.rect.width(), total_height)
+        return QSize(option_rect.width(), total_height)
 
     def _tags_height(self, tags: List[str], max_width: int) -> int:
         if not tags:
@@ -2758,13 +2766,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         quick_x = max(row_rect.left() + 8, anchor_left - quick_width - 4)
         return QRect(quick_x, row_rect.top() + 7, quick_width, quick_height)
 
-    def paint(self, painter: QPainter, option, index: QModelIndex):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         row_type = index.data(TaskRoles.RowType)
-        r = option.rect
+        r = getattr(option, "rect", QRect())
+        option_state = getattr(option, "state", QStyle.StateFlag.State_None)
 
         if row_type == "header":
             d: date = index.data(TaskRoles.Day)
@@ -2796,7 +2805,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
-            if option.state & QStyle.StateFlag.State_MouseOver:
+            if option_state & QStyle.StateFlag.State_MouseOver:
                 painter.setPen(self.C_BORDER)
                 painter.setBrush(QColor("#1f2227"))
                 painter.drawRoundedRect(quick_rect, 4, 4)
@@ -2847,7 +2856,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
-        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        selected = bool(option_state & QStyle.StateFlag.State_Selected)
         if selected:
             bg = QColor("#343844")
         bg = blend_task_row_background(bg, marker_color, selected=selected)
@@ -2919,7 +2928,6 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setPen(title_color)
 
         menu_rect = layout["menu"]
-        quick_rect = layout["quick"]
         pr_rect = layout["priority"]
         title_rect = layout["title"]
         parent_move_rect, parent_move_target, parent_move_text = self._parent_schedule_action(index, r)
@@ -2930,9 +2938,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         if expanded:
             title_box = QRect(
                 title_content_rect.left(),
-                r.top() + self.TEXT_VPAD,
+                r.top() + self.TEXT_V_PAD,
                 title_content_rect.width(),
-                r.height() - self.TEXT_VPAD * 2,
+                r.height() - self.TEXT_V_PAD * 2,
             )
             painter.drawText(title_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, title)
 
@@ -2940,7 +2948,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             title_height = title_metrics.boundingRect(
                 0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, title
             ).height()
-            current_y = r.top() + self.TEXT_VPAD + title_height
+            current_y = r.top() + self.TEXT_V_PAD + title_height
 
             if completion_delay_text:
                 delay_box = QRect(
@@ -2959,7 +2967,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                     title_content_rect.left(),
                     current_y + self.TEXT_GAP,
                     title_content_rect.width(),
-                    r.height() - self.TEXT_VPAD * 2 - title_height - self.TEXT_GAP,
+                    r.height() - self.TEXT_V_PAD * 2 - title_height - self.TEXT_GAP,
                 )
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM if not overdue else self.C_OVERDUE)
@@ -3023,13 +3031,6 @@ class TasksItemDelegate(QStyledItemDelegate):
         gap = 10
         label_w = pr_rect.width() - value_w - icon_w - gap
 
-        label_rect = QRect(
-            pr_rect.left(),
-            pr_rect.top(),
-            label_w,
-            pr_rect.height()
-        )
-
         value_rect = QRect(
             pr_rect.left() + label_w,
             pr_rect.top(),
@@ -3061,7 +3062,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setBrush(QColor("#1f2227"))
         painter.drawRect(menu_rect)
         self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
-        if option.state & QStyle.StateFlag.State_MouseOver:
+        if option_state & QStyle.StateFlag.State_MouseOver:
             painter.setPen(self.C_BORDER)
             painter.setBrush(QColor("#1f2227"))
             painter.drawRoundedRect(quick_rect, 4, 4)
@@ -3071,45 +3072,56 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def editorEvent(self, event, model, option, index):
-        """Обрабатывает клики по чекбоксу и меню строки."""
+    def editorEvent(
+        self,
+        event: QEvent,
+        model: QAbstractItemModel,
+        option: QStyleOptionViewItem,
+        index: QModelIndex,
+    ) -> bool:
+        """Обрабатывает клики по флажку и меню строки."""
         row_type = index.data(TaskRoles.RowType)
         if row_type == "sort_header":
-            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
-                layout = self._row_layout(option.rect)
+                layout = self._row_layout(getattr(option, "rect", QRect()))
+                tasks_model = self._tasks_model(model)
                 if layout["title"].contains(pos):
-                    if hasattr(model, "set_sort"):
-                        model.set_sort("title")
+                    if tasks_model is not None:
+                        tasks_model.set_sort("title")
                     return True
                 if layout["date"].contains(pos):
-                    if hasattr(model, "set_sort"):
-                        model.set_sort("date")
+                    if tasks_model is not None:
+                        tasks_model.set_sort("date")
                     return True
                 if layout["priority"].contains(pos):
-                    if hasattr(model, "set_sort"):
-                        model.set_sort("priority")
+                    if tasks_model is not None:
+                        tasks_model.set_sort("priority")
                     return True
             return False
         if row_type == "header":
-            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
-                r = option.rect
+                r = getattr(option, "rect", QRect())
                 header_day = index.data(TaskRoles.Day)
                 header_text = self._format_header(header_day) if isinstance(header_day, date) else ""
                 quick_rect = self._header_quick_rect(r, header_text)
-                if quick_rect.contains(pos) and hasattr(model, "quick_add_task_for_day"):
+                tasks_model = self._tasks_model(model)
+                if quick_rect.contains(pos) and tasks_model is not None:
                     target_day = index.data(TaskRoles.Day)
                     if isinstance(target_day, date):
-                        model.quick_add_task_for_day(target_day)
+                        tasks_model.quick_add_task_for_day(target_day)
                         return True
             return False
         if row_type != "task":
             return False
 
-        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+        if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
             pos = event.position().toPoint()
-            r = option.rect
+            r = getattr(option, "rect", QRect())
+            tasks_model = self._tasks_model(model)
+            if tasks_model is None:
+                return False
 
             depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
             has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
@@ -3117,37 +3129,33 @@ class TasksItemDelegate(QStyledItemDelegate):
             cb_rect = layout["checkbox"]
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
-            title_rect = layout["title"]
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
-            title_content_rect = title_rect
-            if not parent_move_rect.isNull():
-                title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
             quick_rect = self._task_quick_rect(layout, r)
 
             if has_subtasks and toggle_rect and toggle_rect.contains(pos):
-                if hasattr(model, "toggle_subtasks_expanded_by_row"):
-                    model.toggle_subtasks_expanded_by_row(index.row())
+                tasks_model.toggle_subtasks_expanded_by_row(index.row())
                 return True
 
             if tomorrow_rect.contains(pos):
-                task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
-                if task is not None and hasattr(model, "next_day_for_task"):
-                    new_day = model.next_day_for_task(task)
-                    model.move_task_to_day(task.id, new_day)
+                task = tasks_model.task_at_row(index.row())
+                if task is not None:
+                    new_day = tasks_model.next_day_for_task(task)
+                    tasks_model.move_task_to_day(task.id, new_day)
                 return True
 
             if not parent_move_rect.isNull() and parent_move_target is not None and parent_move_rect.contains(pos):
-                task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
-                if task is not None and hasattr(model, "move_task_to_parent_schedule"):
-                    model.move_task_to_parent_schedule(task.id, parent_move_target.id)
+                task = tasks_model.task_at_row(index.row())
+                if task is not None:
+                    tasks_model.move_task_to_parent_schedule(task.id, parent_move_target.id)
                 return True
 
             if cb_rect.contains(pos):
                 # confirm только если ставим done=True
                 currently_done = bool(index.data(TaskRoles.Done))
                 if not currently_done:
-                    parent = option.widget if isinstance(option.widget, QWidget) else None
+                    option_widget = getattr(option, "widget", None)
+                    parent = option_widget if isinstance(option_widget, QWidget) else None
                     dialog = ConfirmDialog(
                         "Подтверждение",
                         "Пометить задачу выполненной?",
@@ -3158,16 +3166,16 @@ class TasksItemDelegate(QStyledItemDelegate):
                     if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
                         return True  # событие обработали, но действие отменили
 
-                model.toggle_done_by_row(index.row())
+                tasks_model.toggle_done_by_row(index.row())
                 return True
 
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
                 return True
             if quick_rect.contains(pos):
-                task = model.task_at_row(index.row()) if hasattr(model, "task_at_row") else None
-                if task is not None and hasattr(model, "quick_add_subtask"):
-                    model.quick_add_subtask(task.id)
+                task = tasks_model.task_at_row(index.row())
+                if task is not None:
+                    tasks_model.quick_add_subtask(task.id)
                     return True
 
         return False
@@ -3226,16 +3234,17 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
 
         m = index.model()
-        if hasattr(m, "delete_task_by_row"):
-            m.delete_task_by_row(index.row())
+        tasks_model = self._tasks_model(m)
+        if tasks_model is not None:
+            tasks_model.delete_task_by_row(index.row())
 
     def _edit_task(self, index: QModelIndex):
         """Открывает диалог редактирования задачи."""
-        model = index.model()
-        if not hasattr(model, "task_at_row"):
+        tasks_model = self._tasks_model(index.model())
+        if tasks_model is None:
             return
 
-        task = model.task_at_row(index.row())
+        task = tasks_model.task_at_row(index.row())
         if task is None:
             return
 
@@ -3245,33 +3254,32 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
 
         values = dialog.values()
-        if hasattr(model, "update_task_by_row"):
-            try:
-                model.update_task_by_row(
-                    index.row(),
-                    title=values["title"],
-                    description=values["description"],
-                    day=values["day"],
-                    time_text=values["time_text"],
-                    priority=values["priority"],
-                    done=values["done"],
-                    project_id=values["project_id"],
-                    recurrence_kind=values["recurrence_kind"],
-                    recurrence_interval=values["recurrence_interval"],
-                    marker_color=values["marker_color"],
-                    marker_theme=values["marker_theme"],
-                )
-            except ValueError as exc:
-                QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
+        try:
+            tasks_model.update_task_by_row(
+                index.row(),
+                title=values["title"],
+                description=values["description"],
+                day=values["day"],
+                time_text=values["time_text"],
+                priority=values["priority"],
+                done=values["done"],
+                project_id=values["project_id"],
+                recurrence_kind=values["recurrence_kind"],
+                recurrence_interval=values["recurrence_interval"],
+                marker_color=values["marker_color"],
+                marker_theme=values["marker_theme"],
+            )
+        except ValueError as exc:
+            QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def edit_task(self, index: QModelIndex) -> None:
         self._edit_task(index)
 
     def _open_task_view(self, index: QModelIndex) -> None:
-        model = index.model()
-        if not hasattr(model, "task_at_row"):
+        tasks_model = self._tasks_model(index.model())
+        if tasks_model is None:
             return
-        task = model.task_at_row(index.row())
+        task = tasks_model.task_at_row(index.row())
         if task is None:
             return
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
@@ -3326,9 +3334,10 @@ class TasksItemDelegate(QStyledItemDelegate):
             return QRect(), None, ""
 
         model = index.model()
-        if not hasattr(model, "task_by_id"):
+        tasks_model = self._tasks_model(model)
+        if tasks_model is None:
             return QRect(), None, ""
-        parent_task = model.task_by_id(parent_id)
+        parent_task = tasks_model.task_by_id(parent_id)
         if parent_task is None:
             return QRect(), None, ""
         if self._is_overdue(parent_task.day, parent_task.done):
@@ -3362,7 +3371,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         button_height = self.PARENT_MOVE_BUTTON_H
         x = title_rect.right() - button_width
         if expanded:
-            y = title_rect.top() + self.TEXT_VPAD
+            y = title_rect.top() + self.TEXT_V_PAD
         else:
             y = title_rect.center().y() - (button_height // 2)
         return QRect(x, y, button_width, button_height)
@@ -3738,7 +3747,7 @@ class TasksWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self.gantt_hint = QLabel("Режим Гант: прогноз длительности строится автоматически и сохраняется.")
+        self.gantt_hint = QLabel("Режим Gantt: прогноз длительности строится автоматически и сохраняется.")
         self.gantt_hint.setObjectName("TasksGanttHint")
         self.gantt_hint.setWordWrap(True)
         layout.addWidget(self.gantt_hint)
@@ -3753,11 +3762,11 @@ class TasksWorkspace(BaseWorkspace):
         self.gantt_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.gantt_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table_palette = self.gantt_table.palette()
-        table_palette.setColor(QPalette.Base, QColor("#16171a"))
-        table_palette.setColor(QPalette.AlternateBase, QColor("#1b1c20"))
-        table_palette.setColor(QPalette.Text, QColor("#cfcfcf"))
-        table_palette.setColor(QPalette.Mid, QColor("#3a3b40"))
-        table_palette.setColor(QPalette.Highlight, QColor("#4f7ecf"))
+        table_palette.setColor(QPalette.ColorRole.Base, QColor("#16171a"))
+        table_palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1b1c20"))
+        table_palette.setColor(QPalette.ColorRole.Text, QColor("#cfcfcf"))
+        table_palette.setColor(QPalette.ColorRole.Mid, QColor("#3a3b40"))
+        table_palette.setColor(QPalette.ColorRole.Highlight, QColor("#4f7ecf"))
         self.gantt_table.setPalette(table_palette)
         self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -3828,7 +3837,7 @@ class TasksWorkspace(BaseWorkspace):
             x2 = r.left() + int((end_clamped - self._day_start) / span * r.width())
             bar_w = max(2, x2 - x1)
             bar = QRect(x1, r.top() + 1, bar_w, max(2, baseline_y - r.top() - 1))
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(accent_color)
             painter.drawRoundedRect(bar, 4, 4)
 
@@ -3871,7 +3880,7 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_next_day.setAutoRaise(True)
 
         self.btn_gantt = QToolButton()
-        self.btn_gantt.setText("Гант")
+        self.btn_gantt.setText("Gantt")
         self.btn_gantt.setCheckable(True)
         self.btn_gantt.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_gantt.setAutoRaise(True)
@@ -3973,7 +3982,8 @@ class TasksWorkspace(BaseWorkspace):
         try:
             tab = filters.get("tab")
             if not tab:
-                mode = filters.get("mode")
+                mode_raw = filters.get("mode")
+                mode = mode_raw if isinstance(mode_raw, str) else None
                 if mode:
                     tab = self._tab_from_mode(mode)
                 else:
@@ -4165,7 +4175,7 @@ class TasksWorkspace(BaseWorkspace):
         if obj is self.list.viewport() and event.type() == QEvent.Type.Resize:
             self._update_sticky_day_header()
         if obj is self.list.viewport() and event.type() == QEvent.Type.MouseButtonDblClick:
-            if event.button() == Qt.MouseButton.LeftButton:
+            if isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
                 index = self.list.indexAt(pos)
                 if not index.isValid() or index.data(TaskRoles.RowType) != "task":
@@ -4293,6 +4303,7 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_gantt_day()
 
     def _set_gantt_mode(self, enabled: bool) -> None:
+        plan_mode = self.model.filter_mode() == "План"
         if enabled and not plan_mode:
             self.btn_gantt.blockSignals(True)
             self.btn_gantt.setChecked(False)
@@ -4391,9 +4402,9 @@ class TasksWorkspace(BaseWorkspace):
         elif task.priority == "Отложенная":
             base = 25
         complexity_markers = [
-            "исслед", "архитект", "интеграц", "рефактор", "оптимизац",
-            "debug", "тест", "докум", "design", "api", "sql",
-            "миграц", "парсер", "настро", "синхрон",
+            "исследование", "архитектура", "интеграция", "рефакторинг", "оптимизация",
+            "debug", "тест", "документация", "design", "api", "sql",
+            "миграция", "парсинг", "настройка", "синхрон",
         ]
         marker_hits = sum(1 for marker in complexity_markers if marker in text)
         raw = base + words * 2 + marker_hits * 15
@@ -4440,7 +4451,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.gantt_table.setRowCount(0)
         if not tasks:
-            self.gantt_hint.setText("На выбранный день нет активных задач для диаграммы Ганта.")
+            self.gantt_hint.setText("На выбранный день нет активных задач для диаграммы Gantt.")
             return
 
         cursor = datetime.combine(self._focus_day, datetime.strptime("09:00", "%H:%M").time())
@@ -4485,7 +4496,7 @@ class TasksWorkspace(BaseWorkspace):
 
         total_hours = total_minutes / 60.0
         self.gantt_hint.setText(
-            f"Гант на {self._focus_day.isoformat()}: {len(tasks)} задач, {total_minutes} мин (~{total_hours:.1f} ч)."
+            f"Gantt на {self._focus_day.isoformat()}: {len(tasks)} задач, {total_minutes} мин (~{total_hours:.1f} ч)."
         )
 
     def _on_gantt_minutes_changed(self, task_id: int, minutes: int) -> None:
@@ -4499,7 +4510,7 @@ class TasksWorkspace(BaseWorkspace):
             self.list.setAcceptDrops(True)
             self.list.setDropIndicatorShown(True)
             self.list.setDefaultDropAction(Qt.DropAction.MoveAction)
-            self.list.setDragDropMode(QAbstractItemView.DragDrop)
+            self.list.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         else:
             self.list.setDragEnabled(False)
             self.list.setAcceptDrops(False)

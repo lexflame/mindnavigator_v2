@@ -74,3 +74,30 @@ Status: In Progress
 | TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 | hotfix | ProjectsWorkspace visual hierarchy (indent + markers) | fix | Completed |
 
 
+## Sprint 6 - Notes, Export, Import
+Created: 2026-02-25
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_53A85F68-1AC3-415C-82B2-4E1B5FBD424D | 6 | Sprint composition and backlog classification by type/workspace | parity | Completed |
+| TASK_F42B8258-3D69-4555-BEFA-8F2B311F63EA | 6 | DB migration module for schema upgrades | feat | Completed |
+| TASK_75026A8B-7FB9-4AE1-9F6C-BD1092D24B1A | 6 | Update module implementation | feat | Completed |
+| TASK_E0A0B865-013E-445B-9656-84CE4A697CB5 | 6 | Setting: DB storage location | feat | Completed |
+| TASK_18C5FA49-0E96-4009-B903-A12AA581F7AA | 6 | Action: check update (DB update + repository version check) | feat | Completed |
+| TASK_E32E5C80-2EC6-4663-A336-5DD0BE013784 | 6 | Application language selector (EN/RU/DE/FR/ZH) | feat | Completed |
+| TASK_14D8E869-90D7-48F1-A1F0-0509FDFD039A | 6 | Setting: workspace selection checkboxes | feat | Completed |
+| TASK_2639BE33-BC91-42E1-A3AC-A5402D06CCBD | 6 | CSV import/export service class | feat | Completed |
+| TASK_4266DF47-F05A-419E-931B-CC7675EF65D8 | 6 | Workspace Import/Export buttons for tasks/collections/projects/notes/ideas/objects | feat | Completed |
+| TASK_585678D4-1572-45F1-9570-2B5E5F6817CB | 6 | Smooth fast width-expansion animation class | feat | Completed |
+| TASK_420CB243-F7B0-479C-9652-B501AE4AC7DF | 6 | Smooth fast dialog-appearance animation class | feat | Completed |
+| TASK_5CCD9BE4-C5DC-4D14-98E9-231EB8D8E2A1 | 6 | Apply dialog appearance animation for all dialogs | feat | Completed |
+| TASK_905129B0-3848-4C30-9490-CFC00F5A838A | 6 | Sidebar hover-expand over content with mode labels | feat | Completed |
+| TASK_E8446B40-0DA1-43CC-9206-FCC7EC37C0F0 | 6 | System notification click restores from tray and opens target task | feat | Completed |
+| TASK_12A60D96-05E6-4868-91D5-0D2AA70B64CF | 6 | Attachment class implementation | feat | Completed |
+| TASK_93B6AFF6-967A-403F-94C2-6CA6C9A2B0FD | 6 | Tasks attachments: support Ideas | feat | Completed |
+| TASK_E76B6B30-7CA6-4C6D-9B6F-B19AA473450B | 6 | Maps simple mouse mode: forbid marker dragging | feat | Completed |
+| TASK_329B82A5-0968-4121-9E24-2983E0C430E2 | 6 | Rework notes/collections/ideas/objects to tasks-like workflow | feat | Completed |
+| TASK_3ED7E7F2-C87E-4611-85D7-AF271D6E4D31 | 6 | Notes multiline save bugfix | fix | Completed |
+| TASK_04E6A669-898B-498F-827D-FD51B4C678D2 | 6 | Tasks list marker property immediate refresh | fix | Completed |
+| TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 | 6 | Static-analysis remediation by error type with separate commits | parity | Completed |

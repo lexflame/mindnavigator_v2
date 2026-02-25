@@ -526,3 +526,10 @@
 [2026-02-25 19:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_dragdrop_policy.py tests/test_dragdrop_model.py tests/test_dragdrop_integration.py tests/test_dragdrop_controller.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 19:07] OUT: 23 passed.
 [2026-02-25 19:07] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyCallingNonCallableInspection batch-2.
+[2026-02-25 19:29] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (tasks_workspace report pack remediation).
+[2026-02-25 19:29] ACTION: Fixed tasks_workspace inspect issues across PyUnresolvedReferences/PyTypeChecker/PyUnusedLocal/PyShadowingNames/SpellChecking reports (Qt6 enum migration, typed delegate/model guards, plan_mode fix, local cleanup).
+[2026-02-25 19:29] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py
+[2026-02-25 19:29] OUT: OK.
+[2026-02-25 19:29] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_maps_simple_mouse_mode.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_tasks_workspace
+[2026-02-25 19:29] OUT: 17 passed.
+[2026-02-25 19:29] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for tasks_workspace remediation batch.
