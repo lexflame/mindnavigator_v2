@@ -170,8 +170,9 @@ class DragDropController:
                 self.on_drop_requested(self.payload, zone_id)
             if self._executor is not None:
                 success = self._executor.execute(self.payload, zone_id)
-            if success and self.on_drop_committed:
-                self.on_drop_committed(self.payload, zone_id)
+            on_drop_committed = self.on_drop_committed
+            if success and on_drop_committed is not None:
+                on_drop_committed(self.payload, zone_id)
 
         transition_ms = self._motion.drop_success_duration_ms if success else self._motion.drop_failure_duration_ms
         if self.on_drop_transition:
@@ -221,8 +222,9 @@ class DragDropController:
         return distance_reached or time_reached
 
     def _emit_drag_started(self) -> None:
-        if self.payload is not None and self.on_drag_started:
-            self.on_drag_started(self.payload, self.state)
+        on_drag_started = self.on_drag_started
+        if self.payload is not None and on_drag_started is not None:
+            on_drag_started(self.payload, self.state)
 
     def _should_cancel_outside_window(self, pos_global: Point) -> bool:
         if not self._safety.cancel_on_leave_window:
