@@ -657,6 +657,10 @@ class MapTool(Enum):
     MEASURE = auto()
 
 
+def marker_drag_allowed(tool: MapTool, simple_mouse_mode: bool) -> bool:
+    return tool == MapTool.SELECT and not simple_mouse_mode
+
+
 @dataclass(frozen=True)
 class Marker:
     id: int
@@ -732,18 +736,18 @@ class MapImagePreviewDialog(QDialog):
         )
 
         # Открываем в полноэкранном режиме и показываем стартовое изображение.
-        self.setWindowState(self.windowState() | Qt.WindowFullScreen)
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
         self._update_image()
 
     def keyPressEvent(self, event) -> None:
-        # Навигация по изображением стрелками и выход по Esc.
-        if event.key() == Qt.Key_Left:
+        # Навигация по изображениям стрелками и выход по Esc.
+        if event.key() == Qt.Key.Key_Left:
             self._show_previous()
             return
-        if event.key() == Qt.Key_Right:
+        if event.key() == Qt.Key.Key_Right:
             self._show_next()
             return
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.close()
             return
         super().keyPressEvent(event)
@@ -805,7 +809,7 @@ class MapImagePreviewDialog(QDialog):
             self.image_label.setText("Изображение недоступно")
             return
         target_size = self.image_label.size()
-        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        scaled = pixmap.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.image_label.setPixmap(scaled)
         self.image_label.setText("")
 
@@ -970,6 +974,7 @@ class MapCanvas(QWidget):
         self._last_pos = QPointF()
         self._grid_enabled = True
         self._tool = MapTool.SELECT
+        self._simple_mouse_mode = True
         self._background = QPixmap(resource_path("assets/splash.jpg"))
         self._tiles_path = ""
         self._tiles_w = 0
@@ -1246,6 +1251,15 @@ class MapCanvas(QWidget):
         # Текущий активный инструмент.
         return self._tool
 
+    def set_simple_mouse_mode(self, enabled: bool) -> None:
+        self._simple_mouse_mode = bool(enabled)
+        if self._simple_mouse_mode:
+            self._dragging_marker_id = None
+            self._resize_dragging = False
+
+    def _is_marker_drag_allowed(self) -> bool:
+        return marker_drag_allowed(self._tool, self._simple_mouse_mode)
+
     def set_grid_enabled(self, enabled: bool) -> None:
         # Включаем или выключаем сетку и перерисовываем.
         self._grid_enabled = enabled
@@ -1409,7 +1423,7 @@ class MapCanvas(QWidget):
                 painter.setPen(QPen(QColor("#111111"), max(1.0, 1.0 / self._scale)))
                 painter.drawEllipse(QPointF(marker.x, marker.y), radius, radius)
             if is_selected:
-                painter.setBrush(Qt.NoBrush)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.4 / self._scale)))
                 painter.drawEllipse(QPointF(marker.x, marker.y), radius + 2, radius + 2)
             painter.setPen(QColor("#e5e5e5"))
@@ -1438,7 +1452,7 @@ class MapCanvas(QWidget):
                 painter.setBrush(fill)
                 painter.drawPolygon(poly)
             else:
-                painter.setBrush(Qt.NoBrush)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawPolyline(QPolygonF(overlay.points))
             if is_selected and overlay.points:
                 painter.setBrush(QColor("#ffffff"))
@@ -1511,7 +1525,7 @@ class MapCanvas(QWidget):
             return
         preview_color = QColor("#67b9ff") if self._tool == MapTool.MEASURE else QColor("#f2c26d")
         pen = QPen(preview_color, max(1.0, 2.0 / self._scale))
-        pen.setStyle(Qt.DashLine)
+        pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
         if len(self._overlay_draft_points) == 1:
             p = self._overlay_draft_points[0]
@@ -1524,7 +1538,7 @@ class MapCanvas(QWidget):
             painter.setBrush(fill)
             painter.drawPolygon(poly)
         else:
-            painter.setBrush(Qt.NoBrush)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPolyline(poly)
 
     def _draw_preview(self, painter: QPainter) -> None:
@@ -1602,7 +1616,7 @@ class MapCanvas(QWidget):
                     if pixmap.isNull():
                         continue
                     if pixmap.size() != tile_size:
-                        pixmap = pixmap.scaled(tile_size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+                        pixmap = pixmap.scaled(tile_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     x = (col - 1) * tile_size.width()
                     y = (row - 1) * tile_size.height()
                     painter.drawPixmap(QPointF(x, y), pixmap)
@@ -1644,7 +1658,7 @@ class MapCanvas(QWidget):
 
         pen = QPen(QColor("#67c7ff"), max(1.0, 2.0 / self._scale))
         painter.save()
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(pen)
         painter.drawRect(selection_rect)
 
@@ -1803,7 +1817,7 @@ class MapCanvas(QWidget):
 
     def mousePressEvent(self, event):
         # Обработка кликов мыши на канве.
-        if event.button() == Qt.RightButton:
+        if event.button() == Qt.MouseButton.RightButton:
             if self._tool in (MapTool.ADD_REGION, MapTool.MEASURE):
                 if self._overlay_draft_points:
                     self._finalize_overlay()
@@ -1842,6 +1856,8 @@ class MapCanvas(QWidget):
                 # Если зажали рамку, включаем перемещение маркера.
                 marker = self._marker_by_id(self._resize_marker_id)
                 if marker and self._selection_rect(marker).contains(world_pos):
+                    if self._simple_mouse_mode:
+                        return
                     self._resize_dragging = True
                     self._resize_drag_offset = world_pos - QPointF(marker.x, marker.y)
                     return
@@ -1857,7 +1873,7 @@ class MapCanvas(QWidget):
                 self._selected = marker
                 self._selected_overlay_id = None
                 self.markerSelected.emit(marker)
-                self._dragging_marker_id = marker.id
+                self._dragging_marker_id = marker.id if self._is_marker_drag_allowed() else None
                 self.update()
                 return
             overlay = self._overlay_at(world_pos)
@@ -1943,10 +1959,13 @@ class MapCanvas(QWidget):
                     self.setCursor(self._resize_handle_cursor(handle))
                     return
                 if self._selection_rect(marker).contains(world_pos):
-                    self.setCursor(Qt.SizeAllCursor)
+                    if self._is_marker_drag_allowed():
+                        self.setCursor(Qt.SizeAllCursor)
+                    else:
+                        self.unsetCursor()
                     return
             self.unsetCursor()
-        if self._dragging_marker_id is not None and self._tool == MapTool.SELECT:
+        if self._dragging_marker_id is not None and self._is_marker_drag_allowed():
             # Перетаскиваем выбранный маркер.
             world_pos = self._map_to_world(event.position())
             marker = self._marker_by_id(self._dragging_marker_id)
@@ -2265,14 +2284,14 @@ class MapCanvas(QWidget):
         pixmap = QPixmap(str(file_path))
         if pixmap.isNull():
             return None
-        return pixmap.scaled(target, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        return pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
 
     def _view_marker(self, marker: Marker) -> None:
         # Показываем окно просмотра данных маркера.
         dialog = QDialog(self)
         dialog.setWindowTitle("Метка на карте")
         dialog.setObjectName("MapLabelViewDialog")
-        dialog.setAttribute(Qt.WA_StyledBackground, True)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         dialog.resize(980, 680)
         dialog.setMinimumSize(760, 520)
 
@@ -2886,7 +2905,7 @@ class MapEditorWorkspace(QWidget):
         self.info_scroll.setObjectName("MapInfoScroll")
         self.info_scroll.setWidgetResizable(True)
         self.info_scroll.setFrameShape(QFrame.NoFrame)
-        self.info_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.info_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         info_body = QWidget()
         info_body.setObjectName("FormBox")
@@ -3402,7 +3421,7 @@ class MapEditorWorkspace(QWidget):
         pixmap = QPixmap(str(file_path))
         if pixmap.isNull():
             return None
-        return pixmap.scaled(target, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        return pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
 
     def resizeEvent(self, event) -> None:
         # Подстраиваем ширину панели в полноэкранном режиме.
@@ -3771,7 +3790,7 @@ class MapsListWorkspace(QWidget):
         self.list.setObjectName("MapsList")
         self.list.setUniformItemSizes(False)
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
         list_layout.addWidget(self.list, 1)
 
@@ -3820,7 +3839,7 @@ class MapsListWorkspace(QWidget):
         self.marker_search_results.setObjectName("MapMarkerSearchResults")
         self.marker_search_results.setFixedWidth(260)
         self.marker_search_results.setFixedHeight(180)
-        self.marker_search_results.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.marker_search_results.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.marker_search_results.setVisible(False)
         self.marker_search_results.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
@@ -3855,7 +3874,7 @@ class MapsListWorkspace(QWidget):
         self.loading_overlay = QFrame(self)
         self.loading_overlay.setObjectName("MapsLoadingOverlay")
         self.loading_overlay.setVisible(False)
-        self.loading_overlay.setAttribute(Qt.WA_StyledBackground, True)
+        self.loading_overlay.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         overlay_layout = QVBoxLayout(self.loading_overlay)
         overlay_layout.setContentsMargins(0, 0, 0, 0)
         overlay_layout.addStretch(1)
@@ -4275,8 +4294,9 @@ class MapsListWorkspace(QWidget):
     def eventFilter(self, obj, event) -> bool:
         # Обрабатываем Esc в поле поиска, чтобы скрыть результаты.
         if obj is self.marker_search and event.type() == QEvent.KeyPress:
-            if event.key() == Qt.Key_Escape:
+            if event.key() == Qt.Key.Key_Escape:
                 if self.marker_search.text().strip() or self.marker_search_results.isVisible():
                     self._clear_marker_search()
                     return True
         return super().eventFilter(obj, event)
+
