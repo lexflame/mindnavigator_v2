@@ -219,3 +219,5 @@ Purpose: entity property map and UI role map.
 - Task editor/date controls use explicit `QDate(year, month, day)` conversion from Python `date`.
 - Task drag-drop id payload is decoded from `QByteArray.data()` bytes before integer parsing.
 - Projects DnD reject tooltip anchors at `QCursor.pos()` in typed drop-event paths.
+- File navigation/dialog folder-index buckets are normalized through typed helpers:
+  `_sorted_folder_paths` and `_sorted_cloud_files`.

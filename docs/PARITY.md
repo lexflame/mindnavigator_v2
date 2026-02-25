@@ -193,3 +193,5 @@ It also stores:
   - validated typechecker batch-1 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
   - continued `PyTypeCheckerInspection` cleanup (batch-2): simplified projects DnD reject-tooltip anchor to cursor-position path (`projects_nav._show_drop_reject`) to avoid typed `QDropEvent.globalPosition` ambiguity.
   - validated typechecker batch-2 with focused project/tray regressions (`tests/test_project_tree_storage.py`, `tests/test_tray_task_navigation.py`): `8 passed`.
+  - continued `PyTypeCheckerInspection` cleanup (batch-3): hardened folder-index extraction in file selectors (`attach_file_select_nav`, `files_workspace`) with typed bucket normalizers for folder paths and `CloudFileData` rows.
+  - validated typechecker batch-3 with focused workspace/task regressions (`tests/test_workspace_csv_transfer.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_visibility_settings.py`): `12 passed`.

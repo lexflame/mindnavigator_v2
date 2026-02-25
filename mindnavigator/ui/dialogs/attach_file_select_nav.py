@@ -179,6 +179,20 @@ class AttachFileSelectNav(QDialog):
             files_list.append(item)
         return index
 
+    @staticmethod
+    def _sorted_folder_paths(raw_value: object) -> List[str]:
+        if not isinstance(raw_value, set):
+            return []
+        folders = [folder_path for folder_path in raw_value if isinstance(folder_path, str)]
+        return sorted(folders)
+
+    @staticmethod
+    def _sorted_cloud_files(raw_value: object) -> List[CloudFileData]:
+        if not isinstance(raw_value, list):
+            return []
+        files = [file_item for file_item in raw_value if isinstance(file_item, CloudFileData)]
+        return sorted(files, key=lambda cloud_file: cloud_file.name.lower())
+
     def _rebuild_navigation(self) -> None:
         has_data = bool(self._files)
         self.empty_label.setVisible(not has_data)
@@ -200,8 +214,7 @@ class AttachFileSelectNav(QDialog):
 
     def _populate_tree(self, parent_item: QTreeWidgetItem, folder_path: str) -> None:
         data = self._folder_index.get(folder_path, {})
-        folders_raw = data.get("folders")
-        folders = sorted(folders_raw) if isinstance(folders_raw, set) else []
+        folders = self._sorted_folder_paths(data.get("folders"))
         for child_path in folders:
             name = child_path.split("/")[-1]
             child_item = QTreeWidgetItem([name])
@@ -231,11 +244,8 @@ class AttachFileSelectNav(QDialog):
     def _render_file_grid(self, folder_path: str) -> None:
         self.file_grid.clear()
         data = self._folder_index.get(folder_path, {})
-        folders_raw = data.get("folders")
-        folders = sorted(folders_raw) if isinstance(folders_raw, set) else []
-        files_raw = data.get("files")
-        files_source = files_raw if isinstance(files_raw, list) else []
-        files = sorted(files_source, key=lambda cloud_file: cloud_file.name.lower())
+        folders = self._sorted_folder_paths(data.get("folders"))
+        files = self._sorted_cloud_files(data.get("files"))
         cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
         cloud_root_path = Path(cloud_root) if cloud_root else None
 

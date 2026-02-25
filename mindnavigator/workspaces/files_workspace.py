@@ -630,6 +630,20 @@ class FileWorkspace(QWidget):
             files_list.append(item)
         return index
 
+    @staticmethod
+    def _sorted_folder_paths(raw_value: object) -> List[str]:
+        if not isinstance(raw_value, set):
+            return []
+        folders = [folder_path for folder_path in raw_value if isinstance(folder_path, str)]
+        return sorted(folders)
+
+    @staticmethod
+    def _sorted_cloud_files(raw_value: object) -> List[CloudFileData]:
+        if not isinstance(raw_value, list):
+            return []
+        files = [file_item for file_item in raw_value if isinstance(file_item, CloudFileData)]
+        return sorted(files, key=lambda cloud_file: cloud_file.name.lower())
+
     def _rebuild_navigation(self) -> None:
         has_data = bool(self._cloud_files)
         self.nav_mode_button.setEnabled(has_data)
@@ -662,8 +676,7 @@ class FileWorkspace(QWidget):
 
     def _populate_tree(self, parent_item: QTreeWidgetItem, folder_path: str) -> None:
         data = self._folder_index.get(folder_path, {})
-        folders_raw = data.get("folders")
-        folders = sorted(folders_raw) if isinstance(folders_raw, set) else []
+        folders = self._sorted_folder_paths(data.get("folders"))
         for child_path in folders:
             name = child_path.split("/")[-1]
             child_item = QTreeWidgetItem([name])
@@ -690,11 +703,8 @@ class FileWorkspace(QWidget):
     def _render_file_grid(self, folder_path: str) -> None:
         self.file_grid.clear()
         data = self._folder_index.get(folder_path, {})
-        folders_raw = data.get("folders")
-        folders = sorted(folders_raw) if isinstance(folders_raw, set) else []
-        files_raw = data.get("files")
-        files_source = files_raw if isinstance(files_raw, list) else []
-        files = sorted(files_source, key=lambda cloud_file: cloud_file.name.lower())
+        folders = self._sorted_folder_paths(data.get("folders"))
+        files = self._sorted_cloud_files(data.get("files"))
         cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
         cloud_root_path = Path(cloud_root) if cloud_root else None
         collection_map = self._collection_folder_map(cloud_root_path)
@@ -1091,8 +1101,7 @@ class FileWorkspace(QWidget):
 
     def _current_folder_images(self) -> List[CloudFileData]:
         data = self._folder_index.get(self._current_folder, {})
-        files_raw = data.get("files")
-        files = files_raw if isinstance(files_raw, list) else []
+        files = self._sorted_cloud_files(data.get("files"))
         image_files = [item for item in files if item.is_image]
         return sorted(image_files, key=lambda item: item.name.lower())
 
