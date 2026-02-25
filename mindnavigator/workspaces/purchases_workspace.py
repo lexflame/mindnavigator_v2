@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Callable, Optional
 
 from datetime import datetime, timezone
 
@@ -1339,7 +1339,7 @@ class _ShopParseWorker(QRunnable):
         self,
         service: ShopParseService,
         sources: list,
-        should_stop: callable,
+        should_stop: Callable[[], bool],
     ) -> None:
         super().__init__()
         self._service = service

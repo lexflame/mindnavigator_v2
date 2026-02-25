@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QFontMetrics, QGuiApplication, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QFontMetrics, QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
