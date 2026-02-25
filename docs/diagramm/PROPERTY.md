@@ -131,6 +131,10 @@ Purpose: entity property map and UI role map.
 ## Objects Workspace Properties
 - `ObjectsModel.flags` uses Qt6 item-flag namespace (`Qt.ItemFlag.*`) for category/data-row interaction states.
 
+## Ideas Workspace Properties
+- `IdeasListModel` and ideas list view use Qt6 enum namespaces for row flags and list policies:
+  `Qt.ItemFlag.*`, `Qt.ScrollBarPolicy.*`, `Qt.ContextMenuPolicy.*`.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.

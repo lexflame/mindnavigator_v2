@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional, Any
+from typing import Optional, Any, List, Union, Dict
 
 from PySide6.QtCore import Qt, QSize, QAbstractListModel, QModelIndex
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QCursor
@@ -37,11 +37,19 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QDialog,
+    QFileDialog,
+    QMessageBox,
 )
 
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    IDEAS_CSV_FIELDS,
+    export_ideas_rows,
+    import_ideas_rows,
+)
 
 
 IDEA_TYPES = [
@@ -96,33 +104,72 @@ class IdeaItem:
     archived: bool
 
 
+@dataclass(frozen=True)
+class IdeaCategoryRow:
+    category: str
+
+
+IdeaRow = Union[IdeaItem, IdeaCategoryRow]
+
+
 class IdeaRoles:
-    IdeaId = Qt.ItemDataRole.UserRole + 1
-    Title = Qt.ItemDataRole.UserRole + 2
-    Summary = Qt.ItemDataRole.UserRole + 3
-    Body = Qt.ItemDataRole.UserRole + 4
-    Status = Qt.ItemDataRole.UserRole + 5
-    Type = Qt.ItemDataRole.UserRole + 6
-    ValueScore = Qt.ItemDataRole.UserRole + 7
-    EffortScore = Qt.ItemDataRole.UserRole + 8
-    ProjectTitle = Qt.ItemDataRole.UserRole + 9
-    Archived = Qt.ItemDataRole.UserRole + 10
+    RowType = Qt.ItemDataRole.UserRole + 1
+    IdeaId = Qt.ItemDataRole.UserRole + 2
+    Title = Qt.ItemDataRole.UserRole + 3
+    Summary = Qt.ItemDataRole.UserRole + 4
+    Body = Qt.ItemDataRole.UserRole + 5
+    Status = Qt.ItemDataRole.UserRole + 6
+    Type = Qt.ItemDataRole.UserRole + 7
+    ValueScore = Qt.ItemDataRole.UserRole + 8
+    EffortScore = Qt.ItemDataRole.UserRole + 9
+    ProjectTitle = Qt.ItemDataRole.UserRole + 10
+    Archived = Qt.ItemDataRole.UserRole + 11
+
+
+def normalize_idea_category(status: str) -> str:
+    value = (status or "").strip().lower()
+    return STATUS_LABELS.get(value, value.capitalize() if value else "Без статуса")
+
+
+def group_ideas_by_category(items: List[IdeaItem]) -> List[IdeaRow]:
+    order = ["Inbox", "Work", "Ripe", "Done", "Archived", "Без статуса"]
+    groups: Dict[str, List[IdeaItem]] = {}
+    for item in items:
+        groups.setdefault(normalize_idea_category(item.status), []).append(item)
+    rows: List[IdeaRow] = []
+    for category in sorted(
+        groups.keys(),
+        key=lambda value: (order.index(value) if value in order else len(order), value.lower()),
+    ):
+        rows.append(IdeaCategoryRow(category))
+        rows.extend(groups[category])
+    return rows
 
 
 class IdeasListModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._items: list[IdeaItem] = []
+        self._ideas: list[IdeaItem] = []
+        self._rows: list[IdeaRow] = []
 
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
             return 0
-        return len(self._items)
+        return len(self._rows)
 
     def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         if not index.isValid():
             return None
-        item = self._items[index.row()]
+        row = self._rows[index.row()]
+        if role == IdeaRoles.RowType:
+            return "category" if isinstance(row, IdeaCategoryRow) else "idea"
+        if isinstance(row, IdeaCategoryRow):
+            if role == IdeaRoles.Title:
+                return row.category
+            if role == Qt.ItemDataRole.DisplayRole:
+                return row.category
+            return None
+        item = row
         if role == IdeaRoles.IdeaId:
             return item.id
         if role == IdeaRoles.Title:
@@ -149,29 +196,51 @@ class IdeasListModel(QAbstractListModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.NoItemFlags
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return Qt.ItemFlag.NoItemFlags
+        row = self._rows[index.row()]
+        if isinstance(row, IdeaCategoryRow):
+            return Qt.ItemFlag.ItemIsEnabled
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def set_items(self, items: list[IdeaItem]) -> None:
         self.beginResetModel()
-        self._items = items
+        self._ideas = items
+        self._rows = group_ideas_by_category(items)
         self.endResetModel()
 
     def item_at(self, row: int) -> Optional[IdeaItem]:
-        if 0 <= row < len(self._items):
-            return self._items[row]
+        if 0 <= row < len(self._rows):
+            idea_row = self._rows[row]
+            if isinstance(idea_row, IdeaItem):
+                return idea_row
         return None
 
     def index_for_id(self, idea_id: int) -> QModelIndex:
-        for row, item in enumerate(self._items):
-            if item.id == idea_id:
+        for row, item in enumerate(self._rows):
+            if isinstance(item, IdeaItem) and item.id == idea_id:
                 return self.index(row)
         return QModelIndex()
+
+    def statuses(self) -> List[str]:
+        return sorted(
+            {(item.status or "").strip().lower() for item in self._ideas if (item.status or "").strip()},
+            key=lambda value: (
+                ["inbox", "work", "ripe", "done", "archived"].index(value)
+                if value in {"inbox", "work", "ripe", "done", "archived"}
+                else 99,
+                value,
+            ),
+        )
 
 
 class IdeasDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
         painter.save()
+        row_type = index.data(IdeaRoles.RowType)
+        if row_type == "category":
+            self._paint_category(painter, option, index)
+            painter.restore()
+            return
         rect = option.rect.adjusted(10, 6, -10, -6)
         selected = option.state & QStyle.StateFlag.State_Selected
         background = QColor("#2f3036" if selected else "#1f2024")
@@ -208,7 +277,21 @@ class IdeasDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option: QStyle.OptionViewItem, index: QModelIndex) -> QSize:
+        if index.data(IdeaRoles.RowType) == "category":
+            return QSize(option.rect.width(), 30)
         return QSize(option.rect.width(), 86)
+
+    def _paint_category(self, painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
+        rect = option.rect.adjusted(10, 3, -10, -3)
+        title = (index.data(IdeaRoles.Title) or "").strip() or "Без категории"
+        font = QFont(option.font)
+        font.setPointSize(max(8, font.pointSize() - 1))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#8d939b"))
+        painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title)
+        painter.setPen(QColor("#30333a"))
+        painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
 
 
 class IdeasWorkspace(BaseWorkspace):
@@ -217,6 +300,7 @@ class IdeasWorkspace(BaseWorkspace):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         self._db = get_database()
+        self._csv_service = CsvTransferService()
         self._current_idea_id: Optional[int] = None
         self._current_project_id: Optional[int] = None
         self._dirty = False
@@ -256,16 +340,38 @@ class IdeasWorkspace(BaseWorkspace):
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(6)
 
+        quick_row = QWidget()
+        quick_layout = QHBoxLayout(quick_row)
+        quick_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.setSpacing(6)
+        self.quick_status_btn = QToolButton()
+        self.quick_status_btn.setText("Категория")
+        self.quick_status_btn.setObjectName("IdeasQuickStatusBtn")
+        self.quick_status_label = QLabel("Все категории")
+        self.quick_status_label.setObjectName("IdeasQuickStatus")
+        self.quick_status_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
+        self.quick_title_input = QLineEdit()
+        self.quick_title_input.setObjectName("IdeasQuickTitle")
+        self.quick_title_input.setPlaceholderText("Быстрое создание идеи...")
+        self.quick_create_btn = QToolButton()
+        self.quick_create_btn.setText("Создать")
+        self.quick_create_btn.setObjectName("IdeasQuickCreateBtn")
+        quick_layout.addWidget(self.quick_status_btn)
+        quick_layout.addWidget(self.quick_status_label)
+        quick_layout.addWidget(self.quick_title_input, 1)
+        quick_layout.addWidget(self.quick_create_btn)
+        list_layout.addWidget(quick_row)
+
         self.list_view = QListView()
         self.list_view.setObjectName("IdeasList")
         self.list_view.setModel(IdeasListModel(self.list_view))
         self.list_view.setItemDelegate(IdeasDelegate(self.list_view))
         self.list_view.setSelectionMode(QListView.SingleSelection)
         self.list_view.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         self.list_view.doubleClicked.connect(self._open_selected)
-        self.list_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.customContextMenuRequested.connect(self._show_context_menu)
 
         list_layout.addWidget(self.list_view, 1)
@@ -381,6 +487,10 @@ class IdeasWorkspace(BaseWorkspace):
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
         self.value_input.valueChanged.connect(self._mark_dirty)
         self.effort_input.valueChanged.connect(self._mark_dirty)
+        self.quick_create_btn.clicked.connect(self._create_idea_from_quick_form)
+        self.quick_status_btn.clicked.connect(self._open_quick_status_menu)
+        self.quick_title_input.returnPressed.connect(self._create_idea_from_quick_form)
+        self._set_quick_status(None)
 
         self.setStyleSheet("""
             QWidget#IdeasWorkspace { background: #16171a; }
@@ -485,22 +595,37 @@ class IdeasWorkspace(BaseWorkspace):
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)
         action_new.triggered.connect(self._create_idea)
+        action_export = QAction("Экспорт", self)
+        action_export.triggered.connect(self._export_ideas_csv)
         action_import = QAction("Импорт", self)
-        action_import.triggered.connect(lambda: self._set_status("Импорт пока не реализован"))
+        action_import.triggered.connect(self._import_ideas_csv)
         action_triage = QAction("Разобрать инбокс", self)
         action_triage.triggered.connect(lambda: self._set_status("Разбор инбокса пока не реализован"))
         action_archive = QAction("В архив", self)
         action_archive.triggered.connect(self._archive_selected)
         return {
             "new": action_new,
+            "export": action_export,
             "import": action_import,
             "triage": action_triage,
             "archive": action_archive,
         }
 
+    def build_toolbar(self, actions: dict[str, QAction]) -> None:
+        while self.toolbar_layout.count():
+            item = self.toolbar_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.toolbar_layout.addStretch(1)
+        for action in actions.values():
+            button = QToolButton()
+            button.setDefaultAction(action)
+            self.toolbar_layout.addWidget(button)
+
     def get_selection(self):
         index = self.list_view.currentIndex()
-        if not index.isValid():
+        if not index.isValid() or index.data(IdeaRoles.RowType) != "idea":
             return None
         return index.data(IdeaRoles.IdeaId)
 
@@ -511,7 +636,9 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = True
 
     def _on_status_filter_changed(self) -> None:
-        self.set_filter("status", self.status_filter.currentData())
+        status = self.status_filter.currentData()
+        self.set_filter("status", status)
+        self._set_quick_status(status if isinstance(status, str) else None)
 
     def _on_type_filter_changed(self) -> None:
         self.set_filter("type", self.type_filter.currentData())
@@ -553,6 +680,9 @@ class IdeasWorkspace(BaseWorkspace):
         model = self.list_view.model()
         if isinstance(model, IdeasListModel):
             model.set_items(items)
+            quick_status = self.quick_status_label.property("quick_status")
+            if isinstance(quick_status, str) and quick_status not in model.statuses():
+                self._set_quick_status(None)
         self._sync_selection()
 
     def _sync_selection(self) -> None:
@@ -578,7 +708,7 @@ class IdeasWorkspace(BaseWorkspace):
             self._sync_selection()
             return
         index = self.list_view.currentIndex()
-        if not index.isValid():
+        if not index.isValid() or index.data(IdeaRoles.RowType) != "idea":
             self._current_idea_id = None
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
@@ -663,12 +793,52 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = False
         self._set_status("Изменения отменены")
 
-    def _create_idea(self) -> None:
-        idea = self._db.create_idea("Новая идея")
+    def _create_idea(self, title: str = "Новая идея", status: Optional[str] = None) -> None:
+        status_value = (status or "").strip().lower() or "inbox"
+        idea = self._db.create_idea(title, status=status_value)
         self.refresh()
         self._current_idea_id = idea.id
         self._sync_selection()
         self._open_selected()
+
+    def _set_quick_status(self, status: Optional[str]) -> None:
+        normalized = (status or "").strip().lower()
+        if not normalized:
+            self.quick_status_label.setText("Все категории")
+            self.quick_status_label.setProperty("quick_status", None)
+            return
+        self.quick_status_label.setText(normalize_idea_category(normalized))
+        self.quick_status_label.setProperty("quick_status", normalized)
+
+    def _open_quick_status_menu(self) -> None:
+        menu = QMenu(self)
+        action_all = menu.addAction("Все категории")
+        menu.addSeparator()
+        status_actions: Dict[Any, str] = {}
+        for label, value in IDEA_STATUSES[1:]:
+            if value:
+                action = menu.addAction(label)
+                status_actions[action] = value
+        chosen = menu.exec(self.quick_status_btn.mapToGlobal(self.quick_status_btn.rect().bottomLeft()))
+        if chosen is None:
+            return
+        if chosen == action_all:
+            self.status_filter.setCurrentIndex(0)
+            return
+        selected = status_actions.get(chosen)
+        if selected is None:
+            return
+        for idx in range(self.status_filter.count()):
+            if self.status_filter.itemData(idx) == selected:
+                self.status_filter.setCurrentIndex(idx)
+                break
+
+    def _create_idea_from_quick_form(self) -> None:
+        title = (self.quick_title_input.text() or "").strip() or "Новая идея"
+        quick_status = self.quick_status_label.property("quick_status")
+        status = quick_status if isinstance(quick_status, str) and quick_status else "inbox"
+        self._create_idea(title=title, status=status)
+        self.quick_title_input.clear()
 
     def _archive_selected(self) -> None:
         idea_id = self.get_selection()
@@ -703,7 +873,7 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _show_context_menu(self, pos) -> None:
         index = self.list_view.indexAt(pos)
-        if not index.isValid():
+        if not index.isValid() or index.data(IdeaRoles.RowType) != "idea":
             return
         idea_id = index.data(IdeaRoles.IdeaId)
         idea = self._db.get_idea(idea_id)
@@ -745,7 +915,7 @@ class IdeasWorkspace(BaseWorkspace):
         relations = self._db.fetch_idea_relations(idea_id)
         if not relations:
             item = QListWidgetItem("Связей пока нет")
-            item.setFlags(Qt.NoItemFlags)
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.relations_list.addItem(item)
             return
         for relation in relations:
@@ -805,3 +975,41 @@ class IdeasWorkspace(BaseWorkspace):
         )
         self._load_relations(idea.id)
         self.refresh()
+
+    def _export_ideas_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Ideas",
+            "ideas_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_ideas_rows(self._db.fetch_ideas(archived=True))
+        if not rows:
+            self._set_status("Нет данных для экспорта")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=IDEAS_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Ideas", f"Export failed: {exc}")
+            return
+        self._set_status("Экспорт завершен")
+
+    def _import_ideas_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Ideas",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Ideas", f"Import failed: {exc}")
+            return
+        result = import_ideas_rows(self._db, rows)
+        self.refresh()
+        self._set_status(f"Импорт завершен: {result.imported}, пропущено: {result.skipped}")
