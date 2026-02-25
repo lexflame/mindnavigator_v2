@@ -281,7 +281,8 @@ class IdeasDelegate(QStyledItemDelegate):
             return QSize(option.rect.width(), 30)
         return QSize(option.rect.width(), 86)
 
-    def _paint_category(self, painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
+    @staticmethod
+    def _paint_category(painter: QPainter, option: QStyle.OptionViewItem, index: QModelIndex) -> None:
         rect = option.rect.adjusted(10, 3, -10, -3)
         title = (index.data(IdeaRoles.Title) or "").strip() or "Без категории"
         font = QFont(option.font)
@@ -740,7 +741,8 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = False
         self._load_relations(idea_id)
 
-    def _set_combo_value(self, combo: QComboBox, value: str) -> None:
+    @staticmethod
+    def _set_combo_value(combo: QComboBox, value: str) -> None:
         for i in range(combo.count()):
             if combo.itemData(i) == value:
                 combo.setCurrentIndex(i)

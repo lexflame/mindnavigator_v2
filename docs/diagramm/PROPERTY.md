@@ -208,3 +208,4 @@ Purpose: entity property map and UI role map.
   `_resolve_screen`, `_build_folder_index`, `_dnd_log`, `_project_item_label`, `_task_entries`, `_map_entries`, `_marker_entries`, `_validate_project_relocation`, `_hash_file`, `_hash_from_path`, `_description_from_path`, `_is_image`, `_file_matches_project`, `_format_size`, `_copy_path`, `_format_description`, `_format_freshness`, `_normalize_key`.
 - Tasks workspace static helpers include attachment/list formatting and mode mapping primitives:
   `_clear_layout`, `_cloud_file_link_text`, `_attachment_kind_label`, `_task_quick_rect`, `_is_overdue`, `_format_header`, `_format_completion_delay`, `_format_parent_schedule_text`, `_tab_from_mode`, `_estimate_task_minutes`.
+- Notes/ideas delegates keep category paint helpers static (`_paint_category`), and ideas form selection helper `_set_combo_value` is static.

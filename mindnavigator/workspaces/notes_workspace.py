@@ -536,7 +536,8 @@ class NoteCardDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.top() + 58, rect.width() - 40, 10), 6, 6)
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.bottom() - 32, rect.width() - 80, 10), 6, 6)
 
-    def _paint_category(self, painter: QPainter, rect: QRect, title: str) -> None:
+    @staticmethod
+    def _paint_category(painter: QPainter, rect: QRect, title: str) -> None:
         painter.setPen(QColor("#343944"))
         center_y = rect.center().y()
         painter.drawLine(rect.left() + 6, center_y, rect.right() - 6, center_y)
