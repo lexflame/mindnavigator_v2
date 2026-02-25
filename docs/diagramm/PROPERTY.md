@@ -43,6 +43,7 @@ Purpose: entity property map and UI role map.
 ## CSV Transfer Properties
 - Source: `mindnavigator/csv_transfer.py`.
 - Runtime options: `CsvTransferOptions(delimiter, quotechar, encoding)`.
+- File path input contract: `CsvTransferService.import_from_file` / `export_to_file` accept both `Path` and `str` paths from UI file dialogs.
 - Import contract: CSV must contain header row; importer returns string-valued column map per row.
 - Workspace adapter source: `mindnavigator/workspaces/csv_workspace_transfer.py`.
 - CSV field contracts:
