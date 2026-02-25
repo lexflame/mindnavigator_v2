@@ -88,14 +88,14 @@ class _ProjectsListWidget(QListWidget):
             return
         super().dragMoveEvent(event)
 
-    def startDrag(self, supportedActions):
+    def startDrag(self, supported_actions):
         current = self.currentItem()
         if self._pressed_project_id is not None:
             self._drag_source_project_id = self._pressed_project_id
             self._pressed_project_id = None
             print(f"[ProjectsNav DnD] startDrag source={self._drag_source_project_id}")
             self._dnd_log(f"startDrag source={self._drag_source_project_id}")
-            super().startDrag(supportedActions)
+            super().startDrag(supported_actions)
             return
         if current is None:
             selected = self.selectedItems()
@@ -106,7 +106,7 @@ class _ProjectsListWidget(QListWidget):
         self._drag_source_project_id = project_id if isinstance(project_id, int) else None
         print(f"[ProjectsNav DnD] startDrag source={self._drag_source_project_id}")
         self._dnd_log(f"startDrag source={self._drag_source_project_id}")
-        super().startDrag(supportedActions)
+        super().startDrag(supported_actions)
 
     def dropEvent(self, event):
         source_id = self._drag_source_project_id

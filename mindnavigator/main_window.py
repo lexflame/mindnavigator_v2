@@ -737,20 +737,20 @@ class MainWindow(QMainWindow):
             self.hotkey_store.save(self.hotkeys)
         super().closeEvent(event)
 
-    def nativeEvent(self, eventType, message):
+    def nativeEvent(self, event_type, message):
         if (
             sys.platform == "win32"
             and getattr(self, "_system_restore_hotkey_registered", False)
-            and eventType in {"windows_generic_MSG", "windows_dispatcher_MSG"}
+            and event_type in {"windows_generic_MSG", "windows_dispatcher_MSG"}
         ):
             try:
                 msg = ctypes.cast(message, ctypes.POINTER(_WinMSG)).contents
             except Exception:
-                return super().nativeEvent(eventType, message)
+                return super().nativeEvent(event_type, message)
             if msg.message == self._WM_HOTKEY and int(msg.wParam) == self._TRAY_RESTORE_HOTKEY_ID:
                 self._restore_from_tray()
                 return True, 0
-        return super().nativeEvent(eventType, message)
+        return super().nativeEvent(event_type, message)
 
     def changeEvent(self, event):
         """Обрабатывает сворачивание окна для отправки в трей."""
