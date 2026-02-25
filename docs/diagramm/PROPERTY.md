@@ -107,6 +107,9 @@ Purpose: entity property map and UI role map.
 ## Single-Instance Bridge Properties
 - In `_SingleInstanceBridge`, incoming local-socket payload is decoded from `QByteArray` using explicit `.data()` bytes extraction before UTF-8 parsing.
 
+## Framed Dialog Patch Properties
+- `enable_frameless_qdialogs` patched init path normalizes `(parent, flags)` from incoming args/kwargs and forwards to original `QDialog.__init__` without star-arg passthrough.
+
 ## Workspace State Properties
 - `BaseWorkspace.restore_state` normalizes `QSettings.value(...)` results to string-safe values before:
   - assigning `search_text`;

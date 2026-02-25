@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, QSize, Qt
+from typing import Any
+
+from PySide6.QtCore import QTimer, QRect, QSize, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mindnavigator.ui.animations import DialogAppearAnimator
 from mindnavigator.ui.modals import ModalOverlay
 
 _PATCHED = False
@@ -21,6 +24,7 @@ _ORIGINAL_INIT = None
 _ORIGINAL_EXEC = None
 _DEFAULT_DIALOG_SIZE = QSize(1450, 812)
 _MINIMAL_FLEX_SIZE = QSize(560, 300)
+_DIALOG_APPEAR_ANIMATOR: DialogAppearAnimator | None = None
 
 
 def enable_frameless_qdialogs() -> None:
@@ -32,8 +36,17 @@ def enable_frameless_qdialogs() -> None:
     _ORIGINAL_INIT = QDialog.__init__
     _ORIGINAL_EXEC = QDialog.exec
 
-    def _patched_init(self, *args, **kwargs):
-        _ORIGINAL_INIT(self, *args, **kwargs)
+    def _patched_init(self, *args: Any, **kwargs: Any):
+        parent = kwargs.get("parent")
+        if parent is None and args:
+            parent = args[0]
+        flags = kwargs.get("f")
+        if flags is None and len(args) > 1:
+            flags = args[1]
+        if flags is None:
+            _ORIGINAL_INIT(self, parent)
+        else:
+            _ORIGINAL_INIT(self, parent, flags)
         if _should_skip_dialog(self):
             return
         self.setWindowFlag(Qt.FramelessWindowHint, True)
@@ -61,6 +74,8 @@ def enable_frameless_qdialogs() -> None:
             self.accepted.connect(overlay.deleteLater)
             self.rejected.connect(overlay.deleteLater)
             self.finished.connect(overlay.deleteLater)
+        if _should_animate_dialog(self):
+            QTimer.singleShot(0, lambda dialog=self: _dialog_appear_animator().play(dialog))
         return _ORIGINAL_EXEC(self)
 
     QDialog.__init__ = _patched_init
@@ -97,6 +112,18 @@ def _dialog_category(dialog: QDialog) -> str:
     if isinstance(value, str):
         return value
     return ""
+
+
+def _should_animate_dialog(dialog: QDialog) -> bool:
+    disabled = dialog.property("disable_dialog_appear_animation")
+    return not bool(disabled)
+
+
+def _dialog_appear_animator() -> DialogAppearAnimator:
+    global _DIALOG_APPEAR_ANIMATOR
+    if _DIALOG_APPEAR_ANIMATOR is None:
+        _DIALOG_APPEAR_ANIMATOR = DialogAppearAnimator()
+    return _DIALOG_APPEAR_ANIMATOR
 
 
 def _center_dialog(dialog: QDialog, force_screen_center: bool = False) -> None:
