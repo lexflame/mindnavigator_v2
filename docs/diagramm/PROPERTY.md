@@ -281,3 +281,5 @@ Purpose: entity property map and UI role map.
   `main_window.py` UI literals are restored to valid UTF-8 text (workspace names, tray strings, tooltips, reminder captions), preventing mojibake in runtime labels.
 - Splash startup lifecycle property:
   `mindnavigator.__main__.main()` uses idempotent startup completion and explicit splash teardown (`hide` + `close` + `deleteLater`) with a fallback timer, so splash cannot remain visible after successful window initialization.
+- Startup finalization ordering property (follow-up):
+  `finish_startup()` uses deferred maximize (`QTimer.singleShot(0, ...)`) and performs splash teardown in `finally`, so callback-level errors cannot leave splash visible.

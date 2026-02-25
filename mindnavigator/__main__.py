@@ -91,12 +91,24 @@ def main() -> None:
     splash.raise_()
     splash.fade_in()
 
+    splash_closed = False
+
+    def close_splash() -> None:
+        nonlocal splash_closed
+        if splash_closed:
+            return
+        splash_closed = True
+        try:
+            splash.hide()
+            splash.close()
+            splash.deleteLater()
+        finally:
+            app.processEvents()
+
     try:
         window = MainWindow()
     except Exception:
-        splash.hide()
-        splash.close()
-        app.processEvents()
+        close_splash()
         raise
     if single_instance_bridge is not None:
         single_instance_bridge.set_callback(lambda _msg: window.restore_from_tray())
@@ -126,12 +138,23 @@ def main() -> None:
         if startup_finished:
             return
         startup_finished = True
-        window.show()
-        window.showMaximized()
-        window.title_bar.sync_max_button()
-        splash.hide()
-        splash.close()
-        splash.deleteLater()
+        try:
+            window.show()
+        except Exception:
+            close_splash()
+            raise
+
+        def finalize_window_show() -> None:
+            try:
+                window.showMaximized()
+                title_bar = getattr(window, "title_bar", None)
+                sync_max_button = getattr(title_bar, "sync_max_button", None)
+                if callable(sync_max_button):
+                    sync_max_button()
+            finally:
+                close_splash()
+
+        QTimer.singleShot(0, finalize_window_show)
 
     show_next_status(0)
     QTimer.singleShot(2500, finish_startup)
