@@ -277,3 +277,7 @@ Purpose: entity property map and UI role map.
   before rebuilding `tasks/projects/task_attachments`, migration now reconciles stale `<table>_old` artifacts from interrupted runs (including rename-back recovery) to keep startup migrations idempotent.
 - Tasks workspace startup-safety properties:
   `get_selection()` and `_selected_task_index()` now tolerate pre-build state (`list/model` are `None`) during `BaseWorkspace.update_action_states()` call in constructor path.
+- Main shell text integrity property:
+  `main_window.py` UI literals are restored to valid UTF-8 text (workspace names, tray strings, tooltips, reminder captions), preventing mojibake in runtime labels.
+- Splash startup lifecycle property:
+  `mindnavigator.__main__.main()` uses idempotent startup completion and explicit splash teardown (`hide` + `close` + `deleteLater`) with a fallback timer, so splash cannot remain visible after successful window initialization.

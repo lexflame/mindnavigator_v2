@@ -91,7 +91,13 @@ def main() -> None:
     splash.raise_()
     splash.fade_in()
 
-    window = MainWindow()
+    try:
+        window = MainWindow()
+    except Exception:
+        splash.hide()
+        splash.close()
+        app.processEvents()
+        raise
     if single_instance_bridge is not None:
         single_instance_bridge.set_callback(lambda _msg: window.restore_from_tray())
     startup_steps = [
@@ -100,6 +106,8 @@ def main() -> None:
         "Проверка хранилища…",
         "Готово.",
     ]
+
+    startup_finished = False
 
     def show_next_status(step_index: int) -> None:
         if step_index >= len(startup_steps):
@@ -114,11 +122,19 @@ def main() -> None:
             QTimer.singleShot(400, lambda: show_next_status(next_index))
 
     def finish_startup() -> None:
+        nonlocal startup_finished
+        if startup_finished:
+            return
+        startup_finished = True
         window.show()
-        QTimer.singleShot(0, lambda: (window.showMaximized(), window.title_bar.sync_max_button()))
+        window.showMaximized()
+        window.title_bar.sync_max_button()
+        splash.hide()
         splash.close()
+        splash.deleteLater()
 
     show_next_status(0)
+    QTimer.singleShot(2500, finish_startup)
     sys.exit(app.exec())
 
 

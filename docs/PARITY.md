@@ -233,3 +233,6 @@ It also stores:
   - added migration regression `test_database_migration_recovers_from_stale_projects_old_table` to verify recovery path and cleanup of stale `projects_old`.
   - fixed startup UI crash `AttributeError: NoneType object has no attribute currentIndex` in `TasksWorkspace.get_selection()` by guarding pre-build state where `self.list`/`self.model` are not initialized yet.
   - added regression `test_tasks_workspace_get_selection_is_safe_before_list_init` (`tests/test_tasks_marker_refresh.py`).
+  - fixed UI mojibake in `main_window.py`: restored corrupted UTF-8 literals (mode names, tray captions, notifications, tooltips, and command/help captions), so Russian text renders correctly in the main shell.
+  - hardened startup splash lifecycle in `__main__.py`: added idempotent `finish_startup()`, explicit `hide/close/deleteLater` path, exception-safe splash close during `MainWindow()` init, and fallback timer (`2500ms`) to prevent stuck splash when status-chain timing is interrupted.
+  - validated splash/encoding fix with compile + focused regressions: `python -m compileall mindnavigator/main_window.py mindnavigator/__main__.py`, `pytest tests/test_tray_task_navigation.py tests/test_workspace_visibility_settings.py -q` -> `7 passed`.

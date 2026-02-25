@@ -1,10 +1,10 @@
-﻿"""Р“Р»Р°РІРЅРѕРµ РѕРєРЅРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ Рё СЃРІСЏР·Р°РЅРЅР°СЏ Р»РѕРіРёРєР° РёРЅС‚РµСЂС„РµР№СЃР°.
+"""Главное окно приложения и связанная логика интерфейса.
 
-Р’С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ:
-    РЎРѕР±С‹С‚РёСЏ Qt, РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёРµ РґРµР№СЃС‚РІРёСЏ Рё РґР°РЅРЅС‹Рµ РёР· СЂР°Р±РѕС‡РёС… РѕР±Р»Р°СЃС‚РµР№.
+Входные данные:
+    События Qt, пользовательские действия и данные из рабочих областей.
 
-Р’С‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ:
-    РћС‚СЂРёСЃРѕРІР°РЅРЅС‹Рµ РІРёРґР¶РµС‚С‹ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ РёРЅС‚РµСЂС„РµР№СЃР°.
+Выходные данные:
+    Отрисованные виджеты и изменения состояния интерфейса.
 """
 
 from __future__ import annotations
@@ -82,21 +82,21 @@ def normalize_enabled_workspace_ids(raw_value: str, available_ids: set[str]) -> 
 
 
 class MainWindow(QMainWindow):
-    """Р“Р»Р°РІРЅРѕРµ РѕРєРЅРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ СЃ РєР°СЃС‚РѕРјРЅС‹Рј Р·Р°РіРѕР»РѕРІРєРѕРј Рё СЂР°Р±РѕС‡РёРјРё РѕР±Р»Р°СЃС‚СЏРјРё."""
+    """Главное окно приложения с кастомным заголовком и рабочими областями."""
 
     RESIZE_MARGIN = 7
     SNAP_THRESHOLD = 14
 
-    MODE_PROJECTS = "РџСЂРѕРµРєС‚С‹"
-    MODE_TASKS = "Р—Р°РґР°С‡Рё"
-    MODE_PURCHASES = "РџРѕРєСѓРїРєРё"
-    MODE_IDEAS = "РРґРµРё"
-    MODE_COLLECTIONS = "РљРѕР»Р»РµРєС†РёРё"
-    MODE_MAPS = "РљР°СЂС‚С‹"
-    MODE_NOTES = "Р—Р°РјРµС‚РєРё"
-    MODE_FILES = "Р¤Р°Р№Р»С‹"
-    MODE_OBJECTS = "РћР±СЉРµРєС‚С‹"
-    MODE_SETTINGS = "РќР°СЃС‚СЂРѕР№РєРё"
+    MODE_PROJECTS = "Проекты"
+    MODE_TASKS = "Задачи"
+    MODE_PURCHASES = "Покупки"
+    MODE_IDEAS = "Идеи"
+    MODE_COLLECTIONS = "Коллекции"
+    MODE_MAPS = "Карты"
+    MODE_NOTES = "Заметки"
+    MODE_FILES = "Файлы"
+    MODE_OBJECTS = "Объекты"
+    MODE_SETTINGS = "Настройки"
     APP_ENABLED_WORKSPACES_KEY = "app.enabled_workspaces"
     APP_LANGUAGE_KEY = "app.language"
     _TRAY_RESTORE_HOTKEY_ID = 0x4D4E57
@@ -105,28 +105,28 @@ class MainWindow(QMainWindow):
     _MOD_SHIFT = 0x0004
 
     def __init__(self):
-        """РРЅРёС†РёР°Р»РёР·РёСЂСѓРµС‚ РѕРєРЅРѕ, РєРѕРјРїРѕРЅРµРЅС‚С‹ РёРЅС‚РµСЂС„РµР№СЃР° Рё РѕР±СЂР°Р±РѕС‚С‡РёРєРё."""
+        """Инициализирует окно, компоненты интерфейса и обработчики."""
         super().__init__()
 
-        # РќР°СЃС‚СЂР°РёРІР°РµРј Р±Р°Р·РѕРІС‹Рµ С„Р»Р°РіРё РѕРєРЅР° Рё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ.
+        # Настраиваем базовые флаги окна и прозрачность.
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
 
-        # Р’РєР»СЋС‡Р°РµРј Р°РІС‚РѕР·Р°Р»РёРІРєСѓ, С‡С‚РѕР±С‹ РєРѕСЂСЂРµРєС‚РЅРѕ СЂРёСЃРѕРІР°С‚СЊ С„РѕРЅ.
+        # Включаем автозаливку, чтобы корректно рисовать фон.
         self.setAutoFillBackground(True)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
-        # РћРїСЂРµРґРµР»СЏРµРј РјРёРЅРёРјР°Р»СЊРЅС‹Рµ СЂР°Р·РјРµСЂС‹ Рё РёРєРѕРЅРєСѓ РїСЂРёР»РѕР¶РµРЅРёСЏ.
+        # Определяем минимальные размеры и иконку приложения.
         self.setMinimumSize(1100, 700)
         self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
 
-        # РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РєР°СЃС‚РѕРјРЅРѕРіРѕ СЂРµСЃР°Р№Р·Р°.
+        # Инициализируем состояние кастомного ресайза.
         self._resize_edge = ResizeEdge.NONE
         self._resizing = False
         self._press_global = QPoint()
         self._start_geom = QRect()
 
-        # РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ С‚СЂРµСЏ, РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРіРѕ СЂРµР¶РёРјР° РєР°СЂС‚С‹ Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РіРµРѕРјРµС‚СЂРёРё.
+        # Инициализируем состояние трея, полноэкранного режима карты и восстановления геометрии.
         self._restore_geom = QRect()
         self._tray_icon: QSystemTrayIcon | None = None
         self._was_maximized_before_minimize = False
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
         self._mode_labels = get_mode_labels(DEFAULT_LANGUAGE)
         self._current_mode = self.MODE_TASKS
 
-        # РЎРѕР±РёСЂР°РµРј РёРЅС‚РµСЂС„РµР№СЃ, СЃРІСЏР·С‹РІР°РµРј СЂРµР¶РёРјС‹ Рё РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј С‚СЂРµР№.
+        # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
         self._wire_modes()
         self._init_tray()
@@ -151,11 +151,11 @@ class MainWindow(QMainWindow):
         self._init_hotkeys()
         self._register_system_restore_hotkey()
 
-        # Р’РєР»СЋС‡Р°РµРј РѕС‚СЃР»РµР¶РёРІР°РЅРёРµ РјС‹С€Рё Рё С„РёР»СЊС‚СЂ СЃРѕР±С‹С‚РёР№ РґР»СЏ СЃРѕР±СЃС‚РІРµРЅРЅРѕРіРѕ СЂРµСЃР°Р№Р·Р°.
+        # Включаем отслеживание мыши и фильтр событий для собственного ресайза.
         self.setMouseTracking(True)
         self.installEventFilter(self)
 
-        # Р’С‹СЃС‚Р°РІР»СЏРµРј СЃС‚Р°СЂС‚РѕРІС‹Р№ СЂРµР¶РёРј.
+        # Выставляем стартовый режим.
         self.set_mode(self.MODE_TASKS)
 
     def _load_behavior_settings(self) -> None:
@@ -246,7 +246,7 @@ class MainWindow(QMainWindow):
         self.left_rail.set_mode_labels(self._mode_labels)
         current_mode = getattr(self, "_current_mode", self.MODE_TASKS)
         mode_caption = self._mode_caption(current_mode)
-        self.title_bar.title_label.setText(f"{APP_NAME} В· {mode_caption}")
+        self.title_bar.title_label.setText(f"{APP_NAME} · {mode_caption}")
         self.projects_nav.set_mode_title(mode_caption)
 
     def _register_system_restore_hotkey(self) -> None:
@@ -276,33 +276,33 @@ class MainWindow(QMainWindow):
             self._system_restore_hotkey_registered = False
 
     def _init_tray(self):
-        """РќР°СЃС‚СЂР°РёРІР°РµС‚ СЃРёСЃС‚РµРјРЅС‹Р№ С‚СЂРµР№ РґР»СЏ СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ РїСЂРёР»РѕР¶РµРЅРёСЏ."""
-        # РџСЂРѕРІРµСЂСЏРµРј, РґРѕСЃС‚СѓРїРµРЅ Р»Рё СЃРёСЃС‚РµРјРЅС‹Р№ С‚СЂРµР№.
+        """Настраивает системный трей для сворачивания приложения."""
+        # Проверяем, доступен ли системный трей.
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
 
-        # РЎРѕР·РґР°РµРј РёРєРѕРЅРєСѓ С‚СЂРµСЏ Рё РєРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ.
+        # Создаем иконку трея и контекстное меню.
         icon = QIcon(resource_path("assets/icon.ico"))
         self._tray_icon = QSystemTrayIcon(icon, self)
         self._tray_icon.setToolTip(APP_NAME)
 
         menu = QMenu()
-        action_show = menu.addAction("РџРѕРєР°Р·Р°С‚СЊ")
-        action_quit = menu.addAction("Р’С‹С…РѕРґ")
+        action_show = menu.addAction("Показать")
+        action_quit = menu.addAction("Выход")
 
-        # РЎРІСЏР·С‹РІР°РµРј РґРµР№СЃС‚РІРёСЏ РјРµРЅСЋ.
+        # Связываем действия меню.
         action_show.triggered.connect(self.restore_from_tray)
         action_quit.triggered.connect(QApplication.instance().quit)
 
-        # РџРѕРґРєР»СЋС‡Р°РµРј РјРµРЅСЋ Рё РѕР±СЂР°Р±РѕС‚С‡РёРє РєР»РёРєРѕРІ РїРѕ РёРєРѕРЅРєРµ.
+        # Подключаем меню и обработчик кликов по иконке.
         self._tray_icon.setContextMenu(menu)
         self._tray_icon.activated.connect(self._on_tray_activated)
         self._tray_icon.messageClicked.connect(self._on_tray_message_clicked)
         self._tray_icon.show()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
-        """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РєР»РёРєРё РїРѕ РёРєРѕРЅРєРµ РІ С‚СЂРµРµ."""
-        # РќР° РѕРґРёРЅРѕС‡РЅС‹Р№ РєР»РёРє РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РѕРєРЅРѕ.
+        """Обрабатывает клики по иконке в трее."""
+        # На одиночный клик восстанавливаем окно.
         if reason == QSystemTrayIcon.Trigger:
             restore = getattr(self, "restore_from_tray", None)
             if callable(restore):
@@ -328,8 +328,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, lambda target_task_id=task_id: self.page_tasks.focus_task(target_task_id))
 
     def _restore_from_tray(self):
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РѕРєРЅРѕ РёР· С‚СЂРµСЏ."""
-        # Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµР¶РёРј РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ РґРѕ СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ.
+        """Возвращает окно из трея."""
+        # Восстанавливаем режим отображения до сворачивания.
         if self.isHidden():
             if self._was_maximized_before_minimize:
                 self.showMaximized()
@@ -338,7 +338,7 @@ class MainWindow(QMainWindow):
                 if not self._restore_geom.isNull():
                     self.setGeometry(self._restore_geom)
             self._was_maximized_before_minimize = False
-        # РџРѕРґРЅРёРјР°РµРј РѕРєРЅРѕ РїРѕРІРµСЂС… Рё СЃРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РєРЅРѕРїРєРё.
+        # Поднимаем окно поверх и синхронизируем состояние кнопки.
         self.raise_()
         self.activateWindow()
         self.title_bar.sync_max_button()
@@ -347,8 +347,8 @@ class MainWindow(QMainWindow):
         self._restore_from_tray()
 
     def _minimize_to_tray(self):
-        """РЎРІРѕСЂР°С‡РёРІР°РµС‚ РѕРєРЅРѕ РІ С‚СЂРµР№."""
-        # Р•СЃР»Рё С‚СЂРµР№ РЅРµ СЃРѕР·РґР°РЅ, РІС‹С…РѕРґРёРј Р±РµР· РґРµР№СЃС‚РІРёР№.
+        """Сворачивает окно в трей."""
+        # Если трей не создан, выходим без действий.
         if self._tray_icon is None:
             return
         self._was_maximized_before_minimize = self._was_maximized_before_minimize or self.isMaximized()
@@ -357,18 +357,18 @@ class MainWindow(QMainWindow):
             if not geom.isNull() and geom.width() > 0 and geom.height() > 0:
                 self._restore_geom = QRect(geom)
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
-        # РџСЂСЏС‡РµРј РѕРєРЅРѕ Рё РїРѕРєР°Р·С‹РІР°РµРј СѓРІРµРґРѕРјР»РµРЅРёРµ.
+        # Прячем окно и показываем уведомление.
         self.hide()
         self._tray_message_task_id = None
         self._tray_icon.showMessage(
             APP_NAME,
-            "РџСЂРёР»РѕР¶РµРЅРёРµ СЃРІРµСЂРЅСѓС‚Рѕ РІ С‚СЂРµР№.",
+            "Приложение свернуто в трей.",
             QSystemTrayIcon.MessageIcon.Information,
             2000,
         )
 
     def minimize_to_tray(self) -> None:
-        """РЎРІРѕСЂР°С‡РёРІР°РµС‚ РѕРєРЅРѕ: РІ С‚СЂРµР№ РїСЂРё РЅР°Р»РёС‡РёРё, РёРЅР°С‡Рµ СЃС‚Р°РЅРґР°СЂС‚РЅРѕ РІ РїР°РЅРµР»СЊ Р·Р°РґР°С‡."""
+        """Сворачивает окно: в трей при наличии, иначе стандартно в панель задач."""
         if self._tray_icon is not None:
             self._minimize_to_tray()
             return
@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
         return Path(__file__).resolve().parents[1] / "defaults" / "hotkeys.default.json"
 
     def _init_task_reminders(self) -> None:
-        """Р—Р°РїСѓСЃРєР°РµС‚ РїРµСЂРёРѕРґРёС‡РµСЃРєРёРµ РЅР°РїРѕРјРёРЅР°РЅРёСЏ Рѕ РїСЂРѕСЃСЂРѕС‡РµРЅРЅС‹С… Р·Р°РґР°С‡Р°С…."""
+        """Запускает периодические напоминания о просроченных задачах."""
         self._task_reminder_timer = QTimer(self)
         self._task_reminder_timer.setInterval(60 * 1000)
         self._task_reminder_timer.timeout.connect(self._check_task_reminders)
@@ -387,7 +387,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(10 * 1000, self._check_task_reminders)
 
     def _check_task_reminders(self) -> None:
-        """РџРѕРєР°Р·С‹РІР°РµС‚ РЅР°РїРѕРјРёРЅР°РЅРёСЏ РєР°Р¶РґС‹Рµ 30 РјРёРЅСѓС‚ РґРѕ РїРµСЂРµРЅРѕСЃР° РёР»Рё РІС‹РїРѕР»РЅРµРЅРёСЏ Р·Р°РґР°С‡Рё."""
+        """Показывает напоминания каждые 30 минут до переноса или выполнения задачи."""
         if self._tray_icon is None:
             return
         now = datetime.now()
@@ -424,7 +424,7 @@ class MainWindow(QMainWindow):
             self._tray_message_task_id = task.id
             self._tray_icon.showMessage(
                 APP_NAME,
-                f"РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ Р·Р°РґР°С‡Рµ: {task.title}\nРЎСЂРѕРє: {due_text}",
+                f"Напоминание о задаче: {task.title}\nСрок: {due_text}",
                 QSystemTrayIcon.MessageIcon.Information,
                 5000,
             )
@@ -515,18 +515,18 @@ class MainWindow(QMainWindow):
         self._update_hotkey_contexts()
         lines = []
         for command, binding in self.hotkeys.get_active_hotkeys():
-            lines.append(f"{binding.sequence} вЂ” {command.title}")
-        QMessageBox.information(self, "Р“РѕСЂСЏС‡РёРµ РєР»Р°РІРёС€Рё", "\n".join(lines) or "РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РіРѕСЂСЏС‡РёС… РєР»Р°РІРёС€")
+            lines.append(f"{binding.sequence} — {command.title}")
+        QMessageBox.information(self, "Горячие клавиши", "\n".join(lines) or "Нет доступных горячих клавиш")
 
     def _show_command_palette(self) -> None:
         self._update_hotkey_contexts()
         commands = sorted(self.hotkeys.get_active_hotkeys(), key=lambda item: item[0].title.lower())
         lines = [f"{command.title} ({binding.sequence})" for command, binding in commands]
-        QMessageBox.information(self, "Command Palette", "\n".join(lines) or "РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РєРѕРјР°РЅРґ")
+        QMessageBox.information(self, "Command Palette", "\n".join(lines) or "Нет доступных команд")
 
     def _build_ui(self):
-        """РЎРѕР·РґР°РµС‚ Рё РєРѕРјРїРѕРЅСѓРµС‚ РѕСЃРЅРѕРІРЅС‹Рµ РІРёРґР¶РµС‚С‹ РѕРєРЅР°."""
-        # РљРѕСЂРЅРµРІРѕР№ РєРѕРЅС‚РµР№РЅРµСЂ РѕРєРЅР°.
+        """Создает и компонует основные виджеты окна."""
+        # Корневой контейнер окна.
         outer = QWidget(self)
         outer.setObjectName("OuterRoot")
         self.setCentralWidget(outer)
@@ -535,7 +535,7 @@ class MainWindow(QMainWindow):
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
 
-        # РљРѕРЅС‚РµР№РЅРµСЂ РїРѕРґ Р·Р°РіРѕР»РѕРІРѕРє Рё С‚РµР»Рѕ.
+        # Контейнер под заголовок и тело.
         self.container = QWidget()
         self.container.setObjectName("Container")
         outer_layout.addWidget(self.container)
@@ -544,13 +544,13 @@ class MainWindow(QMainWindow):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
 
-        # Р’РµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ Р·Р°РіРѕР»РѕРІРєР°.
+        # Верхняя панель заголовка.
         self.title_bar = TitleBar(self)
         self._apply_titlebar_style()
 
         container_layout.addWidget(self.title_bar)
 
-        # РћСЃРЅРѕРІРЅРѕРµ С‚РµР»Рѕ РѕРєРЅР°.
+        # Основное тело окна.
         body = QWidget()
         body.setObjectName("Body")
         container_layout.addWidget(body, 1)
@@ -559,24 +559,24 @@ class MainWindow(QMainWindow):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
 
-        # Р›РµРІС‹Р№ rail СЃ РєРЅРѕРїРєР°РјРё СЂРµР¶РёРјРѕРІ.
+        # Левый rail с кнопками режимов.
         self.left_rail = LeftRail()
         body_layout.addWidget(self.left_rail)
         self.left_rail.set_expand_host(body)
 
-        # РљРѕРЅС‚РµР№РЅРµСЂ РєРЅРѕРїРєРё СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ РЅР°РІРёРіР°С†РёРё.
+        # Контейнер кнопки сворачивания навигации.
         self.nav_toggle_container = QWidget()
         self.nav_toggle_container.setObjectName("NavToggleContainer")
         nav_toggle_layout = QVBoxLayout(self.nav_toggle_container)
         nav_toggle_layout.setContentsMargins(0, 0, 0, 0)
         nav_toggle_layout.setSpacing(0)
 
-        # РљРЅРѕРїРєР° СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ/СЂР°Р·РІРѕСЂР°С‡РёРІР°РЅРёСЏ.
+        # Кнопка сворачивания/разворачивания.
         self.nav_toggle = QToolButton()
         self.nav_toggle.setObjectName("NavToggleButton")
-        self.nav_toggle.setText("вџЁ")
+        self.nav_toggle.setText("⟨")
         self.nav_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.nav_toggle.setToolTip("РЎРІРµСЂРЅСѓС‚СЊ РЅР°РІРёРіР°С†РёСЋ")
+        self.nav_toggle.setToolTip("Свернуть навигацию")
 
         nav_toggle_layout.addStretch(1)
         nav_toggle_layout.addWidget(self.nav_toggle)
@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
 
         body_layout.addWidget(self.nav_toggle_container)
 
-        # РљРѕР»РѕРЅРєР° РЅР°РІРёРіР°С†РёРё Рё РїРѕРёСЃРєР°.
+        # Колонка навигации и поиска.
         self.nav_column = QWidget()
         self.nav_column.setObjectName("NavColumn")
         nav_layout = QVBoxLayout(self.nav_column)
@@ -598,7 +598,7 @@ class MainWindow(QMainWindow):
 
         body_layout.addWidget(self.nav_column)
 
-        # РЎС‚РµРє СЂР°Р±РѕС‡РёС… РѕР±Р»Р°СЃС‚РµР№.
+        # Стек рабочих областей.
         self.workspace_stack = QStackedWidget()
         self.workspace_stack.setObjectName("WorkspaceStack")
         body_layout.addWidget(self.workspace_stack, 1)
@@ -616,7 +616,7 @@ class MainWindow(QMainWindow):
         self.page_settings = SettingsWorkspace()
         self.page_settings.setting_changed.connect(self._on_setting_changed)
 
-        # Р РµРіРёСЃС‚СЂРёСЂСѓРµРј СЃС‚СЂР°РЅРёС†С‹ Рё СЃРѕС…СЂР°РЅСЏРµРј РёС… РёРЅРґРµРєСЃС‹.
+        # Регистрируем страницы и сохраняем их индексы.
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
@@ -630,15 +630,15 @@ class MainWindow(QMainWindow):
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
-        # РџРѕРґРєР»СЋС‡Р°РµРј СЃРёРіРЅР°Р»С‹ РѕС‚ РЅР°РІРёРіР°С†РёРё Рё РїРѕРёСЃРєР°.
+        # Подключаем сигналы от навигации и поиска.
         self.projects_nav.filter_changed.connect(self._on_nav_filter_changed)
         self.search_nav.resultActivated.connect(self._on_search_result_activated)
         self._current_mode = self.MODE_TASKS
 
-        # РљРЅРѕРїРєР° СЃРІРѕСЂР°С‡РёРІР°РЅРёСЏ РЅР°РІРёРіР°С†РёРё.
+        # Кнопка сворачивания навигации.
         self.nav_toggle.clicked.connect(self._toggle_nav_column)
 
-        # РџСЂРёРјРµРЅСЏРµРј СЃС‚РёР»Рё Рё СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЋ СЂР°Р·РјРµСЂРѕРІ.
+        # Применяем стили и синхронизацию размеров.
         self._apply_root_style()
 
         self.projects_nav.update_width_for_window(self.width())
@@ -647,8 +647,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _placeholder(title: str, subtitle: str) -> QWidget:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РІСЂРµРјРµРЅРЅС‹Р№ СЌРєСЂР°РЅ-Р·Р°РіР»СѓС€РєСѓ РґР»СЏ РЅРµРіРѕС‚РѕРІС‹С… СЂРµР¶РёРјРѕРІ."""
-        # Р—Р°РіР»СѓС€РєР° РґР»СЏ СЂРµР¶РёРјРѕРІ Р±РµР· СЂРµР°Р»РёР·Р°С†РёРё.
+        """Возвращает временный экран-заглушку для неготовых режимов."""
+        # Заглушка для режимов без реализации.
         w = QWidget()
         w.setObjectName("Placeholder")
         l = QVBoxLayout(w)
@@ -666,8 +666,8 @@ class MainWindow(QMainWindow):
         return w
 
     def _apply_titlebar_style(self) -> None:
-        """РџСЂРёРјРµРЅСЏРµС‚ СЃС‚РёР»Рё Рє Р·Р°РіРѕР»РѕРІРєСѓ РѕРєРЅР°."""
-        # РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЃС‚РёР»Рё РґР»СЏ Р·Р°РіРѕР»РѕРІРєР° Рё РєРЅРѕРїРѕРє СѓРїСЂР°РІР»РµРЅРёСЏ.
+        """Применяет стили к заголовку окна."""
+        # Устанавливаем стили для заголовка и кнопок управления.
         self.title_bar.setStyleSheet(f"""
             QWidget#TitleBar {{
                 {TITLEBAR_BACKGROUND}
@@ -694,8 +694,8 @@ class MainWindow(QMainWindow):
         """)
 
     def _apply_root_style(self) -> None:
-        """РџСЂРёРјРµРЅСЏРµС‚ Р±Р°Р·РѕРІС‹Рµ СЃС‚РёР»Рё Рє РєРѕСЂРЅРµРІРѕРјСѓ РєРѕРЅС‚РµР№РЅРµСЂСѓ."""
-        # РџСЂРѕРїРёСЃС‹РІР°РµРј СЃС‚РёР»Рё РґР»СЏ С„РѕРЅР°, РєРѕРЅС‚РµР№РЅРµСЂР° Рё РєРЅРѕРїРєРё РЅР°РІРёРіР°С†РёРё.
+        """Применяет базовые стили к корневому контейнеру."""
+        # Прописываем стили для фона, контейнера и кнопки навигации.
         self.centralWidget().setStyleSheet(f"""
             QWidget#OuterRoot {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
@@ -720,24 +720,24 @@ class MainWindow(QMainWindow):
         """)
 
     def _apply_nav_state_to_workspace(self, workspace: QWidget) -> None:
-        # РџРµСЂРµРґР°РµРј Р°РєС‚РёРІРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РЅР°РІРёРіР°С†РёРё РІ СЂР°Р±РѕС‡РёРµ РѕР±Р»Р°СЃС‚Рё.
+        # Передаем активное состояние навигации в рабочие области.
         if hasattr(workspace, "set_nav_collapsed_state"):
             workspace.set_nav_collapsed_state(not self.nav_column.isVisible())
 
     def _set_nav_collapsed(self, collapsed: bool) -> None:
-        # РЎРєСЂС‹РІР°РµРј/РїРѕРєР°Р·С‹РІР°РµРј РєРѕР»РѕРЅРєСѓ РЅР°РІРёРіР°С†РёРё Рё РјРµРЅСЏРµРј РїРѕРґСЃРєР°Р·РєРё.
+        # Скрываем/показываем колонку навигации и меняем подсказки.
         self.nav_column.setVisible(not collapsed)
-        self.nav_toggle.setText("вџ©" if collapsed else "вџЁ")
-        self.nav_toggle.setToolTip("Р Р°Р·РІРµСЂРЅСѓС‚СЊ РЅР°РІРёРіР°С†РёСЋ" if collapsed else "РЎРІРµСЂРЅСѓС‚СЊ РЅР°РІРёРіР°С†РёСЋ")
+        self.nav_toggle.setText("⟩" if collapsed else "⟨")
+        self.nav_toggle.setToolTip("Развернуть навигацию" if collapsed else "Свернуть навигацию")
         self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
 
     def _toggle_nav_column(self) -> None:
-        # РџРµСЂРµРєР»СЋС‡Р°РµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РєРѕР»РѕРЅРєРё РЅР°РІРёРіР°С†РёРё.
+        # Переключаем состояние колонки навигации.
         self._set_nav_collapsed(self.nav_column.isVisible())
 
     def _wire_modes(self):
-        """РЎРІСЏР·С‹РІР°РµС‚ РєРЅРѕРїРєРё Р»РµРІРѕРіРѕ РјРµРЅСЋ СЃ СЂРµР¶РёРјР°РјРё СЂР°Р±РѕС‡РёС… РѕР±Р»Р°СЃС‚РµР№."""
-        # Р¤РѕСЂРјРёСЂСѓРµРј СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРµ РєРЅРѕРїРѕРє Рё СЂРµР¶РёРјРѕРІ.
+        """Связывает кнопки левого меню с режимами рабочих областей."""
+        # Формируем соответствие кнопок и режимов.
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
@@ -751,29 +751,29 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_settings: self.MODE_SETTINGS,
         }
         self._mode_to_button = {mode_name: button for button, mode_name in self._btn_to_mode.items()}
-        # РџРѕРґРєР»СЋС‡Р°РµРј РєР»РёРєРё РЅР° РєРЅРѕРїРєРё Рє СЃРјРµРЅРµ СЂРµР¶РёРјР°.
+        # Подключаем клики на кнопки к смене режима.
         for btn, mode in self._btn_to_mode.items():
             btn.clicked.connect(lambda checked=False, m=mode: self.set_mode(m))
 
     def set_mode(self, mode_name: str):
-        """РџРµСЂРµРєР»СЋС‡Р°РµС‚ Р°РєС‚РёРІРЅСѓСЋ СЂР°Р±РѕС‡СѓСЋ РѕР±Р»Р°СЃС‚СЊ Рё РѕР±РЅРѕРІР»СЏРµС‚ Р·Р°РіРѕР»РѕРІРєРё."""
+        """Переключает активную рабочую область и обновляет заголовки."""
         if not self._is_mode_enabled(mode_name):
             mode_name = self._first_enabled_mode()
         mode_caption = self._mode_caption(mode_name)
-        # РћР±РЅРѕРІР»СЏРµРј Р·Р°РіРѕР»РѕРІРѕРє РѕРєРЅР° Рё СЃРѕСЃС‚РѕСЏРЅРёРµ РЅР°РІРёРіР°С†РёРё.
-        self.title_bar.title_label.setText(f"{APP_NAME} В· {mode_caption}")
+        # Обновляем заголовок окна и состояние навигации.
+        self.title_bar.title_label.setText(f"{APP_NAME} · {mode_caption}")
         previous_workspace = self.workspace_stack.currentWidget()
         if previous_workspace is not None and hasattr(previous_workspace, "on_leave"):
             previous_workspace.on_leave()
         self._current_mode = mode_name
         self.projects_nav.set_mode_title(mode_caption)
-        # РџРµСЂРµРєР»СЋС‡Р°РµРј СЃС‚СЂР°РЅРёС†Сѓ РІ СЃС‚РµРєРµ.
+        # Переключаем страницу в стеке.
         self.workspace_stack.setCurrentIndex(self._page_index.get(mode_name, self._page_index[self.MODE_TASKS]))
         self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
         current_workspace = self.workspace_stack.currentWidget()
         if current_workspace is not None and hasattr(current_workspace, "on_enter"):
             current_workspace.on_enter(None)
-        # РћР±РЅРѕРІР»СЏРµРј РґР°РЅРЅС‹Рµ Р°РєС‚РёРІРЅРѕР№ СЃС‚СЂР°РЅРёС†С‹.
+        # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
         elif mode_name == self.MODE_PURCHASES:
@@ -788,7 +788,7 @@ class MainWindow(QMainWindow):
         elif mode_name == self.MODE_OBJECTS:
             self.page_objects.refresh_objects()
 
-        # РћС‚РјРµС‡Р°РµРј РІС‹Р±СЂР°РЅРЅСѓСЋ РєРЅРѕРїРєСѓ РІ РјРµРЅСЋ.
+        # Отмечаем выбранную кнопку в меню.
         for btn, m in self._btn_to_mode.items():
             if m == mode_name:
                 btn.setChecked(True)
@@ -797,7 +797,7 @@ class MainWindow(QMainWindow):
         self._update_hotkey_contexts()
 
     def _on_nav_filter_changed(self, kind: str, value: object) -> None:
-        # РћРїСЂРµРґРµР»СЏРµРј Р°РєС‚РёРІРЅС‹Р№ СЂРµР¶РёРј Рё РїСЂРѕРєРёРґС‹РІР°РµРј С„РёР»СЊС‚СЂС‹ РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёР№ РІРёРґ.
+        # Определяем активный режим и прокидываем фильтры в соответствующий вид.
         mode = self._current_mode
         if mode == self.MODE_TASKS:
             if kind == "project":
@@ -847,7 +847,7 @@ class MainWindow(QMainWindow):
             return
 
     def _on_search_result_activated(self, payload: dict) -> None:
-        # РџРѕ С‚РёРїСѓ РЅР°Р№РґРµРЅРЅРѕР№ СЃСѓС‰РЅРѕСЃС‚Рё РїРµСЂРµРєР»СЋС‡Р°РµРј РЅСѓР¶РЅС‹Р№ СЂРµР¶РёРј.
+        # По типу найденной сущности переключаем нужный режим.
         entity = payload.get("entity")
         if entity == "task":
             self.set_mode(self.MODE_TASKS)
@@ -868,8 +868,8 @@ class MainWindow(QMainWindow):
                 self.page_collections.focus_item(int(item_id))
 
     def resizeEvent(self, event):
-        """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ СЂРµСЃР°Р№Р· РѕРєРЅР°, СЃРёРЅС…СЂРѕРЅРёР·РёСЂСѓСЏ С€РёСЂРёРЅСѓ РЅР°РІРёРіР°С†РёРё."""
-        # РџРµСЂРµРґР°РµРј СЃРѕР±С‹С‚РёРµ Р±Р°Р·РѕРІРѕРјСѓ РєР»Р°СЃСЃСѓ Рё РѕР±РЅРѕРІР»СЏРµРј С€РёСЂРёРЅСѓ РїР°РЅРµР»РµР№.
+        """Обрабатывает ресайз окна, синхронизируя ширину навигации."""
+        # Передаем событие базовому классу и обновляем ширину панелей.
         super().resizeEvent(event)
         if not self.isMaximized() and not self.isMinimized() and self.isVisible():
             self._restore_geom = self.geometry()
@@ -909,8 +909,8 @@ class MainWindow(QMainWindow):
         return super().nativeEvent(event_type, message)
 
     def changeEvent(self, event):
-        """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ СЃРІРѕСЂР°С‡РёРІР°РЅРёРµ РѕРєРЅР° РґР»СЏ РѕС‚РїСЂР°РІРєРё РІ С‚СЂРµР№."""
-        # РћС‚СЃР»РµР¶РёРІР°РµРј СЃРІРѕСЂР°С‡РёРІР°РЅРёРµ Рё РѕС‚РїСЂР°РІР»СЏРµРј РѕРєРЅРѕ РІ С‚СЂРµР№.
+        """Обрабатывает сворачивание окна для отправки в трей."""
+        # Отслеживаем сворачивание и отправляем окно в трей.
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
             self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowState.WindowMaximized)
@@ -930,13 +930,13 @@ class MainWindow(QMainWindow):
                 self._minimize_to_tray()
 
     def keyPressEvent(self, event):
-        """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РіРѕСЂСЏС‡РёРµ РєР»Р°РІРёС€Рё РѕРєРЅР°."""
-        # Esc Р·Р°РєСЂС‹РІР°РµС‚ РїРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ СЂРµР¶РёРј РєР°СЂС‚С‹.
+        """Обрабатывает горячие клавиши окна."""
+        # Esc закрывает полноэкранный режим карты.
         if event.key() == Qt.Key.Key_Escape and self._map_fullscreen_active:
             self.set_map_fullscreen(False)
             event.accept()
             return
-        # F11 РїРµСЂРµРєР»СЋС‡Р°РµС‚ РїРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ СЂРµР¶РёРј РѕРєРЅР°.
+        # F11 переключает полноэкранный режим окна.
         if event.key() == Qt.Key.Key_F11:
             if self.isFullScreen():
                 if self._was_maximized_before_fullscreen:
@@ -953,18 +953,18 @@ class MainWindow(QMainWindow):
 
     # ----- Snap / detach -----
     def _snap_to_screen_edges(self, global_pos: QPoint):
-        """РџСЂРёР»РёРїР°РµС‚ РѕРєРЅРѕ Рє РєСЂР°СЏРј СЌРєСЂР°РЅР° Рё СЂР°Р·РІРѕСЂР°С‡РёРІР°РµС‚ РїСЂРё РєР°СЃР°РЅРёРё РІРµСЂС…РЅРµР№ РіСЂР°РЅРёС†С‹."""
-        # Р’ maximized СЂРµР¶РёРј РїСЂРёР»РёРїР°РЅРёРµ РЅРµ РЅСѓР¶РЅРѕ.
+        """Прилипает окно к краям экрана и разворачивает при касании верхней границы."""
+        # В maximized режим прилипание не нужно.
         if self.isMaximized():
             return
 
-        # РџРѕР»СѓС‡Р°РµРј Р°РєС‚РёРІРЅС‹Р№ СЌРєСЂР°РЅ Рё РґРѕСЃС‚СѓРїРЅСѓСЋ РіРµРѕРјРµС‚СЂРёСЋ.
+        # Получаем активный экран и доступную геометрию.
         screen = QApplication.screenAt(global_pos) or self.screen()
         geo = screen.availableGeometry()
         t = self.SNAP_THRESHOLD
         x, y = global_pos.x(), global_pos.y()
 
-        # РџСЂРёРєРѕСЃРЅРѕРІРµРЅРёРµ Рє РІРµСЂС…РЅРµРјСѓ РєСЂР°СЋ вЂ” СЂР°Р·РІРѕСЂР°С‡РёРІР°РµРј РѕРєРЅРѕ.
+        # Прикосновение к верхнему краю — разворачиваем окно.
         if abs(y - geo.top()) <= t:
             if self._restore_geom.isNull():
                 self._restore_geom = self.geometry()
@@ -972,13 +972,13 @@ class MainWindow(QMainWindow):
             self.title_bar.sync_max_button()
             return
 
-        # РџСЂРёРєРѕСЃРЅРѕРІРµРЅРёРµ Рє Р»РµРІРѕРјСѓ РєСЂР°СЋ вЂ” РїРѕР»РѕРІРёРЅРЅРѕРµ РѕРєРЅРѕ СЃР»РµРІР°.
+        # Прикосновение к левому краю — половинное окно слева.
         if abs(x - geo.left()) <= t:
             self.setGeometry(QRect(geo.left(), geo.top(), geo.width() // 2, geo.height()))
             self._restore_geom = self.geometry()
             return
 
-        # РџСЂРёРєРѕСЃРЅРѕРІРµРЅРёРµ Рє РїСЂР°РІРѕРјСѓ РєСЂР°СЋ вЂ” РїРѕР»РѕРІРёРЅРЅРѕРµ РѕРєРЅРѕ СЃРїСЂР°РІР°.
+        # Прикосновение к правому краю — половинное окно справа.
         if abs(x - geo.right()) <= t:
             self.setGeometry(QRect(geo.left() + geo.width() // 2, geo.top(), geo.width() // 2, geo.height()))
             self._restore_geom = self.geometry()
@@ -988,22 +988,22 @@ class MainWindow(QMainWindow):
         self._snap_to_screen_edges(global_pos)
 
     def _begin_restore_on_drag(self, global_pos: QPoint):
-        """Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ РЅРѕСЂРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РїСЂРё РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёРё РёР· maximize."""
-        # Р•СЃР»Рё РЅРµ maximized, РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј.
+        """Восстанавливает нормальный размер при перетаскивании из maximize."""
+        # Если не maximized, ничего не делаем.
         if not self.isMaximized():
             return
 
-        # Р—Р°РїРѕРјРёРЅР°РµРј РіРµРѕРјРµС‚СЂРёСЋ РѕРєРЅР° РґРѕ maximized.
+        # Запоминаем геометрию окна до maximized.
         if self._restore_geom.isNull():
             self._restore_geom = self.normalGeometry()
 
-        # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅСѓСЋ РїРѕР·РёС†РёСЋ РєСѓСЂСЃРѕСЂР° РїРѕ СЌРєСЂР°РЅСѓ.
+        # Рассчитываем относительную позицию курсора по экрану.
         screen = QApplication.screenAt(global_pos) or self.screen()
         avail = screen.availableGeometry()
         rel_x = (global_pos.x() - avail.left()) / max(1, avail.width())
         rel_x = min(max(rel_x, 0.05), 0.95)
 
-        # Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РѕРєРЅРѕ Рё РїРµСЂРµСЃС‡РёС‚С‹РІР°РµРј РіРµРѕРјРµС‚СЂРёСЋ РїРѕРґ РєСѓСЂСЃРѕСЂРѕРј.
+        # Восстанавливаем окно и пересчитываем геометрию под курсором.
         self.showNormal()
         self.title_bar.sync_max_button()
 
@@ -1018,12 +1018,12 @@ class MainWindow(QMainWindow):
 
     # ----- Resize -----
     def _hit_test_edges(self, pos: QPoint) -> ResizeEdge:
-        """РћРїСЂРµРґРµР»СЏРµС‚, Р·Р° РєР°РєРѕР№ РєСЂР°Р№ РѕРєРЅР° РѕС‚РІРµС‡Р°РµС‚ С‚РµРєСѓС‰Р°СЏ РїРѕР·РёС†РёСЏ РјС‹С€Рё."""
-        # Р’ maximized СЂРµР¶РёРјРµ СЂРµСЃР°Р№Р· РѕС‚РєР»СЋС‡РµРЅ.
+        """Определяет, за какой край окна отвечает текущая позиция мыши."""
+        # В maximized режиме ресайз отключен.
         if self.isMaximized():
             return ResizeEdge.NONE
 
-        # РћРїСЂРµРґРµР»СЏРµРј РЅР°РїСЂР°РІР»РµРЅРёРµ СЂРµСЃР°Р№Р·Р° РїРѕ РєРѕРѕСЂРґРёРЅР°С‚Р°Рј.
+        # Определяем направление ресайза по координатам.
         x, y = pos.x(), pos.y()
         w, h = self.width(), self.height()
         m = self.RESIZE_MARGIN
@@ -1065,20 +1065,20 @@ class MainWindow(QMainWindow):
         return Qt.CursorShape.ArrowCursor
 
     def _start_resize(self, edge: ResizeEdge, global_pos: QPoint):
-        """РЎС‚Р°СЂС‚СѓРµС‚ РѕРїРµСЂР°С†РёСЋ РёР·РјРµРЅРµРЅРёСЏ СЂР°Р·РјРµСЂРѕРІ РѕРєРЅР°."""
-        # РЎРѕС…СЂР°РЅСЏРµРј РїР°СЂР°РјРµС‚СЂС‹ СЃС‚Р°СЂС‚Р° СЂРµСЃР°Р№Р·Р°.
+        """Стартует операцию изменения размеров окна."""
+        # Сохраняем параметры старта ресайза.
         self._resizing = True
         self._resize_edge = edge
         self._press_global = global_pos
         self._start_geom = self.geometry()
 
     def _do_resize(self, global_pos: QPoint):
-        """Р’С‹РїРѕР»РЅСЏРµС‚ РёР·РјРµРЅРµРЅРёРµ РіРµРѕРјРµС‚СЂРёРё РѕРєРЅР° РІРѕ РІСЂРµРјСЏ СЂРµСЃР°Р№Р·Р°."""
-        # Р•СЃР»Рё СЂРµСЃР°Р№Р· РЅРµ Р°РєС‚РёРІРµРЅ, РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј.
+        """Выполняет изменение геометрии окна во время ресайза."""
+        # Если ресайз не активен, ничего не делаем.
         if not self._resizing or self._resize_edge == ResizeEdge.NONE:
             return
 
-        # Р Р°СЃСЃС‡РёС‚С‹РІР°РµРј СЃРјРµС‰РµРЅРёСЏ РєСѓСЂСЃРѕСЂР°.
+        # Рассчитываем смещения курсора.
         dx = global_pos.x() - self._press_global.x()
         dy = global_pos.y() - self._press_global.y()
 
@@ -1086,7 +1086,7 @@ class MainWindow(QMainWindow):
         min_w = self.minimumWidth()
         min_h = self.minimumHeight()
 
-        # РћР±РЅРѕРІР»СЏРµРј РіСЂР°РЅРёС†С‹ РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ РЅР°РїСЂР°РІР»РµРЅРёСЏ СЂРµСЃР°Р№Р·Р°.
+        # Обновляем границы в зависимости от направления ресайза.
         if (self._resize_edge & ResizeEdge.LEFT) != ResizeEdge.NONE:
             new_x = g.x() + dx
             new_w = g.width() - dx
@@ -1111,21 +1111,21 @@ class MainWindow(QMainWindow):
             if new_h >= min_h:
                 g.setHeight(new_h)
 
-        # РџСЂРёРјРµРЅСЏРµРј РЅРѕРІСѓСЋ РіРµРѕРјРµС‚СЂРёСЋ Рё Р·Р°РїРѕРјРёРЅР°РµРј РµРµ.
+        # Применяем новую геометрию и запоминаем ее.
         self.setGeometry(g)
         self._restore_geom = self.geometry()
 
     def _stop_resize(self):
-        """РЎР±СЂР°СЃС‹РІР°РµС‚ СЃРѕСЃС‚РѕСЏРЅРёРµ РёР·РјРµРЅРµРЅРёСЏ СЂР°Р·РјРµСЂРѕРІ."""
-        # РЎР±СЂР°СЃС‹РІР°РµРј С„Р»Р°РіРё СЂРµСЃР°Р№Р·Р°.
+        """Сбрасывает состояние изменения размеров."""
+        # Сбрасываем флаги ресайза.
         self._resizing = False
         self._resize_edge = ResizeEdge.NONE
 
     def eventFilter(self, obj, event):
-        """РџРµСЂРµС…РІР°С‚С‹РІР°РµС‚ СЃРѕР±С‹С‚РёСЏ РјС‹С€Рё РґР»СЏ РєР°СЃС‚РѕРјРЅРѕРіРѕ СЂРµСЃР°Р№Р·Р°."""
-        # РћР±СЂР°Р±Р°С‚С‹РІР°РµРј СЃРѕР±С‹С‚РёСЏ С‚РѕР»СЊРєРѕ РґР»СЏ СЃР°РјРѕРіРѕ РѕРєРЅР°.
+        """Перехватывает события мыши для кастомного ресайза."""
+        # Обрабатываем события только для самого окна.
         if obj is self:
-            # рџ”Ґ Р’ maximized РїРѕР»РЅРѕСЃС‚СЊСЋ РІС‹РєР»СЋС‡Р°РµРј hit-test Рё РґРµСЂРіР°РЅРёРµ РєСѓСЂСЃРѕСЂР°
+            # 🔥 В maximized полностью выключаем hit-test и дергание курсора
             if self.isMaximized():
                 if event.type() in (event.Type.MouseMove, event.Type.Leave):
                     self.unsetCursor()
@@ -1135,12 +1135,12 @@ class MainWindow(QMainWindow):
                 pos = event.position().toPoint()
                 global_pos = event.globalPosition().toPoint()
 
-                # Р’Рѕ РІСЂРµРјСЏ СЂРµСЃР°Р№Р·Р° РјРµРЅСЏРµРј РіРµРѕРјРµС‚СЂРёСЋ.
+                # Во время ресайза меняем геометрию.
                 if self._resizing:
                     self._do_resize(global_pos)
                     return True
 
-                # РћР±РЅРѕРІР»СЏРµРј РєСѓСЂСЃРѕСЂ, РµСЃР»Рё РёР·РјРµРЅРёР»СЃСЏ РєСЂР°Р№ СЂРµСЃР°Р№Р·Р°.
+                # Обновляем курсор, если изменился край ресайза.
                 edge = self._hit_test_edges(pos)
                 if edge != self._resize_edge:
                     self._resize_edge = edge
@@ -1152,20 +1152,20 @@ class MainWindow(QMainWindow):
                     pos = event.position().toPoint()
                     edge = self._hit_test_edges(pos)
                     if edge != ResizeEdge.NONE:
-                        # Р—Р°РїСѓСЃРєР°РµРј СЂРµСЃР°Р№Р· РїСЂРё РЅР°Р¶Р°С‚РёРё РЅР° РєСЂР°Р№.
+                        # Запускаем ресайз при нажатии на край.
                         self._start_resize(edge, event.globalPosition().toPoint())
                         return True
                 return False
 
             if event.type() == event.Type.MouseButtonRelease:
-                # РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂРµСЃР°Р№Р· РїРѕ РѕС‚РїСѓСЃРєР°РЅРёСЋ.
+                # Останавливаем ресайз по отпусканию.
                 if self._resizing:
                     self._stop_resize()
                     return True
                 return False
 
             if event.type() == event.Type.Leave:
-                # Р’РѕР·РІСЂР°С‰Р°РµРј РєСѓСЂСЃРѕСЂ, РµСЃР»Рё РЅРµ СЂРµСЃР°Р№Р·РёРј.
+                # Возвращаем курсор, если не ресайзим.
                 if not self._resizing:
                     self.unsetCursor()
                 return False
@@ -1173,12 +1173,12 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def set_map_fullscreen(self, enabled: bool) -> None:
-        # РќРµ РІС‹РїРѕР»РЅСЏРµРј РґРµР№СЃС‚РІРёСЏ, РµСЃР»Рё СЃРѕСЃС‚РѕСЏРЅРёРµ РЅРµ РёР·РјРµРЅРёР»РѕСЃСЊ.
+        # Не выполняем действия, если состояние не изменилось.
         if self._map_fullscreen_active == enabled:
             return
         self._map_fullscreen_active = enabled
         if enabled:
-            # Р—Р°РїРѕРјРёРЅР°РµРј РІРёРґРёРјРѕСЃС‚СЊ РїР°РЅРµР»РµР№ Рё СЃРєСЂС‹РІР°РµРј РёС….
+            # Запоминаем видимость панелей и скрываем их.
             self._map_fullscreen_restore = {
                 "title_bar": self.title_bar.isVisible(),
                 "left_rail": self.left_rail.isVisible(),
@@ -1192,7 +1192,7 @@ class MainWindow(QMainWindow):
             self.nav_column.setVisible(False)
             self.showFullScreen()
         else:
-            # Р’РѕР·РІСЂР°С‰Р°РµРј РІРёРґРёРјРѕСЃС‚СЊ РїР°РЅРµР»РµР№ Рё СЂРµР¶РёРј РѕРєРЅР°.
+            # Возвращаем видимость панелей и режим окна.
             self.title_bar.setVisible(self._map_fullscreen_restore.get("title_bar", True))
             self.left_rail.setVisible(self._map_fullscreen_restore.get("left_rail", True))
             self.nav_toggle_container.setVisible(self._map_fullscreen_restore.get("nav_toggle", True))
@@ -1202,6 +1202,6 @@ class MainWindow(QMainWindow):
             else:
                 self.showNormal()
             self.title_bar.sync_max_button()
-        # РЎРѕРѕР±С‰Р°РµРј СЂР°Р±РѕС‡РµР№ РѕР±Р»Р°СЃС‚Рё Рѕ СЃРјРµРЅРµ РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРіРѕ СЂРµР¶РёРјР°.
+        # Сообщаем рабочей области о смене полноэкранного режима.
         self.page_maps.set_map_fullscreen_state(enabled)
 
