@@ -19,7 +19,9 @@ from typing import Any, ClassVar, Iterable, List, Mapping, Optional, Tuple
 
 from .db_migrations import MigrationStep, apply_migrations
 
-PRIORITIES = ("Low", "Medium", "High", "РћС‚Р»РѕР¶РµРЅРЅР°СЏ")
+DEFERRED_PRIORITY = "Отложенная"
+LEGACY_DEFERRED_PRIORITY = "РћС‚Р»РѕР¶РµРЅРЅР°СЏ"
+PRIORITIES = ("Low", "Medium", "High", DEFERRED_PRIORITY)
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
 COLLECTION_ENTITY_TYPES = ("building", "city", "film", "game", "character", "other")
@@ -462,7 +464,19 @@ def validate_area(area: str) -> str:
 
 def normalize_priority(priority: str) -> str:
     """РќРѕСЂРјР°Р»РёР·СѓРµС‚ Рё РїСЂРѕРІРµСЂСЏРµС‚ Р·РЅР°С‡РµРЅРёРµ РїСЂРёРѕСЂРёС‚РµС‚Р°."""
-    priority = (priority or "").strip() or "Medium"
+    priority = str(priority or "").strip() or "Medium"
+    if priority == LEGACY_DEFERRED_PRIORITY:
+        return DEFERRED_PRIORITY
+    if priority == "4":
+        return DEFERRED_PRIORITY
+    if priority == "3":
+        return "High"
+    if priority == "2":
+        return "Medium"
+    if priority == "1":
+        return "Low"
+    if priority.lower() == "deferred":
+        return DEFERRED_PRIORITY
     if priority not in PRIORITIES:
         raise ValueError("РџСЂРёРѕСЂРёС‚РµС‚ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Low, Medium, High РёР»Рё РћС‚Р»РѕР¶РµРЅРЅР°СЏ.")
     return priority
@@ -518,7 +532,7 @@ class Database:
                     description TEXT NOT NULL DEFAULT '',
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                     gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -541,7 +555,7 @@ class Database:
                     area TEXT NOT NULL,
                     title TEXT NOT NULL,
                     updated TEXT NOT NULL,
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                     parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
                     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1439,7 +1453,24 @@ class Database:
         ).fetchone()
         if not row:
             return True
-        return "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" in (row["sql"] or "")
+        return DEFERRED_PRIORITY in (row["sql"] or "")
+
+    @staticmethod
+    def _priority_normalize_sql(column_expr: str) -> str:
+        return (
+            "CASE "
+            f"WHEN {column_expr} IN ('Low', 'Medium', 'High', '{DEFERRED_PRIORITY}') THEN {column_expr} "
+            f"WHEN {column_expr} = '{LEGACY_DEFERRED_PRIORITY}' THEN '{DEFERRED_PRIORITY}' "
+            f"WHEN CAST({column_expr} AS TEXT) = '1' THEN 'Low' "
+            f"WHEN CAST({column_expr} AS TEXT) = '2' THEN 'Medium' "
+            f"WHEN CAST({column_expr} AS TEXT) = '3' THEN 'High' "
+            f"WHEN CAST({column_expr} AS TEXT) = '4' THEN '{DEFERRED_PRIORITY}' "
+            f"WHEN lower(CAST({column_expr} AS TEXT)) = 'low' THEN 'Low' "
+            f"WHEN lower(CAST({column_expr} AS TEXT)) = 'medium' THEN 'Medium' "
+            f"WHEN lower(CAST({column_expr} AS TEXT)) = 'high' THEN 'High' "
+            f"WHEN lower(CAST({column_expr} AS TEXT)) = 'deferred' THEN '{DEFERRED_PRIORITY}' "
+            "ELSE 'Medium' END"
+        )
 
     def _rebuild_tasks_table(self) -> None:
         self._conn.execute("ALTER TABLE tasks RENAME TO tasks_old;")
@@ -1451,7 +1482,7 @@ class Database:
                 description TEXT NOT NULL DEFAULT '',
                 day TEXT NOT NULL,
                 time_text TEXT NOT NULL DEFAULT '',
-                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                 gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -1468,12 +1499,12 @@ class Database:
             """
         )
         self._conn.execute(
-            """
+            f"""
             INSERT INTO tasks (
                 id, title, description, day, time_text, priority, done, completion_delay_minutes, gantt_estimate_minutes,
                 gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
             )
-            SELECT id, title, description, day, time_text, priority, done, COALESCE(completion_delay_minutes, 0),
+            SELECT id, title, description, day, time_text, {self._priority_normalize_sql("priority")}, done, COALESCE(completion_delay_minutes, 0),
                    COALESCE(gantt_estimate_minutes, 0), COALESCE(gantt_forecasted, 0), project_id, parent_id,
                    COALESCE(recurrence_kind, ''), COALESCE(recurrence_interval, 1),
                    COALESCE(marker_color, ''), COALESCE(marker_theme, ''), created_at, updated_at
@@ -1492,7 +1523,7 @@ class Database:
                 area TEXT NOT NULL,
                 title TEXT NOT NULL,
                 updated TEXT NOT NULL,
-                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
                 archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                 parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1537,7 +1568,7 @@ class Database:
                 area,
                 title,
                 updated,
-                priority,
+                {self._priority_normalize_sql(_source("priority", "'Medium'"))},
                 archived,
                 {_source("parent_project_id", "NULL")},
                 COALESCE({_source("sort_order", "0")}, 0),
@@ -2119,9 +2150,9 @@ class Database:
                 ),
             )
             cascade_priority = None
-            if priority == "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" and prev_priority != "РћС‚Р»РѕР¶РµРЅРЅР°СЏ":
+            if priority == DEFERRED_PRIORITY and prev_priority != DEFERRED_PRIORITY:
                 cascade_priority = priority
-            elif prev_priority == "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" and priority != "РћС‚Р»РѕР¶РµРЅРЅР°СЏ":
+            elif prev_priority == DEFERRED_PRIORITY and priority != DEFERRED_PRIORITY:
                 cascade_priority = priority
             if cascade_priority is not None:
                 self._conn.execute(

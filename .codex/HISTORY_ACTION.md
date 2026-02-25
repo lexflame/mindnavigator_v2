@@ -533,3 +533,11 @@
 [2026-02-25 19:29] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_maps_simple_mouse_mode.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_tasks_workspace
 [2026-02-25 19:29] OUT: 17 passed.
 [2026-02-25 19:29] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for tasks_workspace remediation batch.
+[2026-02-25 22:26] ACTION: Started hotfix for startup migration crash in storage priority constraint normalization.
+[2026-02-25 22:26] ACTION: Updated storage priority canonical constants and migration rebuild SQL to normalize legacy values (`Отложенная`, mojibake alias, numeric 1..4, deferred alias).
+[2026-02-25 22:26] ACTION: Updated main window reminder filter to use shared storage deferred-priority constant.
+[2026-02-25 22:26] ACTION: Added regression test `test_database_migration_normalizes_legacy_priority_values` in tests/test_db_migrations.py.
+[2026-02-25 22:26] CMD: python -m compileall mindnavigator/storage.py mindnavigator/main_window.py tests/test_db_migrations.py
+[2026-02-25 22:26] OUT: OK.
+[2026-02-25 22:26] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_priority_fix
+[2026-02-25 22:26] OUT: 8 passed.

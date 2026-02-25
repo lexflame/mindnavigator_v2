@@ -49,7 +49,7 @@ from .constants import APP_NAME
 from .i18n import DEFAULT_LANGUAGE, get_mode_labels, normalize_language_code
 from .resources import resource_path
 from .hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
-from .storage import get_database
+from .storage import DEFERRED_PRIORITY, get_database
 
 from .ui.styles import TITLEBAR_BACKGROUND
 
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         due_tasks = []
         active_due_ids: set[int] = set()
         for task in get_database().fetch_tasks():
-            if task.done or task.priority == "РћС‚Р»РѕР¶РµРЅРЅР°СЏ":
+            if task.done or task.priority == DEFERRED_PRIORITY:
                 continue
             planned = datetime.combine(task.day, datetime.min.time())
             time_text = (task.time_text or "").strip()
