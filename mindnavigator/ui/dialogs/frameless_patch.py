@@ -39,9 +39,9 @@ def enable_frameless_qdialogs() -> None:
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.resize(_DEFAULT_DIALOG_SIZE)
 
-    def _patched_exec(self, *args, **kwargs):
+    def _patched_exec(self):
         if _should_skip_dialog(self) or _is_popup_dialog(self):
-            return _ORIGINAL_EXEC(self, *args, **kwargs)
+            return _ORIGINAL_EXEC(self)
 
         category = _dialog_category(self)
         if category == "minimal_flex":
@@ -61,7 +61,7 @@ def enable_frameless_qdialogs() -> None:
             self.accepted.connect(overlay.deleteLater)
             self.rejected.connect(overlay.deleteLater)
             self.finished.connect(overlay.deleteLater)
-        return _ORIGINAL_EXEC(self, *args, **kwargs)
+        return _ORIGINAL_EXEC(self)
 
     QDialog.__init__ = _patched_init
     QDialog.exec = _patched_exec

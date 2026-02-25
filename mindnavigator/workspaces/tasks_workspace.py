@@ -1820,8 +1820,8 @@ class TaskEditDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_accept)
-        QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_accept)
+        QShortcut(QKeySequence("Ctrl+Return"), self, self._on_accept)
+        QShortcut(QKeySequence("Ctrl+Enter"), self, self._on_accept)
 
         self.setStyleSheet(f"""
             QDialog#TaskEditDialog {{

@@ -865,9 +865,9 @@ class NoteWorkspace(QWidget):
         self.btn_toggle_right.clicked.connect(self._toggle_right_panel)
         self.btn_zen.toggled.connect(self._toggle_zen_mode)
 
-        QShortcut(QKeySequence("Ctrl+N"), self, activated=self.controller.create_note)
-        QShortcut(QKeySequence("Ctrl+F"), self, activated=self.nav_search.setFocus)
-        QShortcut(QKeySequence("Ctrl+S"), self, activated=self._manual_save)
+        QShortcut(QKeySequence("Ctrl+N"), self, self.controller.create_note)
+        QShortcut(QKeySequence("Ctrl+F"), self, self.nav_search.setFocus)
+        QShortcut(QKeySequence("Ctrl+S"), self, self._manual_save)
 
         self.title_edit.textChanged.connect(self._update_note_title)
         self.tags_edit.textChanged.connect(self._update_note_tags)

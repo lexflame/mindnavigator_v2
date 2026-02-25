@@ -624,9 +624,9 @@ class MapLabelEditDialog(QDialog):
         self._loading = False
 
         # Горячие клавиши диалога.
-        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_save)
-        QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_save)
-        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.reject)
+        QShortcut(QKeySequence("Ctrl+Return"), self, self._on_save)
+        QShortcut(QKeySequence("Ctrl+Enter"), self, self._on_save)
+        QShortcut(QKeySequence(Qt.Key_Escape), self, self.reject)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         # При показе разворачиваем и вписываем диалог в экран.
@@ -813,7 +813,8 @@ class MapLabelEditDialog(QDialog):
             self._register_completer_popup(self.type_combo.lineEdit(), completer)
 
         self.size_spin = QDoubleSpinBox()
-        self.size_spin.setRange(*self._size_range)
+        min_size, max_size = self._size_range
+        self.size_spin.setRange(min_size, max_size)
         self.size_spin.setDecimals(1)
         self.size_spin.setSingleStep(0.5)
         self.size_hint = QLabel("px / ед.")
