@@ -197,13 +197,13 @@ class NotesModel(QAbstractListModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
         if self._loading:
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
         row = self._rows[index.row()]
         if isinstance(row, NoteCategoryRow):
-            return Qt.ItemIsEnabled
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return Qt.ItemFlag.ItemIsEnabled
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def set_loading(self, loading: bool):
         if self._loading == loading:

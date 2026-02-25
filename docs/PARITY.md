@@ -164,6 +164,7 @@ It also stores:
   - continued `PyUnresolvedReferencesInspection` cleanup in `workspaces/ideas_workspace.py`: migrated list/model/context-menu constants to Qt6 enums (`Qt.ItemFlag`, `Qt.ScrollBarPolicy`, `Qt.ContextMenuPolicy`).
   - fixed `PyArgumentListInspection` in `ui/dialogs/frameless_patch.py`: replaced star-arg forwarding into original `QDialog.__init__` with explicit parent/flags normalization and direct call signatures.
   - continued `PyUnresolvedReferencesInspection` cleanup in `ui/dialogs/attach_file_select_nav.py`: migrated dialog/tree/list constants to Qt6 enums (`Qt.AlignmentFlag`, `Qt.ScrollBarPolicy`, `Qt.ItemDataRole`, `Qt.AspectRatioMode`, `Qt.TransformationMode`).
+  - continued `PyUnresolvedReferencesInspection` cleanup in `workspaces/notes_workspace.py`: migrated model row flags to Qt6 `Qt.ItemFlag.*`.
   - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
   - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
   - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.

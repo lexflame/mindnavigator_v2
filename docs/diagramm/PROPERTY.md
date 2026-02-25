@@ -130,6 +130,7 @@ Purpose: entity property map and UI role map.
 ## Notes Workspace Properties
 - `NoteWorkspace` list surface uses Qt6 UI policy enums:
   `Qt.ScrollBarPolicy.ScrollBarAlwaysOff` and `Qt.ContextMenuPolicy.CustomContextMenu`.
+- `NotesModel.flags` uses Qt6 item-flag namespace (`Qt.ItemFlag.*`) for loading/category/data-row interaction states.
 
 ## Tasks Workspace Properties
 - `TasksWorkspace` runtime/UI constants are aligned to Qt6 enum namespaces for list/model/input paths:
