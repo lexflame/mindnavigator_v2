@@ -287,3 +287,9 @@ Purpose: entity property map and UI role map.
   backup option widgets are hydrated with signal blocking, preventing startup-time persistence callbacks from firing before user interaction.
 - Read-only DB resilience property for settings workspace:
   backup option persistence and backup last-run timestamp writes catch `sqlite3.Error`, update status, and do not terminate application startup.
+- Windows native-event pointer safety property:
+  `MainWindow.nativeEvent` now converts Qt `message` payloads to integer pointer form before `ctypes` cast and handles `ctypes.ArgumentError`, preventing recursive event-loop exceptions on `shiboken6.Shiboken.VoidPtr`.
+- Splash teardown stability property (follow-up):
+  startup splash close path avoids explicit `processEvents()` during timer callbacks to prevent re-entrant teardown crashes.
+- Close-event persistence resilience property:
+  hotkey override save failures (`OSError`) during `closeEvent` are non-fatal and do not terminate app shutdown/startup pipeline.

@@ -98,12 +98,8 @@ def main() -> None:
         if splash_closed:
             return
         splash_closed = True
-        try:
-            splash.hide()
-            splash.close()
-            splash.deleteLater()
-        finally:
-            app.processEvents()
+        splash.hide()
+        splash.close()
 
     try:
         window = MainWindow()
@@ -122,6 +118,8 @@ def main() -> None:
     startup_finished = False
 
     def show_next_status(step_index: int) -> None:
+        if splash_closed or startup_finished:
+            return
         if step_index >= len(startup_steps):
             finish_startup()
             return

@@ -243,3 +243,7 @@ It also stores:
   - hardened backup run bookkeeping: `_create_backup` now handles failure to persist `backup_last_run` timestamp in read-only DB without aborting the app.
   - added regression tests `tests/test_settings_workspace_backup_safety.py` covering loading-guard behavior and read-only DB error handling in backup option callback.
   - validated with `python -m compileall mindnavigator/workspaces/settings_workspace.py tests/test_settings_workspace_backup_safety.py`, `pytest tests/test_settings_workspace_backup_safety.py -q`, `pytest tests/test_tray_task_navigation.py -q`.
+  - fixed silent startup/runtime crash path on Windows event loop: `MainWindow.nativeEvent` now normalizes `message` pointer via `int(...)` + `ctypes.c_void_p`, and catches `ctypes.ArgumentError` for `shiboken6.Shiboken.VoidPtr` payloads to avoid recursive native-event exceptions.
+  - removed unsafe splash teardown re-entrancy in `__main__.py`: `close_splash()` no longer calls `app.processEvents()`/`deleteLater()` during startup callback chain.
+  - hardened shutdown path: `MainWindow.closeEvent` now ignores `OSError` when saving hotkey overrides, so read-only profile paths do not abort app close/startup flow.
+  - validated with `python -m compileall mindnavigator/main_window.py mindnavigator/__main__.py`, `pytest tests/test_tray_task_navigation.py -q`, `python -X faulthandler main.py` (no traceback).

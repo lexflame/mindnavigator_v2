@@ -884,7 +884,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._unregister_system_restore_hotkey()
         if hasattr(self, "hotkey_store") and hasattr(self, "hotkeys"):
-            self.hotkey_store.save(self.hotkeys)
+            try:
+                self.hotkey_store.save(self.hotkeys)
+            except OSError:
+                # Ignore write failures on read-only profiles; app shutdown must continue.
+                pass
         super().closeEvent(event)
 
     def nativeEvent(self, event_type, message):
@@ -899,9 +903,20 @@ class MainWindow(QMainWindow):
             and getattr(self, "_system_restore_hotkey_registered", False)
             and event_name in {"windows_generic_MSG", "windows_dispatcher_MSG"}
         ):
+            raw_message: int | None
+            if isinstance(message, int):
+                raw_message = message
+            else:
+                try:
+                    raw_message = int(message)
+                except (TypeError, ValueError):
+                    raw_message = None
+            if not raw_message:
+                return super().nativeEvent(event_type, message)
             try:
-                msg = ctypes.cast(message, ctypes.POINTER(_WinMSG)).contents
-            except (TypeError, ValueError):
+                msg_ptr = ctypes.c_void_p(raw_message)
+                msg = ctypes.cast(msg_ptr, ctypes.POINTER(_WinMSG)).contents
+            except (TypeError, ValueError, ctypes.ArgumentError):
                 return super().nativeEvent(event_type, message)
             if msg.message == self._WM_HOTKEY and int(msg.wParam) == self._TRAY_RESTORE_HOTKEY_ID:
                 self._restore_from_tray()
