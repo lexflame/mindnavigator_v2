@@ -1,49 +1,42 @@
 # APP_DEVEL_AGENTS.md
 
 ## Purpose
-Repository-level development policy for Codex agents.
-This file defines mandatory constraints, quality gates, git policy, architecture, and release structure.
+Repository-level policy for Codex agents.
+This file defines policy constraints. Execution flow is defined in `APP_DEVEL_SKILL.md`.
 
 ## Rule Allocation
-This AGENTS file owns policy-level rules. Operational execution procedures are defined in `APP_DEVEL_SKILL.md`.
+- Policy rules live in this file.
+- Operational steps and command triggers live in `APP_DEVEL_SKILL.md`.
 
-## Task Identity And History
-- Every incoming task must receive a unique `TASK_GUID`.
-- Task history must be maintained in `.codex/HISTORY_TASK.md`.
-- Process I/O history must be maintained in `.codex/HISTORY_ACTION.md` in a chronological shell-history style similar to `.history_bash`.
+## Policy Levels
 
-## Branching And Commit Policy
-- Each sprint must be developed in a dedicated sprint branch.
-- Each task must be committed separately.
-- If a fix is discovered during execution, create two commits in sequence:
-  1. Commit the pre-fix (broken or incomplete) state.
-  2. Commit the fix state.
+### Mandatory (Always)
+- Keep changes task-scoped and avoid unrelated rewrites.
+- Preserve stable desktop behavior unless task explicitly requires behavior changes.
+- Validate changed behavior before final response.
+- Keep architecture consistent with existing MVP boundaries.
 
-## Commit Message Prefix Policy
-- Feature/creation/implementation/development tasks: `feat//:: TASK_GUID`.
-- Bug fixes: `fix//:: TASK_GUID`.
-- Parity tasks: `parity::// TASK_GUID`.
+### Sprint/Release Mode (When Task Is Explicitly Sprint/Release)
+- Use a dedicated sprint branch.
+- Track task identity in `.codex/HISTORY_TASK.md` with a `TASK_GUID`.
+- Track meaningful command/action history in `.codex/HISTORY_ACTION.md`.
+- Use commit prefixes with task id:
+  - feature work: `feat//:: TASK_GUID`
+  - fixes: `fix//:: TASK_GUID`
+  - parity: `parity::// TASK_GUID`
+- Push only after successful validation and when push is requested/required by sprint flow.
 
-## Testing Quality Gates
-- Stable working automated tests must be present and verified.
-- The repository must continuously maintain stable working automated tests.
-- Before each commit, code must be tested.
+## Git Policy
+- One task should map to one commit when commits are requested.
+- Do not create intentional "broken-state" commits unless explicitly requested for debugging/forensics.
+- Use keys from `.codex/git_key/` when repository policy requires authenticated git operations.
 
-## Git Operation Policy
-- Use git keys from `.codex/git_key/` for repository git operations.
-- After successful testing, push changes to git.
-
-## Build And Packaging Policy
-- Build/update `scripts/build_win.bat` for Win64.
-- Build/update `scripts/build_start_win.bat` for Win64 build+compile flow.
-- Build/update `scripts/build_win.sh` for *nix.
-- Build/update `scripts/build_start_win.sh` for *nix build+compile flow.
-
-## Compiled Application Structure
-- Compiled application must include directories:
-  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `defenition`.
-- Root of compiled application must contain a minimal file set.
-- Root of compiled application must include a database cleanup script.
-
-## Architecture Standard
-- Use the MVP pattern for application development.
+## Build And Packaging Policy (Release Tasks)
+- Maintain build scripts when build/release pipeline is part of the task:
+  - `scripts/build_win.bat`
+  - `scripts/build_start_win.bat`
+  - `scripts/build_win.sh`
+  - `scripts/build_start_win.sh`
+- For packaged artifacts, verify required directories:
+  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `definition`.
+- Ensure packaged root includes a DB cleanup script when release packaging is in scope.

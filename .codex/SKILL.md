@@ -14,9 +14,19 @@ Use this skill for routine work in this repository: bugfixes, small features, re
 2. Inspect call sites before changing public behavior.
 3. Implement minimal patch in-place.
 4. Run targeted validation:
-   - `python -m compileall mindnavigator main.py`
+   - `python -m compileall mindnavigator main.py` (for code changes)
    - `pytest tests -k <changed_area>`
-5. Report changed files and residual risks.
+5. Report changed files, validation results, and residual risks.
+
+## Sprint/Release extension (explicit tasks only)
+1. Assign and record `TASK_GUID`.
+2. Update `.codex/HISTORY_TASK.md` and `.codex/HISTORY_ACTION.md`.
+3. Work in dedicated sprint branch.
+4. If commits are requested, use prefixes:
+   - feature: `feat//:: TASK_GUID`
+   - fix: `fix//:: TASK_GUID`
+   - parity: `parity::// TASK_GUID`
+5. Push only when requested/required and after successful validation.
 
 ## Guardrails
 - Keep architecture and naming consistent with nearby code.
