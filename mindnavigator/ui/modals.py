@@ -21,8 +21,8 @@ class ModalOverlay(QFrame):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setObjectName("ModalOverlay")
-        self.setFocusPolicy(Qt.NoFocus)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.setStyleSheet("QFrame#ModalOverlay { background: rgba(10, 10, 12, 160); }")
         self._sync_geometry()
         parent.installEventFilter(self)
@@ -33,7 +33,7 @@ class ModalOverlay(QFrame):
         self.raise_()
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self.parent() and event.type() in (QEvent.Resize, QEvent.Move, QEvent.Show):
+        if obj is self.parent() and event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.Show):
             self._sync_geometry()
         return super().eventFilter(obj, event)
 
@@ -87,8 +87,8 @@ class ConfirmDialog(QDialog):
         layout.addWidget(message_label)
 
         buttons = QDialogButtonBox()
-        confirm_btn = buttons.addButton(confirm_text, QDialogButtonBox.AcceptRole)
-        buttons.addButton(cancel_text, QDialogButtonBox.RejectRole)
+        confirm_btn = buttons.addButton(confirm_text, QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(cancel_text, QDialogButtonBox.ButtonRole.RejectRole)
         confirm_btn.setDefault(True)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

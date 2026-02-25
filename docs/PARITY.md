@@ -203,3 +203,5 @@ It also stores:
   - validated unresolved batch-1 with compile + focused smooth-scroll tests (`tests/test_smooth_scroll.py`): `5 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-2): migrated legacy Qt enums in shell UI modules (`splash`, `titlebar`) and removed typed-unsafe `QMainWindow.title_bar` cross-reference by using local `TitleBar.sync_max_button()`.
   - validated unresolved batch-2 with compile + focused tray/workspace regressions (`tests/test_tray_task_navigation.py`, `tests/test_workspace_visibility_settings.py`): `7 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-3): migrated modal/dialog Qt enums in `base_dialog`, `frameless_patch`, and `modals` (`WindowType`, `FocusPolicy`, `WidgetAttribute`, `QEvent.Type`, `QDialogButtonBox.ButtonRole`).
+  - validated unresolved batch-3 with compile + focused animation/tray regressions (`tests/test_animations.py`, `tests/test_tray_task_navigation.py`): `8 passed`.

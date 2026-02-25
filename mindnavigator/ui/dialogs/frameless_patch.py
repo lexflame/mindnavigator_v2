@@ -49,7 +49,7 @@ def enable_frameless_qdialogs() -> None:
             _ORIGINAL_INIT(self, parent, flags)
         if _should_skip_dialog(self):
             return
-        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.resize(_DEFAULT_DIALOG_SIZE)
 
     def _patched_exec(self):
@@ -97,7 +97,7 @@ def _should_skip_dialog(dialog: QDialog) -> bool:
 
 
 def _is_popup_dialog(dialog: QDialog) -> bool:
-    return bool(dialog.windowFlags() & Qt.Popup)
+    return bool(dialog.windowFlags() & Qt.WindowType.Popup)
 
 
 def _resolve_overlay_parent(parent: QWidget | None) -> QWidget | None:

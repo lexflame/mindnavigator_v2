@@ -12,7 +12,7 @@ class MNBaseDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.resize(self.DEFAULT_INITIAL_SIZE)
         self._mn_positioned = False
 
