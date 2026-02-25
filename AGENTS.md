@@ -32,6 +32,12 @@
 - Do not remove user data paths/configs unless explicitly requested.
 - Keep file operations conservative and reversible.
 
+## Git workflow rules
+- Use credentials only from `.codex/git_key/` for Git operations in this repo.
+- Default token source: `.codex/git_key/ghp_token` via `.codex/git_key/git_askpass.bat`.
+- Before sprint work, create/switch to a dedicated branch named `sprint/<id_or_topic>`.
+- For each completed sprint task: make a commit and push branch updates.
+
 ## Skill loading
 - Use local project skill from `.codex/SKILL.md` when task matches routine project work.
 - If instructions conflict, this file has priority for repository-level behavior.
@@ -53,7 +59,7 @@
 - Validation order after edits:
   `python -m compileall mindnavigator main.py` first, then targeted pytest suites.
 - Full suite validation command confirmed in this sprint:
-  `PYTHONPATH=. pytest tests -p no:cacheprovider --basetemp .pytest_run_tmp`.
+  `PYTHONPATH=. pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`.
 - In this environment, pytest temporary directory permissions may fail unpredictably:
   use `PYTHONPATH=.` and run focused files if full-suite temp fixtures fail due ACL (`PermissionError` in pytest tmpdir internals).
 
