@@ -98,6 +98,10 @@ Purpose: entity property map and UI role map.
   - `files` is processed only when bucket value is `list[CloudFileData]`.
 - Guarded extraction avoids `object`-typed `sorted(...)` paths in static analysis while preserving runtime behavior.
 
+## Window Resize/Native Event Properties
+- `MainWindow.nativeEvent` compares platform event channel via normalized `event_name` text extracted from Qt payload (`QByteArray`/bytes-like or string).
+- Resize edge processing uses explicit `ResizeEdge` flag comparisons (`!= ResizeEdge.NONE`) and diagonal edge sets for cursor mapping.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
