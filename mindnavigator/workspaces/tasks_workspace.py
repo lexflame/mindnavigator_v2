@@ -950,22 +950,32 @@ class TasksModel(QAbstractListModel):
 
         priority_order = {"high": 0, "medium": 1, "low": 2, "отложенная": 3}
 
-        def sort_key(task: TaskRow):
+        def sort_key(task_row: TaskRow):
             if self._sort_key == "title":
-                return task.title.lower(), task.day, time_key(task.time_text), task.id
+                return task_row.title.lower(), task_row.day, time_key(task_row.time_text), task_row.id
             if self._sort_key == "priority":
                 if self._filter_mode == "Все":
-                    return priority_order.get(task.priority.lower(), 4), task.day, time_key(task.time_text), task.id
-                return task.day, priority_order.get(task.priority.lower(), 4), time_key(task.time_text), task.id
-            return task.day, time_key(task.time_text), task.id
+                    return (
+                        priority_order.get(task_row.priority.lower(), 4),
+                        task_row.day,
+                        time_key(task_row.time_text),
+                        task_row.id,
+                    )
+                return (
+                    task_row.day,
+                    priority_order.get(task_row.priority.lower(), 4),
+                    time_key(task_row.time_text),
+                    task_row.id,
+                )
+            return task_row.day, time_key(task_row.time_text), task_row.id
 
         task_ids = {t.id for t in base_tasks}
         children_map: dict[Optional[int], List[TaskRow]] = {}
-        for task in base_tasks:
-            parent_id = task.parent_id if task.parent_id in task_ids else None
-            children_map.setdefault(parent_id, []).append(task)
-        for parent_id, children in children_map.items():
-            if parent_id is None or not children:
+        for task_row in base_tasks:
+            parent_id = task_row.parent_id if task_row.parent_id in task_ids else None
+            children_map.setdefault(parent_id, []).append(task_row)
+        for parent_id, child_rows in children_map.items():
+            if parent_id is None or not child_rows:
                 continue
             if parent_id not in self._subtask_state_initialized:
                 self._collapsed_subtask_ids.add(parent_id)
@@ -973,40 +983,40 @@ class TasksModel(QAbstractListModel):
 
         include_cache: dict[int, bool] = {}
 
-        def should_include(task: TaskRow) -> bool:
+        def should_include(task_row: TaskRow) -> bool:
             if not search:
                 return True
-            cached = include_cache.get(task.id)
+            cached = include_cache.get(task_row.id)
             if cached is not None:
                 return cached
-            if task.id in search_hits:
-                include_cache[task.id] = True
+            if task_row.id in search_hits:
+                include_cache[task_row.id] = True
                 return True
-            for child in children_map.get(task.id, []):
+            for child in children_map.get(task_row.id, []):
                 if should_include(child):
-                    include_cache[task.id] = True
+                    include_cache[task_row.id] = True
                     return True
-            include_cache[task.id] = False
+            include_cache[task_row.id] = False
             return False
 
-        def sorted_children(task: TaskRow) -> List[TaskRow]:
-            children = [child for child in children_map.get(task.id, []) if should_include(child)]
-            children.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
-            return children
+        def sorted_children(task_row: TaskRow) -> List[TaskRow]:
+            child_rows = [child for child in children_map.get(task_row.id, []) if should_include(child)]
+            child_rows.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
+            return child_rows
 
         new_rows: List[Row] = []
         self._task_children = {}
         self._task_depths = {}
 
-        def append_task(task: TaskRow, depth: int) -> None:
-            self._task_depths[task.id] = depth
-            children = sorted_children(task)
-            if children:
-                self._task_children[task.id] = children
-            new_rows.append(task)
-            if task.id in self._collapsed_subtask_ids:
+        def append_task(task_row: TaskRow, depth: int) -> None:
+            self._task_depths[task_row.id] = depth
+            child_rows = sorted_children(task_row)
+            if child_rows:
+                self._task_children[task_row.id] = child_rows
+            new_rows.append(task_row)
+            if task_row.id in self._collapsed_subtask_ids:
                 return
-            for child in children:
+            for child in child_rows:
                 append_task(child, depth + 1)
 
         if self._filter_mode == "Все":
@@ -1021,12 +1031,12 @@ class TasksModel(QAbstractListModel):
             roots.sort(key=sort_key)
             if self._filter_mode == "Выполнено":
                 # Показываем свежие завершенные дни сверху, сохраняя порядок задач внутри дня.
-                roots.sort(key=lambda task: task.day, reverse=True)
-            for task in roots:
-                if current_day != task.day:
-                    current_day = task.day
+                roots.sort(key=lambda task_row: task_row.day, reverse=True)
+            for root_task in roots:
+                if current_day != root_task.day:
+                    current_day = root_task.day
                     new_rows.append(HeaderRow(current_day))
-                append_task(task, 0)
+                append_task(root_task, 0)
 
         self.beginResetModel()
         self._rows = new_rows
@@ -2289,35 +2299,41 @@ class TaskEditDialog(QDialog):
 
         item_combo = QComboBox()
 
-        def fill_items(kind: str) -> None:
+        def fill_items(selected_kind: str) -> None:
             item_combo.clear()
-            if kind == "note":
-                for item in sorted(self._notes_by_id.values(), key=lambda item: item.title.lower()):
-                    label = f"{item.title} · {item.project}" if item.project else item.title
-                    item_combo.addItem(label, item.id)
-            elif kind == "idea":
-                for item in sorted(self._ideas_by_id.values(), key=lambda item: item.title.lower()):
-                    label = f"{item.title} · {item.project_title}" if item.project_title else item.title
-                    item_combo.addItem(label, item.id)
-            elif kind == "object":
-                for item in sorted(self._objects_by_id.values(), key=lambda item: item.title.lower()):
-                    label = f"{item.title} · {item.catalog}" if item.catalog else item.title
-                    item_combo.addItem(label, item.id)
-            elif kind == "map":
-                for item in sorted(self._maps_by_id.values(), key=lambda item: item.title.lower()):
-                    label = f"{item.title} · {item.project}" if item.project else item.title
-                    item_combo.addItem(label, item.id)
-            elif kind == "marker":
-                markers = sorted(self._markers_by_id.values(), key=lambda item: item.name.lower())
+            if selected_kind == "note":
+                for note_row in sorted(self._notes_by_id.values(), key=lambda note: note.title.lower()):
+                    row_label = f"{note_row.title} · {note_row.project}" if note_row.project else note_row.title
+                    item_combo.addItem(row_label, note_row.id)
+            elif selected_kind == "idea":
+                for idea_row in sorted(self._ideas_by_id.values(), key=lambda idea: idea.title.lower()):
+                    row_label = (
+                        f"{idea_row.title} · {idea_row.project_title}" if idea_row.project_title else idea_row.title
+                    )
+                    item_combo.addItem(row_label, idea_row.id)
+            elif selected_kind == "object":
+                for object_row in sorted(self._objects_by_id.values(), key=lambda obj: obj.title.lower()):
+                    row_label = f"{object_row.title} · {object_row.catalog}" if object_row.catalog else object_row.title
+                    item_combo.addItem(row_label, object_row.id)
+            elif selected_kind == "map":
+                for map_row in sorted(self._maps_by_id.values(), key=lambda map_item: map_item.title.lower()):
+                    row_label = f"{map_row.title} · {map_row.project}" if map_row.project else map_row.title
+                    item_combo.addItem(row_label, map_row.id)
+            elif selected_kind == "marker":
+                markers = sorted(self._markers_by_id.values(), key=lambda marker_row: marker_row.name.lower())
                 for marker in markers:
                     map_title = self._maps_by_id.get(marker.map_id).title if marker.map_id in self._maps_by_id else ""
-                    label = f"{marker.name} · {map_title}" if map_title else marker.name
-                    item_combo.addItem(label, marker.id)
-            elif kind in {"file", "image"}:
-                files = [item for item in self._cloud_files_by_id.values() if item.is_image == (kind == "image")]
-                files = sorted(files, key=lambda item: item.name.lower())
-                for item in files:
-                    item_combo.addItem(self._cloud_file_link_text(item), item.id)
+                    marker_label = f"{marker.name} · {map_title}" if map_title else marker.name
+                    item_combo.addItem(marker_label, marker.id)
+            elif selected_kind in {"file", "image"}:
+                files = [
+                    file_row
+                    for file_row in self._cloud_files_by_id.values()
+                    if file_row.is_image == (selected_kind == "image")
+                ]
+                files = sorted(files, key=lambda file_row: file_row.name.lower())
+                for file_row in files:
+                    item_combo.addItem(self._cloud_file_link_text(file_row), file_row.id)
             if item_combo.count() == 0:
                 item_combo.addItem("— нет доступных —", None)
 

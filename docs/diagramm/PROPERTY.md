@@ -201,6 +201,7 @@ Purpose: entity property map and UI role map.
 ## Shadowing Names Properties
 - Lambda/local variables in UI callbacks and tree-build loops are named uniquely per scope (`target_task_id`, `project_row`, `child_node_id`, `item_title`, `category_row`, `cloud_file`) to avoid outer-scope shadowing.
 - Renames are behavior-preserving: only symbol names were adjusted in sorting, rendering, and delayed-callback paths.
+- Tasks workspace list-build closures and attachment-dialog source fill logic use explicit row-local names (`task_row`, `child_rows`, `root_task`, `selected_kind`, `note_row`, `file_row`) to avoid nested-scope collisions.
 
 ## Static Helper Properties
 - Dialog/navigation/dragdrop/workspace helper methods that do not use instance state are explicitly static:
