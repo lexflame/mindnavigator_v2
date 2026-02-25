@@ -270,7 +270,8 @@ class PurchaseAddByUrlDialog(QDialog):
 
     def _parse_url(self) -> None:
         url = (self.url_input.text() or "").strip()
-        if not url.startswith("http://") and not url.startswith("https://"):
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             self._set_status("Нужен корректный URL (http/https).")
             self._parsed_ok = False
             self._refresh_save_state()
