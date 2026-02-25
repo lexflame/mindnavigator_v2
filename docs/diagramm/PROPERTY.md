@@ -68,6 +68,10 @@ Purpose: entity property map and UI role map.
   - `HOVER_PANEL_WIDTH`, `HOVER_ANIMATION_MS`, collapsed width guard (`1px`).
   - host binding via `set_expand_host(body)` in `MainWindow` for overlay rendering above nav/workspace columns.
 
+## DragDrop Callback Safety
+- `DragDropController` dispatches optional callbacks (`on_drag_started`, `on_drop_requested`, `on_drop_committed`) via `callable(...)` guards.
+- Release-path payload is stabilized in a local variable before callback/executor calls to avoid nullable-flow ambiguities in static analysis.
+
 ## Tray Reminder Properties
 - `MainWindow._tray_message_task_id`: transient binding of currently displayed tray toast to task id for click-to-open routing.
 - Reset points:

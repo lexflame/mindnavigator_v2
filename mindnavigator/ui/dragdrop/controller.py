@@ -147,7 +147,8 @@ class DragDropController:
         self._record_move_timing(started_ns)
 
     def on_pointer_release(self, pos_global: Point, now_ms: int) -> None:
-        if self.payload is None:
+        payload = self.payload
+        if payload is None:
             return
 
         normalized_pos = self._normalize_position(pos_global)
@@ -166,13 +167,14 @@ class DragDropController:
         success = bool(zone_id and self.state.is_target_valid)
 
         if success and zone_id:
-            if self.on_drop_requested:
-                self.on_drop_requested(self.payload, zone_id)
+            on_drop_requested = self.on_drop_requested
+            if callable(on_drop_requested):
+                on_drop_requested(payload, zone_id)
             if self._executor is not None:
-                success = self._executor.execute(self.payload, zone_id)
+                success = self._executor.execute(payload, zone_id)
             on_drop_committed = self.on_drop_committed
-            if success and on_drop_committed is not None:
-                on_drop_committed(self.payload, zone_id)
+            if success and callable(on_drop_committed):
+                on_drop_committed(payload, zone_id)
 
         transition_ms = self._motion.drop_success_duration_ms if success else self._motion.drop_failure_duration_ms
         if self.on_drop_transition:
@@ -222,9 +224,10 @@ class DragDropController:
         return distance_reached or time_reached
 
     def _emit_drag_started(self) -> None:
+        payload = self.payload
         on_drag_started = self.on_drag_started
-        if self.payload is not None and on_drag_started is not None:
-            on_drag_started(self.payload, self.state)
+        if payload is not None and callable(on_drag_started):
+            on_drag_started(payload, self.state)
 
     def _should_cancel_outside_window(self, pos_global: Point) -> bool:
         if not self._safety.cancel_on_leave_window:
