@@ -417,7 +417,7 @@ class ProjectsNav(QWidget):
 
         def sibling_key(project: ProjectData) -> tuple:
             priority = normalize_priority(project.priority)
-            return (project.sort_order, priority_order.get(priority, 4), project.title.lower(), project.id)
+            return project.sort_order, priority_order.get(priority, 4), project.title.lower(), project.id
 
         for parent_id, items in children.items():
             items.sort(key=sibling_key)

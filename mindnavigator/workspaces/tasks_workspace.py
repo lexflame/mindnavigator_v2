@@ -882,12 +882,12 @@ class TasksModel(QAbstractListModel):
 
         def sort_key(task: TaskRow):
             if self._sort_key == "title":
-                return (task.title.lower(), task.day, time_key(task.time_text), task.id)
+                return task.title.lower(), task.day, time_key(task.time_text), task.id
             if self._sort_key == "priority":
                 if self._filter_mode == "Все":
-                    return (priority_order.get(task.priority.lower(), 4), task.day, time_key(task.time_text), task.id)
-                return (task.day, priority_order.get(task.priority.lower(), 4), time_key(task.time_text), task.id)
-            return (task.day, time_key(task.time_text), task.id)
+                    return priority_order.get(task.priority.lower(), 4), task.day, time_key(task.time_text), task.id
+                return task.day, priority_order.get(task.priority.lower(), 4), time_key(task.time_text), task.id
+            return task.day, time_key(task.time_text), task.id
 
         task_ids = {t.id for t in base_tasks}
         children_map: dict[Optional[int], List[TaskRow]] = {}
