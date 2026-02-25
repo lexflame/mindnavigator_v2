@@ -8,6 +8,7 @@
 """
 
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
+from PySide6.QtGui import QCursor, QDragEnterEvent, QDragMoveEvent, QDropEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QToolTip,
 )
 from pathlib import Path
+from typing import Optional
 
 from mindnavigator.storage import get_database, normalize_priority, ProjectData
 
@@ -41,9 +43,9 @@ class _ProjectsListWidget(QListWidget):
         except (OSError, IndexError):
             pass
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         item = self.itemAt(event.position().toPoint())
-        payload = (item.data(Qt.UserRole) or {}) if item is not None else {}
+        payload = (item.data(Qt.ItemDataRole.UserRole) or {}) if item is not None else {}
         value = payload.get("value") or {}
         project_id = value.get("id") if payload.get("kind") == "project" else None
         self._pressed_project_id = project_id if isinstance(project_id, int) else None
@@ -51,8 +53,8 @@ class _ProjectsListWidget(QListWidget):
         self._dnd_log(f"mousePress source={self._pressed_project_id}")
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
-        if not (event.buttons() & Qt.LeftButton):
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
             super().mouseMoveEvent(event)
             return
         if self._press_pos is None or self._pressed_project_id is None:
@@ -65,10 +67,10 @@ class _ProjectsListWidget(QListWidget):
         self._drag_source_project_id = self._pressed_project_id
         print(f"[ProjectsNav DnD] mouseMove trigger source={self._drag_source_project_id}")
         self._dnd_log(f"mouseMove trigger source={self._drag_source_project_id}")
-        self.startDrag(Qt.MoveAction)
+        self.startDrag(Qt.DropAction.MoveAction)
         self._press_pos = None
 
-    def dragEnterEvent(self, event):
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         source = event.source()
         if source is self or source is self.viewport():
             event.acceptProposedAction()
@@ -78,7 +80,7 @@ class _ProjectsListWidget(QListWidget):
             return
         super().dragEnterEvent(event)
 
-    def dragMoveEvent(self, event):
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
         source = event.source()
         if source is self or source is self.viewport():
             event.acceptProposedAction()
@@ -88,7 +90,7 @@ class _ProjectsListWidget(QListWidget):
             return
         super().dragMoveEvent(event)
 
-    def startDrag(self, supported_actions):
+    def startDrag(self, supported_actions) -> None:
         current = self.currentItem()
         if self._pressed_project_id is not None:
             self._drag_source_project_id = self._pressed_project_id
@@ -100,7 +102,7 @@ class _ProjectsListWidget(QListWidget):
         if current is None:
             selected = self.selectedItems()
             current = selected[0] if selected else None
-        payload = (current.data(Qt.UserRole) or {}) if current is not None else {}
+        payload = (current.data(Qt.ItemDataRole.UserRole) or {}) if current is not None else {}
         value = payload.get("value") or {}
         project_id = value.get("id") if payload.get("kind") == "project" else None
         self._drag_source_project_id = project_id if isinstance(project_id, int) else None
@@ -108,14 +110,14 @@ class _ProjectsListWidget(QListWidget):
         self._dnd_log(f"startDrag source={self._drag_source_project_id}")
         super().startDrag(supported_actions)
 
-    def dropEvent(self, event):
+    def dropEvent(self, event: QDropEvent) -> None:
         source_id = self._drag_source_project_id
         if not isinstance(source_id, int):
             source_item = self.currentItem()
             if source_item is None:
                 selected = self.selectedItems()
                 source_item = selected[0] if selected else None
-            source_data = source_item.data(Qt.UserRole) if source_item is not None else None
+            source_data = source_item.data(Qt.ItemDataRole.UserRole) if source_item is not None else None
             source_payload = source_data if isinstance(source_data, dict) else {}
             source_kind = source_payload.get("kind")
             source_value = source_payload.get("value") or {}
@@ -131,7 +133,7 @@ class _ProjectsListWidget(QListWidget):
         point = event.position().toPoint()
         target_index = self.indexAt(point)
         target_item = self.item(target_index.row()) if target_index.isValid() else None
-        target_data = target_item.data(Qt.UserRole) if target_item is not None else None
+        target_data = target_item.data(Qt.ItemDataRole.UserRole) if target_item is not None else None
         target_payload = target_data if isinstance(target_data, dict) else {}
         target_kind = target_payload.get("kind")
         target_value = target_payload.get("value") or {}
@@ -178,7 +180,7 @@ class _ProjectsListWidget(QListWidget):
             candidate_id = None
             while 0 <= idx < self.count():
                 candidate = self.item(idx)
-                candidate_payload = (candidate.data(Qt.UserRole) or {}) if candidate is not None else {}
+                candidate_payload = (candidate.data(Qt.ItemDataRole.UserRole) or {}) if candidate is not None else {}
                 candidate_value = candidate_payload.get("value") or {}
                 raw_id = candidate_value.get("id") if candidate_payload.get("kind") == "project" else None
                 if isinstance(raw_id, int):
@@ -203,7 +205,7 @@ class _ProjectsListWidget(QListWidget):
             f"as_child={as_child} drop_after={drop_after} ok={ok}"
         )
         if ok:
-            event.setDropAction(Qt.MoveAction)
+            event.setDropAction(Qt.DropAction.MoveAction)
             event.acceptProposedAction()
         else:
             self._show_drop_reject(event, self._owner._last_drop_error)
@@ -212,9 +214,14 @@ class _ProjectsListWidget(QListWidget):
             self._dnd_log(f"dropEvent rejected: {self._owner._last_drop_error}")
         self._drag_source_project_id = None
 
-    def _show_drop_reject(self, event, message: str) -> None:
+    def _show_drop_reject(self, event: QDropEvent, message: str) -> None:
         text = (message or "").strip() or "Невалидный перенос проекта."
-        QToolTip.showText(event.globalPosition().toPoint(), text, self)
+        global_position = getattr(event, "globalPosition", None)
+        if callable(global_position):
+            point = global_position().toPoint()
+        else:
+            point = QCursor.pos()
+        QToolTip.showText(point, text, self)
 
 
 class ProjectsNav(QWidget):
@@ -247,9 +254,9 @@ class ProjectsNav(QWidget):
         self.list.setObjectName("ProjectsFilterList")
         self.list.setSelectionMode(QListWidget.SingleSelection)
         self.list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setDragDropMode(QAbstractItemView.InternalMove)
-        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.list.setDragEnabled(True)
         self.list.setAcceptDrops(True)
         self.list.viewport().setAcceptDrops(True)
@@ -345,7 +352,7 @@ class ProjectsNav(QWidget):
     def _add_clear_item(self, label: str) -> None:
         item = QListWidgetItem(label)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-        item.setData(Qt.UserRole, {"kind": "clear", "value": None})
+        item.setData(Qt.ItemDataRole.UserRole, {"kind": "clear", "value": None})
         self.list.addItem(item)
 
     def _add_section(self, title: str, entries: list[dict]) -> None:
@@ -353,7 +360,7 @@ class ProjectsNav(QWidget):
             header_item = QListWidgetItem(title)
             header_item.setFlags(Qt.ItemIsEnabled)
             header_item.setForeground(Qt.gray)
-            header_item.setData(Qt.UserRole, {"kind": "section", "value": None})
+            header_item.setData(Qt.ItemDataRole.UserRole, {"kind": "section", "value": None})
             self.list.addItem(header_item)
         self._add_entries(entries)
 
@@ -362,7 +369,7 @@ class ProjectsNav(QWidget):
             empty = QListWidgetItem("— нет данных —")
             empty.setFlags(Qt.ItemIsEnabled)
             empty.setForeground(Qt.gray)
-            empty.setData(Qt.UserRole, {"kind": "empty", "value": None})
+            empty.setData(Qt.ItemDataRole.UserRole, {"kind": "empty", "value": None})
             self.list.addItem(empty)
             return
         for entry in entries:
@@ -376,7 +383,7 @@ class ProjectsNav(QWidget):
                 )
             else:
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            item.setData(Qt.UserRole, entry)
+            item.setData(Qt.ItemDataRole.UserRole, entry)
             self.list.addItem(item)
 
     def _select_key(self, key):
@@ -385,7 +392,7 @@ class ProjectsNav(QWidget):
         fallback_index = 0
         for idx in range(self.list.count()):
             item = self.list.item(idx)
-            data = item.data(Qt.UserRole) or {}
+            data = item.data(Qt.ItemDataRole.UserRole) or {}
             if data.get("kind") in {"section", "empty"}:
                 continue
             if key is not None and data == key:
@@ -489,14 +496,14 @@ class ProjectsNav(QWidget):
             )
         return entries
 
-    def _on_item_selected(self, current: QListWidgetItem, _previous: QListWidgetItem):
+    def _on_item_selected(self, current: Optional[QListWidgetItem], _previous: Optional[QListWidgetItem]) -> None:
         """Обрабатывает выбор элемента для фильтрации."""
         if current is None:
             self._selected_key = None
             self.filter_changed.emit("clear", None)
             self.project_filter_changed.emit(None)
             return
-        data = current.data(Qt.UserRole) or {}
+        data = current.data(Qt.ItemDataRole.UserRole) or {}
         kind = data.get("kind")
         value = data.get("value")
         if kind in {"section", "empty"}:
@@ -509,7 +516,7 @@ class ProjectsNav(QWidget):
         self.filter_changed.emit(kind or "clear", value)
 
     def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
-        data = item.data(Qt.UserRole) or {}
+        data = item.data(Qt.ItemDataRole.UserRole) or {}
         if data.get("kind") != "project" or not data.get("has_children"):
             return
         value = data.get("value") or {}
@@ -600,7 +607,9 @@ class ProjectsNav(QWidget):
         selected = None
         for idx in range(self.list.count()):
             item = self.list.item(idx)
-            data = item.data(Qt.UserRole) or {}
+            if item is None:
+                continue
+            data = item.data(Qt.ItemDataRole.UserRole) or {}
             value = data.get("value") or {}
             if data.get("kind") == "project" and value.get("id") == source_project_id:
                 selected = item
@@ -688,3 +697,6 @@ class ProjectsNav(QWidget):
         current = self.list.currentItem()
         if current is not None:
             self._on_item_selected(current, None)
+
+
+

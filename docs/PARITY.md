@@ -150,6 +150,7 @@ It also stores:
   - fixed `PyCallingNonCallableInspection` in dragdrop controller by switching callback dispatch to explicit `callable(...)` guards and stable local payload binding.
   - started `PyUnresolvedReferencesInspection` cleanup from hotkeys layer: migrated `hotkeys/event_filter.py` to Qt6 enum namespaces (`QEvent.Type`, `Qt.Key`, `QKeySequence.SequenceFormat`).
   - fixed `PyTypeCheckerInspection` for CSV workspace flows by widening `CsvTransferService.import/export_to_file` path signatures to `Path | str` (Qt file dialogs return `str`).
+  - fixed `PyTypeCheckerInspection`/Qt6 enum warnings in `ui/projects_nav.py`: migrated drag/drop/item roles to Qt6 namespaces and hardened drop-tooltip position resolution for typed drop events.
   - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
   - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
   - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.

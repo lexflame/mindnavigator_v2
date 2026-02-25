@@ -86,6 +86,12 @@ Purpose: entity property map and UI role map.
   - `Qt.Key.*` for modifier/system-key skip list;
   - `QKeySequence.SequenceFormat.NativeText` for platform-native sequence text.
 
+## Projects DnD Properties
+- `ProjectsNav` project list uses Qt6 role/action enums:
+  - `Qt.ItemDataRole.UserRole` for row payloads;
+  - `Qt.DropAction.MoveAction` for DnD action dispatch.
+- Drop reject tooltip resolves point from `QDropEvent.globalPosition()` when available, with `QCursor.pos()` fallback for typed API compatibility.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
