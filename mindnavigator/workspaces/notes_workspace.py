@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union, Dict
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QTimer, QObject, Signal
@@ -35,10 +35,18 @@ from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QStackedWidget,
+    QFileDialog,
+    QMessageBox,
 )
 
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import get_database
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    NOTES_CSV_FIELDS,
+    export_notes_rows,
+    import_notes_rows,
+)
 
 @dataclass(frozen=True)
 class NoteItem:
@@ -51,6 +59,14 @@ class NoteItem:
     favorite: bool = False
     attachment: bool = False
     locked: bool = False
+
+
+@dataclass(frozen=True)
+class NoteCategoryRow:
+    category: str
+
+
+NoteRow = Union[NoteItem, NoteCategoryRow]
 
 
 @dataclass
@@ -76,12 +92,33 @@ class NoteRoles:
     Locked = Qt.ItemDataRole.UserRole + 10
 
 
+def normalize_note_body(text: str) -> str:
+    raw = text or ""
+    return raw.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def normalize_note_category(project: str) -> str:
+    value = (project or "").strip()
+    return value if value else "Без проекта"
+
+
+def group_notes_by_category(notes: List[NoteItem]) -> List[NoteRow]:
+    groups: Dict[str, List[NoteItem]] = {}
+    for note in notes:
+        groups.setdefault(normalize_note_category(note.project), []).append(note)
+    rows: List[NoteRow] = []
+    for category in sorted(groups.keys(), key=lambda value: (value == "Без проекта", value.lower())):
+        rows.append(NoteCategoryRow(category))
+        rows.extend(groups[category])
+    return rows
+
+
 class NotesModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._db = get_database()
         self._notes: List[NoteItem] = []
-        self._rows: List[NoteItem] = []
+        self._rows: List[NoteRow] = []
         self._filter_mode = "Все"
         self._search = ""
         self._project_filter: Optional[str] = None
@@ -107,6 +144,9 @@ class NotesModel(QAbstractListModel):
         ]
         self._rebuild()
 
+    def reload(self) -> None:
+        self._load_notes()
+
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
             return 0
@@ -122,10 +162,17 @@ class NotesModel(QAbstractListModel):
                 return "skeleton"
             return None
 
-        note = self._rows[index.row()]
+        row = self._rows[index.row()]
 
         if role == NoteRoles.RowType:
-            return "note"
+            return "category" if isinstance(row, NoteCategoryRow) else "note"
+        if isinstance(row, NoteCategoryRow):
+            if role == NoteRoles.Title:
+                return row.category
+            if role == Qt.ItemDataRole.DisplayRole:
+                return row.category
+            return None
+        note = row
         if role == NoteRoles.NoteId:
             return note.id
         if role == NoteRoles.Title:
@@ -153,6 +200,9 @@ class NotesModel(QAbstractListModel):
             return Qt.NoItemFlags
         if self._loading:
             return Qt.NoItemFlags
+        row = self._rows[index.row()]
+        if isinstance(row, NoteCategoryRow):
+            return Qt.ItemIsEnabled
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def set_loading(self, loading: bool):
@@ -215,6 +265,9 @@ class NotesModel(QAbstractListModel):
             if note.id == note_id:
                 return note
         return None
+
+    def projects(self) -> List[str]:
+        return sorted({normalize_note_category(note.project) for note in self._notes})
 
     def toggle_favorite(self, note_id: int):
         updated_note = self._db.toggle_note_favorite(note_id)
@@ -301,7 +354,7 @@ class NotesModel(QAbstractListModel):
 
         notes.sort(key=lambda n: n.updated, reverse=True)
         self.beginResetModel()
-        self._rows = notes
+        self._rows = group_notes_by_category(notes)
         self.endResetModel()
 
 
@@ -344,12 +397,12 @@ class NotesController(QObject):
         self._state.selected_note_id = note_id
         self.note_open_requested.emit(note_id)
 
-    def create_note(self):
+    def create_note(self, title: str = "Новая заметка", project: str = "Inbox"):
         note = self._model.create_note(
-            "Новая заметка",
+            title,
             "Краткое описание...",
             ["draft"],
-            "Inbox",
+            project,
         )
         self.open_note(note.id)
 
@@ -393,6 +446,10 @@ class NoteCardDelegate(QStyledItemDelegate):
         rect = option.rect.adjusted(6, 6, -6, -6)
         if row_type == "skeleton":
             self._paint_skeleton(painter, rect)
+            painter.restore()
+            return
+        if row_type == "category":
+            self._paint_category(painter, rect, index.data(NoteRoles.Title) or "")
             painter.restore()
             return
 
@@ -476,13 +533,36 @@ class NoteCardDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.top() + 58, rect.width() - 40, 10), 6, 6)
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.bottom() - 32, rect.width() - 80, 10), 6, 6)
 
+    def _paint_category(self, painter: QPainter, rect: QRect, title: str) -> None:
+        painter.setPen(QColor("#343944"))
+        center_y = rect.center().y()
+        painter.drawLine(rect.left() + 6, center_y, rect.right() - 6, center_y)
+
+        badge_width = max(120, min(rect.width() - 20, len(title) * 9 + 24))
+        badge_rect = QRect(rect.left() + 14, rect.top(), badge_width, rect.height())
+        painter.fillRect(badge_rect, QColor("#1a1d24"))
+        painter.setPen(QColor("#8f959e"))
+        badge_font = QFont()
+        badge_font.setPointSize(8)
+        badge_font.setBold(True)
+        painter.setFont(badge_font)
+        painter.drawText(
+            badge_rect.adjusted(8, 0, -8, 0),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            title,
+        )
+
     def sizeHint(self, option, index):
+        if index.data(NoteRoles.RowType) == "category":
+            return QSize(260, 30)
         return QSize(260, 170)
 
 
 class NoteWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._db = get_database()
+        self._csv_service = CsvTransferService()
         self.setObjectName("NotesWorkspace")
         self._state = NoteWorkspaceState()
         self._smooth_scroll_controllers: list[object] = []
@@ -532,8 +612,16 @@ class NoteWorkspace(QWidget):
         self.btn_new_note.setText("Новая")
         self.btn_new_note.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.btn_new_note.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export = QToolButton()
+        self.btn_export.setText("Экспорт")
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_import = QToolButton()
+        self.btn_import.setText("Импорт")
+        self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
 
         header_layout.addWidget(self.btn_new_note)
+        header_layout.addWidget(self.btn_export)
+        header_layout.addWidget(self.btn_import)
         root.addWidget(header)
 
         self.splitter = QSplitter()
@@ -730,23 +818,50 @@ class NoteWorkspace(QWidget):
         header_layout.addWidget(self.list_title)
         header_layout.addStretch(1)
 
-        self.list_hint = QLabel("Grid view")
+        self.list_hint = QLabel("Categories view")
         self.list_hint.setStyleSheet("color:#6e727a; font-size:10px;")
         header_layout.addWidget(self.list_hint)
         layout.addWidget(header)
 
+        quick_row = QFrame()
+        quick_row.setObjectName("NotesQuickRow")
+        quick_layout = QHBoxLayout(quick_row)
+        quick_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.setSpacing(6)
+
+        self.quick_category_btn = QToolButton()
+        self.quick_category_btn.setText("Категория")
+        self.quick_category_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.quick_category_label = QLabel("Все категории")
+        self.quick_category_label.setObjectName("NotesQuickCategory")
+        self.quick_category_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
+
+        self.quick_title_input = QLineEdit()
+        self.quick_title_input.setPlaceholderText("Быстрое создание заметки…")
+
+        self.quick_create_btn = QToolButton()
+        self.quick_create_btn.setText("Создать")
+        self.quick_create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        quick_layout.addWidget(self.quick_category_btn)
+        quick_layout.addWidget(self.quick_category_label)
+        quick_layout.addWidget(self.quick_title_input, 1)
+        quick_layout.addWidget(self.quick_create_btn)
+        layout.addWidget(quick_row)
+
         self.list_view = QListView()
         self.list_view.setObjectName("NotesGrid")
-        self.list_view.setViewMode(QListView.IconMode)
+        self.list_view.setViewMode(QListView.ListMode)
         self.list_view.setResizeMode(QListView.Adjust)
-        self.list_view.setSpacing(12)
-        self.list_view.setUniformItemSizes(True)
+        self.list_view.setSpacing(6)
+        self.list_view.setUniformItemSizes(False)
         self.list_view.setWordWrap(True)
         self.list_view.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list_view.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.setMouseTracking(True)
-        self.list_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
         layout.addWidget(self.list_view, 1)
 
@@ -860,6 +975,10 @@ class NoteWorkspace(QWidget):
 
         self.btn_new_note.clicked.connect(self.controller.create_note)
         self.quick_new_btn.clicked.connect(self.controller.create_note)
+        self.quick_create_btn.clicked.connect(self._create_note_from_quick_form)
+        self.quick_category_btn.clicked.connect(self._open_quick_category_menu)
+        self.btn_export.clicked.connect(self._export_notes_csv)
+        self.btn_import.clicked.connect(self._import_notes_csv)
 
         self.btn_toggle_left.clicked.connect(self._toggle_left_panel)
         self.btn_toggle_right.clicked.connect(self._toggle_right_panel)
@@ -875,6 +994,7 @@ class NoteWorkspace(QWidget):
 
         self.controller.initialize()
         self.controller.start_autosave()
+        self._set_quick_category(None)
 
     def set_project_filter(self, project: Optional[str]) -> None:
         """Устанавливает фильтр по проекту из внешней навигации."""
@@ -891,6 +1011,8 @@ class NoteWorkspace(QWidget):
         if not btn:
             return
         self.controller.set_filter(btn.text().replace(" ⭐", ""))
+        if btn is not self.btn_filter_project:
+            self._set_quick_category(None)
         self._refresh_empty_state()
 
     def _on_search_changed(self):
@@ -908,10 +1030,12 @@ class NoteWorkspace(QWidget):
         if parent.text(0) == "Проекты":
             self.controller.set_project_filter(text)
             self.btn_filter_project.setChecked(True)
+            self._set_quick_category(text)
         if parent.text(0) == "Теги":
             tag = text.lstrip("#")
             self.controller.set_tag_filter(tag)
             self.btn_filter_tag.setChecked(True)
+            self._set_quick_category(None)
         self._refresh_empty_state()
 
     def _open_context_menu(self, point):
@@ -981,9 +1105,7 @@ class NoteWorkspace(QWidget):
         note = self.model.note_by_id(self._state.selected_note_id)
         if not note:
             return
-        preview = self.editor.toPlainText().strip()
-        if preview:
-            preview = preview.split("\n", 1)[0][:140]
+        preview = normalize_note_body(self.editor.toPlainText())
         self.model.update_note(self._state.selected_note_id, note.title, preview, note.tags)
 
     def _toggle_left_panel(self):
@@ -1003,8 +1125,96 @@ class NoteWorkspace(QWidget):
     def _manual_save(self):
         self.autosave_label.setText("Автосохранение: сохранено")
 
+    def _set_quick_category(self, category: Optional[str]) -> None:
+        normalized = normalize_note_category(category or "") if category else None
+        if normalized is None:
+            self.quick_category_label.setText("Все категории")
+            self.quick_category_label.setProperty("quick_category", None)
+            return
+        self.quick_category_label.setText(normalized)
+        self.quick_category_label.setProperty("quick_category", normalized)
+
+    def _open_quick_category_menu(self) -> None:
+        menu = QMenu(self)
+        action_all = menu.addAction("Все категории")
+        menu.addSeparator()
+        actions = {}
+        for project in self.model.projects():
+            action = menu.addAction(project)
+            actions[action] = project
+        chosen = menu.exec(self.quick_category_btn.mapToGlobal(self.quick_category_btn.rect().bottomLeft()))
+        if chosen is None:
+            return
+        if chosen == action_all:
+            self.controller.set_project_filter(None)
+            self.btn_filter_all.setChecked(True)
+            self._set_quick_category(None)
+            self._refresh_empty_state()
+            return
+        selected_project = actions.get(chosen)
+        if selected_project is None:
+            return
+        self.controller.set_project_filter(selected_project)
+        self.btn_filter_project.setChecked(True)
+        self._set_quick_category(selected_project)
+        self._refresh_empty_state()
+
+    def _create_note_from_quick_form(self) -> None:
+        title = (self.quick_title_input.text() or "").strip() or "Новая заметка"
+        quick_category = self.quick_category_label.property("quick_category")
+        project = quick_category if isinstance(quick_category, str) and quick_category else "Inbox"
+        self.controller.create_note(title=title, project=project)
+        self.quick_title_input.clear()
+        self._refresh_empty_state()
+
     def _refresh_empty_state(self):
         if self.model.rowCount() == 0 and not self.model._loading:
             self.empty_state.show()
         else:
             self.empty_state.hide()
+        quick_category = self.quick_category_label.property("quick_category")
+        if isinstance(quick_category, str) and quick_category not in self.model.projects():
+            self._set_quick_category(None)
+
+    def _export_notes_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Notes",
+            "notes_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_notes_rows(self._db.fetch_notes())
+        if not rows:
+            QMessageBox.information(self, "Notes", "Нет данных для экспорта.")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=NOTES_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Notes", f"Export failed: {exc}")
+            return
+        QMessageBox.information(self, "Notes", "Экспорт завершен.")
+
+    def _import_notes_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Notes",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Notes", f"Import failed: {exc}")
+            return
+        result = import_notes_rows(self._db, rows)
+        self.model.reload()
+        self._refresh_empty_state()
+        QMessageBox.information(
+            self,
+            "Notes",
+            f"Импорт завершен: {result.imported}, пропущено: {result.skipped}.",
+        )

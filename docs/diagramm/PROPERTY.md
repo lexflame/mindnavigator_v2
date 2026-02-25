@@ -120,6 +120,10 @@ Purpose: entity property map and UI role map.
 - `MapsWorkspace` and map-preview dialogs use Qt6 enum namespaces for map rendering/input surfaces:
   `Qt.WindowState.*`, `Qt.Key.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`, `Qt.BrushStyle.*`, `Qt.PenStyle.*`, `Qt.MouseButton.*`, `Qt.WidgetAttribute.*`, `Qt.ScrollBarPolicy.*`, `Qt.WindowType.*`.
 
+## Notes Workspace Properties
+- `NoteWorkspace` list surface uses Qt6 UI policy enums:
+  `Qt.ScrollBarPolicy.ScrollBarAlwaysOff` and `Qt.ContextMenuPolicy.CustomContextMenu`.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
