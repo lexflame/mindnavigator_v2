@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QFontMetrics, QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
@@ -591,7 +591,7 @@ class MapLabelEditDialog(QDialog):
         self._dirty = False
         self._resize_requested = False
         self._image_path = ""
-        self._image_icon: QIcon | None = None
+        self._image_icon: Optional[QIcon] = None
         self._parent_path = ""
         self._size_range = size_range
         self._marker_type_options = marker_type_options()
@@ -1537,7 +1537,7 @@ class MapLabelEditDialog(QDialog):
             return
         self._set_cloud_image(rel_path, dialog.selected_icon())
 
-    def _set_cloud_image(self, rel_path: str, icon: QIcon | None) -> None:
+    def _set_cloud_image(self, rel_path: str, icon: Optional[QIcon]) -> None:
         # Загружаем изображение из облачного хранилища или используем иконку.
         cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
         if not cloud_root:

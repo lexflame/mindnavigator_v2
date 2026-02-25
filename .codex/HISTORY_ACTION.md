@@ -512,3 +512,10 @@
 [2026-02-25 19:00] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_maps_simple_mouse_mode.py tests/test_tasks_marker_refresh.py tests/test_tray_task_navigation.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 19:00] OUT: 17 passed.
 [2026-02-25 19:00] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-11.
+[2026-02-25 19:03] ACTION: Started TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 remediation (error type: PyTypeHintsInspection, batch-1).
+[2026-02-25 19:03] ACTION: Normalized map-label dialog icon type hints from `QIcon | None` to `Optional[QIcon]` for PyCharm type-hint compatibility.
+[2026-02-25 19:03] CMD: python -m compileall mindnavigator/ui/dialogs/map_label_edit_dialog.py
+[2026-02-25 19:03] OUT: OK.
+[2026-02-25 19:03] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_workspace_category_layout.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 19:03] OUT: 6 passed.
+[2026-02-25 19:03] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyTypeHintsInspection batch-1.

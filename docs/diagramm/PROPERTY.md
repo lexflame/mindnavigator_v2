@@ -263,3 +263,5 @@ Purpose: entity property map and UI role map.
   `QAbstractItemView.DragDropMode.*`, `Qt.ContextMenuPolicy.*`, `Qt.ScrollBarPolicy.*`.
 - Search/file attach/base workspace helpers use typed Qt6 item-role/button/size policies:
   `Qt.ItemDataRole.*`, `QDialogButtonBox.StandardButton.*`, `QSizePolicy.Policy.*`.
+- Map label edit dialog icon typing is PyCharm-safe with explicit optional Qt types:
+  `Optional[QIcon]` for image-icon state and cloud-image assignment API.
