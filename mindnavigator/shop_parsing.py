@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Protocol, Sequence
 
 from mindnavigator.storage import Database, ShopItemData, ShopSourceData, ShopSourcePropertyData
@@ -67,7 +67,7 @@ class ShopParseService:
         parser = self._resolve_parser(url)
         result = parser.parse(url)
         canonical_url = result.canonical_url or url
-        parsed_at = datetime.utcnow().isoformat(timespec="seconds")
+        parsed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         if item_id is None:
             item_title = (result.title or canonical_url).strip()

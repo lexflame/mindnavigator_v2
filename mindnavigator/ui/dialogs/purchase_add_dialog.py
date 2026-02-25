@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -344,7 +344,7 @@ class PurchaseAddByUrlDialog(QDialog):
                 return
             self._db.update_shop_item_category(item.id, category_id)
 
-        parsed_at = datetime.utcnow().isoformat(timespec="seconds")
+        parsed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         raw_payload = parsed.raw if parsed.raw is not None else {"url": url, "shop_code": self._shop_code}
         source = self._db.upsert_shop_source(
             item_id=item.id,
