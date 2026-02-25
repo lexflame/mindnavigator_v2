@@ -207,3 +207,5 @@ It also stores:
   - validated unresolved batch-3 with compile + focused animation/tray regressions (`tests/test_animations.py`, `tests/test_tray_task_navigation.py`): `8 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-4): migrated marker pixmap scaling enums in `marker_types` to Qt6 namespaces (`Qt.AspectRatioMode`, `Qt.TransformationMode`).
   - validated unresolved batch-4 with compile + focused maps regression (`tests/test_maps_simple_mouse_mode.py`): `2 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-5): migrated legacy Qt constants in `collection_category_dialog`, `collection_import_dialog`, and `purchase_edit_dialog` to Qt6 enum namespaces (`Qt.AlignmentFlag`, `Qt.ItemDataRole`, `QDialogButtonBox.StandardButton`).
+  - validated unresolved batch-5 with compile + focused workspace/task regressions (`tests/test_workspace_category_layout.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_task_attachment_class.py`): `13 passed`.

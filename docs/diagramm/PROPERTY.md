@@ -234,3 +234,7 @@ Purpose: entity property map and UI role map.
   `Qt.WindowType.*`, `Qt.FocusPolicy.*`, `Qt.WidgetAttribute.*`, `QEvent.Type.*`, `QDialogButtonBox.ButtonRole.*`.
 - Marker type pixmap rendering uses Qt6 scaling enums:
   `Qt.AspectRatioMode.KeepAspectRatio` and `Qt.TransformationMode.SmoothTransformation`.
+- Collection and purchase dialogs use Qt6 enum namespaces for layout/item payload behavior:
+  `Qt.AlignmentFlag.*` and `Qt.ItemDataRole.UserRole`.
+- Dialog button boxes in these dialogs are built with explicit standard-button API:
+  `addButton(QDialogButtonBox.StandardButton.Save/Cancel)`.

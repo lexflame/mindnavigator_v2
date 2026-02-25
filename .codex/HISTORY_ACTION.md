@@ -251,3 +251,222 @@
 [2026-02-20 20:08] ACTION: Added persistence for collapsed project ids in workspace via storage settings key projects_workspace.collapsed_ids.
 [2026-02-20 20:08] CMD: python -m compileall mindnavigator/workspaces/projects_workspace.py
 [2026-02-20 20:08] OUT: OK (projects_workspace compiled).
+[2026-02-25 11:32] ACTION: Started Sprint 6 planning for "Notes, Export, Import" from user-provided backlog.
+[2026-02-25 11:32] ACTION: Created docs/sprints/6_SPRINT.md with type/workspace sorting, generated TASK_GUID mapping, and registered Sprint 6 tasks in .codex/HISTORY_TASK.md (status: Planned on review).
+[2026-02-25 11:34] ACTION: Extended Sprint 6 plan with per-task validation matrix (autotests, manual tests, and compile commands for required nodes).
+[2026-02-25 11:35] ACTION: Started TASK_F42B8258-3D69-4555-BEFA-8F2B311F63EA (DB migration module for schema upgrades).
+[2026-02-25 11:37] ACTION: Added mindnavigator/db_migrations.py with versioned migration runner based on PRAGMA user_version and integrated it into storage initialization flow.
+[2026-02-25 11:39] ACTION: Added tests/test_db_migrations.py for migration runner idempotency and legacy schema upgrade path.
+[2026-02-25 11:40] ACTION: Fixed legacy-safe index creation and completed projects-table rebuild with data transfer for priority/schema upgrades.
+[2026-02-25 11:41] CMD: python -m compileall mindnavigator/storage.py mindnavigator/db_migrations.py tests/test_db_migrations.py
+[2026-02-25 11:41] OUT: OK (compiled changed modules/tests).
+[2026-02-25 11:41] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py -q -p no:cacheprovider --basetemp .pytest_run_tmp
+[2026-02-25 11:41] OUT: 2 passed.
+[2026-02-25 11:41] CMD: $env:PYTHONPATH='.'; pytest tests/test_project_tree_storage.py -q -p no:cacheprovider --basetemp .pytest_run_tmp
+[2026-02-25 11:41] OUT: 4 passed.
+[2026-02-25 11:41] ACTION: Completed TASK_F42B8258-3D69-4555-BEFA-8F2B311F63EA.
+[2026-02-25 11:42] ACTION: Started TASK_75026A8B-7FB9-4AE1-9F6C-BD1092D24B1A (update module implementation).
+[2026-02-25 11:43] ACTION: Added mindnavigator/update_service.py (version normalization/comparison + GitHub latest release check via HttpClient).
+[2026-02-25 11:43] ACTION: Added tests/test_update_service.py for update-service behavior and error handling.
+[2026-02-25 11:43] CMD: python -m compileall mindnavigator/update_service.py mindnavigator/db_migrations.py mindnavigator/storage.py tests/test_update_service.py tests/test_db_migrations.py
+[2026-02-25 11:43] OUT: OK (compiled changed modules/tests).
+[2026-02-25 11:43] CMD: $env:PYTHONPATH='.'; pytest tests/test_update_service.py tests/test_db_migrations.py tests/test_project_tree_storage.py -q -p no:cacheprovider --basetemp .pytest_run_tmp
+[2026-02-25 11:43] OUT: 10 passed.
+[2026-02-25 11:43] ACTION: Completed TASK_75026A8B-7FB9-4AE1-9F6C-BD1092D24B1A.
+[2026-02-25 11:45] ACTION: Started TASK_E0A0B865-013E-445B-9656-84CE4A697CB5 (setting: DB storage location).
+[2026-02-25 11:48] ACTION: Added external DB path config support in storage (get/set configured path, default resolution, singleton reset, and DB backup_to API).
+[2026-02-25 11:49] ACTION: Extended SettingsWorkspace with database storage card (choose/open path, copy current DB to target, restart-required status).
+[2026-02-25 11:50] ACTION: Added tests/test_database_path_setting.py for DB path config and backup/singleton path switching behavior.
+[2026-02-25 11:51] ACTION: Updated docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for Sprint 6 DB-path and migration/update map changes.
+[2026-02-25 11:52] CMD: python -m compileall mindnavigator/storage.py mindnavigator/workspaces/settings_workspace.py mindnavigator/db_migrations.py mindnavigator/update_service.py tests/test_database_path_setting.py tests/test_db_migrations.py tests/test_update_service.py main.py
+[2026-02-25 11:52] OUT: OK (compiled changed modules/tests).
+[2026-02-25 11:53] CMD: $env:PYTHONPATH='.'; pytest tests/test_database_path_setting.py tests/test_db_migrations.py tests/test_update_service.py tests/test_project_tree_storage.py -q -p no:cacheprovider -p no:tmpdir
+[2026-02-25 11:53] OUT: 13 passed.
+[2026-02-25 11:53] ACTION: Completed TASK_E0A0B865-013E-445B-9656-84CE4A697CB5.
+[2026-02-25 11:54] ACTION: Started TASK_18C5FA49-0E96-4009-B903-A12AA581F7AA (check update action: DB update + repository version check).
+[2026-02-25 11:55] ACTION: Added SettingsWorkspace check-update action using Database.apply_schema_updates and UpdateService.check_for_update.
+[2026-02-25 11:55] ACTION: Added constants for app/repository version source and test for repeated apply_schema_updates safety.
+[2026-02-25 11:56] CMD: python -m compileall mindnavigator/constants.py mindnavigator/storage.py mindnavigator/workspaces/settings_workspace.py tests/test_db_migrations.py main.py
+[2026-02-25 11:56] OUT: OK (compiled changed modules/tests).
+[2026-02-25 11:56] CMD: $env:PYTHONPATH='.'; pytest tests/test_database_path_setting.py tests/test_db_migrations.py tests/test_update_service.py tests/test_project_tree_storage.py -q -p no:cacheprovider -p no:tmpdir
+[2026-02-25 11:56] OUT: 14 passed.
+[2026-02-25 11:56] ACTION: Synced docs/PARITY.md and docs/diagramm maps for DB path + check update flows.
+[2026-02-25 11:56] ACTION: Completed TASK_18C5FA49-0E96-4009-B903-A12AA581F7AA.
+[2026-02-25 11:57] ACTION: Started TASK_14D8E869-90D7-48F1-A1F0-0509FDFD039A (workspace selection checkboxes).
+[2026-02-25 11:59] ACTION: Added workspace visibility settings card with checkbox persistence in SettingsWorkspace.
+[2026-02-25 12:00] ACTION: Added MainWindow runtime workspace visibility apply logic and mode fallback for hidden workspaces.
+[2026-02-25 12:01] ACTION: Added tests/test_workspace_visibility_settings.py for workspace visibility setting normalization.
+[2026-02-25 12:02] CMD: python -m compileall mindnavigator/main_window.py mindnavigator/workspaces/settings_workspace.py tests/test_workspace_visibility_settings.py main.py
+[2026-02-25 12:02] OUT: OK (compiled changed modules/tests).
+[2026-02-25 12:02] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_database_path_setting.py tests/test_db_migrations.py tests/test_update_service.py tests/test_project_tree_storage.py -q -p no:cacheprovider -p no:tmpdir
+[2026-02-25 12:02] OUT: 17 passed.
+[2026-02-25 12:02] ACTION: Synced docs/PARITY.md and docs/diagramm maps for workspace visibility flow.
+[2026-02-25 12:02] ACTION: Completed TASK_14D8E869-90D7-48F1-A1F0-0509FDFD039A.
+[2026-02-25 12:03] ACTION: Started TASK_E32E5C80-2EC6-4663-A336-5DD0BE013784 (application language selector EN/RU/DE/FR/ZH).
+[2026-02-25 12:04] ACTION: Replaced mindnavigator/i18n.py with normalized language dictionaries and mode-label translation helpers.
+[2026-02-25 12:06] ACTION: Added language selector to SettingsWorkspace with persistence key app.language and runtime setting_changed signal.
+[2026-02-25 12:07] ACTION: Added MainWindow runtime language apply path and LeftRail tooltip relabeling without restart.
+[2026-02-25 12:08] ACTION: Added tests/test_i18n.py for language normalization and label mapping behavior.
+[2026-02-25 12:08] CMD: python -m compileall mindnavigator main.py
+[2026-02-25 12:08] OUT: OK (changed modules compiled; existing environment warning on listing inaccessible tmp folders).
+[2026-02-25 12:09] CMD: $env:PYTHONPATH='.'; pytest tests/test_i18n.py tests/test_workspace_visibility_settings.py tests/test_update_service.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider -p no:tmpdir
+[2026-02-25 12:09] OUT: 16 passed.
+[2026-02-25 12:09] ACTION: Synced docs/PARITY.md and docs/diagramm maps for language setting/runtime relabel pipeline.
+[2026-02-25 12:09] ACTION: Completed TASK_E32E5C80-2EC6-4663-A336-5DD0BE013784.
+[2026-02-25 12:11] ACTION: Started TASK_2639BE33-BC91-42E1-A3AC-A5402D06CCBD (CSV import/export service class).
+[2026-02-25 12:12] ACTION: Added mindnavigator/csv_transfer.py with CsvTransferService/CsvTransferOptions/CsvTransferError.
+[2026-02-25 12:13] ACTION: Added tests/test_csv_transfer.py for multiline/special-char round-trip, custom delimiter, file I/O, and header validation.
+[2026-02-25 12:14] CMD: python -m compileall mindnavigator/csv_transfer.py tests/test_csv_transfer.py mindnavigator/i18n.py mindnavigator/main_window.py mindnavigator/workspaces/settings_workspace.py
+[2026-02-25 12:14] OUT: OK.
+[2026-02-25 12:14] CMD: $env:PYTHONPATH='.'; pytest tests/test_csv_transfer.py tests/test_i18n.py tests/test_workspace_visibility_settings.py tests/test_update_service.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider -p no:tmpdir
+[2026-02-25 12:14] OUT: 20 passed.
+[2026-02-25 12:14] ACTION: Synced docs/PARITY.md and docs/diagramm maps for CSV import/export service.
+[2026-02-25 12:14] ACTION: Completed TASK_2639BE33-BC91-42E1-A3AC-A5402D06CCBD.
+[2026-02-25 12:20] ACTION: Started infrastructure alignment requested by user (merge codex configs, relocate pytest scripts, centralize pytest temp paths, and defenition catalog map).
+[2026-02-25 12:24] ACTION: Added defenition catalog and linked artifacts/build/defaults/dist/tests via directory junctions.
+[2026-02-25 12:29] ACTION: Merged codex config roots by linking codex_conf -> .codex and preserving full backup in codex_conf_legacy.
+[2026-02-25 12:30] ACTION: Added missing codex template files into .codex (AGENTS/CHECKLIST/COMMANDS/README/config-basic/config-advanced).
+[2026-02-25 12:31] ACTION: Moved pytest permission scripts into scripts/ and updated both scripts for repo-root execution.
+[2026-02-25 12:32] ACTION: Migrated pytest local temp usage to .pytest_dir (tests fixtures + .gitignore + AGENTS command references).
+[2026-02-25 12:33] ACTION: Normalized all .pytest folders under .pytest_dir and left compatibility junctions .pytest_tmp/.pytest_run_tmp.
+[2026-02-25 12:34] CMD: python -m compileall mindnavigator tests main.py
+[2026-02-25 12:34] OUT: OK.
+[2026-02-25 12:34] CMD: $env:PYTHONPATH='.'; pytest tests/test_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py tests/test_project_tree_storage.py tests/test_i18n.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 12:34] OUT: 20 passed.
+[2026-02-25 12:40] ACTION: Started TASK_4266DF47-F05A-419E-931B-CC7675EF65D8 (workspace CSV import/export buttons and wiring for tasks/projects/notes/ideas/collections/objects).
+[2026-02-25 12:43] ACTION: Added shared adapter module mindnavigator/workspaces/csv_workspace_transfer.py with field schemas and entity import/export reconciliation logic.
+[2026-02-25 12:46] ACTION: Wired workspace UI actions/buttons for CSV export/import in tasks, projects, notes, ideas, collections, objects.
+[2026-02-25 12:48] ACTION: Added tests/test_workspace_csv_transfer.py for task/project hierarchy restore, notes flags/tags, and collection category-path restore.
+[2026-02-25 12:49] ACTION: Fixed Database.create_task SQL ambiguity by qualifying project link columns (p.linked_map_id/p.linked_note_id/p.linked_object_id).
+[2026-02-25 12:50] CMD: python -m compileall mindnavigator tests main.py
+[2026-02-25 12:50] OUT: OK.
+[2026-02-25 12:50] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 12:50] OUT: 8 passed.
+[2026-02-25 12:50] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for workspace CSV import/export delivery.
+[2026-02-25 12:52] ACTION: Adjusted BaseWorkspace toolbar placement in TasksWorkspace and IdeasWorkspace overrides to render actions right-aligned in the top-right panel.
+[2026-02-25 12:52] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py mindnavigator/workspaces/ideas_workspace.py
+[2026-02-25 12:52] OUT: OK.
+[2026-02-25 12:52] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 12:52] OUT: 8 passed.
+[2026-02-25 12:53] ACTION: Completed TASK_4266DF47-F05A-419E-931B-CC7675EF65D8.
+[2026-02-25 13:02] ACTION: Started TASK_585678D4-1572-45F1-9570-2B5E5F6817CB (smooth fast width-expansion animation class).
+[2026-02-25 13:03] ACTION: Started TASK_420CB243-F7B0-479C-9652-B501AE4AC7DF (smooth fast dialog-appearance animation class).
+[2026-02-25 13:05] ACTION: Added mindnavigator/ui/animations.py with WidthExpandAnimator and DialogAppearAnimator plus normalized config dataclasses.
+[2026-02-25 13:06] ACTION: Added tests/test_animations.py for animation config normalization and clamp behavior.
+[2026-02-25 13:07] CMD: python -m compileall mindnavigator/ui/animations.py tests/test_animations.py
+[2026-02-25 13:07] OUT: OK.
+[2026-02-25 13:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_animations.py tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 13:07] OUT: 12 passed.
+[2026-02-25 13:08] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for animation class delivery.
+[2026-02-25 13:08] ACTION: Completed TASK_585678D4-1572-45F1-9570-2B5E5F6817CB.
+[2026-02-25 13:08] ACTION: Completed TASK_420CB243-F7B0-479C-9652-B501AE4AC7DF.
+[2026-02-25 13:11] CMD: python -m compileall mindnavigator tests main.py
+[2026-02-25 13:11] OUT: OK.
+[2026-02-25 13:12] CMD: $env:PYTHONPATH='.'; pytest tests/test_animations.py tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 13:12] OUT: 18 passed.
+[2026-02-25 13:16] ACTION: Started TASK_5CCD9BE4-C5DC-4D14-98E9-231EB8D8E2A1 (apply dialog appearance animation for all dialogs).
+[2026-02-25 13:17] ACTION: Integrated global dialog animation scheduling into mindnavigator/ui/dialogs/frameless_patch.py::_patched_exec via DialogAppearAnimator and QTimer.singleShot(0).
+[2026-02-25 13:17] ACTION: Added per-dialog opt-out property support: disable_dialog_appear_animation.
+[2026-02-25 13:18] CMD: python -m compileall mindnavigator/ui/dialogs/frameless_patch.py mindnavigator/ui/animations.py
+[2026-02-25 13:18] OUT: OK.
+[2026-02-25 13:19] CMD: $env:PYTHONPATH='.'; pytest tests/test_animations.py tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 13:19] OUT: 18 passed.
+[2026-02-25 13:19] ACTION: Synced docs/PARITY.md and docs/diagramm/{INTERFACE,LIVE,PROPERTY}.md for global dialog animation rollout.
+[2026-02-25 13:19] ACTION: Completed TASK_5CCD9BE4-C5DC-4D14-98E9-231EB8D8E2A1.
+[2026-02-25 13:27] ACTION: Started TASK_905129B0-3848-4C30-9490-CFC00F5A838A (sidebar hover-expand over content with mode labels).
+[2026-02-25 13:30] ACTION: Reworked mindnavigator/ui/leftrail.py to add hover overlay panel bound to MainWindow body with WidthExpandAnimator-driven expansion/collapse.
+[2026-02-25 13:31] ACTION: Wired LeftRail overlay host in MainWindow (_build_ui) and synced panel labels on workspace visibility changes.
+[2026-02-25 13:32] CMD: python -m compileall mindnavigator/ui/leftrail.py mindnavigator/main_window.py
+[2026-02-25 13:32] OUT: OK.
+[2026-02-25 13:33] CMD: $env:PYTHONPATH='.'; pytest tests/test_i18n.py tests/test_workspace_visibility_settings.py tests/test_animations.py tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 13:33] OUT: 24 passed.
+[2026-02-25 13:34] ACTION: Synced docs/PARITY.md and docs/diagramm/{INTERFACE,LIVE,PROPERTY}.md for sidebar hover-expand flow.
+[2026-02-25 13:34] ACTION: Completed TASK_905129B0-3848-4C30-9490-CFC00F5A838A.
+[2026-02-25 14:08] ACTION: Started TASK_E8446B40-0DA1-43CC-9206-FCC7EC37C0F0 (tray notification click: restore from tray and open target task).
+[2026-02-25 14:08] ACTION: Added MainWindow tray message click routing (_on_tray_message_clicked + _open_task_from_tray_notification) with task-id binding from reminder notifications.
+[2026-02-25 14:08] ACTION: Added TasksWorkspace.focus_task(task_id) with task-row lookup, filter-relax fallback, and centered selection.
+[2026-02-25 14:08] ACTION: Added tests/test_tray_task_navigation.py for reminder click restore/open behavior.
+[2026-02-25 14:08] CMD: python -m compileall mindnavigator/main_window.py mindnavigator/workspaces/tasks_workspace.py tests/test_tray_task_navigation.py
+[2026-02-25 14:08] OUT: OK.
+[2026-02-25 14:08] CMD: $env:PYTHONPATH='.'; pytest tests/test_tray_task_navigation.py tests/test_i18n.py tests/test_workspace_visibility_settings.py tests/test_animations.py tests/test_workspace_csv_transfer.py tests/test_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:08] OUT: 28 passed.
+[2026-02-25 14:08] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for tray reminder click navigation flow.
+[2026-02-25 14:08] ACTION: Completed TASK_E8446B40-0DA1-43CC-9206-FCC7EC37C0F0.
+[2026-02-25 14:14] ACTION: Started TASK_12A60D96-05E6-4868-91D5-0D2AA70B64CF (attachment class implementation).
+[2026-02-25 14:14] ACTION: Extended TaskAttachmentData with kind normalization, row/dict serialization helpers, and explicit supported-kind contract.
+[2026-02-25 14:14] ACTION: Updated Database task-attachment CRUD to use class mapping (from_row), normalized kind checks, and strict positive-id validation.
+[2026-02-25 14:14] ACTION: Added tests/test_task_attachment_class.py for attachment serialization round-trip, unknown-kind rejection, CRUD flow, and id validation.
+[2026-02-25 14:14] CMD: python -m compileall mindnavigator/storage.py mindnavigator/workspaces/tasks_workspace.py tests/test_task_attachment_class.py
+[2026-02-25 14:14] OUT: OK.
+[2026-02-25 14:14] CMD: $env:PYTHONPATH='.'; pytest tests/test_task_attachment_class.py tests/test_db_migrations.py tests/test_database_path_setting.py tests/test_workspace_csv_transfer.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:14] OUT: 18 passed.
+[2026-02-25 14:14] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for attachment class pipeline.
+[2026-02-25 14:14] ACTION: Completed TASK_12A60D96-05E6-4868-91D5-0D2AA70B64CF.
+[2026-02-25 14:17] ACTION: Started TASK_93B6AFF6-967A-403F-94C2-6CA6C9A2B0FD (tasks attachments: support ideas).
+[2026-02-25 14:17] ACTION: Extended task attachment UI in TaskDetailsDialog and TaskEditDialog with idea sources (fetch_ideas), picker option, row labels, and idea detail view.
+[2026-02-25 14:17] ACTION: Added regression test test_task_attachment_supports_idea_entities in tests/test_task_attachment_class.py.
+[2026-02-25 14:17] CMD: python -m compileall mindnavigator/storage.py mindnavigator/workspaces/tasks_workspace.py tests/test_task_attachment_class.py
+[2026-02-25 14:17] OUT: OK.
+[2026-02-25 14:17] CMD: $env:PYTHONPATH='.'; pytest tests/test_task_attachment_class.py tests/test_tray_task_navigation.py tests/test_workspace_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:17] OUT: 19 passed.
+[2026-02-25 14:17] ACTION: Synced docs/PARITY.md and docs/diagramm/{INTERFACE,LIVE,PROPERTY}.md for idea-attachment flow.
+[2026-02-25 14:17] ACTION: Completed TASK_93B6AFF6-967A-403F-94C2-6CA6C9A2B0FD.
+[2026-02-25 14:22] ACTION: Started TASK_E76B6B30-7CA6-4C6D-9B6F-B19AA473450B (maps simple mouse mode: block marker dragging).
+[2026-02-25 14:22] ACTION: Added map drag policy helper marker_drag_allowed(tool, simple_mouse_mode) and integrated it into MapCanvas marker drag paths.
+[2026-02-25 14:22] ACTION: Added simple-mouse guardrails: marker selection remains, but marker transfer drag is blocked in SELECT mode with simple mouse enabled.
+[2026-02-25 14:22] ACTION: Added tests/test_maps_simple_mouse_mode.py for map drag policy regression.
+[2026-02-25 14:22] CMD: python -m compileall mindnavigator/workspaces/maps_workspace.py tests/test_maps_simple_mouse_mode.py
+[2026-02-25 14:22] OUT: OK.
+[2026-02-25 14:22] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_task_attachment_class.py tests/test_tray_task_navigation.py tests/test_workspace_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:22] OUT: 21 passed.
+[2026-02-25 14:22] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for maps simple-mouse marker-drag guardrail.
+[2026-02-25 14:22] ACTION: Completed TASK_E76B6B30-7CA6-4C6D-9B6F-B19AA473450B.
+[2026-02-25 14:24] ACTION: Started TASK_3ED7E7F2-C87E-4611-85D7-AF271D6E4D31 (notes multiline save bugfix).
+[2026-02-25 14:24] ACTION: Removed first-line truncation in NoteWorkspace._update_note_body and introduced normalize_note_body for newline-safe full-text persistence.
+[2026-02-25 14:24] ACTION: Added tests/test_notes_multiline_save.py for multiline normalization and DB persistence regression.
+[2026-02-25 14:24] CMD: python -m compileall mindnavigator/workspaces/notes_workspace.py tests/test_notes_multiline_save.py
+[2026-02-25 14:24] OUT: OK.
+[2026-02-25 14:24] CMD: $env:PYTHONPATH='.'; pytest tests/test_notes_multiline_save.py tests/test_maps_simple_mouse_mode.py tests/test_task_attachment_class.py tests/test_tray_task_navigation.py tests/test_workspace_csv_transfer.py tests/test_db_migrations.py tests/test_database_path_setting.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:24] OUT: 23 passed.
+[2026-02-25 14:24] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for notes multiline save flow.
+[2026-02-25 14:24] ACTION: Completed TASK_3ED7E7F2-C87E-4611-85D7-AF271D6E4D31.
+[2026-02-25 14:31] ACTION: Started TASK_04E6A669-898B-498F-827D-FD51B4C678D2 (tasks list marker property immediate refresh).
+[2026-02-25 14:33] ACTION: Updated TasksModel.update_task_by_row to use marker-only fast-path (dataChanged) without full model reset.
+[2026-02-25 14:35] ACTION: Identified and fixed TaskData positional mapping bug in storage create/update returns (marker fields shifted after gantt_forecasted field addition).
+[2026-02-25 14:36] ACTION: Added tests/test_tasks_marker_refresh.py for marker-only update predicate, selected-row tint blending, and model dataChanged regression.
+[2026-02-25 14:37] CMD: python -m compileall mindnavigator/storage.py mindnavigator/workspaces/tasks_workspace.py tests/test_tasks_marker_refresh.py
+[2026-02-25 14:37] OUT: OK.
+[2026-02-25 14:38] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_notes_multiline_save.py tests/test_maps_simple_mouse_mode.py tests/test_task_attachment_class.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 14:38] OUT: 12 passed.
+[2026-02-25 14:38] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for task marker immediate-refresh flow.
+[2026-02-25 14:38] ACTION: Completed TASK_04E6A669-898B-498F-827D-FD51B4C678D2.
+[2026-02-25 15:06] ACTION: Started TASK_329B82A5-0968-4121-9E24-2983E0C430E2 (notes-family tasks-like workflow rework).
+[2026-02-25 15:10] ACTION: Reworked notes/ideas/objects/collections list pipelines to category-separated rows and wired top quick forms for navigation + fast entity creation.
+[2026-02-25 15:11] ACTION: Added collection list row formatter/grouping helpers and kept preview icon loading in entity rows.
+[2026-02-25 15:12] ACTION: Added tests/test_workspace_category_layout.py for notes/ideas/objects/collections category grouping and row text formatting helpers.
+[2026-02-25 15:13] CMD: python -m compileall mindnavigator/workspaces/notes_workspace.py mindnavigator/workspaces/ideas_workspace.py mindnavigator/workspaces/objects_workspace.py mindnavigator/workspaces/collections_workspace.py tests/test_workspace_category_layout.py
+[2026-02-25 15:13] OUT: OK.
+[2026-02-25 15:14] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_category_layout.py tests/test_notes_multiline_save.py tests/test_workspace_csv_transfer.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 15:14] OUT: 10 passed.
+[2026-02-25 15:15] ACTION: Synced docs/PARITY.md and docs/diagramm/{CLASS,INTERFACE,LIVE,PROPERTY}.md for TASK_329 notes-family workflow update.
+[2026-02-25 15:15] ACTION: Completed TASK_329B82A5-0968-4121-9E24-2983E0C430E2.
+[2026-02-25 15:22] ACTION: Started TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 static-analysis remediation (error type: PyUnboundLocalVariableInspection).
+[2026-02-25 15:23] ACTION: Fixed unbound-local warning in purchases workspace by moving json import to module scope and removing local imports from export/import handlers.
+[2026-02-25 15:24] CMD: python -m compileall mindnavigator/workspaces/purchases_workspace.py
+[2026-02-25 15:24] OUT: OK.
+[2026-02-25 15:24] CMD: $env:PYTHONPATH='.'; pytest tests -k purchases -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 15:24] OUT: 86 deselected (targeted purchases tests absent in repository).
+[2026-02-25 17:49] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyShadowingNamesInspection, batch-1).
+[2026-02-25 17:49] ACTION: Renamed shadowing locals/lambda captures in main_window, project nav, maps, dialogs, files/objects/purchases workspaces.
+[2026-02-25 17:49] CMD: python -m compileall mindnavigator/db_migrations.py mindnavigator/main_window.py mindnavigator/ui/dialogs/attach_file_select_nav.py mindnavigator/ui/dialogs/collection_category_dialog.py mindnavigator/ui/dialogs/purchase_add_dialog.py mindnavigator/ui/leftrail.py mindnavigator/ui/projects_nav.py mindnavigator/workspaces/files_workspace.py mindnavigator/workspaces/settings_workspace.py mindnavigator/workspaces/purchases_workspace.py mindnavigator/workspaces/objects_workspace.py mindnavigator/workspaces/maps_workspace.py
+[2026-02-25 17:49] OUT: OK.
+[2026-02-25 17:49] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_tray_task_navigation.py tests/test_project_tree_storage.py tests/test_workspace_visibility_settings.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 17:49] OUT: 17 passed.
+[2026-02-25 17:49] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyShadowingNamesInspection batch-1.
+[2026-02-25 18:39] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-5).
+[2026-02-25 18:39] ACTION: Migrated Qt6 enums and typed-safe button-box construction in collection/purchase dialogs (collection_category_dialog, collection_import_dialog, purchase_edit_dialog).
+[2026-02-25 18:39] CMD: python -m compileall mindnavigator/ui/dialogs/collection_category_dialog.py mindnavigator/ui/dialogs/collection_import_dialog.py mindnavigator/ui/dialogs/purchase_edit_dialog.py
+[2026-02-25 18:39] OUT: OK.
+[2026-02-25 18:39] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_task_attachment_class.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:39] OUT: 13 passed.
+[2026-02-25 18:39] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-5.

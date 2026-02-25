@@ -35,7 +35,7 @@ class CollectionImportDialog(QDialog):
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
 
@@ -49,8 +49,9 @@ class CollectionImportDialog(QDialog):
         form.addRow("", self.include_subfolders)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
+        buttons = QDialogButtonBox()
+        save_btn = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         if save_btn is not None:
             save_btn.setText("Создать")
         buttons.accepted.connect(self.accept)

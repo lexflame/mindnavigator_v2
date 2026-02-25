@@ -52,7 +52,7 @@ class CollectionCategorySelectDialog(QDialog):
         layout.addWidget(self.tree, 1)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(8)
 
@@ -65,8 +65,9 @@ class CollectionCategorySelectDialog(QDialog):
         form.addRow("", self.create_under_selected)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save_btn = buttons.button(QDialogButtonBox.Save)
+        buttons = QDialogButtonBox()
+        save_btn = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         if save_btn is not None:
             save_btn.setText("Выбрать")
         buttons.accepted.connect(self.accept)
@@ -116,7 +117,7 @@ class CollectionCategorySelectDialog(QDialog):
     def _build_tree(self) -> None:
         self.tree.clear()
         root = QTreeWidgetItem(["Все коллекции"])
-        root.setData(0, Qt.UserRole, None)
+        root.setData(0, Qt.ItemDataRole.UserRole, None)
         self.tree.addTopLevelItem(root)
 
         children: Dict[Optional[int], List[CollectionCategoryData]] = {}
@@ -128,7 +129,7 @@ class CollectionCategorySelectDialog(QDialog):
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
             for category_row in children.get(parent_id, []):
                 item = QTreeWidgetItem([category_row.title])
-                item.setData(0, Qt.UserRole, category_row.id)
+                item.setData(0, Qt.ItemDataRole.UserRole, category_row.id)
                 parent_item.addChild(item)
                 add_children(item, category_row.id)
 
@@ -140,7 +141,7 @@ class CollectionCategorySelectDialog(QDialog):
         item = self.tree.currentItem()
         if item is None:
             return None
-        return item.data(0, Qt.UserRole)
+        return item.data(0, Qt.ItemDataRole.UserRole)
 
     def selected_category_id(self) -> Optional[int]:
         path = (self.new_path_edit.text() or "").strip()

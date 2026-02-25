@@ -38,8 +38,8 @@ class PurchaseEditDialog(QDialog):
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft)
-        form.setFormAlignment(Qt.AlignTop)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setSpacing(8)
 
         self.title_input = QLineEdit()
@@ -63,8 +63,10 @@ class PurchaseEditDialog(QDialog):
         form.addRow("Заметки", self.notes_input)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText("Сохранить")
+        buttons = QDialogButtonBox()
+        save_btn = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        save_btn.setText("Сохранить")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
