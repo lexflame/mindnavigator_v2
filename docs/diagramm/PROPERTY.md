@@ -128,6 +128,9 @@ Purpose: entity property map and UI role map.
 - `TasksWorkspace` runtime/UI constants are aligned to Qt6 enum namespaces for list/model/input paths:
   `Qt.ItemFlag.*`, `Qt.Key.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`, `Qt.ScrollBarPolicy.*`, `Qt.WidgetAttribute.*`, `QEvent.Type.*`.
 
+## Objects Workspace Properties
+- `ObjectsModel.flags` uses Qt6 item-flag namespace (`Qt.ItemFlag.*`) for category/data-row interaction states.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.

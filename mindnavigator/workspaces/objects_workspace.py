@@ -14,7 +14,7 @@ from pathlib import Path
 import html
 import re
 import zipfile
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union, Dict
 from PySide6.QtCore import Qt, QSize, QRect, QModelIndex, QAbstractListModel
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPixmap, QImageReader
 from PySide6.QtWidgets import (
@@ -37,13 +37,21 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QDialogButtonBox,
     QMessageBox,
+    QMenu,
     QTreeWidget,
     QTreeWidgetItem,
+    QFileDialog,
 )
 
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
 from mindnavigator.ui.modals import show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    OBJECTS_CSV_FIELDS,
+    export_objects_rows,
+    import_objects_rows,
+)
 
 
 DOC_EXTENSIONS = {".doc", ".docx", ".txt"}
@@ -59,13 +67,40 @@ class ObjectRow:
     description: str
 
 
+@dataclass(frozen=True)
+class ObjectCategoryRow:
+    category: str
+
+
+ObjectListRow = Union[ObjectRow, ObjectCategoryRow]
+
+
 class ObjectRoles:
-    Id = Qt.ItemDataRole.UserRole + 1
-    Title = Qt.ItemDataRole.UserRole + 2
-    Catalog = Qt.ItemDataRole.UserRole + 3
-    ObjectType = Qt.ItemDataRole.UserRole + 4
-    Status = Qt.ItemDataRole.UserRole + 5
-    Description = Qt.ItemDataRole.UserRole + 6
+    RowType = Qt.ItemDataRole.UserRole + 1
+    Id = Qt.ItemDataRole.UserRole + 2
+    Title = Qt.ItemDataRole.UserRole + 3
+    Catalog = Qt.ItemDataRole.UserRole + 4
+    ObjectType = Qt.ItemDataRole.UserRole + 5
+    Status = Qt.ItemDataRole.UserRole + 6
+    Description = Qt.ItemDataRole.UserRole + 7
+
+
+def normalize_object_category(catalog: str) -> str:
+    value = (catalog or "").strip()
+    if not value:
+        return "Без каталога"
+    return value.split("/", 1)[0].strip() or "Без каталога"
+
+
+def group_objects_by_category(items: List[ObjectRow]) -> List[ObjectListRow]:
+    groups: Dict[str, List[ObjectRow]] = {}
+    for item in items:
+        groups.setdefault(normalize_object_category(item.catalog), []).append(item)
+    rows: List[ObjectListRow] = []
+    for category in sorted(groups.keys(), key=lambda value: (value == "Без каталога", value.lower())):
+        rows.append(ObjectCategoryRow(category))
+        rows.extend(groups[category])
+    return rows
 
 
 class ObjectsModel(QAbstractListModel):
@@ -74,6 +109,7 @@ class ObjectsModel(QAbstractListModel):
         self._db = get_database()
         self._all_items: List[ObjectRow] = []
         self._items: List[ObjectRow] = []
+        self._rows: List[ObjectListRow] = []
         self._catalog_filter: Optional[str] = None
         self._project_filter_id: Optional[int] = None
         self._task_filter_id: Optional[int] = None
@@ -102,12 +138,21 @@ class ObjectsModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
             return 0
-        return len(self._items)
+        return len(self._rows)
 
     def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:
         if not index.isValid():
             return None
-        item = self._items[index.row()]
+        row = self._rows[index.row()]
+        if role == ObjectRoles.RowType:
+            return "category" if isinstance(row, ObjectCategoryRow) else "object"
+        if isinstance(row, ObjectCategoryRow):
+            if role == ObjectRoles.Title:
+                return row.category
+            if role == Qt.ItemDataRole.DisplayRole:
+                return row.category
+            return None
+        item = row
         if role == ObjectRoles.Id:
             return item.id
         if role == ObjectRoles.Title:
@@ -123,6 +168,14 @@ class ObjectsModel(QAbstractListModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
+        row = self._rows[index.row()]
+        if isinstance(row, ObjectCategoryRow):
+            return Qt.ItemFlag.ItemIsEnabled
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def set_search(self, text: str) -> None:
         self._search = (text or "").strip().lower()
@@ -195,13 +248,16 @@ class ObjectsModel(QAbstractListModel):
         self._rebuild()
 
     def object_at(self, row: int) -> Optional[ObjectRow]:
-        if row < 0 or row >= len(self._items):
+        if row < 0 or row >= len(self._rows):
             return None
-        return self._items[row]
+        row_item = self._rows[row]
+        if isinstance(row_item, ObjectRow):
+            return row_item
+        return None
 
     def row_for_object_id(self, object_id: int) -> Optional[int]:
-        for index, item in enumerate(self._items):
-            if item.id == object_id:
+        for index, item in enumerate(self._rows):
+            if isinstance(item, ObjectRow) and item.id == object_id:
                 return index
         return None
 
@@ -235,22 +291,21 @@ class ObjectsModel(QAbstractListModel):
                 if search not in hay:
                     continue
             items.append(item)
+        items.sort(key=lambda item: (normalize_object_category(item.catalog).lower(), item.title.lower(), item.id))
 
         self.beginResetModel()
         self._items = items
+        self._rows = group_objects_by_category(items)
         self.endResetModel()
 
 
 class ObjectCardDelegate(QStyledItemDelegate):
-    CARD_H = 170
-    CARD_W = 240
+    ROW_H = 86
 
     C_BG = QColor("#171a20")
     C_BORDER = QColor("#2f333b")
     C_TEXT = QColor("#e6e6e6")
     C_MUTED = QColor("#9aa0a6")
-    C_PILL_BG = QColor("#1f232a")
-    C_PILL_BORDER = QColor("#323741")
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -265,12 +320,29 @@ class ObjectCardDelegate(QStyledItemDelegate):
         self._font_desc.setPointSize(9)
 
     def sizeHint(self, option, index):
-        return QSize(self.CARD_W, self.CARD_H)
+        if index.data(ObjectRoles.RowType) == "category":
+            return QSize(option.rect.width(), 30)
+        return QSize(option.rect.width(), self.ROW_H)
 
     def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
         painter.save()
-        rect = option.rect.adjusted(8, 8, -8, -8)
-        radius = 12
+        row_type = index.data(ObjectRoles.RowType)
+        if row_type == "category":
+            rect = option.rect.adjusted(10, 3, -10, -3)
+            title = (index.data(ObjectRoles.Title) or "").strip() or "Без каталога"
+            font = QFont(option.font)
+            font.setPointSize(max(8, font.pointSize() - 1))
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor("#8d939b"))
+            painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title)
+            painter.setPen(QColor("#30333a"))
+            painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
+            painter.restore()
+            return
+
+        rect = option.rect.adjusted(8, 4, -8, -4)
+        radius = 10
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         bg = QColor(self.C_BG)
@@ -286,9 +358,9 @@ class ObjectCardDelegate(QStyledItemDelegate):
         status = index.data(ObjectRoles.Status) or ""
         description = index.data(ObjectRoles.Description) or ""
 
-        x = rect.x() + 18
-        y = rect.y() + 12
-        w = rect.width() - 36
+        x = rect.x() + 14
+        y = rect.y() + 10
+        w = rect.width() - 28
 
         painter.setPen(self.C_TEXT)
         painter.setFont(self._font_title)
@@ -305,11 +377,13 @@ class ObjectCardDelegate(QStyledItemDelegate):
         meta_text = meta_metrics.elidedText(meta_text, Qt.TextElideMode.ElideRight, w)
         painter.drawText(QRect(x, meta_y, w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, meta_text)
 
-        desc_y = meta_y + 20
+        desc_y = meta_y + 18
         painter.setFont(self._font_desc)
         painter.setPen(self.C_TEXT)
-        desc_rect = QRect(x, desc_y, w, rect.height() - 46)
+        desc_rect = QRect(x, desc_y, w, rect.height() - 38)
         desc_text = description.strip() or "Описание пока не добавлено."
+        desc_metrics = QFontMetrics(self._font_desc)
+        desc_text = desc_metrics.elidedText(desc_text.replace("\n", " "), Qt.TextElideMode.ElideRight, w * 2)
         painter.drawText(desc_rect, Qt.TextFlag.TextWordWrap, desc_text)
 
         painter.restore()
@@ -564,6 +638,7 @@ class ObjectWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._csv_service = CsvTransferService()
         self._smooth_scroll_controllers: list[object] = []
         self._images: List[ObjectImageData] = []
         self._current_image_index = 0
@@ -592,11 +667,44 @@ class ObjectWorkspace(QWidget):
         self.add_button.setText("Добавить объект")
         self.add_button.setObjectName("ObjectsAddButton")
         self.add_button.clicked.connect(self._add_object)
+        self.export_button = QToolButton()
+        self.export_button.setText("Экспорт")
+        self.export_button.setObjectName("ObjectsExportButton")
+        self.export_button.clicked.connect(self._export_objects_csv)
+        self.import_button = QToolButton()
+        self.import_button.setText("Импорт")
+        self.import_button.setObjectName("ObjectsImportButton")
+        self.import_button.clicked.connect(self._import_objects_csv)
 
         header.addWidget(self.search_edit)
         header.addWidget(self.add_button)
+        header.addWidget(self.export_button)
+        header.addWidget(self.import_button)
 
         layout.addLayout(header)
+
+        quick_row = QFrame()
+        quick_row.setObjectName("ObjectsQuickRow")
+        quick_layout = QHBoxLayout(quick_row)
+        quick_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.setSpacing(6)
+        self.quick_catalog_btn = QToolButton()
+        self.quick_catalog_btn.setText("Категория")
+        self.quick_catalog_btn.setObjectName("ObjectsQuickCatalogBtn")
+        self.quick_catalog_label = QLabel("Все категории")
+        self.quick_catalog_label.setObjectName("ObjectsQuickCatalog")
+        self.quick_catalog_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
+        self.quick_title_input = QLineEdit()
+        self.quick_title_input.setObjectName("ObjectsQuickTitle")
+        self.quick_title_input.setPlaceholderText("Быстрое создание объекта...")
+        self.quick_create_btn = QToolButton()
+        self.quick_create_btn.setText("Создать")
+        self.quick_create_btn.setObjectName("ObjectsQuickCreateBtn")
+        quick_layout.addWidget(self.quick_catalog_btn)
+        quick_layout.addWidget(self.quick_catalog_label)
+        quick_layout.addWidget(self.quick_title_input, 1)
+        quick_layout.addWidget(self.quick_create_btn)
+        layout.addWidget(quick_row)
 
         self.splitter = QSplitter()
         self.splitter.setObjectName("ObjectsSplitter")
@@ -613,11 +721,10 @@ class ObjectWorkspace(QWidget):
         self.card_list.setModel(self.model)
         self.card_list.setItemDelegate(ObjectCardDelegate(self.card_list))
         self.card_list.setSelectionMode(QListView.SingleSelection)
-        self.card_list.setViewMode(QListView.IconMode)
+        self.card_list.setViewMode(QListView.ListMode)
         self.card_list.setResizeMode(QListView.Adjust)
-        self.card_list.setUniformItemSizes(True)
-        self.card_list.setGridSize(QSize(256, 190))
-        self.card_list.setSpacing(10)
+        self.card_list.setUniformItemSizes(False)
+        self.card_list.setSpacing(4)
         self.card_list.selectionModel().currentChanged.connect(self._on_object_selected)
 
         self.details_panel = QWidget()
@@ -737,6 +844,10 @@ class ObjectWorkspace(QWidget):
             attach_smooth_scroll(self.thumbnail_list),
             attach_smooth_scroll(self.image_comment),
         ]
+        self.quick_create_btn.clicked.connect(self._create_object_from_quick_form)
+        self.quick_catalog_btn.clicked.connect(self._open_quick_catalog_menu)
+        self.quick_title_input.returnPressed.connect(self._create_object_from_quick_form)
+        self._set_quick_catalog(None)
 
         self._apply_styles()
         self._update_action_state(False)
@@ -749,15 +860,18 @@ class ObjectWorkspace(QWidget):
                 font-size: 20px;
                 font-weight: 600;
             }
-            QLineEdit#ObjectsSearch {
+            QLineEdit#ObjectsSearch,
+            QLineEdit#ObjectsQuickTitle {
                 background: #1f232a;
                 border: 1px solid #2f333b;
                 border-radius: 6px;
                 padding: 6px 10px;
                 color: #e6e6e6;
-                min-width: 240px;
             }
+            QLineEdit#ObjectsSearch { min-width: 240px; }
             QToolButton#ObjectsAddButton,
+            QToolButton#ObjectsExportButton,
+            QToolButton#ObjectsImportButton,
             QToolButton#ObjectsEditButton,
             QToolButton#ObjectsDeleteButton,
             QToolButton#ObjectsAttachButton,
@@ -902,6 +1016,48 @@ class ObjectWorkspace(QWidget):
     def set_marker_filter(self, marker_id: Optional[int]) -> None:
         self.model.set_marker_filter(marker_id)
 
+    def _export_objects_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Objects",
+            "objects_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_objects_rows(self._db.fetch_objects())
+        if not rows:
+            QMessageBox.information(self, "Объекты", "Нет данных для экспорта.")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=OBJECTS_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Объекты", f"Ошибка экспорта: {exc}")
+            return
+        QMessageBox.information(self, "Объекты", "Экспорт завершен.")
+
+    def _import_objects_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Objects",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Объекты", f"Ошибка импорта: {exc}")
+            return
+        result = import_objects_rows(self._db, rows)
+        self.refresh_objects()
+        QMessageBox.information(
+            self,
+            "Объекты",
+            f"Импорт завершен: {result.imported}, пропущено: {result.skipped}.",
+        )
+
     def _on_search(self, text: str) -> None:
         self.model.set_search(text)
 
@@ -909,13 +1065,16 @@ class ObjectWorkspace(QWidget):
         item = self.catalog_tree.currentItem()
         catalog = item.data(0, Qt.ItemDataRole.UserRole) if item else None
         self.model.set_catalog_filter(catalog)
+        self._set_quick_catalog(catalog if isinstance(catalog, str) else None)
 
     def _on_object_selected(self, current: QModelIndex, _previous: QModelIndex) -> None:
         if not current.isValid():
+            self._current_object_id = None
             self._update_action_state(False)
             return
         obj = self.model.object_at(current.row())
         if not obj:
+            self._current_object_id = None
             self._update_action_state(False)
             return
         self._current_object_id = obj.id
@@ -944,6 +1103,70 @@ class ObjectWorkspace(QWidget):
             self.image_counter.setText("0/0")
             self.image_comment.setPlainText("")
             self.thumbnail_list.clear()
+
+    def _set_quick_catalog(self, catalog: Optional[str]) -> None:
+        normalized = (catalog or "").strip()
+        if not normalized:
+            self.quick_catalog_label.setText("Все категории")
+            self.quick_catalog_label.setProperty("quick_catalog", None)
+            return
+        self.quick_catalog_label.setText(normalized)
+        self.quick_catalog_label.setProperty("quick_catalog", normalized)
+
+    def _open_quick_catalog_menu(self) -> None:
+        menu = QMenu(self)
+        action_all = menu.addAction("Все категории")
+        menu.addSeparator()
+        actions: Dict[Any, str] = {}
+        for catalog in self.model.catalogs():
+            action = menu.addAction(catalog)
+            actions[action] = catalog
+        chosen = menu.exec(self.quick_catalog_btn.mapToGlobal(self.quick_catalog_btn.rect().bottomLeft()))
+        if chosen is None:
+            return
+        if chosen == action_all:
+            self._select_catalog_tree_item(None)
+            return
+        catalog = actions.get(chosen)
+        if catalog is None:
+            return
+        self._select_catalog_tree_item(catalog)
+
+    def _select_catalog_tree_item(self, catalog: Optional[str]) -> None:
+        stack: List[QTreeWidgetItem] = [self.catalog_tree.topLevelItem(i) for i in range(self.catalog_tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop(0)
+            if item is None:
+                continue
+            if item.data(0, Qt.ItemDataRole.UserRole) == catalog:
+                self.catalog_tree.setCurrentItem(item)
+                return
+            for idx in range(item.childCount()):
+                stack.append(item.child(idx))
+
+    def _create_object_from_quick_form(self) -> None:
+        title = (self.quick_title_input.text() or "").strip() or "Новый объект"
+        quick_catalog = self.quick_catalog_label.property("quick_catalog")
+        catalog = quick_catalog if isinstance(quick_catalog, str) else ""
+        try:
+            obj = self._db.create_object(
+                title=title,
+                catalog=catalog,
+                object_type="",
+                status="",
+                description="",
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Объекты", str(exc))
+            return
+        self.model.add_object(obj)
+        self._refresh_catalogs()
+        row = self.model.row_for_object_id(obj.id)
+        if row is not None:
+            index = self.model.index(row)
+            if index.isValid():
+                self.card_list.setCurrentIndex(index)
+        self.quick_title_input.clear()
 
     def _add_object(self) -> None:
         dialog = ObjectEditDialog(self)
