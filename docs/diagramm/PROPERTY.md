@@ -92,6 +92,12 @@ Purpose: entity property map and UI role map.
   - `Qt.DropAction.MoveAction` for DnD action dispatch.
 - Drop reject tooltip resolves point from `QDropEvent.globalPosition()` when available, with `QCursor.pos()` fallback for typed API compatibility.
 
+## Cloud Folder Index Properties
+- Navigation tree/grid layers (`AttachFileSelectNav`, `FileWorkspace`) treat folder-index buckets as guarded runtime collections:
+  - `folders` is processed only when bucket value is `set[str]`;
+  - `files` is processed only when bucket value is `list[CloudFileData]`.
+- Guarded extraction avoids `object`-typed `sorted(...)` paths in static analysis while preserving runtime behavior.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
