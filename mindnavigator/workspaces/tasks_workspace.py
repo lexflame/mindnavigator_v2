@@ -1335,8 +1335,11 @@ class TaskDetailsDialog(QDialog):
         desc_title.setObjectName("TaskDetailsSectionTitle")
         desc_text = QLabel(_linkify_description_text(task.description))
         desc_text.setWordWrap(True)
-        desc_text.setTextFormat(Qt.RichText)
-        desc_text.setTextInteractionFlags(Qt.TextBrowserInteraction | Qt.TextSelectableByMouse)
+        desc_text.setTextFormat(Qt.TextFormat.RichText)
+        desc_text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         desc_text.setOpenExternalLinks(True)
         desc_layout.addWidget(desc_title)
         desc_layout.addWidget(desc_text)
@@ -1515,7 +1518,7 @@ class TaskDetailsDialog(QDialog):
             link_text = self._attachment_display_text(attachment)
             link_label = QLabel(f"<a href='{attachment.id}'>{link_text}</a>")
             link_label.setObjectName("TaskAttachmentLink")
-            link_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             link_label.setOpenExternalLinks(False)
             link_label.linkActivated.connect(lambda _link, att=attachment: self._open_attachment(att))
 
@@ -2210,7 +2213,7 @@ class TaskEditDialog(QDialog):
             link_text = self._attachment_display_text(attachment)
             link_label = QLabel(f"<a href='{attachment.id}'>{link_text}</a>")
             link_label.setObjectName("TaskAttachmentLink")
-            link_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             link_label.setOpenExternalLinks(False)
             link_label.linkActivated.connect(lambda _link, att=attachment: self._open_attachment(att))
 
@@ -2606,7 +2609,7 @@ class TaskCreateDialog(TaskEditDialog):
             attachments_frame.hide()
         buttons = self.findChild(QDialogButtonBox)
         if buttons is not None:
-            save_button = buttons.button(QDialogButtonBox.Save)
+            save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
             if save_button is not None:
                 save_button.setText("Создать")
         self.title_edit.setFocus()
@@ -3747,8 +3750,8 @@ class TasksWorkspace(BaseWorkspace):
         )
         self.gantt_table.verticalHeader().setVisible(False)
         self.gantt_table.setAlternatingRowColors(True)
-        self.gantt_table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.gantt_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.gantt_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.gantt_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table_palette = self.gantt_table.palette()
         table_palette.setColor(QPalette.Base, QColor("#16171a"))
         table_palette.setColor(QPalette.AlternateBase, QColor("#1b1c20"))
@@ -3756,12 +3759,12 @@ class TasksWorkspace(BaseWorkspace):
         table_palette.setColor(QPalette.Mid, QColor("#3a3b40"))
         table_palette.setColor(QPalette.Highlight, QColor("#4f7ecf"))
         self.gantt_table.setPalette(table_palette)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.gantt_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.gantt_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.gantt_table, 1)
         return page
 

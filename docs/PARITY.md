@@ -215,3 +215,5 @@ It also stores:
   - validated unresolved batch-7 with compile + focused workspace regressions (`tests/test_workspace_visibility_settings.py`, `tests/test_workspace_csv_transfer.py`): `7 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-8): migrated legacy list/item constants in `projects_nav` to Qt6 enums (`Qt.ItemFlag`, `Qt.GlobalColor`, `QAbstractItemView.SelectionMode`, `QAbstractItemView.ScrollMode`, `QAbstractItemView.DragDropMode`).
   - validated unresolved batch-8 with compile + focused project/tray regressions (`tests/test_project_tree_storage.py`, `tests/test_tray_task_navigation.py`): `8 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-9): migrated remaining legacy Qt constants in `main_window` and `tasks_workspace` (tray message icons, cursor/alignment enums, text interaction flags, dialog button lookup, gantt table selection/edit/resize enums).
+  - validated unresolved batch-9 with compile + focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.

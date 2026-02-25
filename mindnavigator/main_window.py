@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         self._tray_icon.showMessage(
             APP_NAME,
             "РџСЂРёР»РѕР¶РµРЅРёРµ СЃРІРµСЂРЅСѓС‚Рѕ РІ С‚СЂРµР№.",
-            QSystemTrayIcon.Information,
+            QSystemTrayIcon.MessageIcon.Information,
             2000,
         )
 
@@ -425,7 +425,7 @@ class MainWindow(QMainWindow):
             self._tray_icon.showMessage(
                 APP_NAME,
                 f"РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ Р·Р°РґР°С‡Рµ: {task.title}\nРЎСЂРѕРє: {due_text}",
-                QSystemTrayIcon.Information,
+                QSystemTrayIcon.MessageIcon.Information,
                 5000,
             )
             self._task_remind_next_at[task.id] = now + timedelta(minutes=30)
@@ -575,7 +575,7 @@ class MainWindow(QMainWindow):
         self.nav_toggle = QToolButton()
         self.nav_toggle.setObjectName("NavToggleButton")
         self.nav_toggle.setText("вџЁ")
-        self.nav_toggle.setCursor(Qt.PointingHandCursor)
+        self.nav_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.nav_toggle.setToolTip("РЎРІРµСЂРЅСѓС‚СЊ РЅР°РІРёРіР°С†РёСЋ")
 
         nav_toggle_layout.addStretch(1)
@@ -652,14 +652,14 @@ class MainWindow(QMainWindow):
         w = QWidget()
         w.setObjectName("Placeholder")
         l = QVBoxLayout(w)
-        l.setAlignment(Qt.AlignCenter)
+        l.setAlignment(Qt.AlignmentFlag.AlignCenter)
         t = QLabel(title)
         t.setStyleSheet("color:#cfcfcf; font-size:22px;")
         s = QLabel(subtitle)
         s.setStyleSheet("color:#7a7a7a; font-size:13px;")
         s.setWordWrap(True)
         s.setMaximumWidth(640)
-        s.setAlignment(Qt.AlignCenter)
+        s.setAlignment(Qt.AlignmentFlag.AlignCenter)
         l.addWidget(t)
         l.addWidget(s)
         w.setStyleSheet("QWidget#Placeholder { background: #16171a; }")

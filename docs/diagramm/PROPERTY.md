@@ -248,3 +248,8 @@ Purpose: entity property map and UI role map.
 - Projects navigation list rendering uses Qt6 enum namespaces for interaction and row state:
   `Qt.ItemFlag.*`, `Qt.GlobalColor.*`, `QAbstractItemView.SelectionMode.*`,
   `QAbstractItemView.ScrollMode.*`, `QAbstractItemView.DragDropMode.*`.
+- Main-window tray/placeholder controls use Qt6 enum namespaces:
+  `QSystemTrayIcon.MessageIcon.*`, `Qt.CursorShape.*`, `Qt.AlignmentFlag.*`.
+- Tasks workspace details/Gantt UI uses Qt6 enums for text interaction and table policies:
+  `Qt.TextFormat.*`, `Qt.TextInteractionFlag.*`, `QDialogButtonBox.StandardButton.*`,
+  `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.EditTrigger.*`, `QHeaderView.ResizeMode.*`.

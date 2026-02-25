@@ -491,3 +491,10 @@
 [2026-02-25 18:51] CMD: $env:PYTHONPATH='.'; pytest tests/test_project_tree_storage.py tests/test_tray_task_navigation.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:51] OUT: 8 passed.
 [2026-02-25 18:51] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-8.
+[2026-02-25 18:53] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-9).
+[2026-02-25 18:53] ACTION: Migrated Qt6 enums in main window (tray icon message enum, cursor/alignment) and tasks workspace (text interaction flags, dialog button standard enum, gantt table edit/selection/resize enums).
+[2026-02-25 18:53] CMD: python -m compileall mindnavigator/main_window.py mindnavigator/workspaces/tasks_workspace.py
+[2026-02-25 18:53] OUT: OK.
+[2026-02-25 18:53] CMD: $env:PYTHONPATH='.'; pytest tests/test_tray_task_navigation.py tests/test_tasks_marker_refresh.py tests/test_task_attachment_class.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:53] OUT: 16 passed.
+[2026-02-25 18:53] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-9.
