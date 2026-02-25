@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from PySide6.QtCore import Qt, QSize, QUrl, QObject, QRunnable, QThreadPool, Signal, QPointF, QEvent
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices, QImage
@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QVBoxLayout,
     QWidget,
+    QFileDialog,
 )
 
 try:
@@ -48,6 +49,7 @@ except ImportError:
     _MULTIMEDIA_AVAILABLE = False
 
 from mindnavigator.collections_importer import FolderCollectionImporter, list_files, scan_files
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
     CollectionCategoryData,
     CollectionEntryData,
@@ -58,6 +60,11 @@ from mindnavigator.storage import (
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    COLLECTIONS_CSV_FIELDS,
+    export_collections_rows,
+    import_collections_rows,
+)
 
 ENTITY_LABELS = {
     "building": "Здание",
@@ -90,6 +97,43 @@ RELATION_TYPE_MAP = {
     frozenset(("city", "film")): "город=фильм",
     frozenset(("building", "game")): "здание=игра",
 }
+
+
+def normalize_collection_category_title(
+    item: CollectionItemData,
+    categories_by_id: Dict[int, CollectionCategoryData],
+) -> str:
+    if item.category_id is None:
+        return "Без категории"
+    category = categories_by_id.get(item.category_id)
+    if category is None:
+        return "Без категории"
+    return category.title
+
+
+def group_collection_items_by_category(
+    items: List[CollectionItemData],
+    categories_by_id: Dict[int, CollectionCategoryData],
+) -> List[tuple[str, List[CollectionItemData]]]:
+    groups: Dict[str, List[CollectionItemData]] = {}
+    for item in items:
+        groups.setdefault(normalize_collection_category_title(item, categories_by_id), []).append(item)
+    ordered: List[tuple[str, List[CollectionItemData]]] = []
+    for category in sorted(groups.keys(), key=lambda value: (value == "Без категории", value.lower())):
+        values = sorted(groups[category], key=lambda row: (row.title.lower(), row.id))
+        ordered.append((category, values))
+    return ordered
+
+
+def format_collection_item_row(
+    item: CollectionItemData,
+    categories_by_id: Dict[int, CollectionCategoryData],
+) -> str:
+    entity_label = ENTITY_LABELS.get(item.entity_type, item.entity_type)
+    category_label = normalize_collection_category_title(item, categories_by_id)
+    topic_label = f"#{item.topic}" if item.topic else "без темы"
+    source_label = "источник" if item.source_url else "без ссылки"
+    return f"{item.title}\n{entity_label} • {category_label} • {topic_label} • {source_label}"
 
 
 class _EntryThumbSignals(QObject):
@@ -617,6 +661,7 @@ class CollectionsWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._db = get_database()
+        self._csv_service = CsvTransferService()
         self._smooth_scroll_controllers: list[object] = []
         self._items: List[CollectionItemData] = []
         self._items_by_id: Dict[int, CollectionItemData] = {}
@@ -670,13 +715,45 @@ class CollectionsWorkspace(QWidget):
         self.add_button = QToolButton()
         self.add_button.setText("Добавить")
         self.add_button.clicked.connect(self._add_item)
+        self.export_button = QToolButton()
+        self.export_button.setText("Экспорт")
+        self.export_button.clicked.connect(self._export_collections_csv)
+        self.import_button = QToolButton()
+        self.import_button.setText("Импорт")
+        self.import_button.clicked.connect(self._import_collections_csv)
 
         header.addWidget(self.search_edit)
         header.addWidget(self.topic_filter)
         header.addWidget(self.type_filter)
         header.addWidget(self.include_subcategories)
         header.addWidget(self.add_button)
+        header.addWidget(self.export_button)
+        header.addWidget(self.import_button)
         layout.addLayout(header)
+
+        quick_row = QFrame()
+        quick_row.setObjectName("CollectionsQuickRow")
+        quick_layout = QHBoxLayout(quick_row)
+        quick_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.setSpacing(6)
+        self.quick_category_btn = QToolButton()
+        self.quick_category_btn.setText("Категория")
+        self.quick_category_label = QLabel("Все категории")
+        self.quick_category_label.setObjectName("CollectionsQuickCategory")
+        self.quick_category_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
+        self.quick_type_combo = QComboBox()
+        for label, value in ENTITY_CHOICES:
+            self.quick_type_combo.addItem(label, value)
+        self.quick_title_edit = QLineEdit()
+        self.quick_title_edit.setPlaceholderText("Быстрое создание элемента...")
+        self.quick_create_btn = QToolButton()
+        self.quick_create_btn.setText("Создать")
+        quick_layout.addWidget(self.quick_category_btn)
+        quick_layout.addWidget(self.quick_category_label)
+        quick_layout.addWidget(self.quick_type_combo)
+        quick_layout.addWidget(self.quick_title_edit, 1)
+        quick_layout.addWidget(self.quick_create_btn)
+        layout.addWidget(quick_row)
 
         splitter = QSplitter()
 
@@ -690,7 +767,7 @@ class CollectionsWorkspace(QWidget):
         self.category_tree.setHeaderHidden(True)
         self.category_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.category_tree.customContextMenuRequested.connect(self._open_category_menu)
-        self.category_tree.currentItemChanged.connect(lambda *_: self.refresh_collections())
+        self.category_tree.currentItemChanged.connect(self._on_category_tree_changed)
         category_layout.addWidget(category_label)
         category_layout.addWidget(self.category_tree, 1)
 
@@ -801,6 +878,10 @@ class CollectionsWorkspace(QWidget):
             attach_smooth_scroll(self.relations_list),
             attach_smooth_scroll(self.entries_list),
         ]
+        self.quick_category_btn.clicked.connect(self._open_quick_category_menu)
+        self.quick_create_btn.clicked.connect(self._create_item_from_quick_form)
+        self.quick_title_edit.returnPressed.connect(self._create_item_from_quick_form)
+        self._set_quick_category(None)
 
         self._set_action_state(False)
         self._apply_styles()
@@ -1062,6 +1143,76 @@ class CollectionsWorkspace(QWidget):
             return None
         return item.data(0, Qt.ItemDataRole.UserRole)
 
+    def _set_quick_category(self, category_id: Optional[int]) -> None:
+        if category_id is None:
+            self.quick_category_label.setText("Все категории")
+            self.quick_category_label.setProperty("quick_category_id", None)
+            return
+        category = self._categories_by_id.get(category_id)
+        if category is None:
+            self.quick_category_label.setText("Все категории")
+            self.quick_category_label.setProperty("quick_category_id", None)
+            return
+        self.quick_category_label.setText(category.title)
+        self.quick_category_label.setProperty("quick_category_id", category_id)
+
+    def _on_category_tree_changed(self, current: Optional[QTreeWidgetItem], _previous: Optional[QTreeWidgetItem]) -> None:
+        category_id = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        self._set_quick_category(category_id)
+        self.refresh_collections()
+
+    def _open_quick_category_menu(self) -> None:
+        menu = QMenu(self)
+        action_all = menu.addAction("Все категории")
+        menu.addSeparator()
+        actions: Dict[Any, Optional[int]] = {}
+        for label, category_id in self._category_options():
+            action = menu.addAction(label)
+            actions[action] = category_id
+        chosen = menu.exec(self.quick_category_btn.mapToGlobal(self.quick_category_btn.rect().bottomLeft()))
+        if chosen is None:
+            return
+        if chosen == action_all:
+            self._select_category_tree_item(None)
+            return
+        category_id = actions.get(chosen)
+        self._select_category_tree_item(category_id)
+
+    def _select_category_tree_item(self, category_id: Optional[int]) -> None:
+        stack: List[QTreeWidgetItem] = [self.category_tree.topLevelItem(i) for i in range(self.category_tree.topLevelItemCount())]
+        while stack:
+            node = stack.pop(0)
+            if node is None:
+                continue
+            if node.data(0, Qt.ItemDataRole.UserRole) == category_id:
+                self.category_tree.setCurrentItem(node)
+                return
+            for idx in range(node.childCount()):
+                stack.append(node.child(idx))
+
+    def _create_item_from_quick_form(self) -> None:
+        title = (self.quick_title_edit.text() or "").strip() or "Новая коллекция"
+        entity_type = self.quick_type_combo.currentData() or "other"
+        category_value = self.quick_category_label.property("quick_category_id")
+        category_id = category_value if isinstance(category_value, int) else None
+        try:
+            item = self._db.create_collection_item(
+                title=title,
+                entity_type=entity_type,
+                category_id=category_id,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Коллекции", str(exc))
+            return
+        self.quick_title_edit.clear()
+        self.refresh_collections()
+        for row in range(self.items_list.count()):
+            list_item = self.items_list.item(row)
+            if list_item.data(Qt.ItemDataRole.UserRole) == item.id:
+                self.items_list.setCurrentRow(row)
+                self._on_item_selected(list_item, None)
+                break
+
     def _category_children_map(self) -> Dict[Optional[int], List[CollectionCategoryData]]:
         children: Dict[Optional[int], List[CollectionCategoryData]] = {}
         for category in self._categories:
@@ -1289,19 +1440,25 @@ class CollectionsWorkspace(QWidget):
             category_ids=self._category_filter_ids(),
         )
         self._items_by_id = {item.id: item for item in self._items}
+        self._set_quick_category(self._selected_category_id())
 
         self.items_list.blockSignals(True)
         self.items_list.clear()
-        for item in self._items:
-            label = f"{ENTITY_LABELS.get(item.entity_type, item.entity_type)} · {item.title}"
-            if item.topic:
-                label = f"{label}\n#{item.topic}"
-            list_item = QListWidgetItem(label)
-            list_item.setData(Qt.ItemDataRole.UserRole, item.id)
-            list_item.setIcon(self._placeholder_icon())
-            list_item.setSizeHint(QSize(220, 64))
-            self.items_list.addItem(list_item)
-            self._load_thumbnail(item.id, item.image_url)
+        grouped_items = group_collection_items_by_category(self._items, self._categories_by_id)
+        for category_title, values in grouped_items:
+            header_item = QListWidgetItem(category_title)
+            header_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            header_item.setData(Qt.ItemDataRole.UserRole, ("category", category_title))
+            header_item.setSizeHint(QSize(220, 30))
+            self.items_list.addItem(header_item)
+            for item in values:
+                label = format_collection_item_row(item, self._categories_by_id)
+                list_item = QListWidgetItem(label)
+                list_item.setData(Qt.ItemDataRole.UserRole, item.id)
+                list_item.setIcon(self._placeholder_icon())
+                list_item.setSizeHint(QSize(220, 72))
+                self.items_list.addItem(list_item)
+                self._load_thumbnail(item.id, item.image_url)
         self.items_list.blockSignals(False)
 
         if not self._items:
@@ -1309,23 +1466,84 @@ class CollectionsWorkspace(QWidget):
             self._set_action_state(False)
             return
 
-        select_row = 0
+        select_row = -1
         if selected_id is not None:
             for row in range(self.items_list.count()):
                 if self.items_list.item(row).data(Qt.ItemDataRole.UserRole) == selected_id:
                     select_row = row
                     break
+        if select_row < 0:
+            for row in range(self.items_list.count()):
+                payload = self.items_list.item(row).data(Qt.ItemDataRole.UserRole)
+                if isinstance(payload, int):
+                    select_row = row
+                    break
+        if select_row < 0:
+            self._current_item_id = None
+            self._set_action_state(False)
+            return
         self.items_list.setCurrentRow(select_row)
         self._on_item_selected(self.items_list.currentItem(), None)
+
+    def _export_collections_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Collections",
+            "collections_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_collections_rows(
+            self._db.fetch_collection_items(),
+            self._db.fetch_collection_categories(),
+        )
+        if not rows:
+            QMessageBox.information(self, "Коллекции", "Нет данных для экспорта.")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=COLLECTIONS_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Коллекции", f"Ошибка экспорта: {exc}")
+            return
+        QMessageBox.information(self, "Коллекции", "Экспорт завершен.")
+
+    def _import_collections_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Collections",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Коллекции", f"Ошибка импорта: {exc}")
+            return
+        result = import_collections_rows(self._db, rows)
+        self.refresh_collections()
+        QMessageBox.information(
+            self,
+            "Коллекции",
+            f"Импорт завершен: {result.imported}, пропущено: {result.skipped}.",
+        )
 
     def _on_item_selected(self, current: Optional[QListWidgetItem], _previous) -> None:
         if current is None:
             self._current_item_id = None
             self._set_action_state(False)
             return
-        item_id = current.data(Qt.ItemDataRole.UserRole)
+        payload = current.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(payload, int):
+            self._current_item_id = None
+            self._set_action_state(False)
+            return
+        item_id = payload
         item = self._items_by_id.get(item_id)
         if item is None:
+            self._current_item_id = None
             self._set_action_state(False)
             return
 

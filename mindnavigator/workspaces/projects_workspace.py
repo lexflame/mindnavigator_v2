@@ -21,9 +21,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle, QDialog,
     QAbstractItemView, QStyleOptionViewItem,
-    QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox
+    QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox, QFileDialog
 )
 
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
     format_project_date,
     get_database,
@@ -33,6 +34,11 @@ from mindnavigator.storage import (
 )
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    PROJECTS_CSV_FIELDS,
+    export_projects_rows,
+    import_projects_rows,
+)
 
 # ProjectsWorkspace — UI-близнец TasksWorkspace:
 # - та же структура верхней панели
@@ -1611,6 +1617,8 @@ class ProjectsWorkspace(QWidget):
     def __init__(self, parent=None):
         """Создает рабочую область проектов."""
         super().__init__(parent)
+        self._db = get_database()
+        self._csv_service = CsvTransferService()
         self.setObjectName("ProjectsWorkspace")
 
         root = QVBoxLayout(self)
@@ -1661,9 +1669,17 @@ class ProjectsWorkspace(QWidget):
         self.btn_create = QToolButton()
         self.btn_create.setText("Создать")
         self.btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export = QToolButton()
+        self.btn_export.setText("Экспорт")
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_import = QToolButton()
+        self.btn_import.setText("Импорт")
+        self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
 
         top_layout.addWidget(self.cmb_priority)
         top_layout.addWidget(self.btn_create)
+        top_layout.addWidget(self.btn_export)
+        top_layout.addWidget(self.btn_import)
 
         top_layout.addStretch(1)
 
@@ -1701,6 +1717,8 @@ class ProjectsWorkspace(QWidget):
         self.search.textChanged.connect(self.model.set_search)
         self.cmb_area.currentTextChanged.connect(self._on_area_changed)
         self.btn_create.clicked.connect(self._on_create_project)
+        self.btn_export.clicked.connect(self._export_projects_csv)
+        self.btn_import.clicked.connect(self._import_projects_csv)
 
         self.setStyleSheet("""
             QWidget#ProjectsWorkspace { background: #16171a; }
@@ -1749,6 +1767,49 @@ class ProjectsWorkspace(QWidget):
     def refresh_projects(self) -> None:
         """Перезагружает список проектов из базы."""
         self.model.refresh()
+
+    def _export_projects_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Projects",
+            "projects_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_projects_rows(self._db.fetch_projects())
+        if not rows:
+            QMessageBox.information(self, "Projects", "Нет данных для экспорта.")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=PROJECTS_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Projects", f"Export failed: {exc}")
+            return
+        QMessageBox.information(self, "Projects", "Экспорт завершен.")
+
+    def _import_projects_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Projects",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Projects", f"Import failed: {exc}")
+            return
+        result = import_projects_rows(self._db, rows)
+        self.refresh_projects()
+        self._refresh_area_combo()
+        QMessageBox.information(
+            self,
+            "Projects",
+            f"Импорт завершен: {result.imported}, пропущено: {result.skipped}.",
+        )
 
     def set_task_filter(self, task_id: Optional[int]) -> None:
         """Устанавливает фильтр по задаче для списка проектов."""
@@ -1809,4 +1870,3 @@ class ProjectsWorkspace(QWidget):
             self._refresh_area_combo(values["area"])
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
-

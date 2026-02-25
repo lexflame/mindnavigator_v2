@@ -13,4 +13,13 @@ dist/MindNavigator (windows 11 x64)/_internal
 dist/MindNavigator (windows 11 x64)/_internal/base_library.zip
 /dist
 /.pytest_tmp
+/.pytest_run_tmp
+/.pytest_run_tmp_*
+/.pytest_dir
 .idea/PylintPlugin.xml
+
+.ai
+/.npm-cache
+/defenition/artifacts
+/defenition/dist
+/docs/inspect

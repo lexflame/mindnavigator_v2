@@ -52,6 +52,12 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/collections_importer.py`
   - classes: CollectionImportItem, FolderCollectionImporter
   - functions: -
+- `mindnavigator/csv_transfer.py`
+  - classes: CsvTransferError, CsvTransferOptions, CsvTransferService
+  - functions: -
+- `mindnavigator/workspaces/csv_workspace_transfer.py`
+  - classes: CsvImportResult
+  - functions: export_tasks_rows, import_tasks_rows, export_projects_rows, import_projects_rows, export_notes_rows, import_notes_rows, export_ideas_rows, import_ideas_rows, export_objects_rows, import_objects_rows, export_collections_rows, import_collections_rows, build_project_title_to_id, build_category_path_map
 - `mindnavigator/hotkeys/event_filter.py`
   - classes: HotkeyEventFilter
   - functions: is_editable_widget
@@ -64,9 +70,18 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/http_client.py`
   - classes: HttpResponse, HttpCacheEntry, HttpClientError, HttpCache, DomainRateLimiter, HttpClient
   - functions: _decode_content
+- `mindnavigator/i18n.py`
+  - classes: -
+  - functions: normalize_language_code, get_mode_label, get_mode_labels
+- `mindnavigator/db_migrations.py`
+  - classes: MigrationStep
+  - functions: get_user_version, set_user_version, apply_migrations
+- `mindnavigator/update_service.py`
+  - classes: UpdateServiceError, UpdateInfo, UpdateService
+  - functions: normalize_version, is_newer_version
 - `mindnavigator/main_window.py`
   - classes: MainWindow
-  - functions: -
+  - functions: _on_tray_message_clicked, _open_task_from_tray_notification
 - `mindnavigator/marker_types.py`
   - classes: MarkerTypeOption
   - functions: marker_type_options, default_marker_type, marker_type_by_key, marker_type_by_label, marker_type_for_color, marker_type_icon, ...
@@ -78,7 +93,9 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
   - functions: -
 - `mindnavigator/storage.py`
   - classes: TaskData, ProjectData, MapData, MapMarkerData, MapOverlayData, TaskAttachmentData, ...
-  - functions: default_db_path, validate_title, validate_area, normalize_priority, validate_time_text, parse_project_date, ...
+  - functions: default_db_path, get_configured_db_path, set_configured_db_path, get_database, reset_database, validate_title, validate_area, normalize_priority, validate_time_text, parse_project_date, ...
+  - task returns: `create_task` / `update_task` construct `TaskData` via keyword mapping (stable marker fields with gantt flags).
+  - class methods (TaskAttachmentData): normalize_kind, from_row, from_dict, to_dict
 - `mindnavigator/ui/dialogs/attach_file_select_nav.py`
   - classes: AttachFileSelectNav
   - functions: -
@@ -133,6 +150,9 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/ui/smooth_scroll.py`
   - classes: SmoothScrollConfig, SmoothScrollStats, SmoothScrollController
   - functions: attach_smooth_scroll
+- `mindnavigator/ui/animations.py`
+  - classes: WidthExpandAnimationConfig, DialogAppearAnimationConfig, WidthExpandAnimator, DialogAppearAnimator
+  - functions: normalize_width_bounds, normalize_duration_ms
 - `mindnavigator/ui/splash.py`
   - classes: SplashWidget
   - functions: show_splash
@@ -150,22 +170,22 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
   - functions: -
 - `mindnavigator/workspaces/collections_workspace.py`
   - classes: _EntryThumbSignals, _EntryThumbWorker, CollectionMediaPreviewDialog, CollectionItemEditDialog, CollectionRelationDialog, CollectionsWorkspace
-  - functions: -
+  - functions: normalize_collection_category_title, group_collection_items_by_category, format_collection_item_row
 - `mindnavigator/workspaces/files_workspace.py`
   - classes: ScanSummary, CloudScanWorker, ImagePreviewDialog, FileWorkspace
   - functions: -
 - `mindnavigator/workspaces/ideas_workspace.py`
-  - classes: IdeaItem, IdeaRoles, IdeasListModel, IdeasDelegate, IdeasWorkspace
-  - functions: -
+  - classes: IdeaItem, IdeaCategoryRow, IdeaRoles, IdeasListModel, IdeasDelegate, IdeasWorkspace
+  - functions: normalize_idea_category, group_ideas_by_category
 - `mindnavigator/workspaces/maps_workspace.py`
   - classes: MapRow, MapRoles, MapsModel, MapsItemDelegate, MapsListView, MapEditDialog, ...
-  - functions: _parse_marker_properties_blob, _format_marker_properties_text
+  - functions: _parse_marker_properties_blob, _format_marker_properties_text, marker_drag_allowed
 - `mindnavigator/workspaces/notes_workspace.py`
-  - classes: NoteItem, NoteWorkspaceState, NoteRoles, NotesModel, NotesController, NoteCardDelegate, ...
-  - functions: -
+  - classes: NoteItem, NoteCategoryRow, NoteWorkspaceState, NoteRoles, NotesModel, NotesController, NoteCardDelegate, ...
+  - functions: normalize_note_body, normalize_note_category, group_notes_by_category
 - `mindnavigator/workspaces/objects_workspace.py`
-  - classes: ObjectRow, ObjectRoles, ObjectsModel, ObjectCardDelegate, ObjectEditDialog, CloudDocPickerDialog, ...
-  - functions: _load_scaled_pixmap, extract_text_from_document, _read_text_file, _read_docx, _read_doc_binary, _score_text, ...
+  - classes: ObjectRow, ObjectCategoryRow, ObjectRoles, ObjectsModel, ObjectCardDelegate, ObjectEditDialog, CloudDocPickerDialog, ...
+  - functions: normalize_object_category, group_objects_by_category, _load_scaled_pixmap, extract_text_from_document, _read_text_file, _read_docx, _read_doc_binary, _score_text, ...
 - `mindnavigator/workspaces/projects_workspace.py`
   - classes: ProjectRow, HeaderRow, ProjectRoles, ProjectsModel, ProjectsItemDelegate, ProjectEditDialog, ...
   - functions: -
@@ -177,4 +197,4 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
   - functions: -
 - `mindnavigator/workspaces/tasks_workspace.py`
   - classes: TaskRow, HeaderRow, SortHeaderRow, TaskRoles, QuickProjectCreateDialog, TasksModel, ...
-  - functions: attachment_kind_label, _linkify_description_text, collect_task_image_attachments
+  - functions: attachment_kind_label, _linkify_description_text, collect_task_image_attachments, is_marker_only_task_update, blend_task_row_background, focus_task

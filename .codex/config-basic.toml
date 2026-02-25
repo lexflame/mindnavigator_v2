@@ -1,0 +1,22 @@
+# Codex CLI basic config template (docs-aligned)
+
+model = "gpt-5-codex"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# Use repository instructions file.
+instructions_file = "AGENTS.md"
+
+[history]
+persistence = "save-all"
+
+[tools]
+web_search = true
+request_user_input = true
+view_image = true
+
+[projects."D:\\_Branch\\PROJECTS\\project_work\\mindnavigator\\mindnavigator_v2"]
+trusted = true
+
+# Optional desktop notification command.
+# notify = ["python", "C:\\path\\to\\notify.py"]

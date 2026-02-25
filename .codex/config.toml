@@ -1,0 +1,65 @@
+﻿# Codex project config for mindnavigator_v2
+model = "gpt-5.3-codex"
+profile = "balanced"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+model_reasoning_effort = "high"
+model_reasoning_summary = "auto"
+project_doc_fallback_filenames = ["AGENTS.md", "AGENTS.repo.md"]
+project_doc_max_bytes = 65536
+
+[history]
+persistence = "save-all"
+max_bytes = 52428800
+
+[features]
+multi_agent = true
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["D:\\_Branch\\PROJECTS\\project_work\\mindnavigator\\mindnavigator_v2"]
+
+[[skills.config]]
+path = ".codex/skills/mindnavigator-routine"
+enabled = true
+
+[profiles.safe]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+model_reasoning_effort = "medium"
+
+[profiles.balanced]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+model_reasoning_effort = "high"
+
+[profiles.aggressive]
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+web_search = "live"
+model_reasoning_effort = "xhigh"
+
+[agents.reviewer]
+description = "Find security, correctness, and test risks in code."
+config_file = "agents/reviewer.toml"
+
+[agents.explorer]
+description = "Fast codebase explorer for read-heavy tasks."
+config_file = "agents/custom-explorer.toml"
+
+[mcp_servers.context7]
+command = "cmd"
+args = ["/d", "/c", "set npm_config_cache=.npm-cache && npx.cmd -y @upstash/context7-mcp"]
+enabled = true
+startup_timeout_sec = 120
+tool_timeout_sec = 120
+
+[mcp_servers.filesystem]
+command = "cmd"
+args = ["/d", "/c", "set npm_config_cache=.npm-cache && npx.cmd -y @modelcontextprotocol/server-filesystem ."]
+enabled = true
+startup_timeout_sec = 120
+tool_timeout_sec = 120
