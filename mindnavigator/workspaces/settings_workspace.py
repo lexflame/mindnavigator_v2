@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from pathlib import Path
+import sqlite3
 import shutil
 import sys
 import tempfile
@@ -34,7 +35,15 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from mindnavigator.storage import get_database
+from mindnavigator.constants import APP_VERSION, UPDATE_REPOSITORY_NAME, UPDATE_REPOSITORY_OWNER
+from mindnavigator.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalize_language_code
+from mindnavigator.storage import (
+    default_db_path,
+    get_configured_db_path,
+    get_database,
+    set_configured_db_path,
+)
+from mindnavigator.update_service import UpdateService, UpdateServiceError
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 
 
@@ -53,12 +62,27 @@ class SettingsWorkspace(QWidget):
     APP_MINIMIZE_ON_FOCUS_LOST_KEY = "app.minimize_on_focus_lost"
     APP_AUTOSTART_WINDOWS_KEY = "app.autostart_windows"
     APP_SINGLE_INSTANCE_KEY = "app.single_instance"
+    APP_ENABLED_WORKSPACES_KEY = "app.enabled_workspaces"
+    APP_LANGUAGE_KEY = "app.language"
+    APP_DATABASE_PATH_SIGNAL_KEY = "app.database_path"
     BACKUP_PREFIX = "mindnavigator_backup_"
     BACKUP_MANIFEST_NAME = "backup_manifest.json"
+    WORKSPACE_OPTIONS = [
+        ("projects", "Проекты"),
+        ("tasks", "Задачи"),
+        ("purchases", "Покупки"),
+        ("ideas", "Идеи"),
+        ("collections", "Коллекции"),
+        ("maps", "Карты"),
+        ("notes", "Заметки"),
+        ("files", "Файлы"),
+        ("objects", "Объекты"),
+    ]
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._loading_settings = False
         self._backup_entries: list[dict[str, object]] = []
         self._build_ui()
         self._load_settings()
@@ -109,6 +133,111 @@ class SettingsWorkspace(QWidget):
 
         card_layout.addLayout(row)
         layout.addWidget(card)
+
+        db_card = QFrame()
+        db_card.setObjectName("SettingsCard")
+        db_layout = QVBoxLayout(db_card)
+        db_layout.setContentsMargins(20, 18, 20, 18)
+        db_layout.setSpacing(12)
+
+        db_title = QLabel("Database storage")
+        db_title.setObjectName("SettingsSectionTitle")
+        db_hint = QLabel("Choose where the local SQLite database file is stored.")
+        db_hint.setObjectName("SettingsHint")
+        db_hint.setWordWrap(True)
+        db_layout.addWidget(db_title)
+        db_layout.addWidget(db_hint)
+
+        db_row = QHBoxLayout()
+        db_row.setSpacing(12)
+        db_text = QVBoxLayout()
+        db_text.setSpacing(6)
+
+        db_label = QLabel("Database file")
+        db_label.setObjectName("SettingsLabel")
+        db_desc = QLabel("Path applies on next app start. Current data is copied to the new location.")
+        db_desc.setObjectName("SettingsHint")
+        db_desc.setWordWrap(True)
+        db_text.addWidget(db_label)
+        db_text.addWidget(db_desc)
+        db_row.addLayout(db_text, 1)
+
+        self.db_path_edit = QLineEdit()
+        self.db_path_edit.setObjectName("SettingsPath")
+        self.db_path_edit.setReadOnly(True)
+        self.db_path_edit.setPlaceholderText("Not set")
+
+        self.btn_db_dir = QToolButton()
+        self.btn_db_dir.setText("Choose")
+        self.btn_db_dir.setObjectName("SettingsEditButton")
+        self.btn_db_dir.clicked.connect(self._edit_database_storage)
+
+        self.btn_db_open = QToolButton()
+        self.btn_db_open.setText("Open")
+        self.btn_db_open.setObjectName("SettingsEditButton")
+        self.btn_db_open.clicked.connect(self._open_database_storage)
+
+        self.btn_check_updates = QToolButton()
+        self.btn_check_updates.setText("Check update")
+        self.btn_check_updates.setObjectName("SettingsEditButton")
+        self.btn_check_updates.clicked.connect(self._check_updates)
+
+        db_row.addWidget(self.db_path_edit, 2)
+        db_row.addWidget(self.btn_db_dir, 0)
+        db_row.addWidget(self.btn_db_open, 0)
+        db_row.addWidget(self.btn_check_updates, 0)
+        db_layout.addLayout(db_row)
+
+        self.db_path_status = QLabel("")
+        self.db_path_status.setObjectName("SettingsStatus")
+        self.db_path_status.setWordWrap(True)
+        db_layout.addWidget(self.db_path_status)
+
+        layout.addWidget(db_card)
+
+        workspace_card = QFrame()
+        workspace_card.setObjectName("SettingsCard")
+        workspace_layout = QVBoxLayout(workspace_card)
+        workspace_layout.setContentsMargins(20, 18, 20, 18)
+        workspace_layout.setSpacing(12)
+
+        workspace_title = QLabel("Visible workspaces")
+        workspace_title.setObjectName("SettingsSectionTitle")
+        workspace_hint = QLabel("Select which modes are shown in the left sidebar.")
+        workspace_hint.setObjectName("SettingsHint")
+        workspace_hint.setWordWrap(True)
+        workspace_layout.addWidget(workspace_title)
+        workspace_layout.addWidget(workspace_hint)
+
+        self.workspace_checkboxes: dict[str, QCheckBox] = {}
+        checkbox_row = QHBoxLayout()
+        checkbox_row.setSpacing(12)
+        left_col = QVBoxLayout()
+        left_col.setSpacing(6)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(6)
+        split_index = (len(self.WORKSPACE_OPTIONS) + 1) // 2
+        for idx, (workspace_id, label_text) in enumerate(self.WORKSPACE_OPTIONS):
+            checkbox = QCheckBox(label_text)
+            checkbox.setObjectName("SettingsToggle")
+            checkbox.toggled.connect(self._on_workspace_visibility_changed)
+            self.workspace_checkboxes[workspace_id] = checkbox
+            if idx < split_index:
+                left_col.addWidget(checkbox)
+            else:
+                right_col.addWidget(checkbox)
+        left_col.addStretch(1)
+        right_col.addStretch(1)
+        checkbox_row.addLayout(left_col, 1)
+        checkbox_row.addLayout(right_col, 1)
+        workspace_layout.addLayout(checkbox_row)
+
+        self.workspace_status = QLabel("")
+        self.workspace_status.setObjectName("SettingsStatus")
+        self.workspace_status.setWordWrap(True)
+        workspace_layout.addWidget(self.workspace_status)
+
+        layout.addWidget(workspace_card)
 
         backup_card = QFrame()
         backup_card.setObjectName("SettingsCard")
@@ -253,6 +382,19 @@ class SettingsWorkspace(QWidget):
         behavior_title.setObjectName("SettingsSectionTitle")
         behavior_layout.addWidget(behavior_title)
 
+        language_row = QHBoxLayout()
+        language_row.setSpacing(12)
+        language_label = QLabel("Язык приложения")
+        language_label.setObjectName("SettingsLabel")
+        self.language_combo = QComboBox()
+        self.language_combo.setObjectName("SettingsCombo")
+        for language_code, language_name in SUPPORTED_LANGUAGES.items():
+            self.language_combo.addItem(language_name, language_code)
+        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
+        language_row.addWidget(language_label, 0)
+        language_row.addWidget(self.language_combo, 1)
+        behavior_layout.addLayout(language_row)
+
         self.minimize_on_focus_lost_checkbox = QCheckBox("Убирать в трей при потере фокуса окна приложения")
         self.minimize_on_focus_lost_checkbox.setObjectName("SettingsToggle")
         self.minimize_on_focus_lost_checkbox.toggled.connect(self._on_behavior_option_changed)
@@ -348,32 +490,63 @@ class SettingsWorkspace(QWidget):
         )
 
     def _load_settings(self) -> None:
-        path_value = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="")
-        self.path_edit.setText(path_value)
-        backup_dir = self._db.get_setting(self.BACKUP_DIR_KEY, default="")
-        self.backup_path_edit.setText(backup_dir)
-        include_cloud = self._db.get_setting(self.BACKUP_INCLUDE_CLOUD_KEY, default="1") == "1"
-        self.include_cloud_checkbox.setChecked(include_cloud)
-        auto_enabled = self._db.get_setting(self.BACKUP_AUTO_ENABLED_KEY, default="0") == "1"
-        self.auto_backup_checkbox.setChecked(auto_enabled)
-        frequency = self._db.get_setting(self.BACKUP_FREQUENCY_KEY, default="weekly")
-        self._set_combo_value(self.frequency_combo, frequency)
-        retention = self._db.get_setting(self.BACKUP_RETENTION_KEY, default="7")
-        self.retention_spin.setValue(max(1, int(retention) if retention.isdigit() else 7))
-        minimize_on_focus_lost = self._db.get_setting(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, default="1") == "1"
-        autostart_windows = self._db.get_setting(self.APP_AUTOSTART_WINDOWS_KEY, default="0") == "1"
-        single_instance = self._db.get_setting(self.APP_SINGLE_INSTANCE_KEY, default="1") == "1"
-        self.minimize_on_focus_lost_checkbox.blockSignals(True)
-        self.autostart_windows_checkbox.blockSignals(True)
-        self.single_instance_checkbox.blockSignals(True)
-        self.minimize_on_focus_lost_checkbox.setChecked(minimize_on_focus_lost)
-        self.autostart_windows_checkbox.setChecked(autostart_windows)
-        self.single_instance_checkbox.setChecked(single_instance)
-        self.minimize_on_focus_lost_checkbox.blockSignals(False)
-        self.autostart_windows_checkbox.blockSignals(False)
-        self.single_instance_checkbox.blockSignals(False)
-        self._apply_windows_autostart(autostart_windows)
-        self._refresh_backup_list()
+        self._loading_settings = True
+        try:
+            path_value = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="")
+            self.path_edit.setText(path_value)
+            configured_db_path = get_configured_db_path() or default_db_path()
+            self.db_path_edit.setText(str(configured_db_path))
+            backup_dir = self._db.get_setting(self.BACKUP_DIR_KEY, default="")
+            self.backup_path_edit.setText(backup_dir)
+
+            include_cloud = self._db.get_setting(self.BACKUP_INCLUDE_CLOUD_KEY, default="1") == "1"
+            auto_enabled = self._db.get_setting(self.BACKUP_AUTO_ENABLED_KEY, default="0") == "1"
+            frequency = self._db.get_setting(self.BACKUP_FREQUENCY_KEY, default="weekly")
+            retention = self._db.get_setting(self.BACKUP_RETENTION_KEY, default="7")
+
+            self.include_cloud_checkbox.blockSignals(True)
+            self.auto_backup_checkbox.blockSignals(True)
+            self.frequency_combo.blockSignals(True)
+            self.retention_spin.blockSignals(True)
+            self.include_cloud_checkbox.setChecked(include_cloud)
+            self.auto_backup_checkbox.setChecked(auto_enabled)
+            self._set_combo_value(self.frequency_combo, frequency)
+            self.retention_spin.setValue(max(1, int(retention) if retention.isdigit() else 7))
+            self.include_cloud_checkbox.blockSignals(False)
+            self.auto_backup_checkbox.blockSignals(False)
+            self.frequency_combo.blockSignals(False)
+            self.retention_spin.blockSignals(False)
+
+            selected_language = normalize_language_code(
+                self._db.get_setting(self.APP_LANGUAGE_KEY, default=DEFAULT_LANGUAGE)
+            )
+            self.language_combo.blockSignals(True)
+            self._set_combo_value(self.language_combo, selected_language)
+            self.language_combo.blockSignals(False)
+
+            minimize_on_focus_lost = self._db.get_setting(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, default="1") == "1"
+            autostart_windows = self._db.get_setting(self.APP_AUTOSTART_WINDOWS_KEY, default="0") == "1"
+            single_instance = self._db.get_setting(self.APP_SINGLE_INSTANCE_KEY, default="1") == "1"
+            self.minimize_on_focus_lost_checkbox.blockSignals(True)
+            self.autostart_windows_checkbox.blockSignals(True)
+            self.single_instance_checkbox.blockSignals(True)
+            self.minimize_on_focus_lost_checkbox.setChecked(minimize_on_focus_lost)
+            self.autostart_windows_checkbox.setChecked(autostart_windows)
+            self.single_instance_checkbox.setChecked(single_instance)
+            self.minimize_on_focus_lost_checkbox.blockSignals(False)
+            self.autostart_windows_checkbox.blockSignals(False)
+            self.single_instance_checkbox.blockSignals(False)
+            self._apply_windows_autostart(autostart_windows)
+
+            enabled_workspaces_raw = self._db.get_setting(self.APP_ENABLED_WORKSPACES_KEY, default="")
+            enabled_workspace_ids = self._normalize_enabled_workspace_ids(enabled_workspaces_raw)
+            self._set_workspace_checkboxes(enabled_workspace_ids)
+            self._update_workspace_status()
+            self._update_database_status()
+            self._refresh_backup_list()
+        finally:
+            self._loading_settings = False
+
         self._maybe_run_auto_backup()
         self._update_backup_status()
 
@@ -389,6 +562,92 @@ class SettingsWorkspace(QWidget):
             return
         self._db.set_setting(self.CLOUD_STORAGE_KEY, selected)
         self.path_edit.setText(selected)
+
+    def _edit_database_storage(self) -> None:
+        current = self.db_path_edit.text().strip()
+        current_path = Path(current) if current else self._db.path
+        start_dir = current_path.parent if current_path.parent.exists() else Path.home()
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Select database storage directory",
+            str(start_dir),
+        )
+        if not selected_dir:
+            return
+        target_db_path = Path(selected_dir) / "mindnavigator.db"
+        try:
+            if target_db_path.resolve() != self._db.path.resolve():
+                self._db.backup_to(target_db_path)
+            set_configured_db_path(target_db_path)
+        except Exception as exc:
+            QMessageBox.warning(self, "Database path", str(exc))
+            self._update_database_status(message="Failed to update database path.")
+            return
+        self.db_path_edit.setText(str(target_db_path))
+        self.setting_changed.emit(self.APP_DATABASE_PATH_SIGNAL_KEY, str(target_db_path))
+        self._update_database_status(message="Database path updated. Restart app to switch active DB.")
+
+    def _open_database_storage(self) -> None:
+        selected = self.db_path_edit.text().strip()
+        if not selected:
+            self._update_database_status(message="Select database storage directory first.")
+            return
+        db_path = Path(selected)
+        target_dir = db_path.parent if db_path.suffix else db_path
+        if not target_dir.exists():
+            self._update_database_status(message="Database directory not found.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(target_dir)))
+
+    def _update_database_status(self, message: str | None = None) -> None:
+        selected = self.db_path_edit.text().strip()
+        status = message or ""
+        if selected:
+            selected_path = Path(selected)
+            try:
+                pending_switch = selected_path.resolve() != self._db.path.resolve()
+            except OSError:
+                pending_switch = str(selected_path) != str(self._db.path)
+            if pending_switch:
+                suffix = " Pending switch: restart required."
+            else:
+                suffix = " Active database path."
+            status = f"{status}{suffix}".strip()
+        self.db_path_status.setText(status)
+
+    def _check_updates(self) -> None:
+        try:
+            schema_version = self._db.apply_schema_updates()
+        except Exception as exc:
+            QMessageBox.warning(self, "Check update", f"Failed to update DB schema: {exc}")
+            self._update_database_status(message="DB schema update failed.")
+            return
+
+        service = UpdateService(
+            owner=UPDATE_REPOSITORY_OWNER,
+            repository=UPDATE_REPOSITORY_NAME,
+        )
+        try:
+            update_info = service.check_for_update(APP_VERSION)
+        except UpdateServiceError as exc:
+            message = f"DB schema is up to date (v{schema_version}). Version check failed: {exc}"
+            QMessageBox.information(self, "Check update", message)
+            self._update_database_status(message=message)
+            return
+
+        if update_info.update_available:
+            message = (
+                f"DB schema is up to date (v{schema_version}). "
+                f"New app version available: {update_info.latest_version}. "
+                f"Release: {update_info.release_url}"
+            )
+        else:
+            message = (
+                f"DB schema is up to date (v{schema_version}). "
+                f"Current app version {update_info.current_version} is latest."
+            )
+        QMessageBox.information(self, "Check update", message)
+        self._update_database_status(message=message)
 
     def _edit_backup_dir(self) -> None:
         current = self.backup_path_edit.text().strip()
@@ -416,18 +675,24 @@ class SettingsWorkspace(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(backup_dir)))
 
     def _on_backup_option_changed(self) -> None:
-        self._db.set_setting(
-            self.BACKUP_INCLUDE_CLOUD_KEY,
-            "1" if self.include_cloud_checkbox.isChecked() else "0",
-        )
-        self._db.set_setting(
-            self.BACKUP_AUTO_ENABLED_KEY,
-            "1" if self.auto_backup_checkbox.isChecked() else "0",
-        )
-        frequency = self.frequency_combo.currentData()
-        if frequency:
-            self._db.set_setting(self.BACKUP_FREQUENCY_KEY, frequency)
-        self._db.set_setting(self.BACKUP_RETENTION_KEY, str(self.retention_spin.value()))
+        if self._loading_settings:
+            return
+        try:
+            self._db.set_setting(
+                self.BACKUP_INCLUDE_CLOUD_KEY,
+                "1" if self.include_cloud_checkbox.isChecked() else "0",
+            )
+            self._db.set_setting(
+                self.BACKUP_AUTO_ENABLED_KEY,
+                "1" if self.auto_backup_checkbox.isChecked() else "0",
+            )
+            frequency = self.frequency_combo.currentData()
+            if frequency:
+                self._db.set_setting(self.BACKUP_FREQUENCY_KEY, frequency)
+            self._db.set_setting(self.BACKUP_RETENTION_KEY, str(self.retention_spin.value()))
+        except sqlite3.Error as exc:
+            self._update_backup_status(message=f"Backup settings were not saved: {exc}")
+            return
         self._update_backup_status()
 
     def _on_behavior_option_changed(self) -> None:
@@ -441,6 +706,59 @@ class SettingsWorkspace(QWidget):
         self.setting_changed.emit(self.APP_MINIMIZE_ON_FOCUS_LOST_KEY, minimize_on_focus_lost)
         self.setting_changed.emit(self.APP_AUTOSTART_WINDOWS_KEY, autostart_windows)
         self.setting_changed.emit(self.APP_SINGLE_INSTANCE_KEY, single_instance)
+
+    def _on_language_changed(self) -> None:
+        selected_language = normalize_language_code(
+            str(self.language_combo.currentData() or DEFAULT_LANGUAGE)
+        )
+        self._db.set_setting(self.APP_LANGUAGE_KEY, selected_language)
+        self.setting_changed.emit(self.APP_LANGUAGE_KEY, selected_language)
+
+    def _normalize_enabled_workspace_ids(self, raw_value: str) -> list[str]:
+        all_ids = [workspace_id for workspace_id, _ in self.WORKSPACE_OPTIONS]
+        if not raw_value:
+            return all_ids
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return all_ids
+        if not isinstance(parsed, list):
+            return all_ids
+        enabled = []
+        for item in parsed:
+            item_value = str(item).strip()
+            if item_value in all_ids and item_value not in enabled:
+                enabled.append(item_value)
+        return enabled if enabled else all_ids
+
+    def _set_workspace_checkboxes(self, enabled_workspace_ids: list[str]) -> None:
+        enabled_set = set(enabled_workspace_ids)
+        for workspace_id, checkbox in self.workspace_checkboxes.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(workspace_id in enabled_set)
+            checkbox.blockSignals(False)
+
+    def _on_workspace_visibility_changed(self) -> None:
+        enabled_ids = [
+            workspace_id
+            for workspace_id, checkbox in self.workspace_checkboxes.items()
+            if checkbox.isChecked()
+        ]
+        if not enabled_ids:
+            # Keep at least one workspace enabled to avoid an empty sidebar.
+            fallback_id = "tasks" if "tasks" in self.workspace_checkboxes else next(iter(self.workspace_checkboxes))
+            self.workspace_checkboxes[fallback_id].blockSignals(True)
+            self.workspace_checkboxes[fallback_id].setChecked(True)
+            self.workspace_checkboxes[fallback_id].blockSignals(False)
+            enabled_ids = [fallback_id]
+        serialized = json.dumps(enabled_ids, ensure_ascii=False)
+        self._db.set_setting(self.APP_ENABLED_WORKSPACES_KEY, serialized)
+        self.setting_changed.emit(self.APP_ENABLED_WORKSPACES_KEY, serialized)
+        self._update_workspace_status()
+
+    def _update_workspace_status(self) -> None:
+        enabled_count = sum(1 for checkbox in self.workspace_checkboxes.values() if checkbox.isChecked())
+        self.workspace_status.setText(f"Enabled workspaces: {enabled_count}")
 
     def _autostart_command(self) -> str:
         if getattr(sys, "frozen", False):
@@ -492,15 +810,15 @@ class SettingsWorkspace(QWidget):
         if backup_dir and backup_dir.exists():
             entries = sorted(
                 backup_dir.glob(f"{self.BACKUP_PREFIX}*.zip"),
-                key=lambda path: path.stat().st_mtime,
+                key=lambda backup_path: backup_path.stat().st_mtime,
                 reverse=True,
             )
-            for path in entries:
-                metadata = self._read_backup_manifest(path)
+            for backup_path in entries:
+                metadata = self._read_backup_manifest(backup_path)
                 display = metadata.get("display") if metadata else None
                 if not display:
-                    display = path.name
-                self._backup_entries.append({"path": path, "meta": metadata})
+                    display = backup_path.name
+                self._backup_entries.append({"path": backup_path, "meta": metadata})
                 self.backup_combo.addItem(display)
         self.backup_combo.blockSignals(False)
         self._update_backup_details()
@@ -599,10 +917,14 @@ class SettingsWorkspace(QWidget):
             self._update_backup_status(message="Не удалось создать резервную копию.")
             return
 
-        self._db.set_setting(self.BACKUP_LAST_RUN_KEY, datetime.now().isoformat(timespec="seconds"))
+        status_message = "Резервная копия создана."
+        try:
+            self._db.set_setting(self.BACKUP_LAST_RUN_KEY, datetime.now().isoformat(timespec="seconds"))
+        except sqlite3.Error as exc:
+            status_message = f"Backup created, but failed to save last run timestamp: {exc}"
         self._refresh_backup_list()
         self._prune_backups()
-        self._update_backup_status(message="Резервная копия создана.")
+        self._update_backup_status(message=status_message)
 
     def _prune_backups(self) -> None:
         backup_dir = self._get_backup_dir()
@@ -611,12 +933,12 @@ class SettingsWorkspace(QWidget):
         max_count = self.retention_spin.value()
         backups = sorted(
             backup_dir.glob(f"{self.BACKUP_PREFIX}*.zip"),
-            key=lambda path: path.stat().st_mtime,
+            key=lambda backup_path: backup_path.stat().st_mtime,
             reverse=True,
         )
-        for path in backups[max_count:]:
+        for backup_path in backups[max_count:]:
             try:
-                path.unlink()
+                backup_path.unlink()
             except OSError:
                 continue
 

@@ -283,3 +283,7 @@ Purpose: entity property map and UI role map.
   `mindnavigator.__main__.main()` uses idempotent startup completion and explicit splash teardown (`hide` + `close` + `deleteLater`) with a fallback timer, so splash cannot remain visible after successful window initialization.
 - Startup finalization ordering property (follow-up):
   `finish_startup()` uses deferred maximize (`QTimer.singleShot(0, ...)`) and performs splash teardown in `finally`, so callback-level errors cannot leave splash visible.
+- Settings backup-load safety property:
+  backup option widgets are hydrated with signal blocking, preventing startup-time persistence callbacks from firing before user interaction.
+- Read-only DB resilience property for settings workspace:
+  backup option persistence and backup last-run timestamp writes catch `sqlite3.Error`, update status, and do not terminate application startup.

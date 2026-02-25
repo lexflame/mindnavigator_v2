@@ -238,3 +238,8 @@ It also stores:
   - validated splash/encoding fix with compile + focused regressions: `python -m compileall mindnavigator/main_window.py mindnavigator/__main__.py`, `pytest tests/test_tray_task_navigation.py tests/test_workspace_visibility_settings.py -q` -> `7 passed`.
   - startup bootstrap hardening (follow-up): `finish_startup()` now performs maximize/sync in deferred callback with guaranteed splash teardown in `finally`; splash close is centralized in `close_splash()` and reused for exception paths during startup.
   - validated follow-up startup fix with `python -m compileall mindnavigator/__main__.py` and `pytest tests/test_tray_task_navigation.py -q` -> `4 passed`.
+  - fixed startup crash in `settings_workspace`: backup controls (`include_cloud`, `auto_backup`, `frequency`, `retention`) are now loaded under `blockSignals`, so `_on_backup_option_changed` is not triggered during initial UI state hydration.
+  - hardened backup-option persistence for read-only DB mode: `_on_backup_option_changed` now catches `sqlite3.Error` and reports status instead of propagating exception and crashing app startup.
+  - hardened backup run bookkeeping: `_create_backup` now handles failure to persist `backup_last_run` timestamp in read-only DB without aborting the app.
+  - added regression tests `tests/test_settings_workspace_backup_safety.py` covering loading-guard behavior and read-only DB error handling in backup option callback.
+  - validated with `python -m compileall mindnavigator/workspaces/settings_workspace.py tests/test_settings_workspace_backup_safety.py`, `pytest tests/test_settings_workspace_backup_safety.py -q`, `pytest tests/test_tray_task_navigation.py -q`.
