@@ -38,7 +38,7 @@ class _ProjectsListWidget(QListWidget):
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as fp:
                 fp.write(message + "\n")
-        except Exception:
+        except (OSError, IndexError):
             pass
 
     def mousePressEvent(self, event):

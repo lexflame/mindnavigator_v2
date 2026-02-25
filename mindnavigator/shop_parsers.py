@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
-from mindnavigator.http_client import HttpClient
+from mindnavigator.http_client import HttpClient, HttpClientError
 from mindnavigator.shop_parsing import IShopParser, ParsedShopResult, ParsedShopProperty
 
 
@@ -371,7 +371,7 @@ class WildberriesParser(BaseShopParser):
                     canonical_url=url,
                     raw={"status": response.status_code, "content_type": response.headers.get("Content-Type", "")},
                 )
-            except Exception:
+            except (HttpClientError, json.JSONDecodeError, KeyError, TypeError, ValueError):
                 pass
         return super().parse(url)
 

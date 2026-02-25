@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
                 ord("W"),
             )
             self._system_restore_hotkey_registered = bool(result)
-        except Exception:
+        except (AttributeError, OSError, TypeError, ValueError):
             self._system_restore_hotkey_registered = False
 
     def _unregister_system_restore_hotkey(self) -> None:
@@ -745,7 +745,7 @@ class MainWindow(QMainWindow):
         ):
             try:
                 msg = ctypes.cast(message, ctypes.POINTER(_WinMSG)).contents
-            except Exception:
+            except (TypeError, ValueError):
                 return super().nativeEvent(event_type, message)
             if msg.message == self._WM_HOTKEY and int(msg.wParam) == self._TRAY_RESTORE_HOTKEY_ID:
                 self._restore_from_tray()
