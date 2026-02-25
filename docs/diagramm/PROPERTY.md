@@ -212,3 +212,9 @@ Purpose: entity property map and UI role map.
 - Maps workspace static helpers include row/layout and formatting primitives:
   `_row_layout`, `_project_titles`, `_resize_handle_cursor`, `_resize_scale_delta`, `_load_marker_preview`, `_format_value`, `_format_links`, `_format_file_links`.
 - Base workspace lifecycle stubs are static no-ops: `on_leave`, `teardown`.
+
+## Type Checker Properties
+- Main-window native event channel name is decoded from typed Qt payloads (`bytes` and `QByteArray`) before Win32 hotkey dispatch.
+- Resize-edge cursor mapping is driven by normalized integer flag values to keep enum-flag comparisons type-safe.
+- Task editor/date controls use explicit `QDate(year, month, day)` conversion from Python `date`.
+- Task drag-drop id payload is decoded from `QByteArray.data()` bytes before integer parsing.

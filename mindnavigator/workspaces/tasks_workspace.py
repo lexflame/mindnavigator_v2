@@ -1124,7 +1124,8 @@ class TasksModel(QAbstractListModel):
 
         task_id_bytes = data.data("application/x-mindnavigator-task-id")
         try:
-            task_id = int(bytes(task_id_bytes).decode("utf-8"))
+            task_id_payload = bytes(task_id_bytes.data())
+            task_id = int(task_id_payload.decode("utf-8"))
         except ValueError:
             return False
 
@@ -1794,7 +1795,7 @@ class TaskEditDialog(QDialog):
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
         self.day_edit.setDisplayFormat("yyyy-MM-dd")
-        self.day_edit.setDate(task.day)
+        self.day_edit.setDate(QDate(task.day.year, task.day.month, task.day.day))
         self.day_edit.setKeyboardTracking(False)
 
         self.time_edit = QTimeEdit()
@@ -3635,7 +3636,8 @@ class TasksWorkspace(BaseWorkspace):
         self.new_day.setCalendarPopup(True)
         self.new_day.setDisplayFormat("yyyy-MM-dd")
         self.new_day.setFixedWidth(140)
-        self.new_day.setDate(datetime.now().date())
+        today = datetime.now().date()
+        self.new_day.setDate(QDate(today.year, today.month, today.day))
         self.new_day.setToolTip("Дата выполнения (можно выбрать в календаре или ввести вручную)")
         self.new_day.setKeyboardTracking(False)
 

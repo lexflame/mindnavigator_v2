@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QPoint, QRect, QEvent, QTimer
+from PySide6.QtCore import Qt, QPoint, QRect, QEvent, QTimer, QByteArray
 from pathlib import Path
 
 from .windowing import ResizeEdge
@@ -888,11 +888,12 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def nativeEvent(self, event_type, message):
-        event_name = (
-            bytes(event_type).decode("utf-8", errors="ignore")
-            if isinstance(event_type, (bytes, bytearray, memoryview))
-            else str(event_type)
-        )
+        if isinstance(event_type, (bytes, bytearray, memoryview)):
+            event_name = bytes(event_type).decode("utf-8", errors="ignore")
+        elif isinstance(event_type, QByteArray):
+            event_name = bytes(event_type.data()).decode("utf-8", errors="ignore")
+        else:
+            event_name = str(event_type)
         if (
             sys.platform == "win32"
             and getattr(self, "_system_restore_hotkey_registered", False)
@@ -1044,21 +1045,22 @@ class MainWindow(QMainWindow):
     def _cursor_for_edge(edge: ResizeEdge):
         """Return cursor shape for selected resize edge."""
         # Select cursor icon for current resize edge orientation.
+        edge_value = int(edge)
         diagonal_forward = {
-            ResizeEdge.TOP | ResizeEdge.LEFT,
-            ResizeEdge.BOTTOM | ResizeEdge.RIGHT,
+            int(ResizeEdge.TOP | ResizeEdge.LEFT),
+            int(ResizeEdge.BOTTOM | ResizeEdge.RIGHT),
         }
         diagonal_backward = {
-            ResizeEdge.TOP | ResizeEdge.RIGHT,
-            ResizeEdge.BOTTOM | ResizeEdge.LEFT,
+            int(ResizeEdge.TOP | ResizeEdge.RIGHT),
+            int(ResizeEdge.BOTTOM | ResizeEdge.LEFT),
         }
-        if edge in (ResizeEdge.LEFT, ResizeEdge.RIGHT):
+        if edge_value in (int(ResizeEdge.LEFT), int(ResizeEdge.RIGHT)):
             return Qt.CursorShape.SizeHorCursor
-        if edge in (ResizeEdge.TOP, ResizeEdge.BOTTOM):
+        if edge_value in (int(ResizeEdge.TOP), int(ResizeEdge.BOTTOM)):
             return Qt.CursorShape.SizeVerCursor
-        if edge in diagonal_forward:
+        if edge_value in diagonal_forward:
             return Qt.CursorShape.SizeFDiagCursor
-        if edge in diagonal_backward:
+        if edge_value in diagonal_backward:
             return Qt.CursorShape.SizeBDiagCursor
         return Qt.CursorShape.ArrowCursor
 

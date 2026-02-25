@@ -189,3 +189,5 @@ It also stores:
   - validated staticmethod batch-5 with focused map/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
   - continued `PyMethodMayBeStaticInspection` cleanup (batch-6): converted `BaseWorkspace` no-op lifecycle hooks (`on_leave`, `teardown`) to static.
   - validated staticmethod batch-6 with focused workspace regressions (`tests/test_workspace_visibility_settings.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_workspace_category_layout.py`): `11 passed`.
+  - continued `PyTypeCheckerInspection` cleanup (batch-1): normalized Qt payload/date typing in `main_window` and `tasks_workspace` (`nativeEvent` event-type decoding, resize-edge cursor mapping via int flags, `QByteArray` task-id decode, explicit `QDate` conversion for task editors).
+  - validated typechecker batch-1 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
