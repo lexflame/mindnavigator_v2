@@ -119,6 +119,7 @@ class MainWindow(QMainWindow):
         self._task_remind_next_at: dict[int, datetime] = {}
         self._minimize_on_focus_lost = True
 
+        self._current_mode = self.MODE_TASKS
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
         self._wire_modes()

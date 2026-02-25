@@ -3271,6 +3271,18 @@ class TasksWorkspace(BaseWorkspace):
         self._applying_filters = False
         self._gantt_mode = False
         self._smooth_scroll_controllers: list[object] = []
+        self.new_title = None
+        self.new_day = None
+        self.new_time = None
+        self.new_time_toggle = None
+        self.new_priority = None
+        self.btn_add = None
+        self.list = None
+        self.model = None
+        self.delegate = None
+        self._sticky_header = None
+        self.content_stack = None
+        self.gantt_page = None
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
