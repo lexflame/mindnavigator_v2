@@ -4009,18 +4009,22 @@ class TasksWorkspace(BaseWorkspace):
             self._applying_filters = False
 
     def get_selection(self) -> List[TaskRow]:
+        model = getattr(self, "model", None)
+        if model is None:
+            return []
         index = self._selected_task_index()
         if index is None:
             return []
-        if hasattr(self.model, "task_at_row"):
-            task = self.model.task_at_row(index.row())
+        if hasattr(model, "task_at_row"):
+            task = model.task_at_row(index.row())
             return [task] if task else []
         return []
 
     def _selected_task_index(self) -> Optional[QModelIndex]:
-        if not hasattr(self, "list"):
+        list_widget = getattr(self, "list", None)
+        if not isinstance(list_widget, QListView):
             return None
-        index = self.list.currentIndex()
+        index = list_widget.currentIndex()
         if not index.isValid():
             return None
         if index.data(TaskRoles.RowType) != "task":

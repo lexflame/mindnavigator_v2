@@ -275,3 +275,5 @@ Purpose: entity property map and UI role map.
   `DEFERRED_PRIORITY='Отложенная'` is now canonical; rebuild migrations normalize legacy aliases (`РћС‚Р»РѕР¶РµРЅРЅР°СЏ`, numeric `1..4`, `deferred`) before writing into tables with strict priority `CHECK`.
 - Storage rebuild recovery properties:
   before rebuilding `tasks/projects/task_attachments`, migration now reconciles stale `<table>_old` artifacts from interrupted runs (including rename-back recovery) to keep startup migrations idempotent.
+- Tasks workspace startup-safety properties:
+  `get_selection()` and `_selected_task_index()` now tolerate pre-build state (`list/model` are `None`) during `BaseWorkspace.update_action_states()` call in constructor path.

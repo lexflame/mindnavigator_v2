@@ -548,3 +548,10 @@
 [2026-02-25 22:38] OUT: OK.
 [2026-02-25 22:38] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py -p no:cacheprovider --basetemp .pytest_dir/tmp_priority_fix2
 [2026-02-25 22:38] OUT: 5 passed.
+[2026-02-25 22:42] ACTION: Started hotfix for TasksWorkspace startup crash in selection path (`NoneType.currentIndex` before list init).
+[2026-02-25 22:42] ACTION: Hardened `TasksWorkspace.get_selection` and `_selected_task_index` for pre-build state (`list/model` absent or `None`).
+[2026-02-25 22:42] ACTION: Added regression `test_tasks_workspace_get_selection_is_safe_before_list_init` in tests/test_tasks_marker_refresh.py.
+[2026-02-25 22:42] CMD: python -m compileall mindnavigator/workspaces/tasks_workspace.py tests/test_tasks_marker_refresh.py
+[2026-02-25 22:42] OUT: OK.
+[2026-02-25 22:42] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_selection_fix
+[2026-02-25 22:42] OUT: 8 passed.

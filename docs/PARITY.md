@@ -231,3 +231,5 @@ It also stores:
   - aligned runtime priority constants between storage and UI reminder flow (`DEFERRED_PRIORITY` in `storage` + `main_window`) and added regression test `test_database_migration_normalizes_legacy_priority_values` (`tests/test_db_migrations.py`).
   - fixed restart crash `sqlite3.OperationalError: there is already another table or index with this name: projects_old` by making table-rebuild flow recover from stale `<table>_old` artifacts before `ALTER TABLE ... RENAME`.
   - added migration regression `test_database_migration_recovers_from_stale_projects_old_table` to verify recovery path and cleanup of stale `projects_old`.
+  - fixed startup UI crash `AttributeError: NoneType object has no attribute currentIndex` in `TasksWorkspace.get_selection()` by guarding pre-build state where `self.list`/`self.model` are not initialized yet.
+  - added regression `test_tasks_workspace_get_selection_is_safe_before_list_init` (`tests/test_tasks_marker_refresh.py`).
