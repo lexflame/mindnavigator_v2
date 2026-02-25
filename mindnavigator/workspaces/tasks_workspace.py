@@ -4054,11 +4054,11 @@ class TasksWorkspace(BaseWorkspace):
         if selection_model is not None:
             selection_model.select(
                 index,
-                QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect,
             )
             selection_model.setCurrentIndex(
                 index,
-                QItemSelectionModel.SelectionFlag.Current | QItemSelectionModel.SelectionFlag.Select,
+                QItemSelectionModel.SelectionFlag.Current,
             )
         self.list.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
         self.list.setFocus(Qt.FocusReason.OtherFocusReason)

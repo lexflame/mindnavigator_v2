@@ -197,3 +197,5 @@ It also stores:
   - validated typechecker batch-3 with focused workspace/task regressions (`tests/test_workspace_csv_transfer.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_visibility_settings.py`): `12 passed`.
   - continued `PyTypeCheckerInspection` cleanup (batch-4): fixed maps typing edges (`QPointF` world-transform math, integer label font sizing, object-safe entity label formatters for map marker binding dialog).
   - validated typechecker batch-4 with focused maps/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
+  - continued `PyTypeCheckerInspection` cleanup (batch-5): normalized task-focus selection flags in `tasks_workspace` to typed-safe `QItemSelectionModel.SelectionFlag` usage without mixed flag combos.
+  - validated typechecker batch-5 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.

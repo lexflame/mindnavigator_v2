@@ -223,3 +223,4 @@ Purpose: entity property map and UI role map.
   `_sorted_folder_paths` and `_sorted_cloud_files`.
 - Maps canvas/dialog typing guardrails:
   `_map_to_world` returns explicit `QPointF`, marker label font size is integer, and entity-label formatters accept generic `object` with safe attribute extraction.
+- Task focus selection path uses typed-safe selection flags (`ClearAndSelect`, `Current`) without mixed flag combinations.
