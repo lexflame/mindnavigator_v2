@@ -54,7 +54,8 @@ class _SingleInstanceBridge(QObject):
             if socket is None:
                 continue
             socket.waitForReadyRead(200)
-            payload = bytes(socket.readAll()).decode("utf-8", errors="ignore").strip()
+            raw_payload = socket.readAll()
+            payload = bytes(raw_payload.data()).decode("utf-8", errors="ignore").strip()
             socket.disconnectFromServer()
             if self._on_message is not None and payload:
                 self._on_message(payload)

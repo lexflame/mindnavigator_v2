@@ -104,6 +104,9 @@ Purpose: entity property map and UI role map.
 - Main-window runtime flags and key/mouse handling are bound to Qt6 enum namespaces:
   `Qt.WindowType.*`, `Qt.WidgetAttribute.*`, `Qt.WindowState.*`, `Qt.ApplicationState.*`, `Qt.Key.*`, `Qt.CursorShape.*`, `Qt.MouseButton.*`, `QEvent.Type.*`.
 
+## Single-Instance Bridge Properties
+- In `_SingleInstanceBridge`, incoming local-socket payload is decoded from `QByteArray` using explicit `.data()` bytes extraction before UTF-8 parsing.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
