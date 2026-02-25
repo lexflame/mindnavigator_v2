@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from datetime import datetime, timezone
@@ -684,8 +685,6 @@ class PurchasesWorkspace(BaseWorkspace):
         payload = self._db.export_purchases_data()
         try:
             with open(path, "w", encoding="utf-8") as handle:
-                import json
-
                 json.dump(payload, handle, ensure_ascii=False, indent=2)
             self._set_status("Экспорт завершён")
         except OSError as exc:
@@ -701,8 +700,6 @@ class PurchasesWorkspace(BaseWorkspace):
         if not path:
             return
         try:
-            import json
-
             with open(path, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
         except (OSError, json.JSONDecodeError) as exc:
