@@ -126,11 +126,11 @@ class CollectionCategorySelectDialog(QDialog):
             values.sort(key=lambda c: (c.sort_index, c.title.lower(), c.id))
 
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
-            for category in children.get(parent_id, []):
-                item = QTreeWidgetItem([category.title])
-                item.setData(0, Qt.UserRole, category.id)
+            for category_row in children.get(parent_id, []):
+                item = QTreeWidgetItem([category_row.title])
+                item.setData(0, Qt.UserRole, category_row.id)
                 parent_item.addChild(item)
-                add_children(item, category.id)
+                add_children(item, category_row.id)
 
         add_children(root, None)
         self.tree.expandToDepth(1)

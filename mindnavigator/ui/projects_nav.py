@@ -421,7 +421,7 @@ class ProjectsNav(QWidget):
             priority = normalize_priority(project.priority)
             return project.sort_order, priority_order.get(priority, 4), project.title.lower(), project.id
 
-        for parent_id, items in children.items():
+        for parent_key, items in children.items():
             items.sort(key=sibling_key)
 
         entries: list[dict] = []
@@ -644,9 +644,9 @@ class ProjectsNav(QWidget):
     ) -> tuple[bool, str]:
         max_depth_index = 3  # 4 levels in total (0..3)
         children: dict[object, list[int]] = {}
-        for project in by_id.values():
-            parent_id = project.parent_project_id if project.parent_project_id in by_id else None
-            children.setdefault(parent_id, []).append(project.id)
+        for project_row in by_id.values():
+            parent_id = project_row.parent_project_id if project_row.parent_project_id in by_id else None
+            children.setdefault(parent_id, []).append(project_row.id)
 
         descendants: set[int] = set()
         stack = [source_project_id]
@@ -684,7 +684,7 @@ class ProjectsNav(QWidget):
             if not child_ids:
                 subtree_height_cache[project_id] = 0
                 return 0
-            height = 1 + max(subtree_height(child_id) for child_id in child_ids)
+            height = 1 + max(subtree_height(child_node_id) for child_node_id in child_ids)
             subtree_height_cache[project_id] = height
             return height
 

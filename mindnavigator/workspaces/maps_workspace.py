@@ -2496,8 +2496,8 @@ class MapCanvas(QWidget):
                 if not item:
                     links.append("не найдено")
                     continue
-                title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
-                links.append(f'<a style="background:#CCC;border-radius:4px;" href="{kind}:{item_id}">{title}</a>')
+                item_title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+                links.append(f'<a style="background:#CCC;border-radius:4px;" href="{kind}:{item_id}">{item_title}</a>')
             label.setText("<br>".join(links))
             label.linkActivated.connect(handle_link)
             return label
@@ -2843,16 +2843,16 @@ class MapEditorWorkspace(QWidget):
 
         def tool_button(icon_name: str, tooltip: str, tool: Optional[MapTool]) -> QToolButton:
             # Вспомогательная функция для создания кнопки инструмента.
-            btn = QToolButton()
-            btn.setIcon(qta.icon(icon_name, color="#d7d7d7"))
-            btn.setIconSize(QSize(20, 20))
-            btn.setCheckable(True)
-            btn.setToolTip(tooltip)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            tool_btn_widget = QToolButton()
+            tool_btn_widget.setIcon(qta.icon(icon_name, color="#d7d7d7"))
+            tool_btn_widget.setIconSize(QSize(20, 20))
+            tool_btn_widget.setCheckable(True)
+            tool_btn_widget.setToolTip(tooltip)
+            tool_btn_widget.setCursor(Qt.CursorShape.PointingHandCursor)
             if tool is not None:
-                self.tool_group.addButton(btn)
-                btn.clicked.connect(lambda checked=False, t=tool: self._set_tool(t))
-            return btn
+                self.tool_group.addButton(tool_btn_widget)
+                tool_btn_widget.clicked.connect(lambda checked=False, t=tool: self._set_tool(t))
+            return tool_btn_widget
 
         # Кнопки инструментов.
         self.btn_select = tool_button("fa5s.mouse-pointer", "Выбрать", MapTool.SELECT)
@@ -3621,8 +3621,8 @@ class MapEditorWorkspace(QWidget):
             if not item:
                 titles.append("не найдено")
                 continue
-            title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
-            titles.append(title)
+            item_title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+            titles.append(item_title)
         return ", ".join(titles)
 
     def _format_file_links(self, item_ids: List[int], source: dict) -> str:
@@ -3635,8 +3635,8 @@ class MapEditorWorkspace(QWidget):
             if not item:
                 parts.append("не найдено")
                 continue
-            title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
-            safe_title = html.escape(title)
+            item_title = getattr(item, "title", None) or getattr(item, "name", None) or getattr(item, "rel_path", "—")
+            safe_title = html.escape(item_title)
             if getattr(item, "is_image", False):
                 parts.append(f'<a href="file:{item_id}">{safe_title}</a>')
             else:
@@ -3765,13 +3765,13 @@ class MapsListWorkspace(QWidget):
 
         def tab_btn(text: str) -> QToolButton:
             # Создает кнопку вкладки фильтра.
-            b = QToolButton()
-            b.setText(text)
-            b.setCheckable(True)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setAutoRaise(True)
-            self.tabs_group.addButton(b)
-            return b
+            tab_button = QToolButton()
+            tab_button.setText(text)
+            tab_button.setCheckable(True)
+            tab_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            tab_button.setAutoRaise(True)
+            self.tabs_group.addButton(tab_button)
+            return tab_button
 
         self.tab_all = tab_btn("Все")
         self.tab_project = tab_btn("Проект")

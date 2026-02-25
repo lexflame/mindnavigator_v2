@@ -234,7 +234,7 @@ class AttachFileSelectNav(QDialog):
         folders = sorted(folders_raw) if isinstance(folders_raw, set) else []
         files_raw = data.get("files")
         files_source = files_raw if isinstance(files_raw, list) else []
-        files = sorted(files_source, key=lambda item: item.name.lower())
+        files = sorted(files_source, key=lambda cloud_file: cloud_file.name.lower())
         cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
         cloud_root_path = Path(cloud_root) if cloud_root else None
 

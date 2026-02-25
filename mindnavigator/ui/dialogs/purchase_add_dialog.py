@@ -399,11 +399,11 @@ class PurchaseAddByUrlDialog(QDialog):
             by_parent.setdefault(cat.parent_id, []).append(cat)
 
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
-            for cat in sorted(by_parent.get(parent_id, []), key=lambda c: c.title.lower()):
-                item = QTreeWidgetItem([cat.title])
-                item.setData(0, Qt.UserRole, cat.id)
-                parent_item.addChild(item)
-                add_children(item, cat.id)
+            for category_row in sorted(by_parent.get(parent_id, []), key=lambda c: c.title.lower()):
+                category_item = QTreeWidgetItem([category_row.title])
+                category_item.setData(0, Qt.UserRole, category_row.id)
+                parent_item.addChild(category_item)
+                add_children(category_item, category_row.id)
 
         for cat in sorted(by_parent.get(None, []), key=lambda c: c.title.lower()):
             item = QTreeWidgetItem([cat.title])

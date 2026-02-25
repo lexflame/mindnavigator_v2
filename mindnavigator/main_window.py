@@ -325,7 +325,7 @@ class MainWindow(QMainWindow):
         self.set_mode(self.MODE_TASKS)
         if not hasattr(self.page_tasks, "focus_task"):
             return
-        QTimer.singleShot(0, lambda task_id=task_id: self.page_tasks.focus_task(task_id))
+        QTimer.singleShot(0, lambda target_task_id=task_id: self.page_tasks.focus_task(target_task_id))
 
     def _restore_from_tray(self):
         """Р’РѕР·РІСЂР°С‰Р°РµС‚ РѕРєРЅРѕ РёР· С‚СЂРµСЏ."""

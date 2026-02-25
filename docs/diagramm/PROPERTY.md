@@ -196,3 +196,7 @@ Purpose: entity property map and UI role map.
 - Marker-only predicate: `is_marker_only_task_update(previous, updated)` gates fast UI refresh path in `TasksModel`.
 - Selected row paint: `blend_task_row_background(base, marker_color, selected)` keeps marker tint visible for selected task rows.
 - Storage projection safety: `TaskData` return mapping in `Database.create_task`/`Database.update_task` is keyword-based to preserve `gantt_forecasted`, `marker_color`, and `marker_theme` positions.
+
+## Shadowing Names Properties
+- Lambda/local variables in UI callbacks and tree-build loops are named uniquely per scope (`target_task_id`, `project_row`, `child_node_id`, `item_title`, `category_row`, `cloud_file`) to avoid outer-scope shadowing.
+- Renames are behavior-preserving: only symbol names were adjusted in sorting, rendering, and delayed-callback paths.

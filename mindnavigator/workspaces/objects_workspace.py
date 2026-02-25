@@ -291,7 +291,13 @@ class ObjectsModel(QAbstractListModel):
                 if search not in hay:
                     continue
             items.append(item)
-        items.sort(key=lambda item: (normalize_object_category(item.catalog).lower(), item.title.lower(), item.id))
+        items.sort(
+            key=lambda object_row: (
+                normalize_object_category(object_row.catalog).lower(),
+                object_row.title.lower(),
+                object_row.id,
+            )
+        )
 
         self.beginResetModel()
         self._items = items
