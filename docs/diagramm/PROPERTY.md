@@ -258,3 +258,8 @@ Purpose: entity property map and UI role map.
   `QListView.SelectionMode.*`, `QAbstractItemView.ScrollMode.*`.
 - Ideas delegate/list typing uses explicit `QStyleOptionViewItem` and Qt6 list-mode enums:
   `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.ScrollMode.*`.
+- Cross-workspace list/grid modules use Qt6 enum namespaces consistently for view policy/state:
+  `QListView.ViewMode.*`, `QListView.ResizeMode.*`, `QListView.Movement.*`, `QListView.Flow.*`,
+  `QAbstractItemView.DragDropMode.*`, `Qt.ContextMenuPolicy.*`, `Qt.ScrollBarPolicy.*`.
+- Search/file attach/base workspace helpers use typed Qt6 item-role/button/size policies:
+  `Qt.ItemDataRole.*`, `QDialogButtonBox.StandardButton.*`, `QSizePolicy.Policy.*`.

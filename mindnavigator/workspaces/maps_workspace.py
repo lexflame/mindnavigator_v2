@@ -2505,7 +2505,7 @@ class MapCanvas(QWidget):
             # Формируем HTML-ссылки для списка привязок.
             label = QLabel()
             label.setObjectName("MapLabelValue")
-            label.setTextFormat(Qt.RichText)
+            label.setTextFormat(Qt.TextFormat.RichText)
             label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             label.setOpenExternalLinks(False)
             label.setStyleSheet(
@@ -3077,7 +3077,7 @@ class MapEditorWorkspace(QWidget):
             label.setObjectName("MapInfoValue")
             label.setWordWrap(True)
             label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.info_file.setTextFormat(Qt.RichText)
+        self.info_file.setTextFormat(Qt.TextFormat.RichText)
         self.info_file.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.info_file.setOpenExternalLinks(False)
         self.info_file.linkActivated.connect(self._handle_info_link)
@@ -3158,7 +3158,7 @@ class MapEditorWorkspace(QWidget):
         info_layout.addWidget(self.info_scroll)
 
         # Собираем основные панели.
-        self.center_splitter = QSplitter(Qt.Horizontal)
+        self.center_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.center_splitter.setObjectName("MapInfoSplitter")
         self.center_splitter.setHandleWidth(6)
         self.center_splitter.setChildrenCollapsible(False)

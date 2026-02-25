@@ -770,7 +770,7 @@ class NoteWorkspace(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(14)
         self.tree.setAnimated(True)
-        self.tree.setDragDropMode(QAbstractItemView.NoDragDrop)
+        self.tree.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         # TODO: поддержка drag & drop для вложенности и перемещения заметок.
 
         projects = QTreeWidgetItem(["Проекты"])
@@ -856,13 +856,13 @@ class NoteWorkspace(QWidget):
 
         self.list_view = QListView()
         self.list_view.setObjectName("NotesGrid")
-        self.list_view.setViewMode(QListView.ListMode)
-        self.list_view.setResizeMode(QListView.Adjust)
+        self.list_view.setViewMode(QListView.ViewMode.ListMode)
+        self.list_view.setResizeMode(QListView.ResizeMode.Adjust)
         self.list_view.setSpacing(6)
         self.list_view.setUniformItemSizes(False)
         self.list_view.setWordWrap(True)
-        self.list_view.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.list_view.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list_view.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.setMouseTracking(True)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

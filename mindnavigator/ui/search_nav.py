@@ -160,7 +160,7 @@ class SearchNav(QWidget):
         self.setFixedWidth(w)
 
     def _on_result_double_clicked(self, item: QListWidgetItem) -> None:
-        payload = item.data(Qt.UserRole) or {}
+        payload = item.data(Qt.ItemDataRole.UserRole) or {}
         if payload:
             self.resultActivated.emit(payload)
 
@@ -288,7 +288,7 @@ class SearchNav(QWidget):
         self.results_list.setVisible(True)
         for match in matches[: self._max_results]:
             item = QListWidgetItem(match["label"])
-            item.setData(Qt.UserRole, match)
+            item.setData(Qt.ItemDataRole.UserRole, match)
             tooltip = match.get("tooltip")
             if tooltip:
                 item.setToolTip(tooltip)

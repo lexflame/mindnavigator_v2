@@ -335,7 +335,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.archived_only)
         self.filter_layout.addStretch(1)
 
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName("IdeasSplitter")
 
         list_host = QWidget()

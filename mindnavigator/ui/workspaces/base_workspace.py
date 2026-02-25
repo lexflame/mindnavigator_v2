@@ -100,7 +100,7 @@ class BaseWorkspace(QWidget):
 
         self.status_row = QLabel("")
         self.status_row.setObjectName("WorkspaceStatus")
-        self.status_row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.status_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.status_row)
 
     def create_actions(self) -> dict[str, QAction]:

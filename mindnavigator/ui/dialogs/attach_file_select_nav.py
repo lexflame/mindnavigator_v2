@@ -99,8 +99,8 @@ class AttachFileSelectNav(QDialog):
         self.file_grid.setIconSize(QSize(64, 64))
         self.file_grid.setGridSize(QSize(150, 120))
         self.file_grid.setWordWrap(True)
-        self.file_grid.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.file_grid.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.file_grid.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.file_grid.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.file_grid.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.file_grid.currentItemChanged.connect(self._on_grid_selection)
         self.file_grid.itemDoubleClicked.connect(self._on_grid_double_clicked)
@@ -112,10 +112,12 @@ class AttachFileSelectNav(QDialog):
 
         content_layout.addWidget(self.splitter, 1)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons = QDialogButtonBox()
+        self._ok_button = self.buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        self.buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
-        self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        self._ok_button.setEnabled(False)
 
         layout.addWidget(header)
         layout.addWidget(self.empty_label, 1)
@@ -301,25 +303,25 @@ class AttachFileSelectNav(QDialog):
         if current is None:
             self._selected_rel_path = None
             self._selected_icon = None
-            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+            self._ok_button.setEnabled(False)
             return
         payload = current.data(Qt.ItemDataRole.UserRole)
         if not payload:
             self._selected_rel_path = None
             self._selected_icon = None
-            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+            self._ok_button.setEnabled(False)
             return
         if payload[0] == "folder":
             self._selected_rel_path = None
             self._selected_icon = None
-            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+            self._ok_button.setEnabled(False)
             return
 
         rel_path = payload[1]
         file_item = payload[2]
         self._selected_rel_path = rel_path
         self._selected_icon = self._file_icon_for(file_item, self._cloud_root_path())
-        self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
+        self._ok_button.setEnabled(True)
 
     def _on_grid_double_clicked(self, item: QListWidgetItem) -> None:
         payload = item.data(Qt.ItemDataRole.UserRole)

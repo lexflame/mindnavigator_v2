@@ -3684,10 +3684,10 @@ class TasksWorkspace(BaseWorkspace):
         self.list = QListView()
         self.list.setObjectName("TasksList")
         self.list.setUniformItemSizes(False)
-        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SingleSelection)
-        self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
+        self.list.setSelectionMode(QListView.SelectionMode.SingleSelection)
+        self.list.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.list.setMouseTracking(True)
         self.list.viewport().setMouseTracking(True)
 
@@ -4504,5 +4504,4 @@ class TasksWorkspace(BaseWorkspace):
             self.list.setDragEnabled(False)
             self.list.setAcceptDrops(False)
             self.list.setDropIndicatorShown(False)
-            self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
-
+            self.list.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)

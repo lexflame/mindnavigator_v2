@@ -505,3 +505,10 @@
 [2026-02-25 18:56] CMD: $env:PYTHONPATH='.'; pytest tests/test_maps_simple_mouse_mode.py tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:56] OUT: 10 passed.
 [2026-02-25 18:56] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-10.
+[2026-02-25 19:00] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-11).
+[2026-02-25 19:00] ACTION: Migrated remaining legacy Qt constants in search/base/list/dialog workspace modules to Qt6 enum namespaces (item roles, list view modes, drag-drop modes, size policy, dialog standard buttons, splitter orientations).
+[2026-02-25 19:00] CMD: python -m compileall mindnavigator/ui/search_nav.py mindnavigator/ui/workspaces/base_workspace.py mindnavigator/workspaces/tasks_workspace.py mindnavigator/workspaces/objects_workspace.py mindnavigator/workspaces/notes_workspace.py mindnavigator/workspaces/maps_workspace.py mindnavigator/workspaces/ideas_workspace.py mindnavigator/workspaces/files_workspace.py mindnavigator/ui/dialogs/attach_file_select_nav.py
+[2026-02-25 19:00] OUT: OK.
+[2026-02-25 19:00] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_maps_simple_mouse_mode.py tests/test_tasks_marker_refresh.py tests/test_tray_task_navigation.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 19:00] OUT: 17 passed.
+[2026-02-25 19:00] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-11.
