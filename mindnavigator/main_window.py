@@ -374,7 +374,8 @@ class MainWindow(QMainWindow):
             return
         self.showMinimized()
 
-    def _hotkey_defaults_path(self) -> Path:
+    @staticmethod
+    def _hotkey_defaults_path() -> Path:
         return Path(__file__).resolve().parents[1] / "defaults" / "hotkeys.default.json"
 
     def _init_task_reminders(self) -> None:
@@ -429,7 +430,8 @@ class MainWindow(QMainWindow):
             )
             self._task_remind_next_at[task.id] = now + timedelta(minutes=30)
 
-    def _hotkey_overrides_path(self) -> Path:
+    @staticmethod
+    def _hotkey_overrides_path() -> Path:
         return Path.home() / ".mindnavigator" / "hotkeys.overrides.json"
 
     def _init_hotkeys(self) -> None:
@@ -643,7 +645,8 @@ class MainWindow(QMainWindow):
         self.search_nav.update_width_for_window(self.width())
         self._set_nav_collapsed(False)
 
-    def _placeholder(self, title: str, subtitle: str) -> QWidget:
+    @staticmethod
+    def _placeholder(title: str, subtitle: str) -> QWidget:
         """Р’РѕР·РІСЂР°С‰Р°РµС‚ РІСЂРµРјРµРЅРЅС‹Р№ СЌРєСЂР°РЅ-Р·Р°РіР»СѓС€РєСѓ РґР»СЏ РЅРµРіРѕС‚РѕРІС‹С… СЂРµР¶РёРјРѕРІ."""
         # Р—Р°РіР»СѓС€РєР° РґР»СЏ СЂРµР¶РёРјРѕРІ Р±РµР· СЂРµР°Р»РёР·Р°С†РёРё.
         w = QWidget()
@@ -1037,7 +1040,8 @@ class MainWindow(QMainWindow):
 
         return edge
 
-    def _cursor_for_edge(self, edge: ResizeEdge):
+    @staticmethod
+    def _cursor_for_edge(edge: ResizeEdge):
         """Return cursor shape for selected resize edge."""
         # Select cursor icon for current resize edge orientation.
         diagonal_forward = {

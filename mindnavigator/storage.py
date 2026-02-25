@@ -3938,7 +3938,8 @@ class Database:
         with self._conn:
             self._conn.execute("DELETE FROM object_images WHERE id = ?;", (image_id,))
 
-    def _normalize_collection_entity_type(self, entity_type: str) -> str:
+    @staticmethod
+    def _normalize_collection_entity_type(entity_type: str) -> str:
         value = (entity_type or "").strip().lower() or "other"
         if value not in COLLECTION_ENTITY_TYPES:
             raise ValueError(

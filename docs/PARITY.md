@@ -173,3 +173,5 @@ It also stores:
   - validated protected-member cleanup with focused compile + regression suite (`tests/test_tray_task_navigation.py`, `tests/test_maps_simple_mouse_mode.py`, `tests/test_notes_multiline_save.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_workspace_category_layout.py`, `tests/test_project_tree_storage.py`): `19 passed`.
   - fixed `GrazieInspection` in `workspaces/maps_workspace.py` by normalizing fullscreen-preview comment wording (no runtime behavior changes).
   - validated grammar-fix safety with targeted compile and map regression tests (`tests/test_maps_simple_mouse_mode.py`): `2 passed`.
+  - started `PyMethodMayBeStaticInspection` cleanup by converting self-free helper methods to `@staticmethod` in `csv_transfer`, `hotkeys/event_filter`, `main_window`, and `storage` (`_normalize_collection_entity_type`).
+  - validated staticmethod batch with compile + focused regression suite (`tests/test_csv_transfer.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_workspace_visibility_settings.py`, `tests/test_tray_task_navigation.py`, `tests/test_project_tree_storage.py`): `19 passed`.

@@ -50,8 +50,8 @@ class CsvTransferService:
             writer.writerow({key: self._normalize_cell(row.get(key)) for key in headers})
         return buffer.getvalue()
 
+    @staticmethod
     def import_from_string(
-        self,
         csv_text: str,
         *,
         options: CsvTransferOptions | None = None,

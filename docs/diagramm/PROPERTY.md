@@ -44,6 +44,7 @@ Purpose: entity property map and UI role map.
 - Source: `mindnavigator/csv_transfer.py`.
 - Runtime options: `CsvTransferOptions(delimiter, quotechar, encoding)`.
 - File path input contract: `CsvTransferService.import_from_file` / `export_to_file` accept both `Path` and `str` paths from UI file dialogs.
+- `CsvTransferService.import_from_string` is a static parser helper and does not depend on instance state.
 - Import contract: CSV must contain header row; importer returns string-valued column map per row.
 - Workspace adapter source: `mindnavigator/workspaces/csv_workspace_transfer.py`.
 - CSV field contracts:
@@ -95,6 +96,7 @@ Purpose: entity property map and UI role map.
   - `QEvent.Type.KeyPress` for filter gate;
   - `Qt.Key.*` for modifier/system-key skip list;
   - `QKeySequence.SequenceFormat.NativeText` for platform-native sequence text.
+- Sequence normalization helper `_to_sequence` is static and side-effect free.
 
 ## Projects DnD Properties
 - `ProjectsNav` project list uses Qt6 role/action enums:
@@ -113,6 +115,7 @@ Purpose: entity property map and UI role map.
 - Resize edge processing uses explicit `ResizeEdge` flag comparisons (`!= ResizeEdge.NONE`) and diagonal edge sets for cursor mapping.
 - Main-window runtime flags and key/mouse handling are bound to Qt6 enum namespaces:
   `Qt.WindowType.*`, `Qt.WidgetAttribute.*`, `Qt.WindowState.*`, `Qt.ApplicationState.*`, `Qt.Key.*`, `Qt.CursorShape.*`, `Qt.MouseButton.*`, `QEvent.Type.*`.
+- Stateless helper methods are static (`_hotkey_defaults_path`, `_hotkey_overrides_path`, `_placeholder`, `_cursor_for_edge`).
 
 ## Single-Instance Bridge Properties
 - In `_SingleInstanceBridge`, incoming local-socket payload is decoded from `QByteArray` using explicit `.data()` bytes extraction before UTF-8 parsing.

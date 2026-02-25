@@ -45,7 +45,8 @@ class HotkeyEventFilter(QObject):
         event.accept()
         return True
 
-    def _to_sequence(self, event: QKeyEvent) -> str:
+    @staticmethod
+    def _to_sequence(event: QKeyEvent) -> str:
         key = event.key()
         if key in {
             Qt.Key.Key_unknown,
