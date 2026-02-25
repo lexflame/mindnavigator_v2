@@ -1,10 +1,10 @@
-"""Работа с локальной базой данных и валидаторами.
+﻿"""Р Р°Р±РѕС‚Р° СЃ Р»РѕРєР°Р»СЊРЅРѕР№ Р±Р°Р·РѕР№ РґР°РЅРЅС‹С… Рё РІР°Р»РёРґР°С‚РѕСЂР°РјРё.
 
-Входные данные:
-    Параметры моделей, SQL-запросы и значения полей сущностей.
+Р’С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ:
+    РџР°СЂР°РјРµС‚СЂС‹ РјРѕРґРµР»РµР№, SQL-Р·Р°РїСЂРѕСЃС‹ Рё Р·РЅР°С‡РµРЅРёСЏ РїРѕР»РµР№ СЃСѓС‰РЅРѕСЃС‚РµР№.
 
-Выходные данные:
-    Записи базы данных, проверенные строки и объект подключения.
+Р’С‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ:
+    Р—Р°РїРёСЃРё Р±Р°Р·С‹ РґР°РЅРЅС‹С…, РїСЂРѕРІРµСЂРµРЅРЅС‹Рµ СЃС‚СЂРѕРєРё Рё РѕР±СЉРµРєС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ.
 """
 
 from __future__ import annotations
@@ -15,12 +15,16 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Any, ClassVar, Iterable, List, Mapping, Optional, Tuple
 
-PRIORITIES = ("Low", "Medium", "High", "Отложенная")
+from .db_migrations import MigrationStep, apply_migrations
+
+PRIORITIES = ("Low", "Medium", "High", "РћС‚Р»РѕР¶РµРЅРЅР°СЏ")
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
 COLLECTION_ENTITY_TYPES = ("building", "city", "film", "game", "character", "other")
+APP_CONFIG_FILE = "app_config.json"
+APP_CONFIG_DB_PATH_KEY = "db_path"
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,53 @@ class TaskAttachmentData:
     kind: str
     ref_id: int
     created_at: str
+
+    SUPPORTED_KINDS: ClassVar[tuple[str, ...]] = (
+        "note",
+        "object",
+        "map",
+        "marker",
+        "file",
+        "image",
+        "idea",
+    )
+
+    @classmethod
+    def normalize_kind(cls, kind: str) -> str:
+        normalized = (kind or "").strip().lower()
+        if normalized not in cls.SUPPORTED_KINDS:
+            supported = ", ".join(cls.SUPPORTED_KINDS)
+            raise ValueError(f"РќРµРїРѕРґРґРµСЂР¶РёРІР°РµРјС‹Р№ С‚РёРї РІР»РѕР¶РµРЅРёСЏ: {kind!r}. РћР¶РёРґР°РµС‚СЃСЏ: {supported}.")
+        return normalized
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> "TaskAttachmentData":
+        return cls(
+            id=int(row["id"]),
+            task_id=int(row["task_id"]),
+            kind=cls.normalize_kind(str(row["kind"])),
+            ref_id=int(row["ref_id"]),
+            created_at=str(row["created_at"]),
+        )
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "TaskAttachmentData":
+        return cls(
+            id=int(payload.get("id", 0)),
+            task_id=int(payload["task_id"]),
+            kind=cls.normalize_kind(str(payload["kind"])),
+            ref_id=int(payload["ref_id"]),
+            created_at=str(payload.get("created_at", "")),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": int(self.id),
+            "task_id": int(self.task_id),
+            "kind": self.kind,
+            "ref_id": int(self.ref_id),
+            "created_at": self.created_at,
+        }
 
 
 @dataclass(frozen=True)
@@ -327,68 +378,123 @@ class WishlistItemData:
     chosen_source_id: Optional[int]
 
 
-def default_db_path() -> Path:
-    """Возвращает путь к файлу базы данных приложения."""
+def _app_base_dir() -> Path:
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ Р±Р°Р·РѕРІСѓСЋ РґРёСЂРµРєС‚РѕСЂРёСЋ РїСЂРёР»РѕР¶РµРЅРёСЏ РІ РїСЂРѕС„РёР»Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ."""
     base = Path.home() / ".mindnavigator"
     base.mkdir(parents=True, exist_ok=True)
-    return base / "mindnavigator.db"
+    return base
 
 
-def validate_title(title: str, field_name: str = "Название") -> str:
-    """Проверяет и нормализует название."""
+def _app_config_path() -> Path:
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ РІРЅРµС€РЅРµР№ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РїСЂРёР»РѕР¶РµРЅРёСЏ."""
+    return _app_base_dir() / APP_CONFIG_FILE
+
+
+def _read_app_config() -> dict:
+    """Р§РёС‚Р°РµС‚ JSON-РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ РїСЂРёР»РѕР¶РµРЅРёСЏ РёР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРіРѕ РїСЂРѕС„РёР»СЏ."""
+    config_path = _app_config_path()
+    if not config_path.exists():
+        return {}
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_app_config(config: dict) -> None:
+    """РЎРѕС…СЂР°РЅСЏРµС‚ JSON-РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ РїСЂРёР»РѕР¶РµРЅРёСЏ РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїСЂРѕС„РёР»СЊ."""
+    config_path = _app_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def get_configured_db_path() -> Optional[Path]:
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРЅС‹Р№ РїСѓС‚СЊ Р‘Р” РёР· РІРЅРµС€РЅРµР№ РєРѕРЅС„РёРіСѓСЂР°С†РёРё."""
+    config = _read_app_config()
+    raw_path = str(config.get(APP_CONFIG_DB_PATH_KEY, "")).strip()
+    if not raw_path:
+        return None
+    return Path(raw_path)
+
+
+def set_configured_db_path(path: Optional[Path | str]) -> Optional[Path]:
+    """РЎРѕС…СЂР°РЅСЏРµС‚ РїСѓС‚СЊ Р‘Р” РІРѕ РІРЅРµС€РЅРµР№ РєРѕРЅС„РёРіСѓСЂР°С†РёРё; None СЃР±СЂР°СЃС‹РІР°РµС‚ РЅР°СЃС‚СЂРѕР№РєСѓ."""
+    config = _read_app_config()
+    if path is None:
+        config.pop(APP_CONFIG_DB_PATH_KEY, None)
+        _write_app_config(config)
+        return None
+    normalized_path = Path(path)
+    config[APP_CONFIG_DB_PATH_KEY] = str(normalized_path)
+    _write_app_config(config)
+    return normalized_path
+
+
+def default_db_path() -> Path:
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ Р±Р°Р·С‹ РґР°РЅРЅС‹С… РїСЂРёР»РѕР¶РµРЅРёСЏ."""
+    configured = get_configured_db_path()
+    if configured is not None:
+        configured.parent.mkdir(parents=True, exist_ok=True)
+        return configured
+    return _app_base_dir() / "mindnavigator.db"
+
+
+def validate_title(title: str, field_name: str = "РќР°Р·РІР°РЅРёРµ") -> str:
+    """РџСЂРѕРІРµСЂСЏРµС‚ Рё РЅРѕСЂРјР°Р»РёР·СѓРµС‚ РЅР°Р·РІР°РЅРёРµ."""
     title = (title or "").strip()
     if not title:
-        raise ValueError(f"{field_name} не должно быть пустым.")
+        raise ValueError(f"{field_name} РЅРµ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
     if len(title) > MAX_TITLE_LEN:
-        raise ValueError(f"{field_name} слишком длинное (до {MAX_TITLE_LEN} символов).")
+        raise ValueError(f"{field_name} СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ (РґРѕ {MAX_TITLE_LEN} СЃРёРјРІРѕР»РѕРІ).")
     return title
 
 
 def validate_area(area: str) -> str:
-    """Проверяет и нормализует область проекта."""
+    """РџСЂРѕРІРµСЂСЏРµС‚ Рё РЅРѕСЂРјР°Р»РёР·СѓРµС‚ РѕР±Р»Р°СЃС‚СЊ РїСЂРѕРµРєС‚Р°."""
     area = (area or "").strip()
     if not area:
-        raise ValueError("Область проекта не должна быть пустой.")
+        raise ValueError("РћР±Р»Р°СЃС‚СЊ РїСЂРѕРµРєС‚Р° РЅРµ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїСѓСЃС‚РѕР№.")
     if len(area) > MAX_AREA_LEN:
-        raise ValueError(f"Область проекта слишком длинная (до {MAX_AREA_LEN} символов).")
+        raise ValueError(f"РћР±Р»Р°СЃС‚СЊ РїСЂРѕРµРєС‚Р° СЃР»РёС€РєРѕРј РґР»РёРЅРЅР°СЏ (РґРѕ {MAX_AREA_LEN} СЃРёРјРІРѕР»РѕРІ).")
     return area
 
 
 def normalize_priority(priority: str) -> str:
-    """Нормализует и проверяет значение приоритета."""
+    """РќРѕСЂРјР°Р»РёР·СѓРµС‚ Рё РїСЂРѕРІРµСЂСЏРµС‚ Р·РЅР°С‡РµРЅРёРµ РїСЂРёРѕСЂРёС‚РµС‚Р°."""
     priority = (priority or "").strip() or "Medium"
     if priority not in PRIORITIES:
-        raise ValueError("Приоритет должен быть Low, Medium, High или Отложенная.")
+        raise ValueError("РџСЂРёРѕСЂРёС‚РµС‚ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Low, Medium, High РёР»Рё РћС‚Р»РѕР¶РµРЅРЅР°СЏ.")
     return priority
 
 
 def validate_time_text(time_text: str) -> str:
-    """Проверяет формат времени."""
+    """РџСЂРѕРІРµСЂСЏРµС‚ С„РѕСЂРјР°С‚ РІСЂРµРјРµРЅРё."""
     time_text = (time_text or "").strip()
     if not time_text:
         return ""
     try:
         datetime.strptime(time_text, "%H:%M")
     except ValueError as exc:
-        raise ValueError("Время должно быть в формате HH:MM.") from exc
+        raise ValueError("Р’СЂРµРјСЏ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ РІ С„РѕСЂРјР°С‚Рµ HH:MM.") from exc
     return time_text
 
 
 def parse_project_date(value: str) -> date:
-    """Парсит дату проекта в формате dd.mm.yyyy."""
+    """РџР°СЂСЃРёС‚ РґР°С‚Сѓ РїСЂРѕРµРєС‚Р° РІ С„РѕСЂРјР°С‚Рµ dd.mm.yyyy."""
     try:
         return datetime.strptime(value, "%d.%m.%Y").date()
     except ValueError as exc:
-        raise ValueError("Дата проекта должна быть в формате dd.mm.yyyy.") from exc
+        raise ValueError("Р”Р°С‚Р° РїСЂРѕРµРєС‚Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РІ С„РѕСЂРјР°С‚Рµ dd.mm.yyyy.") from exc
 
 
 def format_project_date(value: date) -> str:
-    """Форматирует дату проекта для интерфейса."""
+    """Р¤РѕСЂРјР°С‚РёСЂСѓРµС‚ РґР°С‚Сѓ РїСЂРѕРµРєС‚Р° РґР»СЏ РёРЅС‚РµСЂС„РµР№СЃР°."""
     return value.strftime("%d.%m.%Y")
 
 
 class Database:
-    """Работает с локальной базой данных приложения."""
+    """Р Р°Р±РѕС‚Р°РµС‚ СЃ Р»РѕРєР°Р»СЊРЅРѕР№ Р±Р°Р·РѕР№ РґР°РЅРЅС‹С… РїСЂРёР»РѕР¶РµРЅРёСЏ."""
 
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else default_db_path()
@@ -398,7 +504,7 @@ class Database:
         self._init_db()
 
     def _init_db(self) -> None:
-        """Инициализирует схему и параметры SQLite."""
+        """РРЅРёС†РёР°Р»РёР·РёСЂСѓРµС‚ СЃС…РµРјСѓ Рё РїР°СЂР°РјРµС‚СЂС‹ SQLite."""
         with self._conn:
             self._conn.execute("PRAGMA journal_mode=WAL;")
             self._conn.execute("PRAGMA synchronous=NORMAL;")
@@ -412,7 +518,7 @@ class Database:
                     description TEXT NOT NULL DEFAULT '',
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                     gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -435,7 +541,7 @@ class Database:
                     area TEXT NOT NULL,
                     title TEXT NOT NULL,
                     updated TEXT NOT NULL,
-                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
                     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                     parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
                     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -823,13 +929,17 @@ class Database:
             )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
-            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
+            task_columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+            task_column_names = {row["name"] for row in task_columns}
+            if "project_id" in task_column_names:
+                self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);")
-            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
             project_columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
             project_column_names = {row["name"] for row in project_columns}
-            if "sort_order" in project_column_names:
+            if "parent_project_id" in project_column_names:
+                self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
+            if "parent_project_id" in project_column_names and "sort_order" in project_column_names:
                 self._conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"
                 )
@@ -870,6 +980,26 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_item_item ON wishlist_item(item_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_shop_parse_log_source ON shop_parse_log(source_id);")
 
+        self._run_schema_migrations()
+        self._seed_defaults()
+
+    def _run_schema_migrations(self) -> None:
+        """РџСЂРёРјРµРЅСЏРµС‚ РІРµСЂСЃРёРѕРЅРёСЂРѕРІР°РЅРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ SQLite."""
+        steps = [
+            MigrationStep(1, "core_task_project_schema", self._migration_v1_core_task_project_schema),
+            MigrationStep(2, "map_marker_and_attachment_schema", self._migration_v2_map_marker_and_attachment_schema),
+            MigrationStep(3, "collection_schema", self._migration_v3_collection_schema),
+        ]
+        apply_migrations(self._conn, steps)
+
+    def apply_schema_updates(self) -> int:
+        """РџСЂРёРјРµРЅСЏРµС‚ РІСЃРµ РґРѕСЃС‚СѓРїРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ user_version."""
+        self._run_schema_migrations()
+        row = self._conn.execute("PRAGMA user_version;").fetchone()
+        return int(row[0]) if row else 0
+
+    def _migration_v1_core_task_project_schema(self, _connection: sqlite3.Connection) -> None:
+        """РњРёРіСЂР°С†РёСЏ v1: РІС‹СЂР°РІРЅРёРІР°РЅРёРµ Р±Р°Р·РѕРІС‹С… РєРѕР»РѕРЅРѕРє Р·Р°РґР°С‡/РїСЂРѕРµРєС‚РѕРІ Рё РёРЅРґРµРєСЃРѕРІ."""
         self._ensure_task_project_column()
         self._ensure_project_extended_columns()
         self._ensure_task_description_column()
@@ -881,19 +1011,24 @@ class Database:
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_project_marker_columns()
+
+    def _migration_v2_map_marker_and_attachment_schema(self, _connection: sqlite3.Connection) -> None:
+        """РњРёРіСЂР°С†РёСЏ v2: РїСЂРёРІРµРґРµРЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ РјРµС‚РѕРє РєР°СЂС‚С‹ Рё РІР»РѕР¶РµРЅРёР№ Р·Р°РґР°С‡."""
         self._ensure_marker_attachment_columns()
         self._ensure_marker_parent_path_column()
         self._ensure_marker_image_column()
         self._ensure_map_marker_foreign_keys()
         self._ensure_task_attachment_foreign_keys()
+
+    def _migration_v3_collection_schema(self, _connection: sqlite3.Connection) -> None:
+        """РњРёРіСЂР°С†РёСЏ v3: РїСЂРёРІРµРґРµРЅРёРµ С‚Р°Р±Р»РёС† РєРѕР»Р»РµРєС†РёР№ Рё СЃРІСЏР·Р°РЅРЅС‹С… РєРѕР»РѕРЅРѕРє."""
         self._ensure_collection_category_table()
         self._ensure_collection_item_category_column()
         self._ensure_collection_item_extra_columns()
         self._ensure_collection_entry_columns()
-        self._seed_defaults()
 
     def _ensure_task_project_column(self) -> None:
-        """Добавляет колонку project_id, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ project_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "project_id" not in names:
@@ -901,7 +1036,7 @@ class Database:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);")
 
     def _ensure_project_extended_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ СЂР°СЃС€РёСЂРµРЅРЅС‹Рµ РєРѕР»РѕРЅРєРё РїСЂРѕРµРєС‚РѕРІ, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        """Р вЂќР С•Р В±Р В°Р Р†Р В»РЎРЏР ВµРЎвЂљ РЎР‚Р В°РЎРѓРЎв‚¬Р С‘РЎР‚Р ВµР Р…Р Р…РЎвЂ№Р Вµ Р С”Р С•Р В»Р С•Р Р…Р С”Р С‘ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР С•Р Р†, Р ВµРЎРѓР В»Р С‘ Р С•Р Р…Р С‘ Р С•РЎвЂљРЎРѓРЎС“РЎвЂљРЎРѓРЎвЂљР Р†РЎС“РЎР‹РЎвЂљ."""
         columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
         names = {row["name"] for row in columns}
         additions = {
@@ -924,7 +1059,7 @@ class Database:
             self._normalize_project_sort_order()
 
     def _normalize_project_sort_order(self) -> None:
-        """Нормализует порядок проектов внутри каждого родителя."""
+        """РќРѕСЂРјР°Р»РёР·СѓРµС‚ РїРѕСЂСЏРґРѕРє РїСЂРѕРµРєС‚РѕРІ РІРЅСѓС‚СЂРё РєР°Р¶РґРѕРіРѕ СЂРѕРґРёС‚РµР»СЏ."""
         rows = self._conn.execute(
             """
             SELECT id, parent_project_id, COALESCE(sort_order, 0) AS sort_order
@@ -943,7 +1078,7 @@ class Database:
                 )
 
     def _next_project_sort_order(self, parent_project_id: Optional[int], exclude_id: Optional[int] = None) -> int:
-        """Возвращает следующий индекс сортировки для дочерних проектов."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃР»РµРґСѓСЋС‰РёР№ РёРЅРґРµРєСЃ СЃРѕСЂС‚РёСЂРѕРІРєРё РґР»СЏ РґРѕС‡РµСЂРЅРёС… РїСЂРѕРµРєС‚РѕРІ."""
         if exclude_id is None:
             row = self._conn.execute(
                 """
@@ -966,7 +1101,7 @@ class Database:
         return int(row["max_order"]) + 1 if row is not None else 0
 
     def _ensure_task_description_column(self) -> None:
-        """Добавляет колонку description, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ description, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "description" not in names:
@@ -974,7 +1109,7 @@ class Database:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT '';")
 
     def _ensure_task_parent_column(self) -> None:
-        """Добавляет колонку parent_id, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ parent_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "parent_id" not in names:
@@ -982,7 +1117,7 @@ class Database:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id);")
 
     def _ensure_task_recurrence_columns(self) -> None:
-        """Добавляет колонки периодичности задачи, если они отсутствуют."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚Рё Р·Р°РґР°С‡Рё, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -994,7 +1129,7 @@ class Database:
                 )
 
     def _ensure_task_marker_columns(self) -> None:
-        """Добавляет колонки визуального маркера задачи, если они отсутствуют."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° Р·Р°РґР°С‡Рё, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -1004,7 +1139,7 @@ class Database:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
 
     def _ensure_task_completion_delay_column(self) -> None:
-        """Добавляет колонку расхождения по времени выполнения, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ СЂР°СЃС…РѕР¶РґРµРЅРёСЏ РїРѕ РІСЂРµРјРµРЅРё РІС‹РїРѕР»РЅРµРЅРёСЏ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "completion_delay_minutes" not in names:
@@ -1014,7 +1149,7 @@ class Database:
                 )
 
     def _ensure_task_gantt_columns(self) -> None:
-        """Добавляет колонки оценок Ганта, если они отсутствуют."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РѕС†РµРЅРѕРє Р“Р°РЅС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -1028,7 +1163,7 @@ class Database:
                 )
 
     def _ensure_project_marker_columns(self) -> None:
-        """Добавляет колонки визуального маркера проекта, если они отсутствуют."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° РїСЂРѕРµРєС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
         columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -1038,7 +1173,7 @@ class Database:
                 self._conn.execute("ALTER TABLE projects ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
 
     def _ensure_priority_values(self) -> None:
-        """Обновляет ограничения приоритета до актуального списка значений."""
+        """РћР±РЅРѕРІР»СЏРµС‚ РѕРіСЂР°РЅРёС‡РµРЅРёСЏ РїСЂРёРѕСЂРёС‚РµС‚Р° РґРѕ Р°РєС‚СѓР°Р»СЊРЅРѕРіРѕ СЃРїРёСЃРєР° Р·РЅР°С‡РµРЅРёР№."""
         if (
             self._priority_constraint_is_current("tasks")
             and self._priority_constraint_is_current("projects")
@@ -1057,7 +1192,7 @@ class Database:
             self._ensure_priority_indexes()
 
     def _task_project_fk_needs_repair(self) -> bool:
-        """Проверяет, что project_id в tasks ссылается на таблицу projects."""
+        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ project_id РІ tasks СЃСЃС‹Р»Р°РµС‚СЃСЏ РЅР° С‚Р°Р±Р»РёС†Сѓ projects."""
         rows = self._conn.execute("PRAGMA foreign_key_list(tasks);").fetchall()
         project_refs = [row for row in rows if row["from"] == "project_id"]
         if not project_refs:
@@ -1065,7 +1200,7 @@ class Database:
         return any(row["table"] != "projects" for row in project_refs)
 
     def _repair_task_project_fk(self) -> None:
-        """Исправляет внешние ключи tasks.project_id, если они ссылаются на отсутствующую таблицу."""
+        """РСЃРїСЂР°РІР»СЏРµС‚ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё tasks.project_id, РµСЃР»Рё РѕРЅРё СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰СѓСЋ С‚Р°Р±Р»РёС†Сѓ."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1085,7 +1220,7 @@ class Database:
             self._ensure_priority_indexes()
 
     def _map_marker_fk_needs_repair(self) -> bool:
-        """Проверяет, что внешние ключи map_markers не ссылаются на отсутствующие таблицы."""
+        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё map_markers РЅРµ СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РёРµ С‚Р°Р±Р»РёС†С‹."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1098,7 +1233,7 @@ class Database:
         return any(row["table"] not in tables for row in rows)
 
     def _ensure_map_marker_foreign_keys(self) -> None:
-        """Исправляет устаревшие внешние ключи map_markers, если таблица-источник отсутствует."""
+        """РСЃРїСЂР°РІР»СЏРµС‚ СѓСЃС‚Р°СЂРµРІС€РёРµ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё map_markers, РµСЃР»Рё С‚Р°Р±Р»РёС†Р°-РёСЃС‚РѕС‡РЅРёРє РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         if not self._map_marker_fk_needs_repair():
             return
         with self._conn:
@@ -1108,7 +1243,7 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
 
     def _task_attachment_fk_needs_repair(self) -> bool:
-        """Проверяет, что внешние ключи task_attachments ссылаются на tasks."""
+        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё task_attachments СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° tasks."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1121,7 +1256,7 @@ class Database:
         return any(row["table"] not in tables or row["table"] != "tasks" for row in rows)
 
     def _ensure_task_attachment_foreign_keys(self) -> None:
-        """Исправляет устаревшие внешние ключи task_attachments, если таблица-источник отсутствует."""
+        """РСЃРїСЂР°РІР»СЏРµС‚ СѓСЃС‚Р°СЂРµРІС€РёРµ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё task_attachments, РµСЃР»Рё С‚Р°Р±Р»РёС†Р°-РёСЃС‚РѕС‡РЅРёРє РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         if not self._task_attachment_fk_needs_repair():
             return
         with self._conn:
@@ -1304,7 +1439,7 @@ class Database:
         ).fetchone()
         if not row:
             return True
-        return "Отложенная" in (row["sql"] or "")
+        return "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" in (row["sql"] or "")
 
     def _rebuild_tasks_table(self) -> None:
         self._conn.execute("ALTER TABLE tasks RENAME TO tasks_old;")
@@ -1316,7 +1451,7 @@ class Database:
                 description TEXT NOT NULL DEFAULT '',
                 day TEXT NOT NULL,
                 time_text TEXT NOT NULL DEFAULT '',
-                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                 gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -1349,6 +1484,7 @@ class Database:
         self._rebuild_task_attachments_table()
 
     def _rebuild_projects_table(self) -> None:
+        self._conn.execute("ALTER TABLE projects RENAME TO projects_old;")
         self._conn.execute(
             """
             CREATE TABLE projects (
@@ -1356,7 +1492,7 @@ class Database:
                 area TEXT NOT NULL,
                 title TEXT NOT NULL,
                 updated TEXT NOT NULL,
-                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'РћС‚Р»РѕР¶РµРЅРЅР°СЏ')),
                 archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                 parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1370,6 +1506,53 @@ class Database:
             );
             """
         )
+        old_columns = {
+            row["name"] for row in self._conn.execute("PRAGMA table_info(projects_old);").fetchall()
+        }
+
+        def _source(column: str, fallback: str) -> str:
+            return column if column in old_columns else fallback
+
+        self._conn.execute(
+            f"""
+            INSERT INTO projects (
+                id,
+                area,
+                title,
+                updated,
+                priority,
+                archived,
+                parent_project_id,
+                sort_order,
+                default_task_priority,
+                force_recurrence_kind,
+                linked_map_id,
+                linked_note_id,
+                linked_object_id,
+                marker_color,
+                marker_theme
+            )
+            SELECT
+                id,
+                area,
+                title,
+                updated,
+                priority,
+                archived,
+                {_source("parent_project_id", "NULL")},
+                COALESCE({_source("sort_order", "0")}, 0),
+                COALESCE({_source("default_task_priority", "''")}, ''),
+                COALESCE({_source("force_recurrence_kind", "''")}, ''),
+                {_source("linked_map_id", "NULL")},
+                {_source("linked_note_id", "NULL")},
+                {_source("linked_object_id", "NULL")},
+                COALESCE({_source("marker_color", "''")}, ''),
+                COALESCE({_source("marker_theme", "''")}, '')
+            FROM projects_old;
+            """
+        )
+        self._conn.execute("DROP TABLE projects_old;")
+        self._normalize_project_sort_order()
 
     def _ensure_priority_indexes(self) -> None:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
@@ -1413,7 +1596,7 @@ class Database:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
 
     def _ensure_map_tiles_path_column(self) -> None:
-        """Добавляет колонку tiles_path, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ tiles_path, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(maps);").fetchall()
         names = {row["name"] for row in columns}
         if "tiles_path" not in names:
@@ -1421,7 +1604,7 @@ class Database:
                 self._conn.execute("ALTER TABLE maps ADD COLUMN tiles_path TEXT NOT NULL DEFAULT '';")
 
     def _ensure_marker_attachment_columns(self) -> None:
-        """Добавляет новые колонки для вложений маркера карты."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РЅРѕРІС‹Рµ РєРѕР»РѕРЅРєРё РґР»СЏ РІР»РѕР¶РµРЅРёР№ РјР°СЂРєРµСЂР° РєР°СЂС‚С‹."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         additions = {
@@ -1468,7 +1651,7 @@ class Database:
                     )
 
     def _ensure_marker_image_column(self) -> None:
-        """Добавляет колонку превью для маркеров, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ РїСЂРµРІСЊСЋ РґР»СЏ РјР°СЂРєРµСЂРѕРІ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         if "image_path" not in names:
@@ -1476,7 +1659,7 @@ class Database:
                 self._conn.execute("ALTER TABLE map_markers ADD COLUMN image_path TEXT NOT NULL DEFAULT '';")
 
     def _ensure_marker_parent_path_column(self) -> None:
-        """Добавляет колонку родительского каталога для маркеров, если она отсутствует."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ СЂРѕРґРёС‚РµР»СЊСЃРєРѕРіРѕ РєР°С‚Р°Р»РѕРіР° РґР»СЏ РјР°СЂРєРµСЂРѕРІ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         if "parent_path" not in names:
@@ -1484,7 +1667,7 @@ class Database:
                 self._conn.execute("ALTER TABLE map_markers ADD COLUMN parent_path TEXT NOT NULL DEFAULT '';")
 
     def _seed_defaults(self) -> None:
-        """Добавляет демонстрационные данные, если база пустая."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РґРµРјРѕРЅСЃС‚СЂР°С†РёРѕРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ, РµСЃР»Рё Р±Р°Р·Р° РїСѓСЃС‚Р°СЏ."""
         cur = self._conn.execute("SELECT COUNT(*) FROM tasks;")
         if cur.fetchone()[0] == 0:
             self._seed_tasks()
@@ -1510,13 +1693,13 @@ class Database:
         days = [today - timedelta(days=1), today, today + timedelta(days=1), today + timedelta(days=2)]
         examples = [
             (days[0], "13:00", "BorderDev", "High", 0),
-            (days[0], "14:00", "Wiki → Picture", "High", 0),
-            (days[1], "15:00", "Подумать над DragAndDrop для списка задач в режиме план", "Medium", 0),
-            (days[1], "16:00", "Билеты ПДД", "Low", 0),
-            (days[1], "17:00", "Просмотреть FAV", "Medium", 0),
-            (days[1], "19:00", "Просмотреть записи во всех каналах Избранного", "Medium", 0),
-            (days[2], "20:00", "SimCity Societies → KitBash → Здания усадьбы. Здание школы. Многоэтажка…", "High", 0),
-            (days[3], "22:00", "Stygian · Reign of the Old Ones", "High", 0),
+            (days[0], "14:00", "Wiki в†’ Picture", "High", 0),
+            (days[1], "15:00", "РџРѕРґСѓРјР°С‚СЊ РЅР°Рґ DragAndDrop РґР»СЏ СЃРїРёСЃРєР° Р·Р°РґР°С‡ РІ СЂРµР¶РёРјРµ РїР»Р°РЅ", "Medium", 0),
+            (days[1], "16:00", "Р‘РёР»РµС‚С‹ РџР”Р”", "Low", 0),
+            (days[1], "17:00", "РџСЂРѕСЃРјРѕС‚СЂРµС‚СЊ FAV", "Medium", 0),
+            (days[1], "19:00", "РџСЂРѕСЃРјРѕС‚СЂРµС‚СЊ Р·Р°РїРёСЃРё РІРѕ РІСЃРµС… РєР°РЅР°Р»Р°С… РР·Р±СЂР°РЅРЅРѕРіРѕ", "Medium", 0),
+            (days[2], "20:00", "SimCity Societies в†’ KitBash в†’ Р—РґР°РЅРёСЏ СѓСЃР°РґСЊР±С‹. Р—РґР°РЅРёРµ С€РєРѕР»С‹. РњРЅРѕРіРѕСЌС‚Р°Р¶РєР°вЂ¦", "High", 0),
+            (days[3], "22:00", "Stygian В· Reign of the Old Ones", "High", 0),
             (days[3], "23:00", "The Council", "High", 1),
         ]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1533,12 +1716,12 @@ class Database:
     def _seed_projects(self) -> None:
         examples = [
             ("SPACE", "MindNavigator v2", "06.01.2026", "High", 0),
-            ("SPACE", "Синхронизация FastAPI + S3", "05.01.2026", "Medium", 0),
-            ("TACMap", "Редактор слоёв / маркеров", "03.01.2026", "High", 0),
-            ("MakerTask", "ProjectsWorkspace UI (прототип)", "02.10.2025", "Medium", 0),
-            ("MakerTask", "Drag&Drop планировщика", "01.10.2025", "High", 1),
-            ("Wiki", "Cities: Skylines → DokuWiki", "22.07.2025", "Low", 0),
-            ("Misc", "Сбор референсов / moodboard", "01.01.2026", "Low", 0),
+            ("SPACE", "РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ FastAPI + S3", "05.01.2026", "Medium", 0),
+            ("TACMap", "Р РµРґР°РєС‚РѕСЂ СЃР»РѕС‘РІ / РјР°СЂРєРµСЂРѕРІ", "03.01.2026", "High", 0),
+            ("MakerTask", "ProjectsWorkspace UI (РїСЂРѕС‚РѕС‚РёРї)", "02.10.2025", "Medium", 0),
+            ("MakerTask", "Drag&Drop РїР»Р°РЅРёСЂРѕРІС‰РёРєР°", "01.10.2025", "High", 1),
+            ("Wiki", "Cities: Skylines в†’ DokuWiki", "22.07.2025", "Low", 0),
+            ("Misc", "РЎР±РѕСЂ СЂРµС„РµСЂРµРЅСЃРѕРІ / moodboard", "01.01.2026", "Low", 0),
         ]
         with self._conn:
             for idx, (area, title, updated, priority, archived) in enumerate(examples):
@@ -1552,9 +1735,9 @@ class Database:
 
     def _seed_maps(self) -> None:
         examples = [
-            ("Northern Ridge", "Точки обзора и маршруты патрулей.", "MindNavigator v2", "", 18, 24),
-            ("Sector 12", "Зоны контроля и минные поля.", "TACMap", "", 32, 32),
-            ("Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", "", 12, 20),
+            ("Northern Ridge", "РўРѕС‡РєРё РѕР±Р·РѕСЂР° Рё РјР°СЂС€СЂСѓС‚С‹ РїР°С‚СЂСѓР»РµР№.", "MindNavigator v2", "", 18, 24),
+            ("Sector 12", "Р—РѕРЅС‹ РєРѕРЅС‚СЂРѕР»СЏ Рё РјРёРЅРЅС‹Рµ РїРѕР»СЏ.", "TACMap", "", 32, 32),
+            ("Green Hills", "РђСЂС‚РёР»Р»РµСЂРёР№СЃРєРёРµ РїРѕР·РёС†РёРё Рё РЅР°Р±Р»СЋРґР°С‚РµР»Рё.", "Wiki", "", 12, 20),
         ]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -1571,8 +1754,8 @@ class Database:
         now = datetime.now(timezone.utc)
         examples = [
             (
-                "Онбординг продукта",
-                "Ключевые шаги запуска, список рисков и список блокеров для первой версии...",
+                "РћРЅР±РѕСЂРґРёРЅРі РїСЂРѕРґСѓРєС‚Р°",
+                "РљР»СЋС‡РµРІС‹Рµ С€Р°РіРё Р·Р°РїСѓСЃРєР°, СЃРїРёСЃРѕРє СЂРёСЃРєРѕРІ Рё СЃРїРёСЃРѕРє Р±Р»РѕРєРµСЂРѕРІ РґР»СЏ РїРµСЂРІРѕР№ РІРµСЂСЃРёРё...",
                 ["product", "launch", "priority"],
                 now - timedelta(hours=2),
                 "MindNavigator",
@@ -1581,8 +1764,8 @@ class Database:
                 False,
             ),
             (
-                "Исследование пользователей",
-                "Сводка интервью: болевые точки, привычки ведения заметок, ожидания от поиска...",
+                "РСЃСЃР»РµРґРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№",
+                "РЎРІРѕРґРєР° РёРЅС‚РµСЂРІСЊСЋ: Р±РѕР»РµРІС‹Рµ С‚РѕС‡РєРё, РїСЂРёРІС‹С‡РєРё РІРµРґРµРЅРёСЏ Р·Р°РјРµС‚РѕРє, РѕР¶РёРґР°РЅРёСЏ РѕС‚ РїРѕРёСЃРєР°...",
                 ["research", "ux"],
                 now - timedelta(days=1, hours=3),
                 "Discovery",
@@ -1591,8 +1774,8 @@ class Database:
                 False,
             ),
             (
-                "Архитектура синхронизации",
-                "Контуры API: FastAPI, SQLite, оффлайн-очереди, форматы событий...",
+                "РђСЂС…РёС‚РµРєС‚СѓСЂР° СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё",
+                "РљРѕРЅС‚СѓСЂС‹ API: FastAPI, SQLite, РѕС„С„Р»Р°Р№РЅ-РѕС‡РµСЂРµРґРё, С„РѕСЂРјР°С‚С‹ СЃРѕР±С‹С‚РёР№...",
                 ["backend", "sync"],
                 now - timedelta(days=2),
                 "Platform",
@@ -1601,8 +1784,8 @@ class Database:
                 True,
             ),
             (
-                "UI-референсы",
-                "Obsidian + Notion + IDE: контраст, карточки, минимализм, быстрые экшены...",
+                "UI-СЂРµС„РµСЂРµРЅСЃС‹",
+                "Obsidian + Notion + IDE: РєРѕРЅС‚СЂР°СЃС‚, РєР°СЂС‚РѕС‡РєРё, РјРёРЅРёРјР°Р»РёР·Рј, Р±С‹СЃС‚СЂС‹Рµ СЌРєС€РµРЅС‹...",
                 ["ui", "references"],
                 now - timedelta(days=3, hours=5),
                 "Design",
@@ -1611,8 +1794,8 @@ class Database:
                 False,
             ),
             (
-                "Чеклист релиза",
-                "Checklist: тесты, документация, скриншоты, релизные заметки...",
+                "Р§РµРєР»РёСЃС‚ СЂРµР»РёР·Р°",
+                "Checklist: С‚РµСЃС‚С‹, РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ, СЃРєСЂРёРЅС€РѕС‚С‹, СЂРµР»РёР·РЅС‹Рµ Р·Р°РјРµС‚РєРё...",
                 ["release", "ops"],
                 now - timedelta(days=4),
                 "Delivery",
@@ -1643,7 +1826,7 @@ class Database:
                 )
 
     def fetch_tasks(self) -> List[TaskData]:
-        """Возвращает список всех задач."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІСЃРµС… Р·Р°РґР°С‡."""
         rows = self._conn.execute(
             """
             SELECT
@@ -1703,18 +1886,18 @@ class Database:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         examples = [
             (
-                "Центральный офис",
-                "Город / Административные",
-                "Бизнес-центр",
-                "В эксплуатации",
-                "Главный офис с зонами приема и переговорными.",
+                "Р¦РµРЅС‚СЂР°Р»СЊРЅС‹Р№ РѕС„РёСЃ",
+                "Р“РѕСЂРѕРґ / РђРґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅС‹Рµ",
+                "Р‘РёР·РЅРµСЃ-С†РµРЅС‚СЂ",
+                "Р’ СЌРєСЃРїР»СѓР°С‚Р°С†РёРё",
+                "Р“Р»Р°РІРЅС‹Р№ РѕС„РёСЃ СЃ Р·РѕРЅР°РјРё РїСЂРёРµРјР° Рё РїРµСЂРµРіРѕРІРѕСЂРЅС‹РјРё.",
             ),
             (
-                "Складская зона Север",
-                "Логистика",
-                "Склад",
-                "Проектирование",
-                "Площадка под распределительный центр и технологические блоки.",
+                "РЎРєР»Р°РґСЃРєР°СЏ Р·РѕРЅР° РЎРµРІРµСЂ",
+                "Р›РѕРіРёСЃС‚РёРєР°",
+                "РЎРєР»Р°Рґ",
+                "РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ",
+                "РџР»РѕС‰Р°РґРєР° РїРѕРґ СЂР°СЃРїСЂРµРґРµР»РёС‚РµР»СЊРЅС‹Р№ С†РµРЅС‚СЂ Рё С‚РµС…РЅРѕР»РѕРіРёС‡РµСЃРєРёРµ Р±Р»РѕРєРё.",
             ),
         ]
         with self._conn:
@@ -1727,197 +1910,6 @@ class Database:
                     (title, catalog, object_type, status, description, now, now),
                 )
 
-    def create_task(
-        self,
-        title: str,
-        description: str,
-        day: date,
-        time_text: str,
-        priority: str,
-        project_id: Optional[int] = None,
-        parent_id: Optional[int] = None,
-        recurrence_kind: str = "",
-        recurrence_interval: int = 1,
-        marker_color: str = "",
-        marker_theme: str = "",
-    ) -> TaskData:
-        """Создает задачу в базе данных."""
-        title = validate_title(title)
-        description = (description or "").strip()
-        time_text = validate_time_text(time_text)
-        priority = normalize_priority(priority)
-        recurrence_kind = (recurrence_kind or "").strip().lower()
-        recurrence_interval = max(1, int(recurrence_interval or 1))
-        marker_color = (marker_color or "").strip()
-        marker_theme = (marker_theme or "").strip().lower()
-        if not isinstance(day, date):
-            raise ValueError("Дата задачи некорректна.")
-
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with self._conn:
-            cur = self._conn.execute(
-                """
-                INSERT INTO tasks (
-                    title, description, day, time_text, priority, done, project_id, parent_id,
-                    recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                (
-                    title,
-                    description,
-                    day.isoformat(),
-                    time_text,
-                    priority,
-                    project_id,
-                    parent_id,
-                    recurrence_kind,
-                    recurrence_interval,
-                    marker_color,
-                    marker_theme,
-                    now,
-                    now,
-                ),
-            )
-        project_title = ""
-        project_area = ""
-        if project_id is not None:
-            row = self._conn.execute(
-                "SELECT area, title FROM projects WHERE id = ?;",
-                (project_id,),
-            ).fetchone()
-            if row:
-                project_area = row["area"]
-                project_title = row["title"]
-        return TaskData(
-            cur.lastrowid,
-            day,
-            time_text,
-            title,
-            description,
-            priority,
-            False,
-            project_id,
-            project_title,
-            project_area,
-            parent_id,
-            recurrence_kind,
-            recurrence_interval,
-            0,
-            0,
-            marker_color,
-            marker_theme,
-        )
-
-    def update_task(
-        self,
-        task_id: int,
-        title: str,
-        description: str,
-        day: date,
-        time_text: str,
-        priority: str,
-        done: bool,
-        project_id: Optional[int] = None,
-        parent_id: Optional[int] = None,
-        recurrence_kind: str = "",
-        recurrence_interval: int = 1,
-        marker_color: str = "",
-        marker_theme: str = "",
-    ) -> TaskData:
-        """Обновляет задачу."""
-        prev_row = self._conn.execute(
-            "SELECT priority FROM tasks WHERE id = ?;",
-            (task_id,),
-        ).fetchone()
-        prev_priority = prev_row["priority"] if prev_row else priority
-        title = validate_title(title)
-        description = (description or "").strip()
-        time_text = validate_time_text(time_text)
-        priority = normalize_priority(priority)
-        recurrence_kind = (recurrence_kind or "").strip().lower()
-        recurrence_interval = max(1, int(recurrence_interval or 1))
-        marker_color = (marker_color or "").strip()
-        marker_theme = (marker_theme or "").strip().lower()
-        if not isinstance(day, date):
-            raise ValueError("Дата задачи некорректна.")
-
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-        with self._conn:
-            self._conn.execute(
-                """
-                UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
-                    recurrence_kind = ?, recurrence_interval = ?, marker_color = ?, marker_theme = ?, updated_at = ?
-                WHERE id = ?;
-                """,
-                (
-                    title,
-                    description,
-                    day.isoformat(),
-                    time_text,
-                    priority,
-                    int(done),
-                    project_id,
-                    parent_id,
-                    recurrence_kind,
-                    recurrence_interval,
-                    marker_color,
-                    marker_theme,
-                    now,
-                    task_id,
-                ),
-            )
-            cascade_priority = None
-            if priority == "Отложенная" and prev_priority != "Отложенная":
-                cascade_priority = priority
-            elif prev_priority == "Отложенная" and priority != "Отложенная":
-                cascade_priority = priority
-            if cascade_priority is not None:
-                self._conn.execute(
-                    """
-                    WITH RECURSIVE descendants(id) AS (
-                        SELECT id FROM tasks WHERE parent_id = ?
-                        UNION ALL
-                        SELECT t.id FROM tasks t
-                        JOIN descendants d ON t.parent_id = d.id
-                    )
-                    UPDATE tasks
-                    SET priority = ?, updated_at = ?
-                    WHERE id IN (SELECT id FROM descendants);
-                    """,
-                    (task_id, cascade_priority, now),
-                )
-        project_title = ""
-        project_area = ""
-        if project_id is not None:
-            row = self._conn.execute(
-                "SELECT area, title FROM projects WHERE id = ?;",
-                (project_id,),
-            ).fetchone()
-            if row:
-                project_area = row["area"]
-                project_title = row["title"]
-        return TaskData(
-            task_id,
-            day,
-            time_text,
-            title,
-            description,
-            priority,
-            bool(done),
-            project_id,
-            project_title,
-            project_area,
-            parent_id,
-            recurrence_kind,
-            recurrence_interval,
-            0,
-            0,
-            marker_color,
-            marker_theme,
-        )
 
     def create_task(
         self,
@@ -1933,7 +1925,7 @@ class Database:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
-        """Создает задачу в базе данных."""
+        """РЎРѕР·РґР°РµС‚ Р·Р°РґР°С‡Сѓ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
@@ -1943,7 +1935,7 @@ class Database:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
-            raise ValueError("Дата задачи некорректна.")
+            raise ValueError("Р”Р°С‚Р° Р·Р°РґР°С‡Рё РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
 
         project_title = ""
         project_area = ""
@@ -1953,7 +1945,7 @@ class Database:
                 """
                 SELECT
                     p.area, p.title, pp.title AS parent_title, p.default_task_priority, p.force_recurrence_kind,
-                    linked_map_id, linked_note_id, linked_object_id
+                    p.linked_map_id, p.linked_note_id, p.linked_object_id
                 FROM projects p
                 LEFT JOIN projects pp ON pp.id = p.parent_project_id
                 WHERE p.id = ?;
@@ -2007,23 +1999,24 @@ class Database:
         for kind, ref_id in project_links:
             self.add_task_attachment(cur.lastrowid, kind, ref_id)
         return TaskData(
-            cur.lastrowid,
-            day,
-            time_text,
-            title,
-            description,
-            priority,
-            False,
-            project_id,
-            project_title,
-            project_area,
-            parent_id,
-            recurrence_kind,
-            recurrence_interval,
-            0,
-            0,
-            marker_color,
-            marker_theme,
+            id=cur.lastrowid,
+            day=day,
+            time_text=time_text,
+            title=title,
+            description=description,
+            priority=priority,
+            done=False,
+            project_id=project_id,
+            project_title=project_title,
+            project_area=project_area,
+            parent_id=parent_id,
+            recurrence_kind=recurrence_kind,
+            recurrence_interval=recurrence_interval,
+            completion_delay_minutes=0,
+            gantt_estimate_minutes=0,
+            gantt_forecasted=False,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
 
     def update_task(
@@ -2042,7 +2035,7 @@ class Database:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
-        """Обновляет задачу."""
+        """РћР±РЅРѕРІР»СЏРµС‚ Р·Р°РґР°С‡Сѓ."""
         prev_row = self._conn.execute(
             "SELECT priority FROM tasks WHERE id = ?;",
             (task_id,),
@@ -2057,7 +2050,7 @@ class Database:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
-            raise ValueError("Дата задачи некорректна.")
+            raise ValueError("Р”Р°С‚Р° Р·Р°РґР°С‡Рё РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
 
         project_title = ""
         project_area = ""
@@ -2126,9 +2119,9 @@ class Database:
                 ),
             )
             cascade_priority = None
-            if priority == "Отложенная" and prev_priority != "Отложенная":
+            if priority == "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" and prev_priority != "РћС‚Р»РѕР¶РµРЅРЅР°СЏ":
                 cascade_priority = priority
-            elif prev_priority == "Отложенная" and priority != "Отложенная":
+            elif prev_priority == "РћС‚Р»РѕР¶РµРЅРЅР°СЏ" and priority != "РћС‚Р»РѕР¶РµРЅРЅР°СЏ":
                 cascade_priority = priority
             if cascade_priority is not None:
                 self._conn.execute(
@@ -2148,27 +2141,28 @@ class Database:
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         return TaskData(
-            task_id,
-            day,
-            time_text,
-            title,
-            description,
-            priority,
-            bool(done),
-            project_id,
-            project_title,
-            project_area,
-            parent_id,
-            recurrence_kind,
-            recurrence_interval,
-            0,
-            0,
-            marker_color,
-            marker_theme,
+            id=task_id,
+            day=day,
+            time_text=time_text,
+            title=title,
+            description=description,
+            priority=priority,
+            done=bool(done),
+            project_id=project_id,
+            project_title=project_title,
+            project_area=project_area,
+            parent_id=parent_id,
+            recurrence_kind=recurrence_kind,
+            recurrence_interval=recurrence_interval,
+            completion_delay_minutes=0,
+            gantt_estimate_minutes=0,
+            gantt_forecasted=False,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
-        """Обновляет статус выполнения задачи."""
+        """РћР±РЅРѕРІР»СЏРµС‚ СЃС‚Р°С‚СѓСЃ РІС‹РїРѕР»РЅРµРЅРёСЏ Р·Р°РґР°С‡Рё."""
         row = self._conn.execute(
             """
             SELECT
@@ -2258,7 +2252,7 @@ class Database:
                 )
 
     def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:
-        """Сохраняет оценку времени задачи для режима диаграммы Ганта."""
+        """РЎРѕС…СЂР°РЅСЏРµС‚ РѕС†РµРЅРєСѓ РІСЂРµРјРµРЅРё Р·Р°РґР°С‡Рё РґР»СЏ СЂРµР¶РёРјР° РґРёР°РіСЂР°РјРјС‹ Р“Р°РЅС‚Р°."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         safe_minutes = max(0, int(minutes or 0))
         with self._conn:
@@ -2297,7 +2291,7 @@ class Database:
         return date(year, month, day)
 
     def delete_task(self, task_id: int) -> None:
-        """Удаляет задачу по id."""
+        """РЈРґР°Р»СЏРµС‚ Р·Р°РґР°С‡Сѓ РїРѕ id."""
         with self._conn:
             self._conn.execute(
                 """
@@ -2313,7 +2307,8 @@ class Database:
             )
 
     def fetch_task_attachments(self, task_id: int) -> List[TaskAttachmentData]:
-        """Возвращает список вложений задачи."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІР»РѕР¶РµРЅРёР№ Р·Р°РґР°С‡Рё."""
+        task_id = int(task_id)
         rows = self._conn.execute(
             """
             SELECT id, task_id, kind, ref_id, created_at
@@ -2323,21 +2318,17 @@ class Database:
             """,
             (task_id,),
         ).fetchall()
-        attachments = []
-        for row in rows:
-            attachments.append(
-                TaskAttachmentData(
-                    id=row["id"],
-                    task_id=row["task_id"],
-                    kind=row["kind"],
-                    ref_id=row["ref_id"],
-                    created_at=row["created_at"],
-                )
-            )
-        return attachments
+        return [TaskAttachmentData.from_row(row) for row in rows]
 
     def add_task_attachment(self, task_id: int, kind: str, ref_id: int) -> TaskAttachmentData:
-        """Добавляет вложение к задаче."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РІР»РѕР¶РµРЅРёРµ Рє Р·Р°РґР°С‡Рµ."""
+        task_id = int(task_id)
+        if task_id <= 0:
+            raise ValueError("РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°РґР°С‡Рё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Рј.")
+        ref_id = int(ref_id)
+        if ref_id <= 0:
+            raise ValueError("РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РІР»РѕР¶РµРЅРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Рј.")
+        kind = TaskAttachmentData.normalize_kind(kind)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -2355,21 +2346,15 @@ class Database:
             """,
             (task_id, kind, ref_id),
         ).fetchone()
-        return TaskAttachmentData(
-            id=row["id"],
-            task_id=row["task_id"],
-            kind=row["kind"],
-            ref_id=row["ref_id"],
-            created_at=row["created_at"],
-        )
+        return TaskAttachmentData.from_row(row)
 
     def delete_task_attachment(self, attachment_id: int) -> None:
-        """Удаляет вложение задачи."""
+        """РЈРґР°Р»СЏРµС‚ РІР»РѕР¶РµРЅРёРµ Р·Р°РґР°С‡Рё."""
         with self._conn:
             self._conn.execute("DELETE FROM task_attachments WHERE id = ?;", (attachment_id,))
 
     def fetch_projects(self) -> List[ProjectData]:
-        """Возвращает список проектов."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РїСЂРѕРµРєС‚РѕРІ."""
         rows = self._conn.execute(
             """
             SELECT
@@ -2422,18 +2407,18 @@ class Database:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
-        """Создает проект в базе данных."""
+        """РЎРѕР·РґР°РµС‚ РїСЂРѕРµРєС‚ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
         area = validate_area(area)
-        title = validate_title(title, field_name="Название проекта")
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РїСЂРѕРµРєС‚Р°")
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
-            raise ValueError("Некорректная периодичность проекта.")
+            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°.")
         if not isinstance(updated, date):
-            raise ValueError("Дата проекта некорректна.")
+            raise ValueError("Р”Р°С‚Р° РїСЂРѕРµРєС‚Р° РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
 
         if sort_order is None:
             sort_order = self._next_project_sort_order(parent_project_id)
@@ -2484,32 +2469,6 @@ class Database:
             marker_theme=marker_theme,
         )
 
-    def update_project(
-        self,
-        project_id: int,
-        area: str,
-        title: str,
-        updated: date,
-        priority: str,
-        archived: bool,
-    ) -> ProjectData:
-        """Обновляет данные проекта."""
-        area = validate_area(area)
-        title = validate_title(title, field_name="Название проекта")
-        priority = normalize_priority(priority)
-        if not isinstance(updated, date):
-            raise ValueError("Дата проекта некорректна.")
-
-        with self._conn:
-            self._conn.execute(
-                """
-                UPDATE projects
-                SET area = ?, title = ?, updated = ?, priority = ?, archived = ?
-                WHERE id = ?;
-                """,
-                (area, title, updated.isoformat(), priority, int(archived), project_id),
-            )
-        return ProjectData(project_id, area, title, updated, priority, bool(archived))
 
     def update_project(
         self,
@@ -2529,18 +2488,18 @@ class Database:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
-        """Обновляет данные проекта."""
+        """РћР±РЅРѕРІР»СЏРµС‚ РґР°РЅРЅС‹Рµ РїСЂРѕРµРєС‚Р°."""
         area = validate_area(area)
-        title = validate_title(title, field_name="Название проекта")
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РїСЂРѕРµРєС‚Р°")
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
-            raise ValueError("Некорректная периодичность проекта.")
+            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°.")
         if not isinstance(updated, date):
-            raise ValueError("Дата проекта некорректна.")
+            raise ValueError("Р”Р°С‚Р° РїСЂРѕРµРєС‚Р° РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
         current_row = self._conn.execute(
             "SELECT parent_project_id, COALESCE(sort_order, 0) AS sort_order FROM projects WHERE id = ?;",
             (project_id,),
@@ -2552,7 +2511,7 @@ class Database:
             seen: set[int] = set()
             while cursor is not None and cursor not in seen:
                 if cursor == project_id:
-                    raise ValueError("Циклическая связь проектов не допускается.")
+                    raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
                 seen.add(cursor)
                 row = self._conn.execute(
                     "SELECT parent_project_id FROM projects WHERE id = ?;",
@@ -2614,11 +2573,11 @@ class Database:
         )
 
     def fetch_project_tree(self) -> List[ProjectData]:
-        """Возвращает проекты в порядке обхода по parent/sort_order."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїСЂРѕРµРєС‚С‹ РІ РїРѕСЂСЏРґРєРµ РѕР±С…РѕРґР° РїРѕ parent/sort_order."""
         return self.fetch_projects()
 
     def fetch_project_children(self, parent_project_id: Optional[int]) -> List[ProjectData]:
-        """Возвращает дочерние проекты для указанного родителя."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РґРѕС‡РµСЂРЅРёРµ РїСЂРѕРµРєС‚С‹ РґР»СЏ СѓРєР°Р·Р°РЅРЅРѕРіРѕ СЂРѕРґРёС‚РµР»СЏ."""
         rows = self._conn.execute(
             """
             SELECT
@@ -2657,7 +2616,7 @@ class Database:
         return children
 
     def _reindex_project_group(self, parent_project_id: Optional[int]) -> None:
-        """Пересобирает непрерывный sort_order для группы дочерних проектов."""
+        """РџРµСЂРµСЃРѕР±РёСЂР°РµС‚ РЅРµРїСЂРµСЂС‹РІРЅС‹Р№ sort_order РґР»СЏ РіСЂСѓРїРїС‹ РґРѕС‡РµСЂРЅРёС… РїСЂРѕРµРєС‚РѕРІ."""
         rows = self._conn.execute(
             """
             SELECT id
@@ -2674,9 +2633,9 @@ class Database:
             )
 
     def move_project(self, project_id: int, new_parent_project_id: Optional[int], new_sort_order: Optional[int] = None) -> None:
-        """Перемещает проект в новую ветку и/или позицию среди siblings."""
+        """РџРµСЂРµРјРµС‰Р°РµС‚ РїСЂРѕРµРєС‚ РІ РЅРѕРІСѓСЋ РІРµС‚РєСѓ Рё/РёР»Рё РїРѕР·РёС†РёСЋ СЃСЂРµРґРё siblings."""
         if new_parent_project_id == project_id:
-            raise ValueError("Циклическая связь проектов не допускается.")
+            raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
 
         row = self._conn.execute(
             """
@@ -2687,7 +2646,7 @@ class Database:
             (project_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Проект не найден.")
+            raise ValueError("РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
         old_parent = row["parent_project_id"]
 
         if new_parent_project_id is not None:
@@ -2695,14 +2654,14 @@ class Database:
             seen: set[int] = set()
             while cursor is not None and cursor not in seen:
                 if cursor == project_id:
-                    raise ValueError("Циклическая связь проектов не допускается.")
+                    raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
                 seen.add(cursor)
                 parent_row = self._conn.execute(
                     "SELECT parent_project_id FROM projects WHERE id = ?;",
                     (cursor,),
                 ).fetchone()
                 if parent_row is None:
-                    raise ValueError("Новый родительский проект не найден.")
+                    raise ValueError("РќРѕРІС‹Р№ СЂРѕРґРёС‚РµР»СЊСЃРєРёР№ РїСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
                 cursor = parent_row["parent_project_id"]
 
         siblings_count_row = self._conn.execute(
@@ -2733,23 +2692,23 @@ class Database:
             self._reindex_project_group(new_parent_project_id)
 
     def reorder_project(self, project_id: int, new_sort_order: int) -> None:
-        """Меняет порядок проекта среди siblings без смены родителя."""
+        """РњРµРЅСЏРµС‚ РїРѕСЂСЏРґРѕРє РїСЂРѕРµРєС‚Р° СЃСЂРµРґРё siblings Р±РµР· СЃРјРµРЅС‹ СЂРѕРґРёС‚РµР»СЏ."""
         row = self._conn.execute(
             "SELECT parent_project_id FROM projects WHERE id = ?;",
             (project_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Проект не найден.")
+            raise ValueError("РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
         parent_project_id = row["parent_project_id"]
         self.move_project(project_id, parent_project_id, new_sort_order=new_sort_order)
 
     def delete_project(self, project_id: int) -> None:
-        """Удаляет проект по id."""
+        """РЈРґР°Р»СЏРµС‚ РїСЂРѕРµРєС‚ РїРѕ id."""
         with self._conn:
             self._conn.execute("DELETE FROM projects WHERE id = ?;", (project_id,))
 
     def set_project_archived(self, project_id: int, archived: bool) -> None:
-        """Обновляет статус архивирования проекта."""
+        """РћР±РЅРѕРІР»СЏРµС‚ СЃС‚Р°С‚СѓСЃ Р°СЂС…РёРІРёСЂРѕРІР°РЅРёСЏ РїСЂРѕРµРєС‚Р°."""
         with self._conn:
             self._conn.execute(
                 "UPDATE projects SET archived = ? WHERE id = ?;",
@@ -2757,7 +2716,7 @@ class Database:
             )
 
     def set_projects_archived_for_area(self, area: str, archived: bool) -> None:
-        """Архивирует все проекты в области."""
+        """РђСЂС…РёРІРёСЂСѓРµС‚ РІСЃРµ РїСЂРѕРµРєС‚С‹ РІ РѕР±Р»Р°СЃС‚Рё."""
         area = validate_area(area)
         with self._conn:
             self._conn.execute(
@@ -2766,13 +2725,13 @@ class Database:
             )
 
     def delete_projects_by_area(self, area: str) -> None:
-        """Удаляет все проекты в области."""
+        """РЈРґР°Р»СЏРµС‚ РІСЃРµ РїСЂРѕРµРєС‚С‹ РІ РѕР±Р»Р°СЃС‚Рё."""
         area = validate_area(area)
         with self._conn:
             self._conn.execute("DELETE FROM projects WHERE area = ?;", (area,))
 
     def rename_project_area(self, area: str, new_area: str) -> None:
-        """Переименовывает область проектов."""
+        """РџРµСЂРµРёРјРµРЅРѕРІС‹РІР°РµС‚ РѕР±Р»Р°СЃС‚СЊ РїСЂРѕРµРєС‚РѕРІ."""
         area = validate_area(area)
         new_area = validate_area(new_area)
         with self._conn:
@@ -2782,12 +2741,12 @@ class Database:
             )
 
     def project_areas(self) -> List[str]:
-        """Возвращает отсортированный список областей проекта."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РѕС‚СЃРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Р№ СЃРїРёСЃРѕРє РѕР±Р»Р°СЃС‚РµР№ РїСЂРѕРµРєС‚Р°."""
         rows = self._conn.execute("SELECT DISTINCT area FROM projects ORDER BY area;").fetchall()
         return [row["area"] for row in rows]
 
     def fetch_maps(self) -> List[MapData]:
-        """Возвращает список карт."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РєР°СЂС‚."""
         rows = self._conn.execute(
             "SELECT id, title, description, project, tiles_path, tiles_h, tiles_w FROM maps;"
         ).fetchall()
@@ -2815,13 +2774,13 @@ class Database:
         tiles_h: int,
         tiles_w: int,
     ) -> MapData:
-        """Создает карту."""
-        title = validate_title(title, field_name="Название карты")
+        """РЎРѕР·РґР°РµС‚ РєР°СЂС‚Сѓ."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РєР°СЂС‚С‹")
         description = (description or "").strip()
         project = (project or "").strip()
         tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
-            raise ValueError("Размер сетки должен быть больше нуля.")
+            raise ValueError("Р Р°Р·РјРµСЂ СЃРµС‚РєРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ.")
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -2844,13 +2803,13 @@ class Database:
         tiles_h: int,
         tiles_w: int,
     ) -> MapData:
-        """Обновляет свойства карты."""
-        title = validate_title(title, field_name="Название карты")
+        """РћР±РЅРѕРІР»СЏРµС‚ СЃРІРѕР№СЃС‚РІР° РєР°СЂС‚С‹."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РєР°СЂС‚С‹")
         description = (description or "").strip()
         project = (project or "").strip()
         tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
-            raise ValueError("Размер сетки должен быть больше нуля.")
+            raise ValueError("Р Р°Р·РјРµСЂ СЃРµС‚РєРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ.")
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -2865,7 +2824,7 @@ class Database:
         return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
 
     def fetch_map_markers(self, map_id: Optional[int] = None) -> List[MapMarkerData]:
-        """Возвращает список меток карты."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РјРµС‚РѕРє РєР°СЂС‚С‹."""
         if map_id is None:
             rows = self._conn.execute(
                 """
@@ -2975,7 +2934,7 @@ class Database:
         parent_path: str = "",
         image_path: str = "",
     ) -> MapMarkerData:
-        """Создает или обновляет метку карты."""
+        """РЎРѕР·РґР°РµС‚ РёР»Рё РѕР±РЅРѕРІР»СЏРµС‚ РјРµС‚РєСѓ РєР°СЂС‚С‹."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         task_ids = task_ids or []
         project_ids = project_ids or []
@@ -3116,12 +3075,12 @@ class Database:
         )
 
     def delete_map_marker(self, marker_id: int) -> None:
-        """Удаляет метку карты."""
+        """РЈРґР°Р»СЏРµС‚ РјРµС‚РєСѓ РєР°СЂС‚С‹."""
         with self._conn:
             self._conn.execute("DELETE FROM map_markers WHERE id = ?;", (marker_id,))
 
     def fetch_map_overlays(self, map_id: Optional[int] = None) -> List[MapOverlayData]:
-        """Возвращает список геометрий карты (области/пути)."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РіРµРѕРјРµС‚СЂРёР№ РєР°СЂС‚С‹ (РѕР±Р»Р°СЃС‚Рё/РїСѓС‚Рё)."""
         if map_id is None:
             rows = self._conn.execute(
                 """
@@ -3174,10 +3133,10 @@ class Database:
         color: str,
         title: str = "",
     ) -> MapOverlayData:
-        """Создает геометрию карты и возвращает сохраненную запись."""
+        """РЎРѕР·РґР°РµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЃРѕС…СЂР°РЅРµРЅРЅСѓСЋ Р·Р°РїРёСЃСЊ."""
         overlay_kind = (kind or "").strip().lower()
         if overlay_kind not in {"region", "path"}:
-            raise ValueError("Некорректный тип геометрии карты.")
+            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї РіРµРѕРјРµС‚СЂРёРё РєР°СЂС‚С‹.")
         normalized: List[Tuple[float, float]] = []
         for pair in points or []:
             if not isinstance(pair, (list, tuple)) or len(pair) != 2:
@@ -3188,7 +3147,7 @@ class Database:
                 continue
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
-            raise ValueError("Недостаточно точек для сохранения геометрии.")
+            raise ValueError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ С‚РѕС‡РµРє РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РіРµРѕРјРµС‚СЂРёРё.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
@@ -3227,10 +3186,10 @@ class Database:
         color: str,
         title: str = "",
     ) -> MapOverlayData:
-        """Обновляет геометрию карты и возвращает актуальную запись."""
+        """РћР±РЅРѕРІР»СЏРµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ Р°РєС‚СѓР°Р»СЊРЅСѓСЋ Р·Р°РїРёСЃСЊ."""
         overlay_kind = (kind or "").strip().lower()
         if overlay_kind not in {"region", "path"}:
-            raise ValueError("Некорректный тип геометрии карты.")
+            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї РіРµРѕРјРµС‚СЂРёРё РєР°СЂС‚С‹.")
         normalized: List[Tuple[float, float]] = []
         for pair in points or []:
             if not isinstance(pair, (list, tuple)) or len(pair) != 2:
@@ -3241,7 +3200,7 @@ class Database:
                 continue
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
-            raise ValueError("Недостаточно точек для сохранения геометрии.")
+            raise ValueError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ С‚РѕС‡РµРє РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РіРµРѕРјРµС‚СЂРёРё.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
@@ -3270,7 +3229,7 @@ class Database:
             (overlay_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Геометрия карты не найдена.")
+            raise ValueError("Р“РµРѕРјРµС‚СЂРёСЏ РєР°СЂС‚С‹ РЅРµ РЅР°Р№РґРµРЅР°.")
         parsed = []
         try:
             raw_points = json.loads(row["points"] or "[]")
@@ -3295,12 +3254,12 @@ class Database:
         )
 
     def delete_map_overlay(self, overlay_id: int) -> None:
-        """Удаляет геометрию карты."""
+        """РЈРґР°Р»СЏРµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹."""
         with self._conn:
             self._conn.execute("DELETE FROM map_overlays WHERE id = ?;", (overlay_id,))
 
     def fetch_notes(self) -> List[NoteData]:
-        """Возвращает список всех заметок."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІСЃРµС… Р·Р°РјРµС‚РѕРє."""
         rows = self._conn.execute(
             """
             SELECT
@@ -3345,8 +3304,8 @@ class Database:
         attachment: bool = False,
         locked: bool = False,
     ) -> NoteData:
-        """Создает заметку в базе данных."""
-        title = validate_title(title, field_name="Название заметки")
+        """РЎРѕР·РґР°РµС‚ Р·Р°РјРµС‚РєСѓ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ Р·Р°РјРµС‚РєРё")
         preview = (preview or "").strip()
         project = (project or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
@@ -3388,8 +3347,8 @@ class Database:
         preview: str,
         tags: List[str],
     ) -> NoteData:
-        """Обновляет данные заметки."""
-        title = validate_title(title, field_name="Название заметки")
+        """РћР±РЅРѕРІР»СЏРµС‚ РґР°РЅРЅС‹Рµ Р·Р°РјРµС‚РєРё."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ Р·Р°РјРµС‚РєРё")
         preview = (preview or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -3440,7 +3399,7 @@ class Database:
         tags: Optional[List[str]] = None,
         archived: bool = False,
     ) -> List[IdeaData]:
-        """Возвращает список идей с учетом фильтров."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РёРґРµР№ СЃ СѓС‡РµС‚РѕРј С„РёР»СЊС‚СЂРѕРІ."""
         conditions = []
         params: list[object] = []
         if project_id is not None:
@@ -3519,7 +3478,7 @@ class Database:
         return ideas
 
     def get_idea(self, idea_id: int) -> Optional[IdeaData]:
-        """Возвращает идею по ID."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РёРґРµСЋ РїРѕ ID."""
         row = self._conn.execute(
             """
             SELECT
@@ -3574,8 +3533,8 @@ class Database:
         project_id: Optional[int] = None,
         source: str = "",
     ) -> IdeaData:
-        """Создает идею в базе данных."""
-        title = (title or "").strip() or "Без названия"
+        """РЎРѕР·РґР°РµС‚ РёРґРµСЋ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
+        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
@@ -3637,8 +3596,8 @@ class Database:
         project_id: Optional[int] = None,
         source: str = "",
     ) -> IdeaData:
-        """Обновляет идею."""
-        title = (title or "").strip() or "Без названия"
+        """РћР±РЅРѕРІР»СЏРµС‚ РёРґРµСЋ."""
+        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
@@ -3701,7 +3660,7 @@ class Database:
         )
 
     def set_idea_archived(self, idea_id: int, archived: bool) -> None:
-        """Архивирует или восстанавливает идею."""
+        """РђСЂС…РёРІРёСЂСѓРµС‚ РёР»Рё РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ РёРґРµСЋ."""
         archived_at = datetime.now(timezone.utc).isoformat(timespec="seconds") if archived else None
         with self._conn:
             self._conn.execute(
@@ -3710,12 +3669,12 @@ class Database:
             )
 
     def delete_idea(self, idea_id: int) -> None:
-        """Удаляет идею."""
+        """РЈРґР°Р»СЏРµС‚ РёРґРµСЋ."""
         with self._conn:
             self._conn.execute("DELETE FROM ideas WHERE id = ?;", (idea_id,))
 
     def fetch_idea_relations(self, idea_id: int) -> List[IdeaRelationData]:
-        """Возвращает список связей идеи."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє СЃРІСЏР·РµР№ РёРґРµРё."""
         rows = self._conn.execute(
             """
             SELECT id, idea_id, entity_type, entity_id, created_at
@@ -3737,7 +3696,7 @@ class Database:
         ]
 
     def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
-        """Создает связь идеи с сущностью."""
+        """РЎРѕР·РґР°РµС‚ СЃРІСЏР·СЊ РёРґРµРё СЃ СЃСѓС‰РЅРѕСЃС‚СЊСЋ."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -3749,7 +3708,7 @@ class Database:
             )
 
     def toggle_note_favorite(self, note_id: int) -> NoteData:
-        """Переключает избранное у заметки."""
+        """РџРµСЂРµРєР»СЋС‡Р°РµС‚ РёР·Р±СЂР°РЅРЅРѕРµ Сѓ Р·Р°РјРµС‚РєРё."""
         row = self._conn.execute(
             """
             SELECT title, preview, tags, project, favorite, attachment, locked
@@ -3759,7 +3718,7 @@ class Database:
             (note_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Заметка не найдена.")
+            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
         favorite = not bool(row["favorite"])
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -3785,12 +3744,12 @@ class Database:
         )
 
     def delete_note(self, note_id: int) -> None:
-        """Удаляет заметку."""
+        """РЈРґР°Р»СЏРµС‚ Р·Р°РјРµС‚РєСѓ."""
         with self._conn:
             self._conn.execute("DELETE FROM notes WHERE id = ?;", (note_id,))
 
     def fetch_objects(self) -> List[ObjectData]:
-        """Возвращает список архитектурных объектов."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹С… РѕР±СЉРµРєС‚РѕРІ."""
         rows = self._conn.execute(
             """
             SELECT id, title, catalog, object_type, status, description, created_at, updated_at
@@ -3820,8 +3779,8 @@ class Database:
         status: str,
         description: str,
     ) -> ObjectData:
-        """Создает архитектурный объект."""
-        title = validate_title(title, field_name="Название объекта")
+        """РЎРѕР·РґР°РµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РѕР±СЉРµРєС‚Р°")
         catalog = (catalog or "").strip()
         object_type = (object_type or "").strip()
         status = (status or "").strip()
@@ -3846,8 +3805,8 @@ class Database:
         status: str,
         description: str,
     ) -> ObjectData:
-        """Обновляет архитектурный объект."""
-        title = validate_title(title, field_name="Название объекта")
+        """РћР±РЅРѕРІР»СЏРµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
+        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РѕР±СЉРµРєС‚Р°")
         catalog = (catalog or "").strip()
         object_type = (object_type or "").strip()
         status = (status or "").strip()
@@ -3874,23 +3833,23 @@ class Database:
         return ObjectData(object_id, title, catalog, object_type, status, description, created_at, now)
 
     def delete_object(self, object_id: int) -> None:
-        """Удаляет архитектурный объект."""
+        """РЈРґР°Р»СЏРµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
         with self._conn:
             self._conn.execute("DELETE FROM objects WHERE id = ?;", (object_id,))
 
     def create_object_from_folder_path(self, folder_path: str) -> ObjectData:
-        """Создает объект на основе пути к папке."""
+        """РЎРѕР·РґР°РµС‚ РѕР±СЉРµРєС‚ РЅР° РѕСЃРЅРѕРІРµ РїСѓС‚Рё Рє РїР°РїРєРµ."""
         path = (folder_path or "").strip().strip("/")
         if not path:
-            raise ValueError("Путь к папке не должен быть пустым.")
+            raise ValueError("РџСѓС‚СЊ Рє РїР°РїРєРµ РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         parts = [part for part in path.split("/") if part]
-        title = parts[-1] if parts else "Новый объект"
+        title = parts[-1] if parts else "РќРѕРІС‹Р№ РѕР±СЉРµРєС‚"
         catalog = " / ".join(parts[:-1])
-        description = f"Объект создан из папки: {path}"
+        description = f"РћР±СЉРµРєС‚ СЃРѕР·РґР°РЅ РёР· РїР°РїРєРё: {path}"
         return self.create_object(title, catalog, "", "", description)
 
     def fetch_object_images(self, object_id: int) -> List[ObjectImageData]:
-        """Возвращает список изображений объекта."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РёР·РѕР±СЂР°Р¶РµРЅРёР№ РѕР±СЉРµРєС‚Р°."""
         rows = self._conn.execute(
             """
             SELECT id, object_id, rel_path, description, created_at, updated_at
@@ -3913,10 +3872,10 @@ class Database:
         ]
 
     def add_object_image(self, object_id: int, rel_path: str, description: str = "") -> ObjectImageData:
-        """Добавляет изображение к объекту."""
+        """Р”РѕР±Р°РІР»СЏРµС‚ РёР·РѕР±СЂР°Р¶РµРЅРёРµ Рє РѕР±СЉРµРєС‚Сѓ."""
         rel_path = (rel_path or "").strip()
         if not rel_path:
-            raise ValueError("Путь к изображению не должен быть пустым.")
+            raise ValueError("РџСѓС‚СЊ Рє РёР·РѕР±СЂР°Р¶РµРЅРёСЋ РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         description = (description or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -3945,7 +3904,7 @@ class Database:
         )
 
     def update_object_image(self, image_id: int, description: str) -> ObjectImageData:
-        """Обновляет описание изображения объекта."""
+        """РћР±РЅРѕРІР»СЏРµС‚ РѕРїРёСЃР°РЅРёРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РѕР±СЉРµРєС‚Р°."""
         description = (description or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -3975,7 +3934,7 @@ class Database:
         )
 
     def delete_object_image(self, image_id: int) -> None:
-        """Удаляет изображение объекта."""
+        """РЈРґР°Р»СЏРµС‚ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РѕР±СЉРµРєС‚Р°."""
         with self._conn:
             self._conn.execute("DELETE FROM object_images WHERE id = ?;", (image_id,))
 
@@ -3983,7 +3942,7 @@ class Database:
         value = (entity_type or "").strip().lower() or "other"
         if value not in COLLECTION_ENTITY_TYPES:
             raise ValueError(
-                "Тип коллекции должен быть одним из: building, city, film, game, character, other."
+                "РўРёРї РєРѕР»Р»РµРєС†РёРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРЅРёРј РёР·: building, city, film, game, character, other."
             )
         return value
 
@@ -3994,7 +3953,7 @@ class Database:
         entity_type: Optional[str] = None,
         category_ids: Optional[Iterable[int]] = None,
     ) -> List[CollectionItemData]:
-        """Возвращает элементы режима коллекций."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЌР»РµРјРµРЅС‚С‹ СЂРµР¶РёРјР° РєРѕР»Р»РµРєС†РёР№."""
         clauses: list[str] = []
         params: list[object] = []
         search_text = (search_text or "").strip().lower()
@@ -4059,7 +4018,7 @@ class Database:
         return [dict(row) for row in rows]
 
     def fetch_collection_topics(self) -> List[str]:
-        """Возвращает список тем коллекций."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє С‚РµРј РєРѕР»Р»РµРєС†РёР№."""
         rows = self._conn.execute(
             """
             SELECT DISTINCT topic
@@ -4083,7 +4042,7 @@ class Database:
         source_folder_path: str = "",
         import_options_json: str = "",
     ) -> CollectionItemData:
-        """Создает элемент коллекции."""
+        """РЎРѕР·РґР°РµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
         title = validate_title(title)
         entity_type = self._normalize_collection_entity_type(entity_type)
         topic = (topic or "").strip()
@@ -4144,7 +4103,7 @@ class Database:
         source_folder_path: Optional[str] = None,
         import_options_json: Optional[str] = None,
     ) -> CollectionItemData:
-        """Обновляет элемент коллекции."""
+        """РћР±РЅРѕРІР»СЏРµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
         title = validate_title(title)
         entity_type = self._normalize_collection_entity_type(entity_type)
         topic = (topic or "").strip()
@@ -4161,7 +4120,7 @@ class Database:
                 (item_id,),
             ).fetchone()
             if existing is None:
-                raise ValueError("Р­Р»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё РЅРµ РЅР°Р№РґРµРЅ.")
+                raise ValueError("Р В­Р В»Р ВµР СР ВµР Р…РЎвЂљ Р С”Р С•Р В»Р В»Р ВµР С”РЎвЂ Р С‘Р С‘ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р….")
             if source_folder_path is None:
                 source_folder_path = existing["source_folder_path"] or ""
             if import_options_json is None:
@@ -4201,7 +4160,7 @@ class Database:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Элемент коллекции не найден.")
+            raise ValueError("Р­Р»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё РЅРµ РЅР°Р№РґРµРЅ.")
         return CollectionItemData(
             row["id"],
             row["title"],
@@ -4218,7 +4177,7 @@ class Database:
         )
 
     def delete_collection_item(self, item_id: int) -> None:
-        """Удаляет элемент коллекции."""
+        """РЈРґР°Р»СЏРµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_items WHERE id = ?;", (item_id,))
 
@@ -4228,7 +4187,7 @@ class Database:
         parent_id: Optional[int] = None,
         sort_index: int = 0,
     ) -> CollectionCategoryData:
-        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
@@ -4319,7 +4278,7 @@ class Database:
         )
 
     def update_collection_category_title(self, category_id: int, title: str) -> CollectionCategoryData:
-        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -4339,7 +4298,7 @@ class Database:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
         return CollectionCategoryData(
             row["id"],
             row["title"],
@@ -4369,7 +4328,7 @@ class Database:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
         return CollectionCategoryData(
             row["id"],
             row["title"],
@@ -4395,9 +4354,9 @@ class Database:
             (category_id,),
         ).fetchone()["cnt"]
         if children_count and not move_children_to_root:
-            raise ValueError("Категория содержит подкатегории.")
+            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ СЃРѕРґРµСЂР¶РёС‚ РїРѕРґРєР°С‚РµРіРѕСЂРёРё.")
         if items_count and not move_items_to_root:
-            raise ValueError("Категория содержит коллекции.")
+            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ СЃРѕРґРµСЂР¶РёС‚ РєРѕР»Р»РµРєС†РёРё.")
         with self._conn:
             if move_children_to_root:
                 self._conn.execute(
@@ -4412,7 +4371,7 @@ class Database:
             self._conn.execute("DELETE FROM collection_category WHERE id = ?;", (category_id,))
 
     def fetch_collection_relations(self, item_id: Optional[int] = None) -> List[CollectionRelationData]:
-        """Возвращает связи элементов коллекции."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРІСЏР·Рё СЌР»РµРјРµРЅС‚РѕРІ РєРѕР»Р»РµРєС†РёРё."""
         if item_id is None:
             rows = self._conn.execute(
                 """
@@ -4448,9 +4407,9 @@ class Database:
         right_item_id: int,
         relation_kind: str = "=",
     ) -> CollectionRelationData:
-        """Создает перекрестную связь между элементами коллекции."""
+        """РЎРѕР·РґР°РµС‚ РїРµСЂРµРєСЂРµСЃС‚РЅСѓСЋ СЃРІСЏР·СЊ РјРµР¶РґСѓ СЌР»РµРјРµРЅС‚Р°РјРё РєРѕР»Р»РµРєС†РёРё."""
         if left_item_id == right_item_id:
-            raise ValueError("Нельзя связать элемент сам с собой.")
+            raise ValueError("РќРµР»СЊР·СЏ СЃРІСЏР·Р°С‚СЊ СЌР»РµРјРµРЅС‚ СЃР°Рј СЃ СЃРѕР±РѕР№.")
         left_id, right_id = sorted((int(left_item_id), int(right_item_id)))
         relation_kind = (relation_kind or "=").strip() or "="
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -4472,7 +4431,7 @@ class Database:
             (left_id, right_id, relation_kind),
         ).fetchone()
         if row is None:
-            raise ValueError("Не удалось создать связь коллекции.")
+            raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃРІСЏР·СЊ РєРѕР»Р»РµРєС†РёРё.")
         return CollectionRelationData(
             row["id"],
             row["left_item_id"],
@@ -4482,7 +4441,7 @@ class Database:
         )
 
     def delete_collection_relation(self, relation_id: int) -> None:
-        """Удаляет связь коллекции."""
+        """РЈРґР°Р»СЏРµС‚ СЃРІСЏР·СЊ РєРѕР»Р»РµРєС†РёРё."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_relations WHERE id = ?;", (relation_id,))
 
@@ -4624,7 +4583,7 @@ class Database:
 
     # --- Shop data ---
     def create_shop_category(self, title: str, parent_id: Optional[int] = None) -> ShopCategoryData:
-        title = validate_title(title, field_name="Категория")
+        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -4662,7 +4621,7 @@ class Database:
         return ShopCategoryData(row["id"], row["title"], row["parent_id"])
 
     def update_shop_category_title(self, category_id: int, title: str) -> ShopCategoryData:
-        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
         with self._conn:
             self._conn.execute(
                 """
@@ -4677,7 +4636,7 @@ class Database:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
         return ShopCategoryData(row["id"], row["title"], row["parent_id"])
 
     def delete_shop_category(self, category_id: int) -> None:
@@ -4728,7 +4687,7 @@ class Database:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РўРѕРІР°СЂ РЅРµ РЅР°Р№РґРµРЅ.")
+            raise ValueError("Р СћР С•Р Р†Р В°РЎР‚ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р….")
         return ShopItemData(
             row["id"],
             row["title"],
@@ -4973,7 +4932,7 @@ class Database:
         return [WishlistData(row["id"], row["title"], row["notes"] or "") for row in rows]
 
     def create_wishlist(self, title: str, notes: str = "") -> WishlistData:
-        title = validate_title(title, field_name="Список")
+        title = validate_title(title, field_name="РЎРїРёСЃРѕРє")
         notes = (notes or "").strip()
         with self._conn:
             cur = self._conn.execute(
@@ -4986,7 +4945,7 @@ class Database:
         return WishlistData(cur.lastrowid, title, notes)
 
     def update_wishlist(self, wishlist_id: int, title: str, notes: str = "") -> WishlistData:
-        title = validate_title(title, field_name="Список")
+        title = validate_title(title, field_name="РЎРїРёСЃРѕРє")
         notes = (notes or "").strip()
         with self._conn:
             self._conn.execute(
@@ -5095,7 +5054,7 @@ class Database:
             if key in existing_categories:
                 category_map[cat["id"]] = existing_categories[key]
                 continue
-            created = self.create_shop_category(cat.get("title") or "Без категории", cat.get("parent_id"))
+            created = self.create_shop_category(cat.get("title") or "Р‘РµР· РєР°С‚РµРіРѕСЂРёРё", cat.get("parent_id"))
             category_map[cat["id"]] = created.id
 
         source_by_url = {s.url: s for s in self.fetch_shop_sources_for_items([item.id for item in self.fetch_shop_items()])}
@@ -5114,7 +5073,7 @@ class Database:
                 item_map[item["id"]] = existing_item_id
                 continue
             created = self.create_shop_item(
-                item.get("title") or "Без названия",
+                item.get("title") or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ",
                 category_id=category_map.get(item.get("category_id")),
                 user_notes=item.get("user_notes") or "",
             )
@@ -5185,7 +5144,7 @@ class Database:
         wishlist_map: dict[int, int] = {}
         existing_wishlists = {w.title: w.id for w in self.fetch_wishlists()}
         for wl in wishlists:
-            title = wl.get("title") or "Список"
+            title = wl.get("title") or "РЎРїРёСЃРѕРє"
             if title in existing_wishlists:
                 wishlist_map[wl["id"]] = existing_wishlists[title]
                 continue
@@ -5220,7 +5179,7 @@ class Database:
         category_id: Optional[int] = None,
         user_notes: str = "",
     ) -> ShopItemData:
-        title = (title or "").strip() or "Без названия"
+        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
@@ -5243,7 +5202,7 @@ class Database:
         category_id: Optional[int],
         user_notes: str,
     ) -> ShopItemData:
-        title = (title or "").strip() or "Без названия"
+        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
@@ -5266,7 +5225,7 @@ class Database:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Товар не найден.")
+            raise ValueError("РўРѕРІР°СЂ РЅРµ РЅР°Р№РґРµРЅ.")
         return ShopItemData(
             row["id"],
             row["title"],
@@ -5293,7 +5252,7 @@ class Database:
         shop_code = (shop_code or "").strip()
         url = (url or "").strip()
         if not url:
-            raise ValueError("URL источника не должен быть пустым.")
+            raise ValueError("URL РёСЃС‚РѕС‡РЅРёРєР° РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         sku = (sku or "").strip()
         currency = (currency or "").strip()
         stock_text = (stock_text or "").strip()
@@ -5568,10 +5527,10 @@ class Database:
         return row["min_price"]
 
     def get_setting(self, key: str, default: str = "") -> str:
-        """Возвращает значение настройки."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РЅР°СЃС‚СЂРѕР№РєРё."""
         key = (key or "").strip()
         if not key:
-            raise ValueError("Ключ настройки не должен быть пустым.")
+            raise ValueError("РљР»СЋС‡ РЅР°СЃС‚СЂРѕР№РєРё РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         cur = self._conn.execute("SELECT value FROM settings WHERE key = ?;", (key,))
         row = cur.fetchone()
         if not row:
@@ -5579,10 +5538,10 @@ class Database:
         return row["value"]
 
     def set_setting(self, key: str, value: str) -> None:
-        """Сохраняет значение настройки."""
+        """РЎРѕС…СЂР°РЅСЏРµС‚ Р·РЅР°С‡РµРЅРёРµ РЅР°СЃС‚СЂРѕР№РєРё."""
         key = (key or "").strip()
         if not key:
-            raise ValueError("Ключ настройки не должен быть пустым.")
+            raise ValueError("РљР»СЋС‡ РЅР°СЃС‚СЂРѕР№РєРё РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         value = (value or "").strip()
         with self._conn:
             self._conn.execute(
@@ -5606,14 +5565,14 @@ class Database:
         is_image: bool,
         valid: bool,
     ) -> CloudFileData:
-        """Создает или обновляет запись о файле облака."""
+        """РЎРѕР·РґР°РµС‚ РёР»Рё РѕР±РЅРѕРІР»СЏРµС‚ Р·Р°РїРёСЃСЊ Рѕ С„Р°Р№Р»Рµ РѕР±Р»Р°РєР°."""
         rel_path = (rel_path or "").strip()
         if not rel_path:
-            raise ValueError("Путь файла не должен быть пустым.")
+            raise ValueError("РџСѓС‚СЊ С„Р°Р№Р»Р° РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
         name = (name or "").strip()
         checksum = (checksum or "").strip()
         if not name or not checksum:
-            raise ValueError("Имя файла и контрольная сумма обязательны.")
+            raise ValueError("РРјСЏ С„Р°Р№Р»Р° Рё РєРѕРЅС‚СЂРѕР»СЊРЅР°СЏ СЃСѓРјРјР° РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.")
         description = (description or "").strip()
         hash_value = (hash_value or "").strip()
         size = max(0, int(size))
@@ -5668,7 +5627,7 @@ class Database:
         )
 
     def fetch_cloud_files(self) -> List[CloudFileData]:
-        """Возвращает список файлов облака."""
+        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ РѕР±Р»Р°РєР°."""
         rows = self._conn.execute(
             """
             SELECT id, rel_path, name, description, checksum, hash_value, size, is_image, valid, updated_at
@@ -5693,7 +5652,7 @@ class Database:
         ]
 
     def remove_missing_cloud_files(self, rel_paths: Iterable[str]) -> None:
-        """Удаляет записи о файлах, которых нет в облачном каталоге."""
+        """РЈРґР°Р»СЏРµС‚ Р·Р°РїРёСЃРё Рѕ С„Р°Р№Р»Р°С…, РєРѕС‚РѕСЂС‹С… РЅРµС‚ РІ РѕР±Р»Р°С‡РЅРѕРј РєР°С‚Р°Р»РѕРіРµ."""
         rel_paths = [path for path in rel_paths if path]
         with self._conn:
             if not rel_paths:
@@ -5706,12 +5665,32 @@ class Database:
             )
 
     def reindex(self) -> None:
-        """Переиндексирует таблицы базы данных."""
+        """РџРµСЂРµРёРЅРґРµРєСЃРёСЂСѓРµС‚ С‚Р°Р±Р»РёС†С‹ Р±Р°Р·С‹ РґР°РЅРЅС‹С…."""
         with self._conn:
             self._conn.execute("REINDEX;")
 
+    def backup_to(self, destination_path: Path) -> Path:
+        """РЎРѕР·РґР°РµС‚ РєРѕРЅСЃРёСЃС‚РµРЅС‚РЅСѓСЋ РєРѕРїРёСЋ Р±Р°Р·С‹ РґР°РЅРЅС‹С… РІ СѓРєР°Р·Р°РЅРЅС‹Р№ С„Р°Р№Р»."""
+        destination_path = Path(destination_path)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        if destination_path.resolve() == self.path.resolve():
+            return destination_path
+        tmp_target = destination_path.with_suffix(f"{destination_path.suffix}.tmp")
+        if tmp_target.exists():
+            tmp_target.unlink()
+        with self._conn:
+            self._conn.execute("PRAGMA wal_checkpoint(FULL);")
+        target_conn = sqlite3.connect(tmp_target)
+        try:
+            self._conn.backup(target_conn)
+            target_conn.commit()
+        finally:
+            target_conn.close()
+        tmp_target.replace(destination_path)
+        return destination_path
+
     def close(self) -> None:
-        """Закрывает соединение с базой данных."""
+        """Р—Р°РєСЂС‹РІР°РµС‚ СЃРѕРµРґРёРЅРµРЅРёРµ СЃ Р±Р°Р·РѕР№ РґР°РЅРЅС‹С…."""
         if self._closed:
             return
         self._conn.close()
@@ -5720,7 +5699,20 @@ class Database:
 
 @lru_cache(maxsize=1)
 def get_database() -> Database:
-    """Возвращает singleton базы данных."""
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ singleton Р±Р°Р·С‹ РґР°РЅРЅС‹С…."""
     return Database()
+
+
+def reset_database(path: Optional[Path] = None) -> Database:
+    """РЎР±СЂР°СЃС‹РІР°РµС‚ singleton Р±Р°Р·С‹ РґР°РЅРЅС‹С… Рё РІРѕР·РІСЂР°С‰Р°РµС‚ РЅРѕРІРѕРµ РїРѕРґРєР»СЋС‡РµРЅРёРµ."""
+    try:
+        db = get_database()
+        db.close()
+    except Exception:
+        pass
+    get_database.cache_clear()
+    if path is not None:
+        return Database(path=path)
+    return get_database()
 
 
