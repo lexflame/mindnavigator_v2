@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QEvent, QTimer, Qt
+from PySide6.QtCore import QObject, QEvent, QTimer
 from PySide6.QtWidgets import QAbstractItemView, QAbstractScrollArea, QWidget
 
 

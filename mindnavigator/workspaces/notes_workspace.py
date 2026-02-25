@@ -9,13 +9,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Any
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QAbstractListModel, QModelIndex, QTimer, QObject, Signal
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QShortcut, QKeySequence
+from PySide6.QtGui import QPainter, QColor, QFont, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,

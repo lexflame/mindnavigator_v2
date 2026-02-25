@@ -17,7 +17,7 @@ import sys
 import tempfile
 import zipfile
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,

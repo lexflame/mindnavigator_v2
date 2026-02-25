@@ -36,8 +36,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
-    QFileDialog, QDoubleSpinBox, QPlainTextEdit, QProgressBar,
-    QListWidget, QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem,
+    QFileDialog, QProgressBar, QSizePolicy, QSpacerItem,
     QPushButton, QScrollArea, QColorDialog, QSplitter
 )
 from shiboken6 import isValid
