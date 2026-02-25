@@ -232,3 +232,5 @@ Purpose: entity property map and UI role map.
 - Shell UI components (`splash`, `titlebar`) use Qt6 enums for window flags, alignment, cursor, mouse buttons, and pixmap scaling options.
 - Modal/dialog infrastructure uses Qt6 enum namespaces:
   `Qt.WindowType.*`, `Qt.FocusPolicy.*`, `Qt.WidgetAttribute.*`, `QEvent.Type.*`, `QDialogButtonBox.ButtonRole.*`.
+- Marker type pixmap rendering uses Qt6 scaling enums:
+  `Qt.AspectRatioMode.KeepAspectRatio` and `Qt.TransformationMode.SmoothTransformation`.

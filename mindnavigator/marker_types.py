@@ -95,4 +95,8 @@ def marker_type_pixmap(option: MarkerTypeOption, size: QSize) -> QPixmap | None:
     pixmap = QPixmap(resource_path(option.asset_path))
     if pixmap.isNull():
         return None
-    return pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return pixmap.scaled(
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )

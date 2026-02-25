@@ -205,3 +205,5 @@ It also stores:
   - validated unresolved batch-2 with compile + focused tray/workspace regressions (`tests/test_tray_task_navigation.py`, `tests/test_workspace_visibility_settings.py`): `7 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-3): migrated modal/dialog Qt enums in `base_dialog`, `frameless_patch`, and `modals` (`WindowType`, `FocusPolicy`, `WidgetAttribute`, `QEvent.Type`, `QDialogButtonBox.ButtonRole`).
   - validated unresolved batch-3 with compile + focused animation/tray regressions (`tests/test_animations.py`, `tests/test_tray_task_navigation.py`): `8 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-4): migrated marker pixmap scaling enums in `marker_types` to Qt6 namespaces (`Qt.AspectRatioMode`, `Qt.TransformationMode`).
+  - validated unresolved batch-4 with compile + focused maps regression (`tests/test_maps_simple_mouse_mode.py`): `2 passed`.
