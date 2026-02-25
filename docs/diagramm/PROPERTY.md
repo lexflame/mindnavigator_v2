@@ -273,3 +273,5 @@ Purpose: entity property map and UI role map.
   `Qt.ItemDataRole.SizeHintRole`, `Qt.DropAction.*`, `Qt.WindowState.WindowFullScreen`, `QFrame.Shape.NoFrame`, `QPalette.ColorRole.*`, `Qt.PenStyle.NoPen`, `QAbstractItemView.DragDropMode.DragDrop`.
 - Storage priority migration properties:
   `DEFERRED_PRIORITY='Отложенная'` is now canonical; rebuild migrations normalize legacy aliases (`РћС‚Р»РѕР¶РµРЅРЅР°СЏ`, numeric `1..4`, `deferred`) before writing into tables with strict priority `CHECK`.
+- Storage rebuild recovery properties:
+  before rebuilding `tasks/projects/task_attachments`, migration now reconciles stale `<table>_old` artifacts from interrupted runs (including rename-back recovery) to keep startup migrations idempotent.

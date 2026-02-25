@@ -541,3 +541,10 @@
 [2026-02-25 22:26] OUT: OK.
 [2026-02-25 22:26] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_priority_fix
 [2026-02-25 22:26] OUT: 8 passed.
+[2026-02-25 22:38] ACTION: Started hotfix for migration crash with stale projects_old table name conflict.
+[2026-02-25 22:38] ACTION: Added rebuild recovery guard in storage for stale `<table>_old` artifacts before rebuild (`tasks`, `projects`, `task_attachments`).
+[2026-02-25 22:38] ACTION: Added regression test `test_database_migration_recovers_from_stale_projects_old_table` in tests/test_db_migrations.py.
+[2026-02-25 22:38] CMD: python -m compileall mindnavigator/storage.py tests/test_db_migrations.py
+[2026-02-25 22:38] OUT: OK.
+[2026-02-25 22:38] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py -p no:cacheprovider --basetemp .pytest_dir/tmp_priority_fix2
+[2026-02-25 22:38] OUT: 5 passed.

@@ -1472,7 +1472,48 @@ class Database:
             "ELSE 'Medium' END"
         )
 
+    def _recover_rebuild_source_table(self, table_name: str, *, require_current: bool = True) -> bool:
+        """Восстанавливает исходную таблицу, если остался хвост `<table>_old` после прерванной миграции."""
+        old_name = f"{table_name}_old"
+        old_objects = self._conn.execute(
+            "SELECT type FROM sqlite_master WHERE name=?;",
+            (old_name,),
+        ).fetchall()
+        for row in old_objects:
+            obj_type = row["type"]
+            if obj_type == "index":
+                self._conn.execute(f'DROP INDEX IF EXISTS "{old_name}";')
+            elif obj_type == "view":
+                self._conn.execute(f'DROP VIEW IF EXISTS "{old_name}";')
+            elif obj_type == "trigger":
+                self._conn.execute(f'DROP TRIGGER IF EXISTS "{old_name}";')
+
+        has_current = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+            (table_name,),
+        ).fetchone() is not None
+        has_old = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+            (old_name,),
+        ).fetchone() is not None
+
+        if has_old and has_current:
+            self._conn.execute(f'DROP TABLE "{table_name}";')
+            self._conn.execute(f'ALTER TABLE "{old_name}" RENAME TO "{table_name}";')
+            has_current = True
+            has_old = False
+        elif has_old and not has_current:
+            self._conn.execute(f'ALTER TABLE "{old_name}" RENAME TO "{table_name}";')
+            has_current = True
+            has_old = False
+
+        if require_current and not has_current:
+            raise sqlite3.OperationalError(f"Source table '{table_name}' is missing for rebuild.")
+
+        return has_current and not has_old
+
     def _rebuild_tasks_table(self) -> None:
+        self._recover_rebuild_source_table("tasks")
         self._conn.execute("ALTER TABLE tasks RENAME TO tasks_old;")
         self._conn.execute(
             """
@@ -1515,6 +1556,7 @@ class Database:
         self._rebuild_task_attachments_table()
 
     def _rebuild_projects_table(self) -> None:
+        self._recover_rebuild_source_table("projects")
         self._conn.execute("ALTER TABLE projects RENAME TO projects_old;")
         self._conn.execute(
             """
@@ -1595,6 +1637,8 @@ class Database:
         )
 
     def _rebuild_task_attachments_table(self) -> None:
+        if not self._recover_rebuild_source_table("task_attachments", require_current=False):
+            return
         columns = self._conn.execute("PRAGMA table_info(task_attachments);").fetchall()
         names = {row["name"] for row in columns}
         if not names:

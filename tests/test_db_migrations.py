@@ -215,3 +215,79 @@ def test_database_migration_normalizes_legacy_priority_values() -> None:
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_database_migration_recovers_from_stale_projects_old_table() -> None:
+    db_path = _new_temp_db_path("stale_projects_old")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            """
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE projects_old (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            """
+        )
+        legacy_conn.execute(
+            "INSERT INTO projects(area, title, updated, priority, archived) VALUES (?, ?, ?, ?, ?);",
+            ("Work", "Current projects row", "01.01.2026", "Medium", 0),
+        )
+        legacy_conn.execute(
+            "INSERT INTO projects_old(area, title, updated, priority, archived) VALUES (?, ?, ?, ?, ?);",
+            ("Work", "Recovered from projects_old", "02.01.2026", LEGACY_DEFERRED_PRIORITY, 0),
+        )
+        legacy_conn.execute(
+            "INSERT INTO tasks(title, day, time_text, priority, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);",
+            ("Task from stale state", "2026-02-25", "10:00", "Medium", 0, now, now),
+        )
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        stale_row = database._conn.execute(
+            "SELECT priority FROM projects WHERE title = ?;",
+            ("Recovered from projects_old",),
+        ).fetchone()
+        assert stale_row is not None
+        assert stale_row["priority"] == DEFERRED_PRIORITY
+
+        projects_old_exists = database._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects_old';"
+        ).fetchone()
+        assert projects_old_exists is None
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
