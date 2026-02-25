@@ -218,13 +218,9 @@ class _ProjectsListWidget(QListWidget):
             self._dnd_log(f"dropEvent rejected: {self._owner.last_drop_error}")
         self._drag_source_project_id = None
 
-    def _show_drop_reject(self, event: QDropEvent, message: str) -> None:
+    def _show_drop_reject(self, _event: QDropEvent, message: str) -> None:
         text = (message or "").strip() or "Невалидный перенос проекта."
-        global_position = getattr(event, "globalPosition", None)
-        if callable(global_position):
-            point = global_position().toPoint()
-        else:
-            point = QCursor.pos()
+        point = QCursor.pos()
         QToolTip.showText(point, text, self)
 
 

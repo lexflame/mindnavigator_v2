@@ -191,3 +191,5 @@ It also stores:
   - validated staticmethod batch-6 with focused workspace regressions (`tests/test_workspace_visibility_settings.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_workspace_category_layout.py`): `11 passed`.
   - continued `PyTypeCheckerInspection` cleanup (batch-1): normalized Qt payload/date typing in `main_window` and `tasks_workspace` (`nativeEvent` event-type decoding, resize-edge cursor mapping via int flags, `QByteArray` task-id decode, explicit `QDate` conversion for task editors).
   - validated typechecker batch-1 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
+  - continued `PyTypeCheckerInspection` cleanup (batch-2): simplified projects DnD reject-tooltip anchor to cursor-position path (`projects_nav._show_drop_reject`) to avoid typed `QDropEvent.globalPosition` ambiguity.
+  - validated typechecker batch-2 with focused project/tray regressions (`tests/test_project_tree_storage.py`, `tests/test_tray_task_navigation.py`): `8 passed`.

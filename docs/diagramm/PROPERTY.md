@@ -218,3 +218,4 @@ Purpose: entity property map and UI role map.
 - Resize-edge cursor mapping is driven by normalized integer flag values to keep enum-flag comparisons type-safe.
 - Task editor/date controls use explicit `QDate(year, month, day)` conversion from Python `date`.
 - Task drag-drop id payload is decoded from `QByteArray.data()` bytes before integer parsing.
+- Projects DnD reject tooltip anchors at `QCursor.pos()` in typed drop-event paths.
