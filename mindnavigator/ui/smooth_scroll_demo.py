@@ -13,7 +13,7 @@ def build_smooth_scroll_demo_widget() -> QWidget:
     layout = QVBoxLayout(root)
 
     title = QLabel("Smooth Scroll Demo")
-    title.setAlignment(Qt.AlignCenter)
+    title.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(title)
 
     list_widget = QListWidget()

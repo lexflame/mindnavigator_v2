@@ -8,7 +8,15 @@
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QAbstractItemView,
+)
 
 from mindnavigator.storage import get_database
 
@@ -70,8 +78,8 @@ class SearchNav(QWidget):
 
         self.results_list = QListWidget()
         self.results_list.setObjectName("SearchResultsList")
-        self.results_list.setSelectionMode(QListWidget.SingleSelection)
-        self.results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.results_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results_list.setVisible(False)
         self.results_list.itemDoubleClicked.connect(self._on_result_double_clicked)
 

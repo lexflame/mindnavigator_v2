@@ -199,3 +199,5 @@ It also stores:
   - validated typechecker batch-4 with focused maps/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
   - continued `PyTypeCheckerInspection` cleanup (batch-5): normalized task-focus selection flags in `tasks_workspace` to typed-safe `QItemSelectionModel.SelectionFlag` usage without mixed flag combos.
   - validated typechecker batch-5 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-1): migrated remaining legacy Qt enum references in lightweight UI modules (`search_nav`, `smooth_scroll`, `smooth_scroll_demo`) to Qt6 namespaces.
+  - validated unresolved batch-1 with compile + focused smooth-scroll tests (`tests/test_smooth_scroll.py`): `5 passed`.

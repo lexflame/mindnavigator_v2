@@ -224,3 +224,8 @@ Purpose: entity property map and UI role map.
 - Maps canvas/dialog typing guardrails:
   `_map_to_world` returns explicit `QPointF`, marker label font size is integer, and entity-label formatters accept generic `object` with safe attribute extraction.
 - Task focus selection path uses typed-safe selection flags (`ClearAndSelect`, `Current`) without mixed flag combinations.
+
+## Qt6 Enum Properties
+- Lightweight UI helpers use Qt6 enum namespaces consistently:
+  `QAbstractItemView.SelectionMode.SingleSelection`, `Qt.ScrollBarPolicy.ScrollBarAlwaysOff`,
+  `QAbstractItemView.ScrollMode.ScrollPerPixel`, `Qt.AlignmentFlag.AlignCenter`.

@@ -50,8 +50,8 @@ class SmoothScrollController(QObject):
         if window is not None and window is not self._target:
             window.installEventFilter(self)
         if isinstance(self._target, QAbstractItemView):
-            self._target.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-            self._target.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+            self._target.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+            self._target.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         scrollbar = self._scrollbar()
         if scrollbar is not None:
             scrollbar.rangeChanged.connect(self._on_range_changed)
