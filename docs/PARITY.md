@@ -91,3 +91,63 @@ It also stores:
 - Result:
   - updated test to use `DragPerformanceConfig(min_render_interval_ms=0)`;
   - dragdrop suite: `23 passed`.
+
+### TASK_1FA90F88-2294-4074-88E2-75C3769E6768
+- Type: parity
+- Title: Keep `PARITY` and diagram maps in sync during Sprint 6 delivery
+- Sprint: 6
+- Status: In Progress
+- Why:
+  Sprint execution requires continuous doc sync for parity scope and architecture maps.
+- Scope:
+  - append parity notes for each completed sprint task where cross-cutting changes are made;
+  - update `docs/diagramm/*.md` when data flow, class map, or interface wiring changes.
+- Acceptance criteria:
+  - each completed Sprint 6 task has traceable parity/diagram updates where applicable;
+  - diagram docs include new migration/update/db-path modules and flows.
+- Result (current iteration):
+  - updated `docs/diagramm/CLASS.md` with `db_migrations` and `update_service`;
+  - updated `docs/diagramm/INTERFACE.md`, `LIVE.md`, `PROPERTY.md` for DB path flow and settings surface.
+  - synced diagram maps for `Check update` action flow and constants-based repository/version properties.
+  - synced diagram maps for workspace visibility flow (`app.enabled_workspaces`, sidebar runtime apply).
+  - synced diagram maps for language setting flow (`app.language`, runtime relabeling in `MainWindow` and `LeftRail`).
+  - synced diagram maps for CSV transfer service module and data pipeline (`mindnavigator/csv_transfer.py`).
+  - synced repository operational layout: `codex_conf` unified with `.codex`, pytest local temp moved to `.pytest_dir`, `defenition/` receives catalog links for `artifacts/build/defaults/dist/tests`.
+  - restored runtime/build/test backward compatibility after physical `defenition/*` move by creating root junctions: `artifacts`, `build`, `defaults`, `dist`, `tests` -> `defenition/*` (no data copy/rollback).
+  - added root `pytest.ini` (`pythonpath = .`, `testpaths = tests`) so legacy `pytest tests ...` commands continue working with the new junction-based tests layout.
+  - completed workspace-level CSV import/export wiring for `tasks`, `projects`, `notes`, `ideas`, `collections`, `objects` with top-right buttons and file dialogs.
+  - added shared transfer layer `mindnavigator/workspaces/csv_workspace_transfer.py` and new tests `tests/test_workspace_csv_transfer.py`.
+  - fixed SQL ambiguity in `Database.create_task` (`p.linked_map_id`, `p.linked_note_id`, `p.linked_object_id`) discovered during CSV task import validation.
+  - added animation module `mindnavigator/ui/animations.py` with `WidthExpandAnimator` and `DialogAppearAnimator` classes (+ config normalizers).
+  - added tests `tests/test_animations.py` for animation config normalization and guardrails.
+  - applied dialog appearance animation globally through `mindnavigator/ui/dialogs/frameless_patch.py` (`QDialog.exec` patch path), covering modal dialogs opened by both helper wrappers and direct `dialog.exec()` calls.
+  - implemented sidebar hover-expansion overlay in `LeftRail`: animated width panel with mode names shown over neighboring content columns (without layout reflow of main workspace stack).
+  - implemented tray-notification click navigation for task reminders: `MainWindow` now restores from tray on message click and routes to `TasksWorkspace.focus_task(task_id)` for direct task reveal.
+  - added tests `tests/test_tray_task_navigation.py` for reminder-notification click flow (`restore` + task routing) and timer-scheduled task focus dispatch.
+  - implemented attachment domain class behavior in `TaskAttachmentData`: kind normalization, row/dict deserialization, and dict serialization.
+  - updated `Database` task-attachment CRUD to use class-based normalization/mapping (`from_row`, `normalize_kind`) and strict id validation.
+  - added `tests/test_task_attachment_class.py` covering attachment class serialization + storage CRUD and validation paths.
+  - extended task attachments with `idea` support across task dialogs: type label, source loading (`fetch_ideas`), add-attachment picker, display text, and open-details view.
+  - added regression coverage for idea attachments in tasks: `test_task_attachment_supports_idea_entities`.
+  - implemented maps simple-mouse guardrail: marker dragging is blocked in simple mouse mode (`MapTool.SELECT` with simple mode enabled).
+  - added regression tests for drag-allowance policy in maps mode: `tests/test_maps_simple_mouse_mode.py`.
+  - fixed notes multiline save path: removed first-line truncation in note body sync and preserved full multiline text.
+  - added regression tests `tests/test_notes_multiline_save.py` for body normalization and DB persistence after line breaks.
+  - implemented immediate task-list marker refresh path: `TasksModel.update_task_by_row` now emits targeted `dataChanged` for marker-only edits without full model reset.
+  - fixed storage mapping defect for task marker fields by switching `TaskData` returns in `create_task`/`update_task` to keyword arguments (prevents marker field shift after `gantt_forecasted`).
+  - added regression tests `tests/test_tasks_marker_refresh.py` for marker-only update detection, selected-row marker tint blending, and marker role update emission.
+  - completed notes-family workflow rework (`TASK_329B82A5...`): notes/ideas/objects/collections lists now use category separators and top quick forms for navigation + entity creation.
+  - collections list rows now keep preview icons and use domain-aware row text formatter (`format_collection_item_row`); grouped rendering is driven by category helpers.
+  - added regression tests `tests/test_workspace_category_layout.py` for notes/ideas/objects/collections category grouping and row formatting helpers.
+  - started `TASK_6BFC8077...` static-analysis pass with per-type commit strategy; fixed `PyUnboundLocalVariableInspection` warning in `purchases_workspace` (`json` import scope).
+  - fixed `PyRedundantParenthesesInspection` warnings in `projects_nav` and `tasks_workspace` (tuple returns in sort keys), validated via compile + targeted task/project tests.
+  - fixed `PyUnusedImportsInspection` warnings in smooth-scroll/maps/notes/settings modules by cleaning unused Qt/dataclass imports; validated via compile + focused workspace tests.
+  - fixed `PyPep8NamingInspection` warnings by renaming non-lowercase method arguments (`supportedActions`/`eventType`) to PEP8-compliant names.
+  - fixed `PyPackageRequirementsInspection` by declaring `shiboken6` in `requirements.txt` for explicit dependency parity with maps workspace imports.
+  - fixed `PyBroadExceptionInspection` by narrowing broad catches in tray/hotkey paths, DnD logging, and Wildberries parser fallback flow.
+  - fixed remaining `PyBroadExceptionInspection` in `storage.reset_database`: now closes cached singleton only when present and ignores only `sqlite3.Error` on close.
+  - fixed `PyTypeHintsInspection` warnings by importing `QIcon` for dialog annotations and replacing `callable` with `Callable[[], bool]` in purchases parser worker signatures.
+  - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
+  - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
+  - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.
+  - fixed `HttpUrlsUsage` warning in purchase URL parser by validating scheme via `urlparse` (`http`/`https`) instead of hardcoded `http://` literal checks.

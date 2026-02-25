@@ -5705,11 +5705,12 @@ def get_database() -> Database:
 
 def reset_database(path: Optional[Path] = None) -> Database:
     """РЎР±СЂР°СЃС‹РІР°РµС‚ singleton Р±Р°Р·С‹ РґР°РЅРЅС‹С… Рё РІРѕР·РІСЂР°С‰Р°РµС‚ РЅРѕРІРѕРµ РїРѕРґРєР»СЋС‡РµРЅРёРµ."""
-    try:
+    if get_database.cache_info().currsize == 1:
         db = get_database()
-        db.close()
-    except Exception:
-        pass
+        try:
+            db.close()
+        except sqlite3.Error:
+            pass
     get_database.cache_clear()
     if path is not None:
         return Database(path=path)
