@@ -221,3 +221,5 @@ Purpose: entity property map and UI role map.
 - Projects DnD reject tooltip anchors at `QCursor.pos()` in typed drop-event paths.
 - File navigation/dialog folder-index buckets are normalized through typed helpers:
   `_sorted_folder_paths` and `_sorted_cloud_files`.
+- Maps canvas/dialog typing guardrails:
+  `_map_to_world` returns explicit `QPointF`, marker label font size is integer, and entity-label formatters accept generic `object` with safe attribute extraction.

@@ -1567,7 +1567,8 @@ class MapCanvas(QWidget):
     def _map_to_world(self, pos: QPointF) -> QPointF:
         # Перевод координат из экранных в мировые.
         pos_f = QPointF(pos)
-        return (pos_f - self._offset) / self._scale
+        delta = pos_f - self._offset
+        return QPointF(delta.x() / self._scale, delta.y() / self._scale)
 
     def _map_from_world(self, pos: QPointF) -> QPointF:
         # Перевод координат из мировых в экранные.
@@ -1695,9 +1696,10 @@ class MapCanvas(QWidget):
             self._resize_handle_regions[name] = rect
         painter.restore()
 
-    def _marker_label_font_size(self, marker: Marker) -> float:
+    def _marker_label_font_size(self, marker: Marker) -> int:
         # Размер шрифта подписи зависит от размера маркера.
-        return max(6.0, 8.0 * (marker.size / self.DEFAULT_MARKER_SIZE))
+        size = int(round(8.0 * (marker.size / self.DEFAULT_MARKER_SIZE)))
+        return max(6, size)
 
     def _marker_label_rect(self, marker: Marker) -> QRectF:
         # Рассчитываем область, занимаемую подписью маркера.
@@ -2169,34 +2171,48 @@ class MapCanvas(QWidget):
 
     def _edit_marker(self, marker: Marker) -> None:
         # Открываем диалог редактирования маркера.
-        def task_label(item) -> str:
+        def task_label(item: object) -> str:
             # Отображение задачи в списке.
-            return f"{item.title} · {item.project_title}" if item.project_title else item.title
+            task_title = str(getattr(item, "title", "") or "")
+            project_title = str(getattr(item, "project_title", "") or "")
+            return f"{task_title} · {project_title}" if project_title else task_title
 
-        def project_label(item) -> str:
+        def project_label(item: object) -> str:
             # Отображение проекта в списке.
-            return f"{item.title} · {item.area}" if item.area else item.title
+            project_title = str(getattr(item, "title", "") or "")
+            project_area = str(getattr(item, "area", "") or "")
+            return f"{project_title} · {project_area}" if project_area else project_title
 
-        def note_label(item) -> str:
+        def note_label(item: object) -> str:
             # Отображение заметки в списке.
-            return f"{item.title} · {item.project}" if item.project else item.title
+            note_title = str(getattr(item, "title", "") or "")
+            note_project = str(getattr(item, "project", "") or "")
+            return f"{note_title} · {note_project}" if note_project else note_title
 
-        def object_label(item) -> str:
+        def object_label(item: object) -> str:
             # Отображение объекта в списке.
-            return f"{item.title} · {item.catalog}" if item.catalog else item.title
+            object_title = str(getattr(item, "title", "") or "")
+            object_catalog = str(getattr(item, "catalog", "") or "")
+            return f"{object_title} · {object_catalog}" if object_catalog else object_title
 
-        def file_label(item) -> str:
+        def file_label(item: object) -> str:
             # Отображение файла в списке.
-            return item.name or item.rel_path
+            file_name = str(getattr(item, "name", "") or "")
+            rel_path = str(getattr(item, "rel_path", "") or "")
+            return file_name or rel_path
 
-        def map_label(item) -> str:
+        def map_label(item: object) -> str:
             # Отображение карты в списке.
-            return f"{item.title} · {item.project}" if item.project else item.title
+            map_title = str(getattr(item, "title", "") or "")
+            map_project = str(getattr(item, "project", "") or "")
+            return f"{map_title} · {map_project}" if map_project else map_title
 
-        def marker_label(item) -> str:
+        def marker_label(item: object) -> str:
             # Отображение метки в списке.
-            map_title = self._maps_by_id.get(item.map_id).title if item.map_id in self._maps_by_id else ""
-            return f"{item.name} · {map_title}" if map_title else item.name
+            map_id = getattr(item, "map_id", None)
+            marker_name = str(getattr(item, "name", "") or "")
+            map_title = self._maps_by_id.get(map_id).title if map_id in self._maps_by_id else ""
+            return f"{marker_name} · {map_title}" if map_title else marker_name
 
         # Источники сущностей для привязок.
         entity_sources = {

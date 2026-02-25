@@ -195,3 +195,5 @@ It also stores:
   - validated typechecker batch-2 with focused project/tray regressions (`tests/test_project_tree_storage.py`, `tests/test_tray_task_navigation.py`): `8 passed`.
   - continued `PyTypeCheckerInspection` cleanup (batch-3): hardened folder-index extraction in file selectors (`attach_file_select_nav`, `files_workspace`) with typed bucket normalizers for folder paths and `CloudFileData` rows.
   - validated typechecker batch-3 with focused workspace/task regressions (`tests/test_workspace_csv_transfer.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_visibility_settings.py`): `12 passed`.
+  - continued `PyTypeCheckerInspection` cleanup (batch-4): fixed maps typing edges (`QPointF` world-transform math, integer label font sizing, object-safe entity label formatters for map marker binding dialog).
+  - validated typechecker batch-4 with focused maps/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`): `6 passed`.
