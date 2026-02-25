@@ -88,7 +88,7 @@ class ConfirmDialog(QDialog):
 
         buttons = QDialogButtonBox()
         confirm_btn = buttons.addButton(confirm_text, QDialogButtonBox.AcceptRole)
-        cancel_btn = buttons.addButton(cancel_text, QDialogButtonBox.RejectRole)
+        buttons.addButton(cancel_text, QDialogButtonBox.RejectRole)
         confirm_btn.setDefault(True)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

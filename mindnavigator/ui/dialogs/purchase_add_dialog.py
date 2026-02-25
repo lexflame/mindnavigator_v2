@@ -249,7 +249,7 @@ class PurchaseAddByUrlDialog(QDialog):
         for item in items:
             self.existing_combo.addItem(item.title, item.id)
 
-    def _sync_mode(self, *args) -> None:
+    def _sync_mode(self, *_) -> None:
         is_new = self.mode_new.isChecked()
         self.new_title.setEnabled(is_new)
         self.existing_combo.setEnabled(not is_new and self.existing_combo.count() > 0)

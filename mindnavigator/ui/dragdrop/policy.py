@@ -61,7 +61,7 @@ class NestedHitTestService:
 
 
 class AcceptAllValidator:
-    def validate(self, payload: DragPayload, zone_id: str) -> bool:
+    def validate(self, _payload: DragPayload, _zone_id: str) -> bool:
         return True
 
 

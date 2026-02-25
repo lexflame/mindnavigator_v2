@@ -2183,20 +2183,16 @@ class TaskEditDialog(QDialog):
 
         def fill_items(kind: str) -> None:
             item_combo.clear()
-            items = []
             if kind == "note":
-                items = sorted(self._notes_by_id.values(), key=lambda item: item.title.lower())
-                for item in items:
+                for item in sorted(self._notes_by_id.values(), key=lambda item: item.title.lower()):
                     label = f"{item.title} · {item.project}" if item.project else item.title
                     item_combo.addItem(label, item.id)
             elif kind == "object":
-                items = sorted(self._objects_by_id.values(), key=lambda item: item.title.lower())
-                for item in items:
+                for item in sorted(self._objects_by_id.values(), key=lambda item: item.title.lower()):
                     label = f"{item.title} · {item.catalog}" if item.catalog else item.title
                     item_combo.addItem(label, item.id)
             elif kind == "map":
-                items = sorted(self._maps_by_id.values(), key=lambda item: item.title.lower())
-                for item in items:
+                for item in sorted(self._maps_by_id.values(), key=lambda item: item.title.lower()):
                     label = f"{item.title} · {item.project}" if item.project else item.title
                     item_combo.addItem(label, item.id)
             elif kind == "marker":

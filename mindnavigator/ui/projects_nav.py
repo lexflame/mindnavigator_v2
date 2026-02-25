@@ -302,33 +302,28 @@ class ProjectsNav(QWidget):
         """Заполняет список навигации для активного режима."""
         selected_key = self._selected_key
         self.list.clear()
-        entries = []
-        hint = ""
-        header = mode_name
+        header = "Навигация"
+        hint = "Навигация (пока пусто)"
         if mode_name == "Задачи":
             header = "Проекты"
             hint = "Фильтрация задач по проектам"
-            entries = self._project_entries()
             self._add_clear_item("Все проекты")
-            self._add_entries(entries)
+            self._add_entries(self._project_entries())
         elif mode_name == "Проекты":
             header = "Задачи"
             hint = "Фильтрация проектов по задачам"
-            entries = self._task_entries()
             self._add_clear_item("Все задачи")
-            self._add_entries(entries)
+            self._add_entries(self._task_entries())
         elif mode_name == "Файлы":
             header = "Проекты"
             hint = "Фильтрация файлов по проектам"
-            entries = self._project_entries()
             self._add_clear_item("Все проекты")
-            self._add_entries(entries)
+            self._add_entries(self._project_entries())
         elif mode_name == "Карты":
             header = "Проекты"
             hint = "Фильтрация карт по проектам"
-            entries = self._project_entries()
             self._add_clear_item("Все проекты")
-            self._add_entries(entries)
+            self._add_entries(self._project_entries())
         elif mode_name == "Заметки":
             header = "Задачи и карты"
             hint = "Фильтрация заметок по задачам или проектам карт"
@@ -342,9 +337,6 @@ class ProjectsNav(QWidget):
             self._add_section("Проекты", self._project_entries())
             self._add_section("Задачи", self._task_entries())
             self._add_section("Метки на карте", self._marker_entries())
-        else:
-            header = "Навигация"
-            hint = "Навигация (пока пусто)"
 
         self.header.setText(header)
         self.hint.setText(hint)
@@ -497,7 +489,7 @@ class ProjectsNav(QWidget):
             )
         return entries
 
-    def _on_item_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
+    def _on_item_selected(self, current: QListWidgetItem, _previous: QListWidgetItem):
         """Обрабатывает выбор элемента для фильтрации."""
         if current is None:
             self._selected_key = None
