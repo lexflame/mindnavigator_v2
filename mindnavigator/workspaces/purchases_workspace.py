@@ -90,7 +90,7 @@ class PurchasesWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(quick_recent)
         self.filter_layout.addStretch(1)
 
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName("PurchasesSplitter")
 
         left_panel = QWidget()
@@ -144,14 +144,14 @@ class PurchasesWorkspace(BaseWorkspace):
         self.items_table.setHorizontalHeaderLabels(
             ["Товар", "Категория", "Лучшая цена", "Источники", "Актуальность"]
         )
-        self.items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.items_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.items_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.items_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.items_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.items_table.horizontalHeader().setStretchLastSection(True)
         self.items_table.verticalHeader().setVisible(False)
         self.items_table.setSortingEnabled(True)
         self.items_table.itemSelectionChanged.connect(self._on_item_selected)
-        self.items_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.items_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.items_table.customContextMenuRequested.connect(self._show_items_context_menu)
         center_layout.addWidget(self.items_table, 1)
 
@@ -226,7 +226,7 @@ class PurchasesWorkspace(BaseWorkspace):
         self.sources_table.setHorizontalHeaderLabels(["Магазин", "URL", "Цена", "Наличие", "Артикул"])
         self.sources_table.horizontalHeader().setStretchLastSection(True)
         self.sources_table.verticalHeader().setVisible(False)
-        self.sources_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.sources_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.sources_table.itemSelectionChanged.connect(self._on_source_selected)
         sources_layout.addWidget(self.sources_table, 1)
         self.card_tabs.addTab(sources_tab, "Источники")
@@ -248,7 +248,7 @@ class PurchasesWorkspace(BaseWorkspace):
         prop_toolbar.addStretch(1)
         properties_layout.addLayout(prop_toolbar)
 
-        props_split = QSplitter(Qt.Horizontal)
+        props_split = QSplitter(Qt.Orientation.Horizontal)
         source_props_block = QWidget()
         source_props_layout = QVBoxLayout(source_props_block)
         source_props_layout.setContentsMargins(0, 0, 0, 0)
@@ -258,8 +258,8 @@ class PurchasesWorkspace(BaseWorkspace):
         self.source_props_table.setHorizontalHeaderLabels(["Имя", "Значение", "Ед.", "Ключ"])
         self.source_props_table.horizontalHeader().setStretchLastSection(True)
         self.source_props_table.verticalHeader().setVisible(False)
-        self.source_props_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.source_props_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.source_props_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.source_props_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         source_props_layout.addWidget(self.source_props_table, 1)
         props_split.addWidget(source_props_block)
 
@@ -272,7 +272,7 @@ class PurchasesWorkspace(BaseWorkspace):
         self.item_props_table.setHorizontalHeaderLabels(["Имя", "Значение", "Ед.", "Ключ"])
         self.item_props_table.horizontalHeader().setStretchLastSection(True)
         self.item_props_table.verticalHeader().setVisible(False)
-        self.item_props_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.item_props_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         item_props_layout.addWidget(self.item_props_table, 1)
         props_split.addWidget(item_props_block)
 
@@ -338,7 +338,7 @@ class PurchasesWorkspace(BaseWorkspace):
         )
         self.wishlist_table.horizontalHeader().setStretchLastSection(True)
         self.wishlist_table.verticalHeader().setVisible(False)
-        self.wishlist_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.wishlist_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         wishlist_layout.addWidget(self.wishlist_table, 1)
 
         self.wishlist_summary = QLabel("Итого: —")
@@ -850,7 +850,7 @@ class PurchasesWorkspace(BaseWorkspace):
             "Удалить категорию",
             "Удалить выбранную категорию? Товары будут без категории.",
         )
-        if confirm != QMessageBox.Yes:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
         self._db.delete_shop_category(int(category_id))
         self._load_categories()
@@ -1084,7 +1084,7 @@ class PurchasesWorkspace(BaseWorkspace):
         table.setHorizontalHeaderLabels(["Дата", "Статус", "Content-Type", "URL", "Raw"])
         table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         for row_data in logs:
             row = table.rowCount()
             table.insertRow(row)
@@ -1261,7 +1261,7 @@ class PurchasesWorkspace(BaseWorkspace):
         if wishlist_id is None:
             return
         confirm = QMessageBox.question(self, "Удалить список", "Удалить выбранный список?")
-        if confirm != QMessageBox.Yes:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
         self._db.delete_wishlist(int(wishlist_id))
         self._load_wishlists()

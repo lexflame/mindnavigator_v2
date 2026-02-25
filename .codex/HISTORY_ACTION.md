@@ -477,3 +477,10 @@
 [2026-02-25 18:46] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_csv_transfer.py tests/test_task_attachment_class.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:46] OUT: 9 passed.
 [2026-02-25 18:46] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-6.
+[2026-02-25 18:48] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-7).
+[2026-02-25 18:48] ACTION: Migrated Qt6 enums in purchases workspace list/table policies, splitters, context menus, and confirmation buttons.
+[2026-02-25 18:48] CMD: python -m compileall mindnavigator/workspaces/purchases_workspace.py
+[2026-02-25 18:48] OUT: OK.
+[2026-02-25 18:48] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_workspace_csv_transfer.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:48] OUT: 7 passed.
+[2026-02-25 18:48] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-7.

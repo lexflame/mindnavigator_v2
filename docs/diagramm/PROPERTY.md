@@ -242,3 +242,6 @@ Purpose: entity property map and UI role map.
   `Qt.WindowType.*`, `Qt.WidgetAttribute.*`, `Qt.FocusReason.*`, `Qt.ScrollBarPolicy.*`, `Qt.ItemDataRole.*`, `Qt.CheckState.*`.
 - Purchase compare table configuration uses typed Qt6 enums:
   `QAbstractItemView.EditTrigger.NoEditTriggers`, `QHeaderView.ResizeMode.Stretch`, `Qt.GlobalColor.*`.
+- Purchases workspace list/table controls use Qt6 enum namespaces:
+  `Qt.Orientation.*`, `Qt.ContextMenuPolicy.*`, `QAbstractItemView.SelectionBehavior.*`,
+  `QAbstractItemView.SelectionMode.*`, `QAbstractItemView.EditTrigger.*`, `QMessageBox.StandardButton.*`.
