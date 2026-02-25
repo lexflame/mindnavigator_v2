@@ -238,3 +238,7 @@ Purpose: entity property map and UI role map.
   `Qt.AlignmentFlag.*` and `Qt.ItemDataRole.UserRole`.
 - Dialog button boxes in these dialogs are built with explicit standard-button API:
   `addButton(QDialogButtonBox.StandardButton.Save/Cancel)`.
+- Entity/purchase dialogs use Qt6 enum namespaces for popup/focus/list interaction and payload roles:
+  `Qt.WindowType.*`, `Qt.WidgetAttribute.*`, `Qt.FocusReason.*`, `Qt.ScrollBarPolicy.*`, `Qt.ItemDataRole.*`, `Qt.CheckState.*`.
+- Purchase compare table configuration uses typed Qt6 enums:
+  `QAbstractItemView.EditTrigger.NoEditTriggers`, `QHeaderView.ResizeMode.Stretch`, `Qt.GlobalColor.*`.

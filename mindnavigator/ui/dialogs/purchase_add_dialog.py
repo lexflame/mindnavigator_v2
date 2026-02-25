@@ -159,12 +159,13 @@ class PurchaseAddByUrlDialog(QDialog):
         self.status_label.setObjectName("PurchaseDialogStatus")
         layout.addWidget(self.status_label)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText("Сохранить")
+        buttons = QDialogButtonBox()
+        self._save_button = buttons.addButton(QDialogButtonBox.StandardButton.Save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self._save_button.setText("Сохранить")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        self._save_button = buttons.button(QDialogButtonBox.Save)
         self._save_button.setEnabled(False)
 
         self.url_input.returnPressed.connect(self._parse_url)
@@ -391,7 +392,7 @@ class PurchaseAddByUrlDialog(QDialog):
     def _load_categories(self) -> None:
         self.category_tree.clear()
         root = QTreeWidgetItem(["Без категории"])
-        root.setData(0, Qt.UserRole, None)
+        root.setData(0, Qt.ItemDataRole.UserRole, None)
         self.category_tree.addTopLevelItem(root)
         categories = self._db.fetch_shop_categories()
         by_parent: dict[Optional[int], list] = {}
@@ -401,13 +402,13 @@ class PurchaseAddByUrlDialog(QDialog):
         def add_children(parent_item: QTreeWidgetItem, parent_id: Optional[int]) -> None:
             for category_row in sorted(by_parent.get(parent_id, []), key=lambda c: c.title.lower()):
                 category_item = QTreeWidgetItem([category_row.title])
-                category_item.setData(0, Qt.UserRole, category_row.id)
+                category_item.setData(0, Qt.ItemDataRole.UserRole, category_row.id)
                 parent_item.addChild(category_item)
                 add_children(category_item, category_row.id)
 
         for cat in sorted(by_parent.get(None, []), key=lambda c: c.title.lower()):
             item = QTreeWidgetItem([cat.title])
-            item.setData(0, Qt.UserRole, cat.id)
+            item.setData(0, Qt.ItemDataRole.UserRole, cat.id)
             self.category_tree.addTopLevelItem(item)
             add_children(item, cat.id)
         self.category_tree.expandAll()
@@ -417,7 +418,7 @@ class PurchaseAddByUrlDialog(QDialog):
         item = self.category_tree.currentItem()
         if item is None:
             return None
-        return item.data(0, Qt.UserRole)
+        return item.data(0, Qt.ItemDataRole.UserRole)
 
     def _category_has_uncategorized(self) -> bool:
         return self.category_tree.topLevelItemCount() > 0
@@ -443,7 +444,7 @@ class PurchaseAddByUrlDialog(QDialog):
         current = self.category_tree.currentItem()
         if current is None:
             return
-        category_id = current.data(0, Qt.UserRole)
+        category_id = current.data(0, Qt.ItemDataRole.UserRole)
         if category_id is None:
             QMessageBox.information(self, "Категория", "Нельзя переименовать «Без категории».")
             return
@@ -460,7 +461,7 @@ class PurchaseAddByUrlDialog(QDialog):
         current = self.category_tree.currentItem()
         if current is None:
             return
-        category_id = current.data(0, Qt.UserRole)
+        category_id = current.data(0, Qt.ItemDataRole.UserRole)
         if category_id is None:
             QMessageBox.information(self, "Категория", "Нельзя удалить «Без категории».")
             return
@@ -469,7 +470,7 @@ class PurchaseAddByUrlDialog(QDialog):
             "Удалить категорию",
             "Удалить категорию? Все товары будут без категории.",
         )
-        if confirm != QMessageBox.Yes:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
         self._db.delete_shop_category(int(category_id))
         self._load_categories()

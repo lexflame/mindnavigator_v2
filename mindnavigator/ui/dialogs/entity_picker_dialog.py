@@ -48,8 +48,8 @@ class EntityPickerDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("EntityPickerDialog")
         self.setWindowTitle(f"Выбор: {entity_type}")
-        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.resize(320, 280)
         self._fetch_fn = fetch_fn
         self._selected_ids = set(selected_ids or [])
@@ -68,13 +68,15 @@ class EntityPickerDialog(QDialog):
             self.search_input.setText(initial_query)
 
         self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.list_widget.setSpacing(6)
-        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.list_widget.setFixedHeight(180)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("Добавить")
+        buttons = QDialogButtonBox()
+        ok_button = buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        ok_button.setText("Добавить")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -135,24 +137,24 @@ class EntityPickerDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
         if not self._anchor_widget:
-            self.search_input.setFocus(Qt.PopupFocusReason)
+            self.search_input.setFocus(Qt.FocusReason.PopupFocusReason)
             self.search_input.selectAll()
             return
         width = self._anchor_widget.width()
         self.setFixedWidth(width)
         anchor_pos = self._anchor_widget.mapToGlobal(QPoint(0, self._anchor_widget.height()))
         self.move(anchor_pos)
-        self.search_input.setFocus(Qt.PopupFocusReason)
+        self.search_input.setFocus(Qt.FocusReason.PopupFocusReason)
         self.search_input.selectAll()
 
     def selected_items(self) -> list[ChipItem]:
         selected = []
         for index in range(self.list_widget.count()):
             item = self.list_widget.item(index)
-            data = item.data(Qt.UserRole)
+            data = item.data(Qt.ItemDataRole.UserRole)
             if not data:
                 continue
-            if item.checkState() == Qt.Checked:
+            if item.checkState() == Qt.CheckState.Checked:
                 selected.append(data)
         return selected
 
@@ -162,12 +164,14 @@ class EntityPickerDialog(QDialog):
         self.list_widget.clear()
         if not self._items:
             empty = QListWidgetItem("— нет элементов —")
-            empty.setFlags(Qt.NoItemFlags)
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list_widget.addItem(empty)
             return
         for chip in self._items:
             entry = QListWidgetItem(chip.title)
-            entry.setData(Qt.UserRole, chip)
-            entry.setFlags(entry.flags() | Qt.ItemIsUserCheckable)
-            entry.setCheckState(Qt.Checked if chip.id in self._selected_ids else Qt.Unchecked)
+            entry.setData(Qt.ItemDataRole.UserRole, chip)
+            entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            entry.setCheckState(
+                Qt.CheckState.Checked if chip.id in self._selected_ids else Qt.CheckState.Unchecked
+            )
             self.list_widget.addItem(entry)

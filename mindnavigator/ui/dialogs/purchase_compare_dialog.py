@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -64,13 +65,14 @@ class PurchaseCompareDialog(QDialog):
 
         self.table = QTableWidget(0, 0)
         self.table.setObjectName("PurchaseCompareTable")
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = QDialogButtonBox()
+        buttons.addButton(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
@@ -202,5 +204,5 @@ class PurchaseCompareDialog(QDialog):
                 for col_idx in range(1, len(items) + 1):
                     cell = self.table.item(row_idx, col_idx)
                     if cell is not None:
-                        cell.setBackground(Qt.yellow)
-                        cell.setForeground(Qt.black)
+                        cell.setBackground(Qt.GlobalColor.yellow)
+                        cell.setForeground(Qt.GlobalColor.black)

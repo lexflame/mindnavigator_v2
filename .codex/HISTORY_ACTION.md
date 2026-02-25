@@ -470,3 +470,10 @@
 [2026-02-25 18:39] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_category_layout.py tests/test_workspace_csv_transfer.py tests/test_task_attachment_class.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-02-25 18:39] OUT: 13 passed.
 [2026-02-25 18:39] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-5.
+[2026-02-25 18:46] ACTION: Continued TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 (error type: PyUnresolvedReferencesInspection, batch-6).
+[2026-02-25 18:46] ACTION: Migrated Qt6 enum usage and typed-safe dialog button-box wiring in entity/purchase dialogs (entity_picker_dialog, purchase_add_dialog, purchase_compare_dialog).
+[2026-02-25 18:46] CMD: python -m compileall mindnavigator/ui/dialogs/entity_picker_dialog.py mindnavigator/ui/dialogs/purchase_add_dialog.py mindnavigator/ui/dialogs/purchase_compare_dialog.py
+[2026-02-25 18:46] OUT: OK.
+[2026-02-25 18:46] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_csv_transfer.py tests/test_task_attachment_class.py -q -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-02-25 18:46] OUT: 9 passed.
+[2026-02-25 18:46] ACTION: Synced docs/PARITY.md and docs/diagramm/PROPERTY.md for PyUnresolvedReferencesInspection batch-6.
