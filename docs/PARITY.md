@@ -155,6 +155,7 @@ It also stores:
   - fixed `PyTypeCheckerInspection` in `main_window.py`: normalized `nativeEvent` type matching through decoded `event_name` and replaced ambiguous `ResizeEdge` checks with explicit flag comparisons/diagonal sets.
   - continued `PyUnresolvedReferencesInspection` cleanup in `main_window.py`: switched legacy Qt constants to Qt6 enums (`WindowType`, `WidgetAttribute`, `WindowState`, `ApplicationState`, `Key`, `CursorShape`, `MouseButton`, `QEvent.Type`).
   - fixed `PyTypeCheckerInspection` in single-instance bridge (`__main__.py`) by decoding `QLocalSocket.readAll()` via explicit QByteArray `.data()` bytes conversion.
+  - fixed `PyTypeCheckerInspection` in `ui/workspaces/base_workspace.py`: normalized `QSettings.value(...)` reads to guaranteed `str` before JSON decode and query restore.
   - fixed `PyArgumentListInspection` warnings by normalizing `QShortcut` call signatures, replacing tuple-unpack `setRange` call with explicit min/max values, and tightening patched `QDialog.exec` signature forwarding.
   - fixed `PyUnusedLocalInspection` warnings by removing unused temp variables/args in modal + project-nav + dragdrop + purchase dialog paths and simplifying task attachment item-fill loops.
   - fixed `PyAttributeOutsideInitInspection` by predeclaring runtime UI attributes in `TasksWorkspace.__init__` and setting startup `_current_mode` in `MainWindow`.

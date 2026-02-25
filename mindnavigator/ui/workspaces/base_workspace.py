@@ -185,8 +185,10 @@ class BaseWorkspace(QWidget):
 
     def restore_state(self) -> None:
         settings = QSettings()
-        search_text = settings.value(self._settings_key("search_text"), "", str)
-        filters_json = settings.value(self._settings_key("filters"), "{}", str)
+        search_text_raw = settings.value(self._settings_key("search_text"), "", str)
+        search_text = search_text_raw if isinstance(search_text_raw, str) else ""
+        filters_json_raw = settings.value(self._settings_key("filters"), "{}", str)
+        filters_json = filters_json_raw if isinstance(filters_json_raw, str) else "{}"
         try:
             stored_filters = json.loads(filters_json) if filters_json else {}
         except json.JSONDecodeError:

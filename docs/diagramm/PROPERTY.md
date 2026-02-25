@@ -107,6 +107,11 @@ Purpose: entity property map and UI role map.
 ## Single-Instance Bridge Properties
 - In `_SingleInstanceBridge`, incoming local-socket payload is decoded from `QByteArray` using explicit `.data()` bytes extraction before UTF-8 parsing.
 
+## Workspace State Properties
+- `BaseWorkspace.restore_state` normalizes `QSettings.value(...)` results to string-safe values before:
+  - assigning `search_text`;
+  - JSON-decoding stored filter payload.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.
