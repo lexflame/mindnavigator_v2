@@ -124,6 +124,10 @@ Purpose: entity property map and UI role map.
 - `NoteWorkspace` list surface uses Qt6 UI policy enums:
   `Qt.ScrollBarPolicy.ScrollBarAlwaysOff` and `Qt.ContextMenuPolicy.CustomContextMenu`.
 
+## Tasks Workspace Properties
+- `TasksWorkspace` runtime/UI constants are aligned to Qt6 enum namespaces for list/model/input paths:
+  `Qt.ItemFlag.*`, `Qt.Key.*`, `Qt.AspectRatioMode.*`, `Qt.TransformationMode.*`, `Qt.ScrollBarPolicy.*`, `Qt.WidgetAttribute.*`, `QEvent.Type.*`.
+
 ## Task Attachment Properties
 - Value object: `TaskAttachmentData(id, task_id, kind, ref_id, created_at)`.
 - Supported kinds (`TaskAttachmentData.SUPPORTED_KINDS`): `note`, `object`, `map`, `marker`, `file`, `image`, `idea`.

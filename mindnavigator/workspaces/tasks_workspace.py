@@ -18,15 +18,16 @@ import re
 from typing import Dict, List, Union, Optional, Set, Tuple, Any
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData
-from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
+from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView
+    QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog
 )
 
+from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
     CloudFileData,
     TaskAttachmentData,
@@ -40,19 +41,25 @@ from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialo
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
+from mindnavigator.workspaces.csv_workspace_transfer import (
+    TASKS_CSV_FIELDS,
+    export_tasks_rows,
+    import_tasks_rows,
+)
 
 WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 _PARENT_UNSET = object()
 
 ATTACHMENT_KIND_LABELS = {
     "note": "Заметка",
+    "idea": "Идея",
     "object": "Объект",
     "map": "Карта",
     "marker": "Метка карты",
     "file": "Файл",
     "image": "Изображение",
 }
-ATTACHMENT_KIND_ORDER = ("note", "object", "map", "marker", "file", "image")
+ATTACHMENT_KIND_ORDER = ("note", "idea", "object", "map", "marker", "file", "image")
 _URL_RE = re.compile(r"(https?://[^\s<>'\"()]+)")
 
 
@@ -126,6 +133,46 @@ class TaskRoles:
     ParentTaskId = Qt.ItemDataRole.UserRole + 21
     MarkerColor = Qt.ItemDataRole.UserRole + 22
     MarkerTheme = Qt.ItemDataRole.UserRole + 23
+
+
+def is_marker_only_task_update(previous: TaskRow, updated: TaskRow) -> bool:
+    """Возвращает True, если изменились только свойства маркера."""
+    marker_changed = (
+        previous.marker_color != updated.marker_color
+        or previous.marker_theme != updated.marker_theme
+    )
+    if not marker_changed:
+        return False
+    return (
+        previous.id == updated.id
+        and previous.day == updated.day
+        and previous.time_text == updated.time_text
+        and previous.title == updated.title
+        and previous.description == updated.description
+        and previous.priority == updated.priority
+        and previous.done == updated.done
+        and previous.project_id == updated.project_id
+        and previous.project_title == updated.project_title
+        and previous.project_area == updated.project_area
+        and previous.parent_id == updated.parent_id
+        and previous.recurrence_kind == updated.recurrence_kind
+        and previous.recurrence_interval == updated.recurrence_interval
+        and previous.completion_delay_minutes == updated.completion_delay_minutes
+    )
+
+
+def blend_task_row_background(base: QColor, marker_color: str, selected: bool) -> QColor:
+    """Подмешивает цвет маркера в фон строки, включая выделенную строку."""
+    tint = QColor((marker_color or "").strip())
+    if not tint.isValid():
+        return base
+    marker_weight = 0.22 if selected else 0.35
+    base_weight = 1.0 - marker_weight
+    return QColor(
+        int(base.red() * base_weight + tint.red() * marker_weight),
+        int(base.green() * base_weight + tint.green() * marker_weight),
+        int(base.blue() * base_weight + tint.blue() * marker_weight),
+    )
 
 
 class QuickProjectCreateDialog(QDialog):
@@ -368,18 +415,18 @@ class TasksModel(QAbstractListModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         """Задает флаги взаимодействия для строки."""
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
         r = self._rows[index.row()]
         if isinstance(r, HeaderRow):
-            flags = Qt.ItemIsEnabled
+            flags = Qt.ItemFlag.ItemIsEnabled
             if self._drag_enabled:
-                flags |= Qt.ItemIsDropEnabled
+                flags |= Qt.ItemFlag.ItemIsDropEnabled
             return flags
         if isinstance(r, SortHeaderRow):
-            return Qt.ItemIsEnabled
-        flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return Qt.ItemFlag.ItemIsEnabled
+        flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         if self._drag_enabled:
-            flags |= Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
+            flags |= Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled
         return flags
 
     def set_filter_mode(self, mode: str):
@@ -553,30 +600,53 @@ class TasksModel(QAbstractListModel):
             self._reload_from_db()
             return
 
-        new_all: List[Row] = []
-        for it in self._all_rows:
-            if isinstance(it, TaskRow) and it.id == r.id:
-                it = TaskRow(
-                    updated.id,
-                    updated.day,
-                    updated.time_text,
-                    updated.title,
-                    updated.description,
-                    updated.priority,
-                    updated.done,
-                    updated.project_id,
-                    updated.project_title,
-                    updated.project_area,
-                    updated.parent_id,
-                    updated.recurrence_kind,
-                    updated.recurrence_interval,
-                    updated.completion_delay_minutes,
-                    updated.marker_color,
-                    updated.marker_theme,
-                )
-            new_all.append(it)
+        updated_row = TaskRow(
+            updated.id,
+            updated.day,
+            updated.time_text,
+            updated.title,
+            updated.description,
+            updated.priority,
+            updated.done,
+            updated.project_id,
+            updated.project_title,
+            updated.project_area,
+            updated.parent_id,
+            updated.recurrence_kind,
+            updated.recurrence_interval,
+            updated.completion_delay_minutes,
+            updated.marker_color,
+            updated.marker_theme,
+        )
+        self._all_rows = [
+            updated_row if isinstance(it, TaskRow) and it.id == r.id else it
+            for it in self._all_rows
+        ]
 
-        self._all_rows = new_all
+        if is_marker_only_task_update(r, updated_row):
+            changed_row_idx = -1
+            new_rows: List[Row] = []
+            for idx, it in enumerate(self._rows):
+                if isinstance(it, TaskRow) and it.id == r.id:
+                    changed_row_idx = idx
+                    new_rows.append(updated_row)
+                else:
+                    new_rows.append(it)
+            self._rows = new_rows
+            if changed_row_idx >= 0:
+                idx = self.index(changed_row_idx, 0)
+                if idx.isValid():
+                    self.dataChanged.emit(
+                        idx,
+                        idx,
+                        [
+                            TaskRoles.MarkerColor,
+                            TaskRoles.MarkerTheme,
+                            TaskRoles.ProjectTitle,
+                            Qt.ItemDataRole.DisplayRole,
+                        ],
+                    )
+                    return
         self._rebuild()
 
     def toggle_done_by_row(self, row_idx: int):
@@ -1141,13 +1211,13 @@ class TaskImagePreviewDialog(QDialog):
         self._update_image()
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key.Key_Left:
             self._show_previous()
             return
-        if event.key() == Qt.Key_Right:
+        if event.key() == Qt.Key.Key_Right:
             self._show_next()
             return
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.close()
             return
         super().keyPressEvent(event)
@@ -1201,7 +1271,7 @@ class TaskImagePreviewDialog(QDialog):
             self.image_label.setText("Изображение недоступно")
             return
         target_size = self.image_label.size()
-        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        scaled = pixmap.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.image_label.setPixmap(scaled)
         self.image_label.setText("")
 
@@ -1401,11 +1471,13 @@ class TaskDetailsDialog(QDialog):
 
     def _load_attachment_sources(self) -> None:
         notes = self._db.fetch_notes()
+        ideas = self._db.fetch_ideas(archived=True)
         objects = self._db.fetch_objects()
         maps = self._db.fetch_maps()
         markers = self._db.fetch_map_markers()
         cloud_files = self._db.fetch_cloud_files()
         self._notes_by_id = {note.id: note for note in notes}
+        self._ideas_by_id = {idea.id: idea for idea in ideas}
         self._objects_by_id = {item.id: item for item in objects}
         self._maps_by_id = {item.id: item for item in maps}
         self._markers_by_id = {item.id: item for item in markers}
@@ -1464,6 +1536,13 @@ class TaskDetailsDialog(QDialog):
         if attachment.kind == "note":
             note = self._notes_by_id.get(attachment.ref_id)
             return note.title if note else "Заметка не найдена"
+        if attachment.kind == "idea":
+            idea = self._ideas_by_id.get(attachment.ref_id)
+            if not idea:
+                return "Идея не найдена"
+            if idea.project_title:
+                return f"{idea.title} · {idea.project_title}"
+            return idea.title
         if attachment.kind == "object":
             obj = self._objects_by_id.get(attachment.ref_id)
             return obj.title if obj else "Объект не найден"
@@ -1513,6 +1592,25 @@ class TaskDetailsDialog(QDialog):
                 ("Описание", note.preview or "—"),
             ]
             self._open_info_dialog("Заметка", rows, wrap_rows={"Описание"})
+            return
+        if attachment.kind == "idea":
+            idea = self._ideas_by_id.get(attachment.ref_id)
+            if not idea:
+                QMessageBox.warning(self, "Вложения", "Идея не найдена.")
+                return
+            rows = [
+                ("Название", idea.title),
+                ("Проект", idea.project_title or "—"),
+                ("Тип", idea.type or "—"),
+                ("Статус", idea.status or "—"),
+                ("Ценность", str(idea.value_score)),
+                ("Сложность", str(idea.effort_score)),
+                ("Источник", idea.source or "—"),
+                ("Обновлено", idea.updated_at.strftime("%d.%m.%Y %H:%M")),
+                ("Кратко", idea.summary or "—"),
+                ("Описание", idea.body_md or "—"),
+            ]
+            self._open_info_dialog("Идея", rows, wrap_rows={"Кратко", "Описание"})
             return
         if attachment.kind == "object":
             obj = self._objects_by_id.get(attachment.ref_id)
@@ -2066,11 +2164,13 @@ class TaskEditDialog(QDialog):
 
     def _load_attachment_sources(self) -> None:
         notes = self._db.fetch_notes()
+        ideas = self._db.fetch_ideas(archived=True)
         objects = self._db.fetch_objects()
         maps = self._db.fetch_maps()
         markers = self._db.fetch_map_markers()
         cloud_files = self._db.fetch_cloud_files()
         self._notes_by_id = {note.id: note for note in notes}
+        self._ideas_by_id = {idea.id: idea for idea in ideas}
         self._objects_by_id = {item.id: item for item in objects}
         self._maps_by_id = {item.id: item for item in maps}
         self._markers_by_id = {item.id: item for item in markers}
@@ -2139,6 +2239,13 @@ class TaskEditDialog(QDialog):
         if attachment.kind == "note":
             note = self._notes_by_id.get(attachment.ref_id)
             return note.title if note else "Заметка не найдена"
+        if attachment.kind == "idea":
+            idea = self._ideas_by_id.get(attachment.ref_id)
+            if not idea:
+                return "Идея не найдена"
+            if idea.project_title:
+                return f"{idea.title} · {idea.project_title}"
+            return idea.title
         if attachment.kind == "object":
             obj = self._objects_by_id.get(attachment.ref_id)
             return obj.title if obj else "Объект не найден"
@@ -2170,6 +2277,7 @@ class TaskEditDialog(QDialog):
         kind_combo = QComboBox()
         kind_items = [
             ("Заметка", "note"),
+            ("Идея", "idea"),
             ("Объект", "object"),
             ("Карта", "map"),
             ("Метка карты", "marker"),
@@ -2186,6 +2294,10 @@ class TaskEditDialog(QDialog):
             if kind == "note":
                 for item in sorted(self._notes_by_id.values(), key=lambda item: item.title.lower()):
                     label = f"{item.title} · {item.project}" if item.project else item.title
+                    item_combo.addItem(label, item.id)
+            elif kind == "idea":
+                for item in sorted(self._ideas_by_id.values(), key=lambda item: item.title.lower()):
+                    label = f"{item.title} · {item.project_title}" if item.project_title else item.title
                     item_combo.addItem(label, item.id)
             elif kind == "object":
                 for item in sorted(self._objects_by_id.values(), key=lambda item: item.title.lower()):
@@ -2290,6 +2402,25 @@ class TaskEditDialog(QDialog):
                 ("Описание", note.preview or "—"),
             ]
             self._open_info_dialog("Заметка", rows, wrap_rows={"Описание"})
+            return
+        if attachment.kind == "idea":
+            idea = self._ideas_by_id.get(attachment.ref_id)
+            if not idea:
+                QMessageBox.warning(self, "Вложения", "Идея не найдена.")
+                return
+            rows = [
+                ("Название", idea.title),
+                ("Проект", idea.project_title or "—"),
+                ("Тип", idea.type or "—"),
+                ("Статус", idea.status or "—"),
+                ("Ценность", str(idea.value_score)),
+                ("Сложность", str(idea.effort_score)),
+                ("Источник", idea.source or "—"),
+                ("Обновлено", idea.updated_at.strftime("%d.%m.%Y %H:%M")),
+                ("Кратко", idea.summary or "—"),
+                ("Описание", idea.body_md or "—"),
+            ]
+            self._open_info_dialog("Идея", rows, wrap_rows={"Кратко", "Описание"})
             return
         if attachment.kind == "object":
             obj = self._objects_by_id.get(attachment.ref_id)
@@ -2690,16 +2821,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
 
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
-        if option.state & QStyle.StateFlag.State_Selected:
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if selected:
             bg = QColor("#343844")
-        elif marker_color:
-            tint = QColor(marker_color)
-            if tint.isValid():
-                bg = QColor(
-                    int(bg.red() * 0.65 + tint.red() * 0.35),
-                    int(bg.green() * 0.65 + tint.green() * 0.35),
-                    int(bg.blue() * 0.65 + tint.blue() * 0.35),
-                )
+        bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
         painter.setPen(self.C_BORDER)
@@ -3267,6 +3392,8 @@ class TasksWorkspace(BaseWorkspace):
 
     def __init__(self, parent=None):
         """Создает интерфейс рабочей области задач."""
+        self._db = get_database()
+        self._csv_service = CsvTransferService()
         self._focus_day = date.today()
         self._applying_filters = False
         self._gantt_mode = False
@@ -3429,6 +3556,28 @@ class TasksWorkspace(BaseWorkspace):
             }
         """)
 
+    def create_actions(self) -> dict[str, QAction]:
+        action_export = QAction("Экспорт", self)
+        action_export.triggered.connect(self._export_tasks_csv)
+        action_import = QAction("Импорт", self)
+        action_import.triggered.connect(self._import_tasks_csv)
+        return {
+            "export": action_export,
+            "import": action_import,
+        }
+
+    def build_toolbar(self, actions: dict[str, QAction]) -> None:
+        while self.toolbar_layout.count():
+            item = self.toolbar_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.toolbar_layout.addStretch(1)
+        for action in actions.values():
+            button = QToolButton()
+            button.setDefaultAction(action)
+            self.toolbar_layout.addWidget(button)
+
     def build_content(self) -> None:
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -3493,7 +3642,7 @@ class TasksWorkspace(BaseWorkspace):
         self.list.setObjectName("TasksList")
         self.list.setUniformItemSizes(False)
         self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setSelectionMode(QListView.SingleSelection)
         self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
         self.list.setMouseTracking(True)
@@ -3506,8 +3655,8 @@ class TasksWorkspace(BaseWorkspace):
         self.list.setItemDelegate(self.delegate)
         self._sticky_header = QLabel(self.list.viewport())
         self._sticky_header.setObjectName("TasksStickyHeader")
-        self._sticky_header.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        self._sticky_header.setAttribute(Qt.WA_StyledBackground, True)
+        self._sticky_header.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._sticky_header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._sticky_header.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._sticky_header.hide()
 
@@ -3729,6 +3878,44 @@ class TasksWorkspace(BaseWorkspace):
         if self._gantt_mode:
             self._refresh_gantt_day()
 
+    def _export_tasks_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Tasks",
+            "tasks_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_tasks_rows(self._db.fetch_tasks())
+        if not rows:
+            self.set_status("Нет данных для экспорта")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=TASKS_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Tasks", f"Export failed: {exc}")
+            return
+        self.set_status("Экспорт завершен")
+
+    def _import_tasks_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Tasks",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Tasks", f"Import failed: {exc}")
+            return
+        result = import_tasks_rows(self._db, rows)
+        self.refresh()
+        self.set_status(f"Импорт завершен: {result.imported}, пропущено: {result.skipped}")
+
     def on_enter(self, context: dict | None = None) -> None:
         super().on_enter(context)
 
@@ -3786,6 +3973,56 @@ class TasksWorkspace(BaseWorkspace):
         if index.data(TaskRoles.RowType) != "task":
             return None
         return index
+
+    def _index_for_task_id(self, task_id: int) -> Optional[QModelIndex]:
+        if not hasattr(self, "model"):
+            return None
+        for row in range(self.model.rowCount()):
+            index = self.model.index(row, 0)
+            if not index.isValid():
+                continue
+            if index.data(TaskRoles.RowType) != "task":
+                continue
+            if index.data(TaskRoles.TaskId) == task_id:
+                return index
+        return None
+
+    def focus_task(self, task_id: int) -> bool:
+        index = self._index_for_task_id(task_id)
+        if index is None:
+            if self._gantt_mode:
+                self._gantt_mode = False
+                self.btn_gantt.blockSignals(True)
+                self.btn_gantt.setChecked(False)
+                self.btn_gantt.blockSignals(False)
+                self.content_stack.setCurrentWidget(self.list)
+            self._apply_tab("plan")
+            self.model.set_project_filter(None)
+            self.model.set_priority_filter(None)
+            self.model.set_search("")
+            self.cmb_priority.setCurrentText("Любой")
+            self.search_input.blockSignals(True)
+            self.search_input.clear()
+            self.search_input.blockSignals(False)
+            index = self._index_for_task_id(task_id)
+        if index is None:
+            return False
+
+        self.content_stack.setCurrentWidget(self.list)
+        self.list.setCurrentIndex(index)
+        selection_model = self.list.selectionModel()
+        if selection_model is not None:
+            selection_model.select(
+                index,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
+            )
+            selection_model.setCurrentIndex(
+                index,
+                QItemSelectionModel.SelectionFlag.Current | QItemSelectionModel.SelectionFlag.Select,
+            )
+        self.list.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.list.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
 
     def _edit_selected_task(self) -> None:
         index = self._selected_task_index()
@@ -3882,9 +4119,9 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_gantt_day()
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self.list.viewport() and event.type() == QEvent.Resize:
+        if obj is self.list.viewport() and event.type() == QEvent.Type.Resize:
             self._update_sticky_day_header()
-        if obj is self.list.viewport() and event.type() == QEvent.MouseButtonDblClick:
+        if obj is self.list.viewport() and event.type() == QEvent.Type.MouseButtonDblClick:
             if event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
                 index = self.list.indexAt(pos)
@@ -4223,3 +4460,4 @@ class TasksWorkspace(BaseWorkspace):
             self.list.setAcceptDrops(False)
             self.list.setDropIndicatorShown(False)
             self.list.setDragDropMode(QAbstractItemView.NoDragDrop)
+
