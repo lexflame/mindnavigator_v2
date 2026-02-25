@@ -229,3 +229,4 @@ Purpose: entity property map and UI role map.
 - Lightweight UI helpers use Qt6 enum namespaces consistently:
   `QAbstractItemView.SelectionMode.SingleSelection`, `Qt.ScrollBarPolicy.ScrollBarAlwaysOff`,
   `QAbstractItemView.ScrollMode.ScrollPerPixel`, `Qt.AlignmentFlag.AlignCenter`.
+- Shell UI components (`splash`, `titlebar`) use Qt6 enums for window flags, alignment, cursor, mouse buttons, and pixmap scaling options.

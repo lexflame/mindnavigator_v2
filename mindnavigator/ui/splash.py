@@ -22,7 +22,9 @@ class SplashWidget(QWidget):
         super().__init__(None)
         self._app = app
 
-        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setFixedSize(w, h)
 
         # Эффект прозрачности
@@ -32,7 +34,7 @@ class SplashWidget(QWidget):
         # Анимация прозрачности
         self.animation = QPropertyAnimation(self.opacity_effect, b"opacity")
         self.animation.setDuration(500)  # длительность анимации в мс
-        self.animation.setEasingCurve(QEasingCurve.OutQuad)  # плавный спад
+        self.animation.setEasingCurve(QEasingCurve.Type.OutQuad)  # плавный спад
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -47,16 +49,21 @@ class SplashWidget(QWidget):
         card_layout.setSpacing(10)
 
         self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         pm = QPixmap(image_path)
         if not pm.isNull():
-            pm2 = pm.scaled(w - 28, h - 70, Qt.KeepAspectRatio, Qt.FastTransformation)
+            pm2 = pm.scaled(
+                w - 28,
+                h - 70,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.FastTransformation,
+            )
             self.image_label.setPixmap(pm2)
 
         self.status_label = QLabel("Запуск…")
         self.status_label.setObjectName("SplashStatus")
-        self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         card_layout.addWidget(self.image_label, 1)
         card_layout.addWidget(self.status_label, 0)

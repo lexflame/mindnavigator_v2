@@ -41,7 +41,14 @@ class TitleBar(QWidget):
         self.icon_label = QLabel()
         pm = QPixmap(resource_path("assets/icon.ico"))
         if not pm.isNull():
-            self.icon_label.setPixmap(pm.scaled(18, 18, Qt.KeepAspectRatio, Qt.FastTransformation))
+            self.icon_label.setPixmap(
+                pm.scaled(
+                    18,
+                    18,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.FastTransformation,
+                )
+            )
         self.icon_label.setFixedSize(18, 18)
 
         self.title_label = QLabel(APP_NAME)
@@ -57,7 +64,7 @@ class TitleBar(QWidget):
 
         for b in (self.btn_min, self.btn_max, self.btn_close):
             b.setFixedSize(34, 26)
-            b.setCursor(Qt.PointingHandCursor)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
 
         if hasattr(self._window, "minimize_to_tray"):
             self.btn_min.clicked.connect(self._window.minimize_to_tray)
@@ -116,7 +123,7 @@ class TitleBar(QWidget):
 
     def mousePressEvent(self, e):
         """Запоминает старт перетаскивания заголовка."""
-        if e.button() == Qt.LeftButton:
+        if e.button() == Qt.MouseButton.LeftButton:
             self._press_initiated = True
             self._press_global = e.globalPosition().toPoint()
 
@@ -145,14 +152,14 @@ class TitleBar(QWidget):
 
             # 4) обновляем drag offset и продолжаем
             self._drag_pos = e.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
-            self._window.title_bar.sync_max_button()
+            self.sync_max_button()
 
         self._window.move(e.globalPosition().toPoint() - self._drag_pos)
         e.accept()
 
     def mouseReleaseEvent(self, e):
         """Завершает перетаскивание и применяет прилипания к краям."""
-        if e.button() == Qt.LeftButton:
+        if e.button() == Qt.MouseButton.LeftButton:
             global_pos = e.globalPosition().toPoint()
             self._press_initiated = False
             self._dragging = False
@@ -166,6 +173,6 @@ class TitleBar(QWidget):
 
     def mouseDoubleClickEvent(self, e):
         """Обрабатывает двойной клик для разворота окна."""
-        if e.button() == Qt.LeftButton:
+        if e.button() == Qt.MouseButton.LeftButton:
             self._toggle_max_restore()
             e.accept()

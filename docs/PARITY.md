@@ -201,3 +201,5 @@ It also stores:
   - validated typechecker batch-5 with focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-1): migrated remaining legacy Qt enum references in lightweight UI modules (`search_nav`, `smooth_scroll`, `smooth_scroll_demo`) to Qt6 namespaces.
   - validated unresolved batch-1 with compile + focused smooth-scroll tests (`tests/test_smooth_scroll.py`): `5 passed`.
+  - continued `PyUnresolvedReferencesInspection` cleanup (batch-2): migrated legacy Qt enums in shell UI modules (`splash`, `titlebar`) and removed typed-unsafe `QMainWindow.title_bar` cross-reference by using local `TitleBar.sync_max_button()`.
+  - validated unresolved batch-2 with compile + focused tray/workspace regressions (`tests/test_tray_task_navigation.py`, `tests/test_workspace_visibility_settings.py`): `7 passed`.
