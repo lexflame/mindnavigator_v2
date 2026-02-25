@@ -1522,14 +1522,16 @@ class TaskDetailsDialog(QDialog):
             row_layout.addWidget(link_label, 1)
             self.attachments_list.addWidget(row)
 
-    def _clear_layout(self, layout: QVBoxLayout) -> None:
+    @staticmethod
+    def _clear_layout(layout: QVBoxLayout) -> None:
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-    def _cloud_file_link_text(self, file_item) -> str:
+    @staticmethod
+    def _cloud_file_link_text(file_item) -> str:
         description = (file_item.description or "").strip()
         if description:
             try:
@@ -2222,17 +2224,20 @@ class TaskEditDialog(QDialog):
             row_layout.addWidget(remove_btn)
             self.attachments_list.addWidget(row)
 
-    def _clear_layout(self, layout: QVBoxLayout) -> None:
+    @staticmethod
+    def _clear_layout(layout: QVBoxLayout) -> None:
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-    def _attachment_kind_label(self, kind: str) -> str:
+    @staticmethod
+    def _attachment_kind_label(kind: str) -> str:
         return attachment_kind_label(kind)
 
-    def _cloud_file_link_text(self, file_item) -> str:
+    @staticmethod
+    def _cloud_file_link_text(file_item) -> str:
         description = (file_item.description or "").strip()
         if description:
             try:
@@ -2736,7 +2741,8 @@ class TasksItemDelegate(QStyledItemDelegate):
             quick_x = max(text_left + 10, max_right - quick_width)
         return QRect(quick_x, row_rect.top() + 6, quick_width, quick_height)
 
-    def _task_quick_rect(self, layout: dict, row_rect: QRect) -> QRect:
+    @staticmethod
+    def _task_quick_rect(layout: dict, row_rect: QRect) -> QRect:
         quick_width = 22
         quick_height = row_rect.height() - 14
         toggle_rect = layout.get("subtask_toggle")
@@ -3282,11 +3288,13 @@ class TasksItemDelegate(QStyledItemDelegate):
             return self.C_DEFER
         return self.C_MED
 
-    def _is_overdue(self, d: date, done: bool) -> bool:
+    @staticmethod
+    def _is_overdue(d: date, done: bool) -> bool:
         """Проверяет, просрочена ли задача."""
         return (d < date.today()) and (not done)
 
-    def _format_header(self, d: date) -> str:
+    @staticmethod
+    def _format_header(d: date) -> str:
         """Формирует подпись для заголовка дня."""
         wd = WEEKDAY_RU[d.weekday()]
         return f"{d.isoformat()} — {wd}"
@@ -3294,7 +3302,8 @@ class TasksItemDelegate(QStyledItemDelegate):
     def format_header(self, d: date) -> str:
         return self._format_header(d)
 
-    def _format_completion_delay(self, delay_minutes: int) -> str:
+    @staticmethod
+    def _format_completion_delay(delay_minutes: int) -> str:
         """Формирует подпись расхождения по факту выполнения."""
         minutes = max(0, int(delay_minutes or 0))
         days = minutes // (24 * 60)
@@ -3332,7 +3341,8 @@ class TasksItemDelegate(QStyledItemDelegate):
             return QRect(), None, ""
         return rect, parent_task, text
 
-    def _format_parent_schedule_text(self, parent_task: TaskRow) -> str:
+    @staticmethod
+    def _format_parent_schedule_text(parent_task: TaskRow) -> str:
         if parent_task.time_text:
             return f"Перенести на {parent_task.day.isoformat()} {parent_task.time_text}"
         return f"Перенести на {parent_task.day.isoformat()}"
@@ -4183,7 +4193,8 @@ class TasksWorkspace(BaseWorkspace):
         """Перезагружает список задач из базы."""
         self.model.refresh()
 
-    def _tab_from_mode(self, mode: Optional[str]) -> str:
+    @staticmethod
+    def _tab_from_mode(mode: Optional[str]) -> str:
         if mode == "Сегодня":
             return "today"
         if mode == "Выполнено":
@@ -4363,7 +4374,8 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header.raise_()
         self._sticky_header.show()
 
-    def _estimate_task_minutes(self, task) -> int:
+    @staticmethod
+    def _estimate_task_minutes(task) -> int:
         text = f"{task.title} {task.description or ''}".lower()
         words = len((task.description or "").split())
         base = 50
