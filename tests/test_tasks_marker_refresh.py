@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +13,7 @@ from mindnavigator.workspaces.tasks_workspace import (
     TaskRoles,
     blend_task_row_background,
     is_marker_only_task_update,
+    should_show_today_badge,
 )
 
 
@@ -66,6 +67,11 @@ def test_blend_task_row_background_tints_selected_row() -> None:
     tinted = blend_task_row_background(base, "#2f6edb", selected=True)
 
     assert tinted != base
+
+
+def test_should_show_today_badge_detects_current_day() -> None:
+    assert should_show_today_badge(date.today()) is True
+    assert should_show_today_badge(date.today() - timedelta(days=1)) is False
 
 
 def test_tasks_model_marker_update_emits_data_changed(monkeypatch) -> None:
