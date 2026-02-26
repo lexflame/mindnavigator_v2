@@ -2878,13 +2878,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
             x += tag_width + self.TAG_GAP
 
-    def _header_quick_rect(self, row_rect: QRect, header_text: str) -> QRect:
+    def _header_quick_rect(
+        self,
+        row_rect: QRect,
+        header_text: str,
+        include_today_badge: bool = False,
+    ) -> QRect:
         metrics = QFontMetrics(self._font_header)
         text_left = row_rect.left() + 10
         text_width = metrics.horizontalAdvance(header_text)
+        today_badge_width = metrics.horizontalAdvance("СЕГОДНЯ") if include_today_badge else 0
         quick_width = 116
         quick_height = row_rect.height() - 12
-        quick_x = text_left + text_width + 14
+        quick_x = text_left + text_width + 14 + today_badge_width
         max_right = row_rect.right() - 12
         if quick_x + quick_width > max_right:
             quick_x = max(text_left + 10, max_right - quick_width)
@@ -2920,7 +2926,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            quick_rect = self._header_quick_rect(r, txt)
+            quick_rect = self._header_quick_rect(r, txt, include_today_badge=show_today)
             text_rect = QRect(r.left() + 10, r.top(), quick_rect.left() - r.left() - 18, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, txt)
 
@@ -3238,7 +3244,13 @@ class TasksItemDelegate(QStyledItemDelegate):
                 r = getattr(option, "rect", QRect())
                 header_day = index.data(TaskRoles.Day)
                 header_text = self._format_header(header_day) if isinstance(header_day, date) else ""
-                quick_rect = self._header_quick_rect(r, header_text)
+                quick_rect = self._header_quick_rect(
+                    r,
+                    header_text,
+                    include_today_badge=(
+                        isinstance(header_day, date) and should_show_today_badge(header_day)
+                    ),
+                )
                 tasks_model = self._tasks_model(model)
                 if quick_rect.contains(pos) and tasks_model is not None:
                     target_day = index.data(TaskRoles.Day)
