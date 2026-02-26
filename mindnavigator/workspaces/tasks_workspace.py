@@ -21,7 +21,7 @@ import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea, QStyleOptionViewItem,
     QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog
@@ -61,19 +61,164 @@ ATTACHMENT_KIND_LABELS = {
 }
 ATTACHMENT_KIND_ORDER = ("note", "idea", "object", "map", "marker", "file", "image")
 _URL_RE = re.compile(r"(https?://[^\s<>'\"()]+)")
+_FENCED_CODE_RE = re.compile(r"```([^\n`]*)\n?(.*?)```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+_INLINE_CODE_STYLE = (
+    "font-family:'Consolas','Courier New',monospace;"
+    "background:#1f2228;"
+    "color:#f0f0f0;"
+    "padding:1px 5px;"
+    "border-radius:5px;"
+    "border:1px solid #5a5f66;"
+)
+_BLOCK_CODE_STYLE = (
+    "font-family:'Consolas','Courier New',monospace;"
+    "background:#171a20;"
+    "border:1px solid #5a5f66;"
+    "border-radius:8px;"
+    "padding:5px;"
+    "margin:6px 0;"
+    "white-space:pre-wrap;"
+)
+_BLOCK_CODE_LANG_STYLE = "color:#7d828a;font-size:10px;margin:2px 0 2px 2px;"
+_LINK_STYLE = "color:#6ECBFF;text-decoration:none;"
+_COPY_CODE_BUTTON_STYLE = (
+    "QToolButton {"
+    "background:#2a2d34;"
+    "color:#d7dae0;"
+    "border:1px solid #5a5f66;"
+    "border-radius:5px;"
+    "padding:2px 8px;"
+    "}"
+    "QToolButton:hover {"
+    "background:#343841;"
+    "}"
+)
 
 
 def attachment_kind_label(kind: str) -> str:
     return ATTACHMENT_KIND_LABELS.get(kind, kind)
 
 
+def _linkify_escaped_text(escaped_text: str) -> str:
+    def replace_url(match: re.Match[str]) -> str:
+        url = match.group(1)
+        return f"<a href='{url}' style=\"{_LINK_STYLE}\">{url}</a>"
+
+    return _URL_RE.sub(replace_url, escaped_text)
+
+
+def _extract_markdown_code_blocks(text: str) -> list[str]:
+    raw = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    blocks: list[str] = []
+    for match in _FENCED_CODE_RE.finditer(raw):
+        block = (match.group(2) or "").strip("\n")
+        if block:
+            blocks.append(block)
+    return blocks
+
+
+def _copy_markdown_code_blocks_to_clipboard(code_blocks: list[str]) -> None:
+    if not code_blocks:
+        return
+    QApplication.clipboard().setText("\n\n".join(code_blocks))
+
+
+def _configure_markdown_preview_label(value_label: QLabel) -> None:
+    value_label.setWordWrap(True)
+    value_label.setTextFormat(Qt.TextFormat.RichText)
+    value_label.setTextInteractionFlags(
+        Qt.TextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+    )
+    value_label.setOpenExternalLinks(True)
+
+
+def _build_markdown_preview_widget(text: str, parent: Optional[QWidget] = None) -> QWidget:
+    container = QWidget(parent)
+    container_layout = QVBoxLayout(container)
+    container_layout.setContentsMargins(0, 0, 0, 0)
+    container_layout.setSpacing(4)
+
+    value_label = QLabel(_linkify_description_text(text))
+    _configure_markdown_preview_label(value_label)
+    container_layout.addWidget(value_label)
+
+    code_blocks = _extract_markdown_code_blocks(text)
+    if not code_blocks:
+        return container
+
+    copy_row = QHBoxLayout()
+    copy_row.setContentsMargins(0, 0, 0, 0)
+    copy_row.addStretch(1)
+    copy_button = QToolButton(container)
+    copy_button.setText("Копировать код")
+    copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
+    copy_button.setStyleSheet(_COPY_CODE_BUTTON_STYLE)
+    blocks_to_copy = list(code_blocks)
+    copy_button.clicked.connect(
+        lambda _checked=False, blocks=blocks_to_copy: _copy_markdown_code_blocks_to_clipboard(blocks)
+    )
+    copy_row.addWidget(copy_button)
+    container_layout.addLayout(copy_row)
+    return container
+
+
+def _render_inline_description_html(text: str) -> str:
+    rendered: list[str] = []
+    cursor = 0
+    for match in _INLINE_CODE_RE.finditer(text):
+        plain_text = text[cursor:match.start()]
+        if plain_text:
+            escaped_plain = html.escape(plain_text)
+            linked_plain = _linkify_escaped_text(escaped_plain)
+            rendered.append(linked_plain.replace("\n", "<br>"))
+
+        inline_code = html.escape(match.group(1) or "")
+        rendered.append(f"<code style=\"{_INLINE_CODE_STYLE}\">{inline_code}</code>")
+        cursor = match.end()
+
+    tail_text = text[cursor:]
+    if tail_text:
+        escaped_tail = html.escape(tail_text)
+        linked_tail = _linkify_escaped_text(escaped_tail)
+        rendered.append(linked_tail.replace("\n", "<br>"))
+    return "".join(rendered)
+
+
 def _linkify_description_text(text: str) -> str:
-    raw = (text or "").strip()
+    raw = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not raw:
         return "—"
-    escaped = html.escape(raw)
-    linked = _URL_RE.sub(r"<a href='\1'>\1</a>", escaped)
-    return linked.replace("\n", "<br>")
+
+    rendered: list[str] = []
+    cursor = 0
+    for match in _FENCED_CODE_RE.finditer(raw):
+        plain_text = raw[cursor:match.start()]
+        if plain_text:
+            rendered.append(_render_inline_description_html(plain_text))
+
+        language = (match.group(1) or "").strip()
+        code_body = html.escape(match.group(2) or "")
+        if language:
+            rendered.append(
+                f"<div style=\"{_BLOCK_CODE_LANG_STYLE}\">{html.escape(language)}</div>"
+            )
+        rendered.append(
+            f"<pre style=\"{_BLOCK_CODE_STYLE}\"><code>{code_body}</code></pre>"
+        )
+        cursor = match.end()
+
+    tail_text = raw[cursor:]
+    if tail_text:
+        rendered.append(_render_inline_description_html(tail_text))
+    return "".join(rendered)
+
+
+def should_show_today_badge(header_day: date) -> bool:
+    return header_day == date.today()
 
 
 @dataclass(frozen=True)
@@ -1332,18 +1477,8 @@ class TaskDetailsDialog(QDialog):
         desc_layout.setContentsMargins(14, 12, 14, 12)
         desc_title = QLabel("Описание")
         desc_title.setObjectName("TaskDetailsSectionTitle")
-        desc_text = QLabel(_linkify_description_text(task.description))
-        desc_text.setWordWrap(True)
-        desc_text.setTextFormat(Qt.TextFormat.RichText)
-        desc_text.setTextInteractionFlags(
-            Qt.TextInteractionFlags(
-                Qt.TextInteractionFlag.TextBrowserInteraction
-                | Qt.TextInteractionFlag.TextSelectableByMouse
-            )
-        )
-        desc_text.setOpenExternalLinks(True)
         desc_layout.addWidget(desc_title)
-        desc_layout.addWidget(desc_text)
+        desc_layout.addWidget(_build_markdown_preview_widget(task.description, desc_block))
         content_layout.addWidget(desc_block)
 
         props_block = QFrame()
@@ -1684,9 +1819,10 @@ class TaskDetailsDialog(QDialog):
 
         wrap_rows = wrap_rows or set()
         for label, value in rows:
-            value_label = QLabel(value or "—")
             if label in wrap_rows:
-                value_label.setWordWrap(True)
+                value_label = _build_markdown_preview_widget(value, dialog)
+            else:
+                value_label = QLabel(value or "—")
             form.addRow(label, value_label)
         layout.addLayout(form)
 
@@ -2503,9 +2639,10 @@ class TaskEditDialog(QDialog):
 
         wrap_rows = wrap_rows or set()
         for label, value in rows:
-            value_label = QLabel(value or "—")
             if label in wrap_rows:
-                value_label.setWordWrap(True)
+                value_label = _build_markdown_preview_widget(value, dialog)
+            else:
+                value_label = QLabel(value or "—")
             form.addRow(label, value_label)
         layout.addLayout(form)
 
@@ -2741,13 +2878,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
             x += tag_width + self.TAG_GAP
 
-    def _header_quick_rect(self, row_rect: QRect, header_text: str) -> QRect:
+    def _header_quick_rect(
+        self,
+        row_rect: QRect,
+        header_text: str,
+        include_today_badge: bool = False,
+    ) -> QRect:
         metrics = QFontMetrics(self._font_header)
         text_left = row_rect.left() + 10
         text_width = metrics.horizontalAdvance(header_text)
+        today_badge_width = metrics.horizontalAdvance("СЕГОДНЯ") if include_today_badge else 0
         quick_width = 116
         quick_height = row_rect.height() - 12
-        quick_x = text_left + text_width + 14
+        quick_x = text_left + text_width + 14 + today_badge_width
         max_right = row_rect.right() - 12
         if quick_x + quick_width > max_right:
             quick_x = max(text_left + 10, max_right - quick_width)
@@ -2778,16 +2921,12 @@ class TasksItemDelegate(QStyledItemDelegate):
         if row_type == "header":
             d: date = index.data(TaskRoles.Day)
             txt = self._format_header(d)
-            model = index.model()
-            is_plan = False
-            if hasattr(model, "filter_mode"):
-                is_plan = model.filter_mode() == "План"
-            show_today = is_plan and d == date.today()
+            show_today = should_show_today_badge(d)
             painter.fillRect(r, self.C_BG)
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            quick_rect = self._header_quick_rect(r, txt)
+            quick_rect = self._header_quick_rect(r, txt, include_today_badge=show_today)
             text_rect = QRect(r.left() + 10, r.top(), quick_rect.left() - r.left() - 18, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, txt)
 
@@ -3105,7 +3244,13 @@ class TasksItemDelegate(QStyledItemDelegate):
                 r = getattr(option, "rect", QRect())
                 header_day = index.data(TaskRoles.Day)
                 header_text = self._format_header(header_day) if isinstance(header_day, date) else ""
-                quick_rect = self._header_quick_rect(r, header_text)
+                quick_rect = self._header_quick_rect(
+                    r,
+                    header_text,
+                    include_today_badge=(
+                        isinstance(header_day, date) and should_show_today_badge(header_day)
+                    ),
+                )
                 tasks_model = self._tasks_model(model)
                 if quick_rect.contains(pos) and tasks_model is not None:
                     target_day = index.data(TaskRoles.Day)

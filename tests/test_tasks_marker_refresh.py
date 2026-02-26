@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor
+from PySide6.QtGui import QFontMetrics
+from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import tasks_workspace
@@ -13,6 +16,7 @@ from mindnavigator.workspaces.tasks_workspace import (
     TaskRoles,
     blend_task_row_background,
     is_marker_only_task_update,
+    should_show_today_badge,
 )
 
 
@@ -66,6 +70,27 @@ def test_blend_task_row_background_tints_selected_row() -> None:
     tinted = blend_task_row_background(base, "#2f6edb", selected=True)
 
     assert tinted != base
+
+
+def test_should_show_today_badge_detects_current_day() -> None:
+    assert should_show_today_badge(date.today()) is True
+    assert should_show_today_badge(date.today() - timedelta(days=1)) is False
+
+
+def test_header_quick_rect_reserves_space_for_today_badge() -> None:
+    _app = QApplication.instance() or QApplication([])
+    delegate = tasks_workspace.TasksItemDelegate()
+    row_rect = QRect(0, 0, 1000, delegate.HEADER_H)
+    header_text = delegate.format_header(date.today())
+
+    base_rect = delegate._header_quick_rect(row_rect, header_text, include_today_badge=False)
+    with_badge_rect = delegate._header_quick_rect(row_rect, header_text, include_today_badge=True)
+
+    metrics = QFontMetrics(delegate._font_header)
+    today_width = metrics.horizontalAdvance("СЕГОДНЯ")
+
+    assert with_badge_rect.left() > base_rect.left()
+    assert (with_badge_rect.left() - base_rect.left()) >= today_width
 
 
 def test_tasks_model_marker_update_emits_data_changed(monkeypatch) -> None:

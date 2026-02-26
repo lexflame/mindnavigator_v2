@@ -1,3 +1,8 @@
+---
+name: mindnavigator-routine
+description: Routine workflow for bug fixes, small features, targeted refactors, and test updates in this repository.
+---
+
 # Skill: mindnavigator-routine
 
 ## When to Use
