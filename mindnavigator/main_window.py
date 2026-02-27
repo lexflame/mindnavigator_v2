@@ -81,6 +81,16 @@ def normalize_enabled_workspace_ids(raw_value: str, available_ids: set[str]) -> 
     return enabled if enabled else set(available_ids)
 
 
+def normalize_nav_collapsed_setting(raw_value: str) -> bool:
+    """Returns whether nav should be collapsed for persisted setting values."""
+    normalized = str(raw_value).strip().lower()
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    return True
+
+
 class MainWindow(QMainWindow):
     """Главное окно приложения с кастомным заголовком и рабочими областями."""
 
@@ -99,6 +109,7 @@ class MainWindow(QMainWindow):
     MODE_SETTINGS = "Настройки"
     APP_ENABLED_WORKSPACES_KEY = "app.enabled_workspaces"
     APP_LANGUAGE_KEY = "app.language"
+    APP_NAV_COLLAPSED_KEY = "app.nav_collapsed"
     _TRAY_RESTORE_HOTKEY_ID = 0x4D4E57
     _WM_HOTKEY = 0x0312
     _MOD_CONTROL = 0x0002
@@ -162,6 +173,8 @@ class MainWindow(QMainWindow):
         db = get_database()
         value = db.get_setting("app.minimize_on_focus_lost", "1")
         self._minimize_on_focus_lost = value == "1"
+        nav_collapsed_value = db.get_setting(self.APP_NAV_COLLAPSED_KEY, "1")
+        self._set_nav_collapsed(normalize_nav_collapsed_setting(nav_collapsed_value), persist=False)
         language_code = db.get_setting(self.APP_LANGUAGE_KEY, DEFAULT_LANGUAGE)
         self._apply_ui_language(language_code)
         enabled_workspaces_raw = db.get_setting(self.APP_ENABLED_WORKSPACES_KEY, "")
@@ -643,7 +656,7 @@ class MainWindow(QMainWindow):
 
         self.projects_nav.update_width_for_window(self.width())
         self.search_nav.update_width_for_window(self.width())
-        self._set_nav_collapsed(False)
+        self._set_nav_collapsed(True, persist=False)
 
     @staticmethod
     def _placeholder(title: str, subtitle: str) -> QWidget:
@@ -724,11 +737,13 @@ class MainWindow(QMainWindow):
         if hasattr(workspace, "set_nav_collapsed_state"):
             workspace.set_nav_collapsed_state(not self.nav_column.isVisible())
 
-    def _set_nav_collapsed(self, collapsed: bool) -> None:
+    def _set_nav_collapsed(self, collapsed: bool, *, persist: bool = True) -> None:
         # Скрываем/показываем колонку навигации и меняем подсказки.
         self.nav_column.setVisible(not collapsed)
         self.nav_toggle.setText("⟩" if collapsed else "⟨")
         self.nav_toggle.setToolTip("Развернуть навигацию" if collapsed else "Свернуть навигацию")
+        if persist:
+            get_database().set_setting(self.APP_NAV_COLLAPSED_KEY, "1" if collapsed else "0")
         self._apply_nav_state_to_workspace(self.workspace_stack.currentWidget())
 
     def _toggle_nav_column(self) -> None:
