@@ -27,6 +27,7 @@ MAX_AREA_LEN = 80
 COLLECTION_ENTITY_TYPES = ("building", "city", "film", "game", "character", "other")
 APP_CONFIG_FILE = "app_config.json"
 APP_CONFIG_DB_PATH_KEY = "db_path"
+SQLITE_BUSY_TIMEOUT_MS = 10000
 
 
 @dataclass(frozen=True)
@@ -442,6 +443,21 @@ def default_db_path() -> Path:
     return _app_base_dir() / "mindnavigator.db"
 
 
+def is_network_database_path(path: Path) -> bool:
+    """Возвращает True для UNC-путей, где SQLite WAL часто недоступен."""
+    normalized_path = str(path).strip()
+    return normalized_path.startswith("\\\\") or normalized_path.startswith("//")
+
+
+def _configure_connection_pragmas(connection: sqlite3.Connection, path: Path) -> None:
+    """Настраивает режим SQLite с учетом локального или сетевого размещения БД."""
+    journal_mode = "DELETE" if is_network_database_path(path) else "WAL"
+    connection.execute(f"PRAGMA journal_mode={journal_mode};")
+    connection.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS};")
+    connection.execute("PRAGMA synchronous=NORMAL;")
+    connection.execute("PRAGMA foreign_keys=ON;")
+
+
 def validate_title(title: str, field_name: str = "РќР°Р·РІР°РЅРёРµ") -> str:
     """РџСЂРѕРІРµСЂСЏРµС‚ Рё РЅРѕСЂРјР°Р»РёР·СѓРµС‚ РЅР°Р·РІР°РЅРёРµ."""
     title = (title or "").strip()
@@ -512,7 +528,11 @@ class Database:
 
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else default_db_path()
-        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._conn = sqlite3.connect(
+            self.path,
+            check_same_thread=False,
+            timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+        )
         self._conn.row_factory = sqlite3.Row
         self._closed = False
         self._init_db()
@@ -520,9 +540,7 @@ class Database:
     def _init_db(self) -> None:
         """РРЅРёС†РёР°Р»РёР·РёСЂСѓРµС‚ СЃС…РµРјСѓ Рё РїР°СЂР°РјРµС‚СЂС‹ SQLite."""
         with self._conn:
-            self._conn.execute("PRAGMA journal_mode=WAL;")
-            self._conn.execute("PRAGMA synchronous=NORMAL;")
-            self._conn.execute("PRAGMA foreign_keys=ON;")
+            _configure_connection_pragmas(self._conn, self.path)
 
             self._conn.execute(
                 """

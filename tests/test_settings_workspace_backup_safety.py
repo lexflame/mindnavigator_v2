@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
+from mindnavigator.workspaces import settings_workspace
 from mindnavigator.workspaces.settings_workspace import SettingsWorkspace
 
 
@@ -59,6 +61,29 @@ class _DummySettingsWorkspace:
         self.status_messages.append(message)
 
 
+class _DummyLineEdit:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def text(self) -> str:
+        return self._value
+
+
+class _DummyLabel:
+    def __init__(self) -> None:
+        self.value = ""
+
+    def setText(self, value: str) -> None:
+        self.value = value
+
+
+class _DummyDatabaseStatusWorkspace:
+    def __init__(self, db_path: Path, selected_path: str) -> None:
+        self._db = type("DummyDBPath", (), {"path": db_path})()
+        self.db_path_edit = _DummyLineEdit(selected_path)
+        self.db_path_status = _DummyLabel()
+
+
 def test_backup_options_change_is_ignored_while_loading() -> None:
     workspace = _DummySettingsWorkspace(db=_DummyDB())
     workspace._loading_settings = True
@@ -79,3 +104,18 @@ def test_backup_options_change_handles_readonly_database_error() -> None:
     assert workspace.status_messages
     assert workspace.status_messages[-1] is not None
     assert "readonly" in str(workspace.status_messages[-1]).lower()
+
+
+def test_database_status_shows_network_compatibility_warning(monkeypatch) -> None:
+    db_path = Path("D:/mindnavigator/mindnavigator.db")
+    workspace = _DummyDatabaseStatusWorkspace(
+        db_path=db_path,
+        selected_path=str(db_path),
+    )
+    monkeypatch.setattr(settings_workspace, "is_network_database_path", lambda _path: True)
+
+    SettingsWorkspace._update_database_status(workspace, "Database path updated.")  # type: ignore[arg-type]
+
+    assert "Database path updated." in workspace.db_path_status.value
+    assert "Active database path." in workspace.db_path_status.value
+    assert "Network DB compatibility mode" in workspace.db_path_status.value
