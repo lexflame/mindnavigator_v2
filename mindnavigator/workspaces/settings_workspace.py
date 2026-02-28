@@ -41,6 +41,7 @@ from mindnavigator.storage import (
     default_db_path,
     get_configured_db_path,
     get_database,
+    is_network_database_path,
     set_configured_db_path,
 )
 from mindnavigator.update_service import UpdateService, UpdateServiceError
@@ -601,7 +602,9 @@ class SettingsWorkspace(QWidget):
 
     def _update_database_status(self, message: str | None = None) -> None:
         selected = self.db_path_edit.text().strip()
-        status = message or ""
+        status_parts: list[str] = []
+        if message:
+            status_parts.append(message)
         if selected:
             selected_path = Path(selected)
             try:
@@ -609,11 +612,14 @@ class SettingsWorkspace(QWidget):
             except OSError:
                 pending_switch = str(selected_path) != str(self._db.path)
             if pending_switch:
-                suffix = " Pending switch: restart required."
+                status_parts.append("Pending switch: restart required.")
             else:
-                suffix = " Active database path."
-            status = f"{status}{suffix}".strip()
-        self.db_path_status.setText(status)
+                status_parts.append("Active database path.")
+            if is_network_database_path(selected_path):
+                status_parts.append(
+                    "Network DB compatibility mode: WAL disabled, writes are serialized between app instances."
+                )
+        self.db_path_status.setText(" ".join(status_parts).strip())
 
     def _check_updates(self) -> None:
         try:
