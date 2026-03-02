@@ -2916,6 +2916,13 @@ class Database:
             )
         return MapData(map_id, title, description, project, tiles_path, tiles_h, tiles_w)
 
+    def delete_map(self, map_id: int) -> None:
+        """Удаляет карту и связанные с ней графические данные."""
+        with self._conn:
+            self._conn.execute("DELETE FROM map_markers WHERE map_id = ?;", (map_id,))
+            self._conn.execute("DELETE FROM map_overlays WHERE map_id = ?;", (map_id,))
+            self._conn.execute("DELETE FROM maps WHERE id = ?;", (map_id,))
+
     def fetch_map_markers(self, map_id: Optional[int] = None) -> List[MapMarkerData]:
         """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РјРµС‚РѕРє РєР°СЂС‚С‹."""
         if map_id is None:
