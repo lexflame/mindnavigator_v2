@@ -81,6 +81,7 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_53A85F68-1AC3-415C-82B2-4E1B5FBD424D | 6 | Sprint composition and backlog classification by type/workspace | parity | Completed |
+| TASK_1FA90F88-2294-4074-88E2-75C3769E6768 | 6 | Keep PARITY and diagram maps in sync during Sprint 6 delivery | parity | Completed |
 | TASK_F42B8258-3D69-4555-BEFA-8F2B311F63EA | 6 | DB migration module for schema upgrades | feat | Completed |
 | TASK_75026A8B-7FB9-4AE1-9F6C-BD1092D24B1A | 6 | Update module implementation | feat | Completed |
 | TASK_E0A0B865-013E-445B-9656-84CE4A697CB5 | 6 | Setting: DB storage location | feat | Completed |

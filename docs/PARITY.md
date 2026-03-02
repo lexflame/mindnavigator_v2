@@ -96,7 +96,7 @@ It also stores:
 - Type: parity
 - Title: Keep `PARITY` and diagram maps in sync during Sprint 6 delivery
 - Sprint: 6
-- Status: In Progress
+- Status: Done
 - Why:
   Sprint execution requires continuous doc sync for parity scope and architecture maps.
 - Scope:
@@ -247,3 +247,4 @@ It also stores:
   - removed unsafe splash teardown re-entrancy in `__main__.py`: `close_splash()` no longer calls `app.processEvents()`/`deleteLater()` during startup callback chain.
   - hardened shutdown path: `MainWindow.closeEvent` now ignores `OSError` when saving hotkey overrides, so read-only profile paths do not abort app close/startup flow.
   - validated with `python -m compileall mindnavigator/main_window.py mindnavigator/__main__.py`, `pytest tests/test_tray_task_navigation.py -q`, `python -X faulthandler main.py` (no traceback).
+  - final parity review completed: `docs/PARITY.md`, `.codex/HISTORY_TASK.md`, and `.codex/HISTORY_ACTION.md` are now aligned for this tracking task, with no remaining open Sprint 6 parity backlog item under `TASK_1FA90F88-2294-4074-88E2-75C3769E6768`.

@@ -555,3 +555,7 @@
 [2026-02-25 22:42] OUT: OK.
 [2026-02-25 22:42] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_tray_task_navigation.py -p no:cacheprovider --basetemp .pytest_dir/tmp_selection_fix
 [2026-02-25 22:42] OUT: 8 passed.
+[2026-03-02 19:03] ACTION: Started TASK_1FA90F88-2294-4074-88E2-75C3769E6768 (close parity backlog sync and align history).
+[2026-03-02 19:03] ACTION: Updated TASK_1FA90F88-2294-4074-88E2-75C3769E6768 status -> Completed.
+[2026-03-02 19:03] ACTION: Synced docs/PARITY.md with .codex/HISTORY_TASK.md and .codex/HISTORY_ACTION.md for the Sprint 6 parity tracking task.
+[2026-03-02 19:03] ACTION: Completed TASK_1FA90F88-2294-4074-88E2-75C3769E6768.
