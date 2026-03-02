@@ -1,48 +1,45 @@
 # AGENTS.md (Repo Template)
 
-## Mission
-Deliver minimal, correct, reversible changes for `mindnavigator_v2`.
+## Purpose
+Compact repository template for a Codex pack that uses a split model:
+- repository root `AGENTS.md` as the source of truth,
+- local `.codex/SKILL.md` as the main workflow file,
+- local `.codex/AGENTS.md` as the concise policy mirror.
 
-## Rule Priority
-- Direct task request.
-- Repository `AGENTS.md` in project root.
-- `.codex/rules/*`.
+## Recommended Rule Priority
+1. Direct task request.
+2. Repository root `AGENTS.md`.
+3. `.codex/SKILL.md`.
+4. `.codex/AGENTS.md`.
+5. Other supporting `.codex` reference files.
 
-## Working Rules
-- Search first with `rg`.
-- Inspect call sites before edits.
-- Prefer in-place changes over broad refactors.
+## Template Working Rules
+- Deliver minimal, correct, reversible changes.
 - Keep patches task-scoped and avoid unrelated rewrites.
-- Keep Windows-only logic guarded by `sys.platform == "win32"`.
-- Use timezone-aware UTC (`datetime.now(timezone.utc)`).
+- Preserve stable product behavior unless the task explicitly requires a behavior change.
+- Preserve backward compatibility unless the task explicitly requires a breaking change.
+- Search first, then inspect call sites, then patch in place.
+- Validate changed behavior before the final response.
 
-## Execution Modes
+## Template Validation Contract
+- For code changes, run a syntax pass first.
+- Run focused tests for the changed scope.
+- If tests were not run, say why.
+- Report changed files, validation commands, outcomes, and residual risks.
 
-### Default Mode (Always)
-- Implement minimal patch.
-- Preserve stable desktop behavior unless task explicitly requires behavior changes.
-- Run validation for changed scope.
+## Template Sprint And Release Rules
+Apply only when the task is explicitly sprint, release, parity, or hotfix work.
+- Use a dedicated sprint branch.
+- Track `TASK_GUID` in the task history file.
+- Log meaningful actions in the action history file.
+- Prefer one focused commit per task when commits are requested.
+- Use explicit commit prefixes for feature, fix, and parity work.
+- Push only after successful validation and only when requested or required by the delivery flow.
 
-### Sprint/Release Mode (Explicitly Requested)
-- Use dedicated sprint branch.
-- Track `TASK_GUID` and update `.codex/HISTORY_TASK.md`.
-- Log meaningful actions in `.codex/HISTORY_ACTION.md`.
-- Use commit prefixes:
-  - feature: `feat//:: TASK_GUID`
-  - fix: `fix//:: TASK_GUID`
-  - parity: `parity::// TASK_GUID`
-- Push only after successful validation and when requested/required.
-
-## Git Rules
-- One task maps to one commit when commits are requested.
-- Do not create intentional broken-state commits unless explicitly requested.
-
-## Required Validation
-- `python -m compileall mindnavigator main.py`
-- `pytest tests -k <scope>`
-- If tests are not run, state why.
-
-## Output Contract
-- Changed files.
-- Validation commands and results.
-- Known residual risks and follow-up options.
+## Template File Roles
+- `AGENTS.md`: authoritative repository policy.
+- `.codex/SKILL.md`: primary local workflow.
+- `.codex/AGENTS.md`: concise local policy mirror.
+- `.codex/COMMANDS.md`: quick command reference.
+- `.codex/CHECKLIST.md`: finish checklist.
+- `.codex/rules/*.md`: modular source rules for audit and reuse.

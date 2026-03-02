@@ -1,38 +1,56 @@
-# AGENTS.md (Codex CLI Optimized)
+# AGENTS.md (Codex Pack Policy Mirror)
 
-## Scope
-Repository development for `mindnavigator_v2` (Python 3.11+, desktop app).
+## Purpose
+Concise policy mirror for the local Codex support pack in `mindnavigator_v2`.
+This file is a compact policy layer inside `.codex`; the authoritative repository rules remain in the root `AGENTS.md`, and the main execution workflow inside the Codex pack lives in `.codex/SKILL.md`.
 
-## Priorities
-1. Preserve app behavior and data safety.
-2. Prefer minimal, targeted changes.
-3. Keep backward compatibility unless task explicitly requires otherwise.
+## Rule Priority
+1. Direct task request.
+2. Repository root `AGENTS.md`.
+3. `.codex/SKILL.md`.
+4. This file.
+5. Other supporting files inside `.codex/`.
 
-## Workflow
-1. Locate affected code with `rg`.
-2. Inspect call sites before editing.
-3. Apply focused patch in-place.
-4. Validate quickly:
-   - `python -m compileall mindnavigator main.py`
-   - `pytest tests -k <changed_scope>`
-5. Report changed files, test results, and residual risks.
-
-## Guardrails
+## Core Policy
+- Keep changes minimal, task-scoped, and reversible.
+- Preserve stable desktop behavior unless the task explicitly requires behavior changes.
+- Preserve backward compatibility unless the task explicitly requires a breaking change.
 - Do not modify unrelated files.
-- Do not remove user data/config paths unless explicitly requested.
-- Keep platform guards for Windows-specific behavior (`sys.platform == "win32"`).
-- Use timezone-aware UTC (`datetime.now(timezone.utc)`), avoid deprecated UTC APIs.
+- Do not remove user data or config paths unless explicitly requested.
+- Validate changed behavior before the final response.
 
-## UI/Qt Rules
-- Use Qt6 enums (`Qt.ItemDataRole.*`, `Qt.AlignmentFlag.*`, etc.).
-- Keep model `data()` signatures compatible:
-  `def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> Any:`
+## Repository-Specific Guardrails
+- Use `rg` first for navigation and impact discovery.
+- Inspect call sites before changing public behavior.
+- Keep Windows-only logic guarded by `sys.platform == "win32"`.
+- Use timezone-aware UTC with `datetime.now(timezone.utc)`.
+- Use Qt6 enums and keep model `data()` signatures compatible.
 - Prefer delegate-based hit zones for quick row actions over embedded widgets.
+- For new persisted fields, update schema or migration, dataclasses, CRUD SQL, model roles, dialogs, and delegate painting together.
+- For task reparent or move logic, resolve the project from the top-most parent chain before the DB update.
+- Runtime settings should persist in storage and apply live in `MainWindow` when practical.
+- Single-instance activation should send a lightweight restore signal and then exit.
 
-## Storage/Entity Rules
-- For new persisted fields: update schema/migration + dataclasses + CRUD SQL + model roles + dialogs + delegate painting.
-- For task reparent/move logic: resolve project from top-most parent chain before DB update.
+## Validation Baseline
+- For code changes, run `python -m compileall mindnavigator main.py`.
+- Run `pytest tests -k <changed_scope>` for changed behavior.
+- If tests are not run, state why.
+- Report validation commands, outcomes, and residual risks.
 
-## Runtime Settings Rules
-- Persist setting to storage and apply live in `MainWindow` when practical.
-- Single-instance activation should send lightweight restore signal and exit.
+## Sprint And Release Policy
+Apply only for explicit sprint, release, parity, or hotfix work.
+- Use a dedicated sprint branch.
+- Track `TASK_GUID` in `.codex/HISTORY_TASK.md`.
+- Append meaningful actions to `.codex/HISTORY_ACTION.md`.
+- Use one focused commit per task when commits are requested.
+- If commits are requested, use these prefixes:
+- feature: `feat//:: TASK_GUID`
+- fix: `fix//:: TASK_GUID`
+- parity: `parity::// TASK_GUID`
+- Push only after successful validation and when requested or required by the delivery flow.
+
+## Supporting References
+- `.codex/SKILL.md`: primary workflow and execution flow.
+- `.codex/COMMANDS.md`: quick command map.
+- `.codex/CHECKLIST.md`: finish checklist.
+- `.codex/rules/*.md`: modular source rules kept for audit and reuse.
