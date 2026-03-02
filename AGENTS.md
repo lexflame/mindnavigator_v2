@@ -20,6 +20,7 @@
 - Follow existing style in touched files.
 - Use clear names and small functions.
 - Add comments only for non-obvious logic.
+- Add succinct comments or docstrings at key code paths and functions when the intent is not obvious and no explanation exists yet.
 - Avoid unnecessary dependencies.
 
 ## Validation
@@ -36,7 +37,12 @@
 - Use credentials only from `.codex/git_key/` for Git operations in this repo.
 - Default token source: `.codex/git_key/ghp_token` via `.codex/git_key/git_askpass.bat`.
 - Before sprint work, create/switch to a dedicated branch named `sprint/<id_or_topic>`.
+- For each `PARTITION` inside a sprint, create/switch to a dedicated branch before implementation (`sprint/<id_or_topic>-p<partition>` is the default shape).
+- After each completed `PARTITION`, prepare a PR for that partition branch, complete/merge it only after required validations and pipeline checks pass, and then continue with the next partition.
+- Before starting implementation for every sprint task, write a task decomposition that covers scope, dependencies, validation, and rollback notes.
 - For each completed sprint task: make a commit and push branch updates.
+- For every repository change, create a focused commit and push it after validation; do not batch unrelated edits into one commit.
+- Before moving to the next sprint task, wait for the relevant pipeline to finish and verify it passed for the current branch/PR.
 
 ## Skill loading
 - Use local project skill from `.codex/SKILL.md` when task matches routine project work.
