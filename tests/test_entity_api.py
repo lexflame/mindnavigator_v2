@@ -8,6 +8,7 @@ from mindnavigator.entity_api import (
     API_NAME,
     API_PROTOCOL_VERSION,
     API_SCHEMA_VERSION,
+    CodexEntityAdapter,
     EntityApiError,
     EntityApiPool,
     EntityApiService,
@@ -207,5 +208,60 @@ def test_entity_api_service_reports_missing_and_unsupported_entities(unique_temp
             service.list_entities("unknown-kind")
         with pytest.raises(EntityNotFoundError):
             service.get_entity("task", 999999)
+    finally:
+        database.close()
+
+
+def test_entity_api_service_execute_actions_update_entities(unique_temp_path) -> None:
+    database = Database(path=unique_temp_path("entity_api_execute", ".sqlite3"))
+    service = EntityApiService(database=database)
+    try:
+        task = service.create_entity("task", {"title": "Exec Task", "day": "2026-03-02"})
+        project = service.create_entity(
+            "project",
+            {"area": "API", "title": "Exec Project", "updated": "2026-03-02"},
+        )
+        note = service.create_entity("note", {"title": "Exec Note"})
+        idea = service.create_entity("idea", {"title": "Exec Idea", "status": "inbox"})
+
+        task_result = service.execute_entity_action("task", task["id"], "mark_done")
+        project_result = service.execute_entity_action("project", project["id"], "archive")
+        note_result = service.execute_entity_action("note", note["id"], "favorite")
+        idea_result = service.execute_entity_action("idea", idea["id"], "promote")
+
+        assert task_result["entity"]["done"] is True
+        assert project_result["entity"]["archived"] is True
+        assert note_result["entity"]["favorite"] is True
+        assert idea_result["entity"]["status"] == "work"
+    finally:
+        database.close()
+
+
+def test_entity_api_service_execute_rejects_unsupported_action(unique_temp_path) -> None:
+    database = Database(path=unique_temp_path("entity_api_execute_errors", ".sqlite3"))
+    service = EntityApiService(database=database)
+    try:
+        task = service.create_entity("task", {"title": "Exec Task", "day": "2026-03-02"})
+
+        with pytest.raises(EntityApiError):
+            service.execute_entity_action("task", task["id"], "archive")
+    finally:
+        database.close()
+
+
+def test_codex_entity_adapter_handshake_and_proxy(unique_temp_path) -> None:
+    database = Database(path=unique_temp_path("entity_api_adapter", ".sqlite3"))
+    service = EntityApiService(database=database)
+    adapter = CodexEntityAdapter(service=service, client_version="2026.03")
+    try:
+        handshake = adapter.handshake()
+        created = adapter.create_entity("task", {"title": "Adapter Task", "day": "2026-03-02"})
+        action_result = adapter.execute_entity_action("task", created["id"], "toggle_done")
+        fetched = adapter.get_entity("task", created["id"])
+
+        assert handshake["connection"]["client_name"] == "codex"
+        assert handshake["connection"]["client_version"] == "2026.03"
+        assert action_result["entity"]["done"] is True
+        assert fetched["done"] is True
     finally:
         database.close()

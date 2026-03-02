@@ -62,6 +62,9 @@ class EntityNotFoundError(EntityApiError):
     """Raised when a requested entity is missing."""
 
 
+_IDEA_PROMOTION_FLOW = ("inbox", "work", "ripe", "done")
+
+
 class EntityApiPool:
     """Describes the application entity API for machine clients such as Codex."""
 
@@ -192,7 +195,7 @@ class EntityApiPool:
                 identity_field="id",
                 list_fields=("id", "title", "status", "type", "project_id"),
                 mutable_fields=("title", "summary", "body_md", "type", "status", "value_score", "effort_score", "project_id", "source"),
-                execute_actions=("promote", "archive"),
+                execute_actions=("promote", "archive", "unarchive"),
             ),
             EntityKindSpec(
                 kind="object",
@@ -200,7 +203,7 @@ class EntityApiPool:
                 identity_field="id",
                 list_fields=("id", "title", "catalog", "object_type", "status"),
                 mutable_fields=("title", "catalog", "object_type", "status", "description"),
-                execute_actions=("refresh_images",),
+                execute_actions=(),
             ),
             EntityKindSpec(
                 kind="map",
@@ -208,7 +211,7 @@ class EntityApiPool:
                 identity_field="id",
                 list_fields=("id", "title", "project", "tiles_path", "tiles_h", "tiles_w"),
                 mutable_fields=("title", "description", "project", "tiles_path", "tiles_h", "tiles_w"),
-                execute_actions=("rebuild_overlays",),
+                execute_actions=(),
             ),
             EntityKindSpec(
                 kind="collection_item",
@@ -216,7 +219,7 @@ class EntityApiPool:
                 identity_field="id",
                 list_fields=("id", "title", "entity_type", "category_id", "topic"),
                 mutable_fields=("title", "entity_type", "category_id", "topic", "image_url", "source_url", "description"),
-                execute_actions=("reimport",),
+                execute_actions=(),
             ),
         )
 
@@ -522,6 +525,62 @@ class EntityApiService(EntityApiPool):
             raise EntityApiError(f"Unsupported entity kind: {entity_kind}")
         return {"entity_kind": kind, "entity_id": int(entity_id), "deleted": True}
 
+    def execute_entity_action(
+        self,
+        entity_kind: str,
+        entity_id: int,
+        action: str,
+        payload: Mapping[str, object] | None = None,
+    ) -> dict[str, Any]:
+        kind = self._normalize_kind(entity_kind)
+        current = self._get_entity_record(kind, entity_id)
+        if current is None:
+            raise EntityNotFoundError(f"Entity not found: {kind}:{entity_id}")
+        normalized_action = (action or "").strip().lower()
+        action_payload = self._serialize_value(dict(payload or {}))
+        if kind == "task":
+            if normalized_action == "mark_done":
+                entity = self._update_task_done(current, True)
+            elif normalized_action == "mark_pending":
+                entity = self._update_task_done(current, False)
+            elif normalized_action == "toggle_done":
+                entity = self._update_task_done(current, not bool(current.done))
+            else:
+                raise EntityApiError(f"Unsupported action '{action}' for entity kind '{kind}'.")
+        elif kind == "project":
+            if normalized_action not in {"archive", "unarchive"}:
+                raise EntityApiError(f"Unsupported action '{action}' for entity kind '{kind}'.")
+            self._db.set_project_archived(int(entity_id), normalized_action == "archive")
+            entity = self.get_entity(kind, int(entity_id))
+        elif kind == "note":
+            if normalized_action == "favorite":
+                entity = self._serialize_entity(self._db.set_note_favorite(int(entity_id), True))
+            elif normalized_action == "unfavorite":
+                entity = self._serialize_entity(self._db.set_note_favorite(int(entity_id), False))
+            elif normalized_action == "lock":
+                entity = self._serialize_entity(self._db.set_note_locked(int(entity_id), True))
+            elif normalized_action == "unlock":
+                entity = self._serialize_entity(self._db.set_note_locked(int(entity_id), False))
+            else:
+                raise EntityApiError(f"Unsupported action '{action}' for entity kind '{kind}'.")
+        elif kind == "idea":
+            if normalized_action == "promote":
+                entity = self._promote_idea(current)
+            elif normalized_action in {"archive", "unarchive"}:
+                self._db.set_idea_archived(int(entity_id), normalized_action == "archive")
+                entity = self.get_entity(kind, int(entity_id))
+            else:
+                raise EntityApiError(f"Unsupported action '{action}' for entity kind '{kind}'.")
+        else:
+            raise EntityApiError(f"Entity kind '{kind}' does not support execute actions.")
+        return {
+            "entity_kind": kind,
+            "entity_id": int(entity_id),
+            "action": normalized_action,
+            "entity": entity,
+            "payload": action_payload,
+        }
+
     def _fetch_entities(self, entity_kind: str) -> list[Any]:
         kind = self._normalize_kind(entity_kind)
         if kind == "task":
@@ -556,6 +615,34 @@ class EntityApiService(EntityApiPool):
         if kind not in supported:
             raise EntityApiError(f"Unsupported entity kind: {entity_kind}")
         return kind
+
+    def _update_task_done(self, current: Any, done: bool) -> dict[str, Any]:
+        self._db.set_task_done(int(current.id), bool(done))
+        updated = self._get_entity_record("task", int(current.id))
+        if updated is None:
+            raise EntityNotFoundError(f"Entity not found: task:{current.id}")
+        return self._serialize_entity(updated)
+
+    def _promote_idea(self, current: Any) -> dict[str, Any]:
+        status = str(getattr(current, "status", "") or "").strip().lower()
+        if status in _IDEA_PROMOTION_FLOW:
+            next_index = min(_IDEA_PROMOTION_FLOW.index(status) + 1, len(_IDEA_PROMOTION_FLOW) - 1)
+            next_status = _IDEA_PROMOTION_FLOW[next_index]
+        else:
+            next_status = _IDEA_PROMOTION_FLOW[0]
+        entity = self._db.update_idea(
+            int(current.id),
+            title=str(current.title),
+            summary=str(current.summary),
+            body_md=str(current.body_md),
+            idea_type=str(current.type),
+            status=next_status,
+            value_score=int(current.value_score),
+            effort_score=int(current.effort_score),
+            project_id=current.project_id,
+            source=str(current.source),
+        )
+        return self._serialize_entity(entity)
 
     @staticmethod
     def _serialize_entity(entity: Any) -> dict[str, Any]:
@@ -655,3 +742,62 @@ class EntityApiService(EntityApiPool):
             return date.fromisoformat(str(value))
         except ValueError as exc:
             raise EntityApiError(f"Cannot parse date value: {value!r}") from exc
+
+
+class CodexEntityAdapter:
+    """Codex-friendly wrapper that performs a compatibility handshake before each call."""
+
+    def __init__(
+        self,
+        service: EntityApiService | None = None,
+        client_version: str = API_PROTOCOL_VERSION,
+    ) -> None:
+        self._service = service or EntityApiService()
+        self._client_version = client_version
+
+    def handshake(self) -> dict[str, Any]:
+        connection = self._service.connect(
+            client_name="codex",
+            client_version=self._client_version,
+            capabilities=["crud", "execute"],
+        )
+        if not connection.get("codex_compatible"):
+            raise EntityApiError("Entity API service is not compatible with Codex.")
+        return connection
+
+    def list_entities(
+        self,
+        entity_kind: str,
+        *,
+        filters: Mapping[str, object] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        self.handshake()
+        return self._service.list_entities(entity_kind, filters=filters, limit=limit, offset=offset)
+
+    def get_entity(self, entity_kind: str, entity_id: int) -> dict[str, Any]:
+        self.handshake()
+        return self._service.get_entity(entity_kind, entity_id)
+
+    def create_entity(self, entity_kind: str, payload: Mapping[str, object]) -> dict[str, Any]:
+        self.handshake()
+        return self._service.create_entity(entity_kind, payload)
+
+    def update_entity(self, entity_kind: str, entity_id: int, payload: Mapping[str, object]) -> dict[str, Any]:
+        self.handshake()
+        return self._service.update_entity(entity_kind, entity_id, payload)
+
+    def delete_entity(self, entity_kind: str, entity_id: int, *, force: bool = False) -> dict[str, Any]:
+        self.handshake()
+        return self._service.delete_entity(entity_kind, entity_id, force=force)
+
+    def execute_entity_action(
+        self,
+        entity_kind: str,
+        entity_id: int,
+        action: str,
+        payload: Mapping[str, object] | None = None,
+    ) -> dict[str, Any]:
+        self.handshake()
+        return self._service.execute_entity_action(entity_kind, entity_id, action, payload)
