@@ -3843,6 +3843,76 @@ class Database:
             locked=bool(row["locked"]),
         )
 
+    def set_note_favorite(self, note_id: int, favorite: bool) -> NoteData:
+        """РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃС‚Р°С‚СѓСЃ РёР·Р±СЂР°РЅРЅРѕРіРѕ Сѓ Р·Р°РјРµС‚РєРё."""
+        row = self._conn.execute(
+            """
+            SELECT title, preview, tags, project, attachment, locked
+            FROM notes
+            WHERE id = ?;
+            """,
+            (note_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE notes
+                SET favorite = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (int(bool(favorite)), now, note_id),
+            )
+        tags = json.loads(row["tags"] or "[]")
+        return NoteData(
+            id=note_id,
+            title=row["title"],
+            preview=row["preview"] or "",
+            tags=tags if isinstance(tags, list) else [],
+            updated=datetime.fromisoformat(now),
+            project=row["project"] or "",
+            favorite=bool(favorite),
+            attachment=bool(row["attachment"]),
+            locked=bool(row["locked"]),
+        )
+
+    def set_note_locked(self, note_id: int, locked: bool) -> NoteData:
+        """РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃС‚Р°С‚СѓСЃ Р±Р»РѕРєРёСЂРѕРІРєРё Р·Р°РјРµС‚РєРё."""
+        row = self._conn.execute(
+            """
+            SELECT title, preview, tags, project, favorite, attachment
+            FROM notes
+            WHERE id = ?;
+            """,
+            (note_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE notes
+                SET locked = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (int(bool(locked)), now, note_id),
+            )
+        tags = json.loads(row["tags"] or "[]")
+        return NoteData(
+            id=note_id,
+            title=row["title"],
+            preview=row["preview"] or "",
+            tags=tags if isinstance(tags, list) else [],
+            updated=datetime.fromisoformat(now),
+            project=row["project"] or "",
+            favorite=bool(row["favorite"]),
+            attachment=bool(row["attachment"]),
+            locked=bool(locked),
+        )
+
     def delete_note(self, note_id: int) -> None:
         """РЈРґР°Р»СЏРµС‚ Р·Р°РјРµС‚РєСѓ."""
         with self._conn:
