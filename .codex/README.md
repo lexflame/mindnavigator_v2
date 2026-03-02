@@ -17,6 +17,34 @@ The workflow was consolidated so the main execution guidance now lives in `.code
 - `skills/mindnavigator-routine/SKILL.md`: active local skill referenced by `.codex/config.toml`, kept aligned with `.codex/SKILL.md`.
 - `multi-agent-playbook.md`: role split and handoff contract.
 
+## Role Inventory
+### Source Of Truth
+- Repository root `AGENTS.md`: authoritative repository policy and delivery rules.
+- `.codex/SKILL.md`: authoritative workflow inside the local Codex pack.
+
+### Active Runtime Files
+- `.codex/config.toml`: active project Codex configuration for this repository.
+- `.codex/skills/mindnavigator-routine/SKILL.md`: active local skill enabled by `.codex/config.toml`.
+
+### Reference Files
+- `.codex/AGENTS.md`: concise policy mirror for the local Codex pack.
+- `.codex/COMMANDS.md`: quick command map.
+- `.codex/CHECKLIST.md`: quick finish checklist.
+- `.codex/rules/*.md`: modular source rules kept for audit and reuse.
+- `.codex/multi-agent-playbook.md`: role split and handoff reference for multi-agent work.
+
+### Template Files
+- `.codex/AGENTS.repo.md`: reusable template for split-model Codex packs.
+- `.codex/config-basic.toml`: baseline external Codex CLI config template.
+- `.codex/config-advanced.toml`: overlay config template for extended setups.
+- `.codex/profiles/mcp.toml`: MCP profile template.
+- `.codex/profiles/multi-agent.toml`: multi-agent profile template.
+
+### Operational Data
+- `.codex/HISTORY_TASK.md`: task tracking log for explicit sprint, release, parity, and hotfix work.
+- `.codex/HISTORY_ACTION.md`: chronological action log for tracked work.
+- `.codex/git_key/`: local credential material for authenticated Git operations in this repository.
+
 ## Recommended Setup
 1. Keep repository-level rules in the root `AGENTS.md` as the source of truth.
 2. Use `.codex/SKILL.md` as the primary workflow source inside the local Codex pack.
