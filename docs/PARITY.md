@@ -248,3 +248,39 @@ It also stores:
   - hardened shutdown path: `MainWindow.closeEvent` now ignores `OSError` when saving hotkey overrides, so read-only profile paths do not abort app close/startup flow.
   - validated with `python -m compileall mindnavigator/main_window.py mindnavigator/__main__.py`, `pytest tests/test_tray_task_navigation.py -q`, `python -X faulthandler main.py` (no traceback).
   - final parity review completed: `docs/PARITY.md`, `.codex/HISTORY_TASK.md`, and `.codex/HISTORY_ACTION.md` are now aligned for this tracking task, with no remaining open Sprint 6 parity backlog item under `TASK_1FA90F88-2294-4074-88E2-75C3769E6768`.
+
+### TASK_53A85F68-1AC3-415C-82B2-4E1B5FBD424D
+- Type: parity
+- Title: Sprint composition and backlog classification by type/workspace
+- Sprint: 6
+- Status: Done
+- Why:
+  Sprint 6 delivery needed an explicit parity pass to classify work items by type and workspace before implementation started.
+- Scope:
+  - normalize the Sprint 6 backlog structure;
+  - mark parity work separately from feature and fix work;
+  - keep the task ledger consistent with the sprint plan.
+- Acceptance criteria:
+  - Sprint 6 backlog is classified by task type and workspace;
+  - parity work is visible as parity in the task ledger.
+- Result:
+  - Sprint 6 backlog was normalized and registered with explicit type/workspace classification;
+  - `TASK_53A85F68-1AC3-415C-82B2-4E1B5FBD424D` is tracked as a completed parity item in `.codex/HISTORY_TASK.md`.
+
+### TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6
+- Type: parity
+- Title: Static-analysis remediation by error type with separate commits
+- Sprint: 6
+- Status: Done
+- Why:
+  Sprint 6 accumulated a broad static-analysis backlog that required parity cleanup outside the direct feature stream.
+- Scope:
+  - remediate static-analysis findings by inspection type;
+  - keep fixes grouped in focused batches;
+  - validate each remediation pass with targeted compile and regression checks.
+- Acceptance criteria:
+  - targeted static-analysis groups are remediated in completed batches;
+  - resulting changes are tracked as parity work and validated incrementally.
+- Result:
+  - static-analysis cleanup was completed across multiple inspection groups (`PyUnboundLocalVariable`, `PyShadowingNames`, `PyUnresolvedReferences`, `PyTypeChecker`, and related follow-up batches);
+  - the remediation stream is tracked as completed parity work in `.codex/HISTORY_TASK.md` and detailed in `.codex/HISTORY_ACTION.md`.

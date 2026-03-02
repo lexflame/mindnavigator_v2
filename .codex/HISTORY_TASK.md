@@ -73,6 +73,16 @@ Status: In Progress
 | TASK_0DE2B002-565F-4A74-9AD9-00668A7AA79A | hotfix | ProjectsWorkspace list: enable project drag&drop reorder | fix | Completed |
 | TASK_712DECD4-9A4E-4DFE-A220-00DDC9782939 | hotfix | ProjectsWorkspace visual hierarchy (indent + markers) | fix | Completed |
 
+## Parity Backlog
+Created: 2026-03-02
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_5D95A5AE-2E6D-4A7B-9C4E-8F4C4E7A3B12 | 5 | Register Sprint 5 debug summary and environment constraint | parity | Completed |
+| TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0 | 1 | Review unexpected file `.codex/manual/ERROR_GIT/git_runner.txt` | parity | Completed |
+| TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB | 1 | Restore local automated test runner (`pytest`) in active Python environment | parity | Completed |
+| TASK_5743A7F2-2D90-41A8-9D25-663435E0B526 | 1 | Fix throttling-related regression in clamp motion test | parity | Completed |
 
 ## Sprint 6 - Notes, Export, Import
 Created: 2026-02-25
