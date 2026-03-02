@@ -35,6 +35,10 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
         if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+    - name: Install Linux Qt runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libegl1 libgl1 libopengl0
     - name: Compile sources
       run: |
         python -m compileall mindnavigator main.py
