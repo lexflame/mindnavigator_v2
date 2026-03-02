@@ -77,3 +77,45 @@
 13. When a task status is changed in `.codex/HISTORY_TASK.md`, add a matching action entry in `.codex/HISTORY_ACTION.md` that explains the transition.
 14. When a task is completed, ensure both history files agree: `.codex/HISTORY_TASK.md` must show the terminal status and `.codex/HISTORY_ACTION.md` must record what was delivered and how it was validated.
 15. If work is not being tracked as an explicit sprint, release, parity, or hotfix task, updating the history files is optional unless the user asks for it.
+
+## History Entry Templates
+1. Use this strict line format for `.codex/HISTORY_ACTION.md`:
+- `[YYYY-MM-DD HH:MM] TYPE: message`
+2. `TYPE` in `.codex/HISTORY_ACTION.md` must be one of:
+- `SESSION_START`
+- `ACTION`
+- `ANALYSIS`
+- `CMD`
+- `OUT`
+- `ERROR`
+3. For commands with meaningful execution output in `.codex/HISTORY_ACTION.md`, write them as two consecutive lines:
+- `[YYYY-MM-DD HH:MM] CMD: <exact command or normalized command summary>`
+- `[YYYY-MM-DD HH:MM] OUT: <meaningful result>`
+4. For task state transitions in `.codex/HISTORY_ACTION.md`, use this strict line format:
+- `[YYYY-MM-DD HH:MM] ACTION: Updated <TASK_GUID> status -> <STATUS>.`
+5. For task start records in `.codex/HISTORY_ACTION.md`, use this strict line format:
+- `[YYYY-MM-DD HH:MM] ACTION: Started <TASK_GUID> (<short title>).`
+6. For task completion records in `.codex/HISTORY_ACTION.md`, use this strict line format:
+- `[YYYY-MM-DD HH:MM] ACTION: Completed <TASK_GUID>.`
+7. Use this strict Markdown table schema for `.codex/HISTORY_TASK.md` task rows:
+- `| Task GUID | Sprint | Title | Type | Status |`
+8. Each `.codex/HISTORY_TASK.md` row must use this strict row format:
+- `| <TASK_GUID> | <SPRINT_OR_WORKSTREAM> | <TITLE> | <TYPE> | <STATUS> |`
+9. `TYPE` in `.codex/HISTORY_TASK.md` should use repository work classes:
+- `feat`
+- `fix`
+- `parity`
+- `docs`
+- `chore`
+- `hotfix`
+10. `STATUS` in `.codex/HISTORY_TASK.md` should use explicit workflow states:
+- `Planned`
+- `In Progress`
+- `Blocked`
+- `Completed`
+- `Completed (<note>)`
+11. Use this strict section header format for `.codex/HISTORY_TASK.md`:
+- `## <Sprint Number or Workstream Name> - <Title>`
+12. Immediately below each `.codex/HISTORY_TASK.md` section header, use this metadata block:
+- `Created: YYYY-MM-DD`
+- `Status: <SECTION_STATUS>`
