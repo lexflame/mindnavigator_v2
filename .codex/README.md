@@ -45,6 +45,16 @@ The workflow was consolidated so the main execution guidance now lives in `.code
 - `.codex/HISTORY_ACTION.md`: chronological action log for tracked work.
 - `.codex/git_key/`: local credential material for authenticated Git operations in this repository.
 
+## Change Maintenance Rule
+When the repository workflow, validation flow, sprint delivery flow, or history-tracking contract changes, keep these files aligned in the same change set:
+1. Repository root `AGENTS.md` for authoritative policy.
+2. `.codex/SKILL.md` for the primary local workflow.
+3. `.codex/skills/mindnavigator-routine/SKILL.md` for the active runtime skill loaded by `.codex/config.toml`.
+4. `.codex/AGENTS.md` and `.codex/AGENTS.repo.md` for the local policy mirror and template layer.
+5. `.codex/CHECKLIST.md` and `.codex/COMMANDS.md` for quick-reference drift prevention.
+6. `.codex/README.md` when file roles, rule priority, or pack structure changes.
+7. `.codex/HISTORY_TASK.md` and `.codex/HISTORY_ACTION.md` when the change is explicit sprint, release, parity, or hotfix work.
+
 ## Recommended Setup
 1. Keep repository-level rules in the root `AGENTS.md` as the source of truth.
 2. Use `.codex/SKILL.md` as the primary workflow source inside the local Codex pack.
