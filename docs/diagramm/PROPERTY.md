@@ -54,7 +54,7 @@ Purpose: entity property map and UI role map.
 - Import result contract: `CsvImportResult(imported, skipped)` is used by workspace UI status dialogs.
 
 ## Repository Ops Layout
-- Unified codex config root: `codex_conf` is linked to `.codex` (legacy snapshot preserved in `codex_conf_legacy`).
+- Unified codex config root: `.codex` is the single active Codex configuration root after legacy snapshot cleanup.
 - Local pytest paths are centralized in `.pytest_dir` (`tmp`, `run_tmp`, `user_tmp`), with compatibility links from `.pytest_tmp` and `.pytest_run_tmp`.
 - Catalog folder `defenition` stores canonical `artifacts`, `build`, `defaults`, `dist`, `tests` directories.
 - Root compatibility layer maps legacy paths `artifacts`, `build`, `defaults`, `dist`, `tests` to `defenition/*` via Windows junctions (no data duplication).
