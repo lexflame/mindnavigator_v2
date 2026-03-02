@@ -1,6 +1,4 @@
 from datetime import date
-from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
@@ -8,10 +6,8 @@ from mindnavigator.storage import Database
 
 
 @pytest.fixture()
-def db():
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    db_path = base_dir / f"test_projects_{uuid4().hex}.sqlite3"
+def db(unique_temp_path):
+    db_path = unique_temp_path("test_projects", ".sqlite3")
     database = Database(path=db_path)
     try:
         yield database

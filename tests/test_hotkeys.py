@@ -67,12 +67,12 @@ def test_conflict_detection():
     assert any(conflict.context == "Global" for conflict in conflicts)
 
 
-def test_persistence_round_trip(tmp_path: Path):
+def test_persistence_round_trip(unique_temp_path):
     manager = HotkeyManager([_command("a", "Ctrl+P", ["Global"])])
     manager.bind("a", "Ctrl+Shift+P")
     manager.set_enabled("a", False)
 
-    store = HotkeyOverridesStore(tmp_path / "hotkeys.overrides.json")
+    store = HotkeyOverridesStore(unique_temp_path("hotkeys_overrides", ".json"))
     store.save(manager)
 
     restored = HotkeyManager([_command("a", "Ctrl+P", ["Global"])])

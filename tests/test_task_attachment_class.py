@@ -1,19 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
 from mindnavigator.storage import Database, TaskAttachmentData
-
-
-def _new_temp_db_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.sqlite3"
-
 
 def test_task_attachment_data_serialization_round_trip() -> None:
     payload = {
@@ -44,8 +35,8 @@ def test_task_attachment_data_rejects_unknown_kind() -> None:
         TaskAttachmentData.normalize_kind("unknown-kind")
 
 
-def test_task_attachment_crud_with_database() -> None:
-    db_path = _new_temp_db_path("task_attachment")
+def test_task_attachment_crud_with_database(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment", ".sqlite3")
     database = Database(path=db_path)
     try:
         task = database.create_task(
@@ -77,8 +68,8 @@ def test_task_attachment_crud_with_database() -> None:
         db_path.unlink(missing_ok=True)
 
 
-def test_task_attachment_supports_idea_entities() -> None:
-    db_path = _new_temp_db_path("task_attachment_idea")
+def test_task_attachment_supports_idea_entities(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_idea", ".sqlite3")
     database = Database(path=db_path)
     try:
         task = database.create_task(
@@ -106,8 +97,8 @@ def test_task_attachment_supports_idea_entities() -> None:
         db_path.unlink(missing_ok=True)
 
 
-def test_task_attachment_add_rejects_non_positive_ids() -> None:
-    db_path = _new_temp_db_path("task_attachment_invalid_ids")
+def test_task_attachment_add_rejects_non_positive_ids(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_invalid_ids", ".sqlite3")
     database = Database(path=db_path)
     try:
         with pytest.raises(ValueError):

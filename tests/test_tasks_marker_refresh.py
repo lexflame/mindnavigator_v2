@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from pathlib import Path
-from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtCore import QRect
@@ -18,13 +16,6 @@ from mindnavigator.workspaces.tasks_workspace import (
     is_marker_only_task_update,
     should_show_today_badge,
 )
-
-
-def _new_temp_db_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.sqlite3"
-
 
 def test_is_marker_only_task_update_detects_marker_change() -> None:
     base = tasks_workspace.TaskRow(
@@ -93,9 +84,9 @@ def test_header_quick_rect_reserves_space_for_today_badge() -> None:
     assert (with_badge_rect.left() - base_rect.left()) >= today_width
 
 
-def test_tasks_model_marker_update_emits_data_changed(monkeypatch) -> None:
+def test_tasks_model_marker_update_emits_data_changed(monkeypatch, unique_temp_path) -> None:
     _app = QCoreApplication.instance() or QCoreApplication([])
-    db_path = _new_temp_db_path("tasks_marker_refresh")
+    db_path = unique_temp_path("tasks_marker_refresh", ".sqlite3")
     database = Database(path=db_path)
     try:
         created = database.create_task(
