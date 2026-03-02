@@ -2,18 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
-from uuid import uuid4
 
 from mindnavigator.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
-
-
-def _new_temp_db_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.sqlite3"
-
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
@@ -41,8 +32,8 @@ def test_apply_migrations_is_versioned_and_idempotent() -> None:
     assert applied == []
 
 
-def test_database_applies_versioned_schema_migrations_for_legacy_schema() -> None:
-    db_path = _new_temp_db_path("legacy_migration")
+def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_temp_path) -> None:
+    db_path = unique_temp_path("legacy_migration", ".sqlite3")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     legacy_conn = sqlite3.connect(db_path)
@@ -123,8 +114,8 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema() -> Non
         db_path.unlink(missing_ok=True)
 
 
-def test_apply_schema_updates_is_safe_for_repeated_calls() -> None:
-    db_path = _new_temp_db_path("apply_schema_updates")
+def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> None:
+    db_path = unique_temp_path("apply_schema_updates", ".sqlite3")
     database = Database(path=db_path)
     try:
         with database._conn:
@@ -136,8 +127,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls() -> None:
         db_path.unlink(missing_ok=True)
 
 
-def test_database_migration_normalizes_legacy_priority_values() -> None:
-    db_path = _new_temp_db_path("legacy_priority_normalize")
+def test_database_migration_normalizes_legacy_priority_values(unique_temp_path) -> None:
+    db_path = unique_temp_path("legacy_priority_normalize", ".sqlite3")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     legacy_conn = sqlite3.connect(db_path)
@@ -217,8 +208,8 @@ def test_database_migration_normalizes_legacy_priority_values() -> None:
         db_path.unlink(missing_ok=True)
 
 
-def test_database_migration_recovers_from_stale_projects_old_table() -> None:
-    db_path = _new_temp_db_path("stale_projects_old")
+def test_database_migration_recovers_from_stale_projects_old_table(unique_temp_path) -> None:
+    db_path = unique_temp_path("stale_projects_old", ".sqlite3")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     legacy_conn = sqlite3.connect(db_path)

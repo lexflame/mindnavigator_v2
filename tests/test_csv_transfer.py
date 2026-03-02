@@ -1,18 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-from uuid import uuid4
-
 import pytest
 
 from mindnavigator.csv_transfer import CsvTransferError, CsvTransferOptions, CsvTransferService
-
-
-def _new_temp_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.csv"
-
 
 def test_csv_round_trip_with_multiline_and_special_symbols() -> None:
     service = CsvTransferService()
@@ -57,9 +47,9 @@ def test_csv_supports_custom_delimiter() -> None:
     assert parsed == [{"a": "1", "b": "2;3"}]
 
 
-def test_csv_file_round_trip() -> None:
+def test_csv_file_round_trip(unique_temp_path) -> None:
     service = CsvTransferService()
-    path = _new_temp_path("csv_transfer")
+    path = unique_temp_path("csv_transfer", ".csv")
 
     rows = [{"id": 1, "name": "Task"}, {"id": 2, "name": "Task 2"}]
     service.export_to_file(path, rows)

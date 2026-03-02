@@ -13,6 +13,7 @@ dist/MindNavigator (windows 11 x64)/_internal
 dist/MindNavigator (windows 11 x64)/_internal/base_library.zip
 /dist
 /.pytest_tmp
+/.pytest_tmp_data
 /.pytest_run_tmp
 /.pytest_run_tmp_*
 /.pytest_dir
@@ -20,6 +21,7 @@ dist/MindNavigator (windows 11 x64)/_internal/base_library.zip
 
 .ai
 /.npm-cache
+/.test_runtime
 /defenition/artifacts
 /defenition/dist
 /docs/inspect

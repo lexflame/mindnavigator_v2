@@ -1,17 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-from uuid import uuid4
-
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.notes_workspace import normalize_note_body
-
-
-def _new_temp_db_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.sqlite3"
-
 
 def test_normalize_note_body_preserves_multiline_text() -> None:
     body = "first\r\nsecond\nthird\rfourth"
@@ -21,8 +11,8 @@ def test_normalize_note_body_preserves_multiline_text() -> None:
     assert normalized == "first\nsecond\nthird\nfourth"
 
 
-def test_note_storage_keeps_text_after_line_breaks() -> None:
-    db_path = _new_temp_db_path("notes_multiline")
+def test_note_storage_keeps_text_after_line_breaks(unique_temp_path) -> None:
+    db_path = unique_temp_path("notes_multiline", ".sqlite3")
     database = Database(path=db_path)
     try:
         created = database.create_note(

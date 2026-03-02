@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
-from uuid import uuid4
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.csv_workspace_transfer import (
@@ -15,15 +13,8 @@ from mindnavigator.workspaces.csv_workspace_transfer import (
     import_collections_rows,
 )
 
-
-def _new_temp_db_path(prefix: str) -> Path:
-    base_dir = Path.cwd() / ".pytest_dir" / "tmp"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"{prefix}_{uuid4().hex}.db"
-
-
-def test_import_tasks_rows_restores_parent_and_done() -> None:
-    db = Database(path=_new_temp_db_path("csv_tasks"))
+def test_import_tasks_rows_restores_parent_and_done(unique_temp_path) -> None:
+    db = Database(path=unique_temp_path("csv_tasks", ".db"))
     try:
         project = db.create_project(
             area="Work",
@@ -74,8 +65,8 @@ def test_import_tasks_rows_restores_parent_and_done() -> None:
         db.close()
 
 
-def test_import_projects_rows_restores_parent_chain() -> None:
-    db = Database(path=_new_temp_db_path("csv_projects"))
+def test_import_projects_rows_restores_parent_chain(unique_temp_path) -> None:
+    db = Database(path=unique_temp_path("csv_projects", ".db"))
     try:
         rows = [
             {
@@ -120,9 +111,9 @@ def test_import_projects_rows_restores_parent_chain() -> None:
         db.close()
 
 
-def test_export_and_import_notes_rows_preserve_flags_and_tags() -> None:
-    source_db = Database(path=_new_temp_db_path("csv_notes_source"))
-    target_db = Database(path=_new_temp_db_path("csv_notes_target"))
+def test_export_and_import_notes_rows_preserve_flags_and_tags(unique_temp_path) -> None:
+    source_db = Database(path=unique_temp_path("csv_notes_source", ".db"))
+    target_db = Database(path=unique_temp_path("csv_notes_target", ".db"))
     try:
         created = source_db.create_note(
             title="CSV Note",
@@ -150,9 +141,9 @@ def test_export_and_import_notes_rows_preserve_flags_and_tags() -> None:
         target_db.close()
 
 
-def test_export_collections_rows_contains_category_path_and_import_recreates_it() -> None:
-    source_db = Database(path=_new_temp_db_path("csv_collections_source"))
-    target_db = Database(path=_new_temp_db_path("csv_collections_target"))
+def test_export_collections_rows_contains_category_path_and_import_recreates_it(unique_temp_path) -> None:
+    source_db = Database(path=unique_temp_path("csv_collections_source", ".db"))
+    target_db = Database(path=unique_temp_path("csv_collections_target", ".db"))
     try:
         root = source_db.create_collection_category("Root")
         child = source_db.create_collection_category("Child", parent_id=root.id)
