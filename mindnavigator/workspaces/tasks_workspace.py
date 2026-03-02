@@ -320,6 +320,20 @@ def blend_task_row_background(base: QColor, marker_color: str, selected: bool) -
     )
 
 
+def format_task_list_title(task_id: object, title: str) -> str:
+    """Builds the visible task title used by the tasks list UI."""
+    base_title = (title or "").strip()
+    if not base_title:
+        base_title = "Без названия"
+    try:
+        normalized_task_id = int(task_id)
+    except (TypeError, ValueError):
+        return base_title
+    if normalized_task_id <= 0:
+        return base_title
+    return f"MN-{normalized_task_id}: {base_title}"
+
+
 class QuickProjectCreateDialog(QDialog):
     def __init__(self, parent=None):
         """Создает краткий диалог создания проекта."""
@@ -554,7 +568,7 @@ class TasksModel(QAbstractListModel):
         if role == TaskRoles.MarkerTheme:
             return r.marker_theme
         if role == Qt.ItemDataRole.DisplayRole:
-            return r.title
+            return format_task_list_title(r.id, r.title)
         return None
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
@@ -2820,7 +2834,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         if not expanded:
             return QSize(option_rect.width(), self.ROW_H)
 
-        title = index.data(TaskRoles.Title) or ""
+        title = index.data(Qt.ItemDataRole.DisplayRole) or ""
         description = index.data(TaskRoles.Description) or ""
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
@@ -2976,7 +2990,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         day: date = index.data(TaskRoles.Day)
         time_text: str = index.data(TaskRoles.DisplayTime) or ""
-        title: str = index.data(TaskRoles.Title) or ""
+        title: str = index.data(Qt.ItemDataRole.DisplayRole) or ""
         description: str = index.data(TaskRoles.Description) or ""
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         project_area: str = index.data(TaskRoles.ProjectArea) or ""

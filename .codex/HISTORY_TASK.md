@@ -84,6 +84,14 @@ Status: Completed
 | TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB | 1 | Restore local automated test runner (`pytest`) in active Python environment | parity | Completed |
 | TASK_5743A7F2-2D90-41A8-9D25-663435E0B526 | 1 | Fix throttling-related regression in clamp motion test | parity | Completed |
 
+## Ad Hoc Tasks
+Created: 2026-03-02
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 | adhoc | Show task number beside task title in tasks list (`MN-<id>: <title>`) | feat | Completed |
+
 ## Sprint 6 - Notes, Export, Import
 Created: 2026-02-25
 Status: Completed

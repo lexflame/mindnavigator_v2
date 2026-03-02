@@ -562,3 +562,12 @@
 [2026-03-02 19:06] ACTION: Backfilled missing legacy parity tasks into .codex/HISTORY_TASK.md for TASK_5D95A5AE-2E6D-4A7B-9C4E-8F4C4E7A3B12, TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0, TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB, and TASK_5743A7F2-2D90-41A8-9D25-663435E0B526.
 [2026-03-02 19:06] ACTION: Synced docs/PARITY.md backlog composition with parity tasks already tracked in .codex/HISTORY_TASK.md for TASK_53A85F68-1AC3-415C-82B2-4E1B5FBD424D and TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6.
 [2026-03-02 19:06] ACTION: Completed full PARITY backlog audit and aligned docs/PARITY.md, .codex/HISTORY_TASK.md, and .codex/HISTORY_ACTION.md by task inventory.
+[2026-03-02 20:10] ACTION: Started TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 (show task number beside task title in tasks list).
+[2026-03-02 20:15] ACTION: Added `format_task_list_title` and updated TasksModel plus TasksItemDelegate so task rows render as `MN-<id>: <title>` while preserving raw title roles.
+[2026-03-02 20:15] ACTION: Added regression coverage for task list title formatting and display-role rendering in tests/test_tasks_marker_refresh.py.
+[2026-03-02 20:15] CMD: $env:PYTHONPYCACHEPREFIX='.syntax_check'; python -m compileall mindnavigator/workspaces/tasks_workspace.py tests/test_tasks_marker_refresh.py
+[2026-03-02 20:15] OUT: OK.
+[2026-03-02 20:15] CMD: $env:PYTHONPATH='.'; $env:QT_QPA_PLATFORM='offscreen'; python -m pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --ignore=defenition/tests
+[2026-03-02 20:15] OUT: 8 passed.
+[2026-03-02 20:15] ACTION: Updated TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 status -> Completed.
+[2026-03-02 20:15] ACTION: Completed TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321.

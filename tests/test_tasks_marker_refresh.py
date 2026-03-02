@@ -13,6 +13,7 @@ from mindnavigator.workspaces import tasks_workspace
 from mindnavigator.workspaces.tasks_workspace import (
     TaskRoles,
     blend_task_row_background,
+    format_task_list_title,
     is_marker_only_task_update,
     should_show_today_badge,
 )
@@ -61,6 +62,12 @@ def test_blend_task_row_background_tints_selected_row() -> None:
     tinted = blend_task_row_background(base, "#2f6edb", selected=True)
 
     assert tinted != base
+
+
+def test_format_task_list_title_prefixes_valid_id_and_falls_back_for_invalid_id() -> None:
+    assert format_task_list_title(42, "Проверить релиз") == "MN-42: Проверить релиз"
+    assert format_task_list_title("bad", "Проверить релиз") == "Проверить релиз"
+    assert format_task_list_title(None, "") == "Без названия"
 
 
 def test_should_show_today_badge_detects_current_day() -> None:
@@ -140,6 +147,36 @@ def test_tasks_model_marker_update_emits_data_changed(monkeypatch, unique_temp_p
             TaskRoles.MarkerColor in role_list and TaskRoles.MarkerTheme in role_list
             for role_list in changes
         )
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_model_display_role_shows_prefixed_task_number(monkeypatch, unique_temp_path) -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = unique_temp_path("tasks_title_prefix", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        created = database.create_task(
+            title="Проверить релиз",
+            description="",
+            day=date(2026, 3, 2),
+            time_text="",
+            priority="Medium",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            if index.data(TaskRoles.RowType) != "task":
+                continue
+            if index.data(TaskRoles.TaskId) == created.id:
+                assert index.data() == f"MN-{created.id}: Проверить релиз"
+                assert index.data(TaskRoles.Title) == "Проверить релиз"
+                break
+        else:
+            raise AssertionError("Task row was not found in the model.")
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
