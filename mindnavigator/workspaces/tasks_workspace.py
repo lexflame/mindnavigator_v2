@@ -15,7 +15,7 @@ import html
 import json
 from pathlib import Path
 import re
-from typing import Dict, List, Union, Optional, Set, Tuple, Any
+from typing import Dict, List, Union, Optional, Set, Tuple, Any, cast
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
@@ -128,10 +128,8 @@ def _configure_markdown_preview_label(value_label: QLabel) -> None:
     value_label.setWordWrap(True)
     value_label.setTextFormat(Qt.TextFormat.RichText)
     value_label.setTextInteractionFlags(
-        Qt.TextInteractionFlags(
-            Qt.TextInteractionFlag.TextBrowserInteraction
-            | Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        Qt.TextInteractionFlag.TextBrowserInteraction
+        | Qt.TextInteractionFlag.TextSelectableByMouse
     )
     value_label.setOpenExternalLinks(True)
 
@@ -157,9 +155,9 @@ def _build_markdown_preview_widget(text: str, parent: Optional[QWidget] = None) 
     copy_button.setText("Копировать код")
     copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
     copy_button.setStyleSheet(_COPY_CODE_BUTTON_STYLE)
-    blocks_to_copy = list(code_blocks)
+    blocks_to_copy = tuple(code_blocks)
     copy_button.clicked.connect(
-        lambda _checked=False, blocks=blocks_to_copy: _copy_markdown_code_blocks_to_clipboard(blocks)
+        lambda _checked=False, blocks=blocks_to_copy: _copy_markdown_code_blocks_to_clipboard(list(blocks))
     )
     copy_row.addWidget(copy_button)
     container_layout.addLayout(copy_row)
@@ -326,7 +324,7 @@ def format_task_list_title(task_id: object, title: str) -> str:
     if not base_title:
         base_title = "Без названия"
     try:
-        normalized_task_id = int(task_id)
+        normalized_task_id = int(cast(Any, task_id))
     except (TypeError, ValueError):
         return base_title
     if normalized_task_id <= 0:
@@ -583,9 +581,11 @@ class TasksModel(QAbstractListModel):
             return flags
         if isinstance(r, SortHeaderRow):
             return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
-        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags |= Qt.ItemFlag.ItemIsSelectable
         if self._drag_enabled:
-            flags |= Qt.ItemFlags(Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled)
+            flags |= Qt.ItemFlag.ItemIsDragEnabled
+            flags |= Qt.ItemFlag.ItemIsDropEnabled
         return flags
 
     def set_filter_mode(self, mode: str):

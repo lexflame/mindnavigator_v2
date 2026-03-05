@@ -351,7 +351,9 @@ class ProjectsNav(QWidget):
 
     def _add_clear_item(self, label: str) -> None:
         item = QListWidgetItem(label)
-        item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        clear_flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        clear_flags |= Qt.ItemFlag.ItemIsSelectable
+        item.setFlags(clear_flags)
         item.setData(Qt.ItemDataRole.UserRole, {"kind": "clear", "value": None})
         self.list.addItem(item)
 
@@ -375,14 +377,15 @@ class ProjectsNav(QWidget):
         for entry in entries:
             item = QListWidgetItem(entry["label"])
             if entry.get("kind") == "project":
-                item.setFlags(
-                    Qt.ItemFlag.ItemIsEnabled
-                    | Qt.ItemFlag.ItemIsSelectable
-                    | Qt.ItemFlag.ItemIsDragEnabled
-                    | Qt.ItemFlag.ItemIsDropEnabled
-                )
+                item_flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+                item_flags |= Qt.ItemFlag.ItemIsSelectable
+                item_flags |= Qt.ItemFlag.ItemIsDragEnabled
+                item_flags |= Qt.ItemFlag.ItemIsDropEnabled
+                item.setFlags(item_flags)
             else:
-                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                item_flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+                item_flags |= Qt.ItemFlag.ItemIsSelectable
+                item.setFlags(item_flags)
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.list.addItem(item)
 
@@ -424,8 +427,8 @@ class ProjectsNav(QWidget):
 
         entries: list[dict] = []
 
-        def append_subtree(parent_id: object, depth: int) -> None:
-            for project in children.get(parent_id, []):
+        def append_subtree(node_parent_id: object, depth: int) -> None:
+            for project in children.get(node_parent_id, []):
                 project_children = children.get(project.id, [])
                 has_children = bool(project_children)
                 is_expanded = project.id not in self._collapsed_project_ids
@@ -714,6 +717,5 @@ class ProjectsNav(QWidget):
         current = self.list.currentItem()
         if current is not None:
             self._on_item_selected(current, None)
-
 
 

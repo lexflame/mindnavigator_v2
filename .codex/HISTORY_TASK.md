@@ -133,3 +133,4 @@ Status: In Progress
 | TASK_B6BF096B-3362-4D88-94A3-262E8D0DD379 | 8 | Implement PARTITION B sprint composition semantics (MN-215..MN-223) | feat | Completed |
 | TASK_93EEFC5D-CA39-4871-BB3E-F9844466DBDC | 8 | Implement PARTITION C keyword classification semantics (MN-225..MN-230) | feat | Completed |
 | TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 | 8 | Implement PARTITION D Russian abstraction semantics (MN-232, MN-233) | feat | Completed |
+| TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 | 8 | Fix PyCharm inspection findings from docs/inspect for Sprint 8 closure gate | fix | Completed |

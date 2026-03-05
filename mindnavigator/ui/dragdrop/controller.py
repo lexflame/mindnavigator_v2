@@ -168,17 +168,17 @@ class DragDropController:
 
         if success and zone_id:
             on_drop_requested = self.on_drop_requested
-            if callable(on_drop_requested):
+            if on_drop_requested is not None:
                 on_drop_requested(payload, zone_id)
             if self._executor is not None:
                 success = self._executor.execute(payload, zone_id)
             on_drop_committed = self.on_drop_committed
-            if success and callable(on_drop_committed):
+            if success and on_drop_committed is not None:
                 on_drop_committed(payload, zone_id)
 
         transition_ms = self._motion.drop_success_duration_ms if success else self._motion.drop_failure_duration_ms
         on_drop_transition = self.on_drop_transition
-        if callable(on_drop_transition):
+        if on_drop_transition is not None:
             on_drop_transition(success, transition_ms)
         self._play_drop_result(success)
         self.reset()
@@ -227,7 +227,7 @@ class DragDropController:
     def _emit_drag_started(self) -> None:
         payload = self.payload
         on_drag_started = self.on_drag_started
-        if payload is not None and callable(on_drag_started):
+        if payload is not None and on_drag_started is not None:
             on_drag_started(payload, self.state)
 
     def _should_cancel_outside_window(self, pos_global: Point) -> bool:

@@ -13,6 +13,7 @@ import ctypes
 import json
 import sys
 from datetime import datetime, timedelta
+from typing import Mapping, cast
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -267,8 +268,11 @@ class MainWindow(QMainWindow):
         if sys.platform != "win32":
             return
         try:
+            register_hotkey = getattr(ctypes.windll.user32, "RegisterHotKey", None)
+            if not callable(register_hotkey):
+                return
             hwnd = int(self.winId())
-            result = ctypes.windll.user32.RegisterHotKey(
+            result = register_hotkey(
                 hwnd,
                 self._TRAY_RESTORE_HOTKEY_ID,
                 self._MOD_CONTROL | self._MOD_SHIFT,
@@ -284,7 +288,9 @@ class MainWindow(QMainWindow):
         if not getattr(self, "_system_restore_hotkey_registered", False):
             return
         try:
-            ctypes.windll.user32.UnregisterHotKey(int(self.winId()), self._TRAY_RESTORE_HOTKEY_ID)
+            unregister_hotkey = getattr(ctypes.windll.user32, "UnregisterHotKey", None)
+            if callable(unregister_hotkey):
+                unregister_hotkey(int(self.winId()), self._TRAY_RESTORE_HOTKEY_ID)
         finally:
             self._system_restore_hotkey_registered = False
 
@@ -316,7 +322,7 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """Обрабатывает клики по иконке в трее."""
         # На одиночный клик восстанавливаем окно.
-        if reason == QSystemTrayIcon.Trigger:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
             restore = getattr(self, "restore_from_tray", None)
             if callable(restore):
                 restore()
@@ -813,48 +819,53 @@ class MainWindow(QMainWindow):
 
     def _on_nav_filter_changed(self, kind: str, value: object) -> None:
         # Определяем активный режим и прокидываем фильтры в соответствующий вид.
+        payload = cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
+        entity_id = payload.get("id")
+        project_title = payload.get("title")
+        map_project = payload.get("project")
+
         mode = self._current_mode
         if mode == self.MODE_TASKS:
-            if kind == "project":
-                self.page_tasks.set_project_filter(value["id"])
+            if kind == "project" and isinstance(entity_id, int):
+                self.page_tasks.set_project_filter(entity_id)
             elif kind == "clear":
                 self.page_tasks.set_project_filter(None)
             return
         if mode == self.MODE_PROJECTS:
-            if kind == "task":
-                self.page_projects.set_task_filter(value["id"])
+            if kind == "task" and isinstance(entity_id, int):
+                self.page_projects.set_task_filter(entity_id)
             elif kind == "clear":
                 self.page_projects.set_task_filter(None)
             return
         if mode == self.MODE_FILES:
-            if kind == "project":
-                self.page_files.set_project_filter(value["id"])
+            if kind == "project" and isinstance(entity_id, int):
+                self.page_files.set_project_filter(entity_id)
             elif kind == "clear":
                 self.page_files.set_project_filter(None)
             return
         if mode == self.MODE_MAPS:
-            if kind == "project":
-                self.page_maps.set_project_filter(value["title"])
+            if kind == "project" and isinstance(project_title, str):
+                self.page_maps.set_project_filter(project_title)
             elif kind == "clear":
                 self.page_maps.set_project_filter(None)
             return
         if mode == self.MODE_NOTES:
-            if kind == "task":
-                self.page_notes.set_task_filter(value["id"])
+            if kind == "task" and isinstance(entity_id, int):
+                self.page_notes.set_task_filter(entity_id)
             elif kind == "map":
-                project = value.get("project") or None
+                project = map_project if isinstance(map_project, str) and map_project else None
                 self.page_notes.set_project_filter(project)
             elif kind == "clear":
                 self.page_notes.set_project_filter(None)
                 self.page_notes.set_task_filter(None)
             return
         if mode == self.MODE_OBJECTS:
-            if kind == "project":
-                self.page_objects.set_project_filter(value["id"])
-            elif kind == "task":
-                self.page_objects.set_task_filter(value["id"])
-            elif kind == "marker":
-                self.page_objects.set_marker_filter(value["id"])
+            if kind == "project" and isinstance(entity_id, int):
+                self.page_objects.set_project_filter(entity_id)
+            elif kind == "task" and isinstance(entity_id, int):
+                self.page_objects.set_task_filter(entity_id)
+            elif kind == "marker" and isinstance(entity_id, int):
+                self.page_objects.set_marker_filter(entity_id)
             elif kind == "clear":
                 self.page_objects.set_project_filter(None)
                 self.page_objects.set_task_filter(None)
@@ -943,12 +954,12 @@ class MainWindow(QMainWindow):
         # Отслеживаем сворачивание и отправляем окно в трей.
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
-            self._was_maximized_before_minimize = bool(event.oldState() & Qt.WindowState.WindowMaximized)
+            old_state = event.oldState() if hasattr(event, "oldState") else Qt.WindowState.WindowNoState
+            self._was_maximized_before_minimize = bool(old_state & Qt.WindowState.WindowMaximized)
             self._minimize_to_tray()
             return
         if event.type() == QEvent.Type.ActivationChange:
-            app = QApplication.instance()
-            app_inactive = app is None or app.applicationState() != Qt.ApplicationState.ApplicationActive
+            app_inactive = QApplication.applicationState() != Qt.ApplicationState.ApplicationActive
             if (
                 app_inactive
                 and self._minimize_on_focus_lost
@@ -1075,18 +1086,22 @@ class MainWindow(QMainWindow):
     def _cursor_for_edge(edge: ResizeEdge):
         """Return cursor shape for selected resize edge."""
         # Select cursor icon for current resize edge orientation.
-        edge_value = int(edge)
+        edge_value = int(edge.value)
+        left = int(ResizeEdge.LEFT.value)
+        right = int(ResizeEdge.RIGHT.value)
+        top = int(ResizeEdge.TOP.value)
+        bottom = int(ResizeEdge.BOTTOM.value)
         diagonal_forward = {
-            int(ResizeEdge.TOP | ResizeEdge.LEFT),
-            int(ResizeEdge.BOTTOM | ResizeEdge.RIGHT),
+            top | left,
+            bottom | right,
         }
         diagonal_backward = {
-            int(ResizeEdge.TOP | ResizeEdge.RIGHT),
-            int(ResizeEdge.BOTTOM | ResizeEdge.LEFT),
+            top | right,
+            bottom | left,
         }
-        if edge_value in (int(ResizeEdge.LEFT), int(ResizeEdge.RIGHT)):
+        if edge_value in (left, right):
             return Qt.CursorShape.SizeHorCursor
-        if edge_value in (int(ResizeEdge.TOP), int(ResizeEdge.BOTTOM)):
+        if edge_value in (top, bottom):
             return Qt.CursorShape.SizeVerCursor
         if edge_value in diagonal_forward:
             return Qt.CursorShape.SizeFDiagCursor
@@ -1117,26 +1132,26 @@ class MainWindow(QMainWindow):
         min_h = self.minimumHeight()
 
         # Обновляем границы в зависимости от направления ресайза.
-        if (self._resize_edge & ResizeEdge.LEFT) != ResizeEdge.NONE:
+        if self._resize_edge & ResizeEdge.LEFT:
             new_x = g.x() + dx
             new_w = g.width() - dx
             if new_w >= min_w:
                 g.setX(new_x)
                 g.setWidth(new_w)
 
-        if (self._resize_edge & ResizeEdge.RIGHT) != ResizeEdge.NONE:
+        if self._resize_edge & ResizeEdge.RIGHT:
             new_w = g.width() + dx
             if new_w >= min_w:
                 g.setWidth(new_w)
 
-        if (self._resize_edge & ResizeEdge.TOP) != ResizeEdge.NONE:
+        if self._resize_edge & ResizeEdge.TOP:
             new_y = g.y() + dy
             new_h = g.height() - dy
             if new_h >= min_h:
                 g.setY(new_y)
                 g.setHeight(new_h)
 
-        if (self._resize_edge & ResizeEdge.BOTTOM) != ResizeEdge.NONE:
+        if self._resize_edge & ResizeEdge.BOTTOM:
             new_h = g.height() + dy
             if new_h >= min_h:
                 g.setHeight(new_h)
@@ -1157,11 +1172,11 @@ class MainWindow(QMainWindow):
         if obj is self:
             # 🔥 В maximized полностью выключаем hit-test и дергание курсора
             if self.isMaximized():
-                if event.type() in (event.Type.MouseMove, event.Type.Leave):
+                if event.type() in (QEvent.Type.MouseMove, QEvent.Type.Leave):
                     self.unsetCursor()
                 return super().eventFilter(obj, event)
 
-            if event.type() == event.Type.MouseMove:
+            if event.type() == QEvent.Type.MouseMove and hasattr(event, "position") and hasattr(event, "globalPosition"):
                 pos = event.position().toPoint()
                 global_pos = event.globalPosition().toPoint()
 
@@ -1177,24 +1192,25 @@ class MainWindow(QMainWindow):
                     self.setCursor(self._cursor_for_edge(edge))
                 return False
 
-            if event.type() == event.Type.MouseButtonPress:
+            if event.type() == QEvent.Type.MouseButtonPress and hasattr(event, "button") and hasattr(event, "position"):
                 if event.button() == Qt.MouseButton.LeftButton:
                     pos = event.position().toPoint()
                     edge = self._hit_test_edges(pos)
                     if edge != ResizeEdge.NONE:
                         # Запускаем ресайз при нажатии на край.
-                        self._start_resize(edge, event.globalPosition().toPoint())
+                        if hasattr(event, "globalPosition"):
+                            self._start_resize(edge, event.globalPosition().toPoint())
                         return True
                 return False
 
-            if event.type() == event.Type.MouseButtonRelease:
+            if event.type() == QEvent.Type.MouseButtonRelease:
                 # Останавливаем ресайз по отпусканию.
                 if self._resizing:
                     self._stop_resize()
                     return True
                 return False
 
-            if event.type() == event.Type.Leave:
+            if event.type() == QEvent.Type.Leave:
                 # Возвращаем курсор, если не ресайзим.
                 if not self._resizing:
                     self.unsetCursor()

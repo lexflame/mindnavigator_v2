@@ -139,7 +139,7 @@ class FlowLayout(QLayout):
             return self._items.pop(index)
         return None
 
-    def expandingDirections(self) -> Qt.Orientations:
+    def expandingDirections(self) -> Qt.Orientation:
         # Направления, в которых раскладка может расширяться.
         return Qt.Orientation(0)
 
@@ -704,7 +704,7 @@ class MapLabelEditDialog(QDialog):
         self.form_scroll = QScrollArea()
         self.form_scroll.setObjectName("MapLabelFormScroll")
         self.form_scroll.setWidgetResizable(True)
-        self.form_scroll.setFrameShape(QFrame.NoFrame)
+        self.form_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.form_scroll.setWidget(right)
 
@@ -806,7 +806,7 @@ class MapLabelEditDialog(QDialog):
         self.type_combo = QComboBox()
         self.type_combo.setEditable(True)
         self.type_combo.addItems(sorted({t for t in type_suggestions if t}))
-        self.type_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.type_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         if type_suggestions:
             # Настраиваем автодополнение по типу.
             completer = QCompleter(sorted({t for t in type_suggestions if t}), self)
@@ -911,7 +911,7 @@ class MapLabelEditDialog(QDialog):
                 completer = QCompleter(list(labels.keys()), link_input.search_input)
                 completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
                 completer.setFilterMode(Qt.MatchFlag.MatchContains)
-                completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
+                completer.textActivated.connect(lambda text, k=key: self._add_link_from_title(k, text))
                 link_input.search_input.setCompleter(completer)
                 self._register_completer_popup(link_input.search_input, completer)
 
@@ -1445,10 +1445,10 @@ class MapLabelEditDialog(QDialog):
                 self,
                 "Несохранённые изменения",
                 "Есть несохранённые изменения. Закрыть?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.Yes:
+            if confirm != QMessageBox.StandardButton.Yes:
                 return
         super().reject()
 

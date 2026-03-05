@@ -1,5 +1,10 @@
+from typing import TYPE_CHECKING
+
 from .manager import HotkeyManager, HotkeyOverridesStore, load_commands_from_json, normalize_sequence
 from .models import Conflict, HotkeyBinding, HotkeyCommand
+
+if TYPE_CHECKING:
+    from .event_filter import HotkeyEventFilter, is_editable_widget
 
 __all__ = [
     "Conflict",

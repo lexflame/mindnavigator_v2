@@ -17,6 +17,7 @@ import shutil
 import sys
 import tempfile
 import zipfile
+from typing import cast
 
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QCheckBox,
     QComboBox,
+    QDialog,
     QSpinBox,
     QMessageBox,
 )
@@ -766,7 +768,8 @@ class SettingsWorkspace(QWidget):
         enabled_count = sum(1 for checkbox in self.workspace_checkboxes.values() if checkbox.isChecked())
         self.workspace_status.setText(f"Enabled workspaces: {enabled_count}")
 
-    def _autostart_command(self) -> str:
+    @staticmethod
+    def _autostart_command() -> str:
         if getattr(sys, "frozen", False):
             return f"\"{Path(sys.executable)}\""
         main_py = Path(__file__).resolve().parents[2] / "main.py"
@@ -796,7 +799,8 @@ class SettingsWorkspace(QWidget):
         except OSError:
             pass
 
-    def _set_combo_value(self, combo: QComboBox, value: str) -> None:
+    @staticmethod
+    def _set_combo_value(combo: QComboBox, value: str) -> None:
         for index in range(combo.count()):
             if combo.itemData(index) == value:
                 combo.setCurrentIndex(index)
@@ -816,7 +820,7 @@ class SettingsWorkspace(QWidget):
         if backup_dir and backup_dir.exists():
             entries = sorted(
                 backup_dir.glob(f"{self.BACKUP_PREFIX}*.zip"),
-                key=lambda backup_path: backup_path.stat().st_mtime,
+                key=lambda backup_file: backup_file.stat().st_mtime,
                 reverse=True,
             )
             for backup_path in entries:
@@ -855,11 +859,11 @@ class SettingsWorkspace(QWidget):
         if index < 0 or index >= len(self._backup_entries):
             index = 0
         entry = self._backup_entries[index]
-        path = entry["path"]
-        meta = entry.get("meta") or {}
+        path = cast(Path, entry.get("path"))
+        meta = cast(dict[str, object], entry.get("meta") or {})
         size_text = self._format_bytes(path.stat().st_size)
-        created_at = meta.get("created_at") or datetime.fromtimestamp(path.stat().st_mtime).isoformat()
-        include_cloud = meta.get("include_cloud_label") or "нет"
+        created_at = str(meta.get("created_at") or datetime.fromtimestamp(path.stat().st_mtime).isoformat())
+        include_cloud = str(meta.get("include_cloud_label") or "нет")
         self.backup_details.setText(
             f"Размер: {size_text} · Дата: {created_at.replace('T', ' ')} · "
             f"Облачное хранилище: {include_cloud}"
@@ -867,7 +871,8 @@ class SettingsWorkspace(QWidget):
         self.btn_restore_backup.setEnabled(True)
         self.btn_delete_backup.setEnabled(True)
 
-    def _format_bytes(self, size: int) -> str:
+    @staticmethod
+    def _format_bytes(size: int) -> str:
         units = ["Б", "КБ", "МБ", "ГБ"]
         value = float(size)
         for unit in units:
@@ -939,7 +944,7 @@ class SettingsWorkspace(QWidget):
         max_count = self.retention_spin.value()
         backups = sorted(
             backup_dir.glob(f"{self.BACKUP_PREFIX}*.zip"),
-            key=lambda backup_path: backup_path.stat().st_mtime,
+            key=lambda backup_file: backup_file.stat().st_mtime,
             reverse=True,
         )
         for backup_path in backups[max_count:]:
@@ -955,7 +960,7 @@ class SettingsWorkspace(QWidget):
         index = self.backup_combo.currentIndex()
         if index < 0 or index >= len(self._backup_entries):
             index = 0
-        path = self._backup_entries[index]["path"]
+        path = cast(Path, self._backup_entries[index].get("path"))
         dialog = ConfirmDialog(
             "Восстановление данных",
             "Восстановление заменит текущие данные. Продолжить?",
@@ -963,7 +968,7 @@ class SettingsWorkspace(QWidget):
             confirm_text="Восстановить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != dialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         self._restore_backup(path)
 
@@ -1014,7 +1019,7 @@ class SettingsWorkspace(QWidget):
         index = self.backup_combo.currentIndex()
         if index < 0 or index >= len(self._backup_entries):
             index = 0
-        path = self._backup_entries[index]["path"]
+        path = cast(Path, self._backup_entries[index].get("path"))
         dialog = ConfirmDialog(
             "Удаление копии",
             f"Удалить резервную копию {path.name}?",
@@ -1022,7 +1027,7 @@ class SettingsWorkspace(QWidget):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if exec_with_overlay(dialog, self) != dialog.Accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         try:
             path.unlink()

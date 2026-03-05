@@ -657,3 +657,12 @@
 [2026-03-05 14:54] ACTION: Completed TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22.
 [2026-03-05 15:32] ACTION: Operator confirmed build and test run success for Sprint 8 post-partition parity gate.
 [2026-03-05 15:32] ACTION: Requested PyCharm inspection execution from operator as the next mandatory gate before release flow.
+[2026-03-05 16:40] ACTION: Started TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 (Fix PyCharm inspection findings from docs/inspect).
+[2026-03-05 16:40] ACTION: Updated TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 status -> In Progress.
+[2026-03-05 16:40] ACTION: Applied technical inspection fixes across main_window, workspaces, dialogs, dragdrop controller, hotkeys export typing, and entity API casting.
+[2026-03-05 16:40] CMD: python -m compileall mindnavigator main.py
+[2026-03-05 16:40] OUT: OK.
+[2026-03-05 16:40] CMD: $env:PYTHONPATH='.'; pytest tests\test_hotkeys.py tests\test_entity_api.py tests\test_dragdrop_controller.py tests\test_dragdrop_model.py tests\test_dragdrop_policy.py tests\test_dragdrop_integration.py tests\test_settings_workspace_backup_safety.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-05 16:40] OUT: 44 passed.
+[2026-03-05 16:40] ACTION: Updated TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 status -> Completed.
+[2026-03-05 16:40] ACTION: Completed TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124.
