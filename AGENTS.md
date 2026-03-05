@@ -62,6 +62,7 @@
 50. Avoid variable shadowing in nested scopes; prefer explicit names such as `tab_button`, `project_row`, and `node`.
 51. For sprint decomposition from MindNavigator tasks, always read and use descriptions for the root task and all nested tasks; do not rely on titles only.
 52. If operator confirmation is required before a meaningful action, send a Telegram notification request and continue only after confirmation is received.
+53. For sprint delivery tasks, keep class/function docblocks and non-obvious logic comments aligned with PHP PSR-12 style intent: concise purpose-first phrasing, explicit behavior notes, and consistent formatting.
 
 ## History File Rules
 1. `HISTORY_TASK` source of truth is `.codex/HISTORY_TASK.md`.

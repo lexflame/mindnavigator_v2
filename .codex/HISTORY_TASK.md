@@ -135,3 +135,4 @@ Status: Completed
 | TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 | 8 | Implement PARTITION D Russian abstraction semantics (MN-232, MN-233) | feat | Completed |
 | TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 | 8 | Fix PyCharm inspection findings from docs/inspect for Sprint 8 closure gate | fix | Completed |
 | TASK_148126AA-979F-422E-9211-E75F3A9AD34E | 8 | Finalize Sprint 8 closure and sync MN-211 completion state | chore | Completed |
+| TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 | 8 | Add explicit PSR-12-style comment/docblock rule to AGENTS and finalize closure alignment | docs | Completed |

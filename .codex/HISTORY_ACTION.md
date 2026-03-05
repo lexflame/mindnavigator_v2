@@ -700,3 +700,8 @@
 [2026-03-05 22:18] CMD: Query GitHub API check-runs for commit `2a85ee7215fd52d545d5d3689cd4999b5a09bcd7`.
 [2026-03-05 22:18] OUT: All 4 checks completed with `success` conclusion (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
 [2026-03-05 22:18] ACTION: Confirmed Sprint 8 closure pipeline gate passed for branch sprint/mn-211-integration-pD.
+[2026-03-05 22:50] ACTION: Started TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 (Add explicit PSR-12-style comment/docblock rule and finalize closure alignment).
+[2026-03-05 22:50] ACTION: Updated TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 status -> In Progress.
+[2026-03-05 22:51] ACTION: Added AGENTS.md rule requiring PSR-12-style intent for class/function docblocks and non-obvious logic comments in sprint delivery tasks.
+[2026-03-05 22:51] ACTION: Updated TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 status -> Completed.
+[2026-03-05 22:51] ACTION: Completed TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478.
