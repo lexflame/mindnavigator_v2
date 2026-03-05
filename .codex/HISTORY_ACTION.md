@@ -697,3 +697,6 @@
 [2026-03-05 22:16] OUT: Remote branch updated to 350f0b1; local remote-tracking ref update failed due lock-permission on refs/remotes/origin.
 [2026-03-05 22:16] CMD: git ls-remote origin refs/heads/sprint/mn-211-integration-pD
 [2026-03-05 22:16] OUT: Confirmed remote branch head at 350f0b12ec3f0fe1fdf25823e15a3a0e42045fb6.
+[2026-03-05 22:18] CMD: Query GitHub API check-runs for commit `2a85ee7215fd52d545d5d3689cd4999b5a09bcd7`.
+[2026-03-05 22:18] OUT: All 4 checks completed with `success` conclusion (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 22:18] ACTION: Confirmed Sprint 8 closure pipeline gate passed for branch sprint/mn-211-integration-pD.
