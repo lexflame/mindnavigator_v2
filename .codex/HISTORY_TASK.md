@@ -83,6 +83,7 @@ Status: Completed
 | TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0 | 1 | Review unexpected file `.codex/manual/ERROR_GIT/git_runner.txt` | parity | Completed |
 | TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB | 1 | Restore local automated test runner (`pytest`) in active Python environment | parity | Completed |
 | TASK_5743A7F2-2D90-41A8-9D25-663435E0B526 | 1 | Fix throttling-related regression in clamp motion test | parity | Completed |
+| TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22 | 8 | Register Sprint 8 partition PR and pipeline parity closure | parity | Completed |
 
 ## Ad Hoc Tasks
 Created: 2026-03-02
