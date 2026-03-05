@@ -580,3 +580,15 @@
 [2026-03-05 14:04] ACTION: Added docs/sprints/8_SPRINT.md with partition map, task array, decomposition notes, validation matrix, and DoD derived from MN-211 descendants.
 [2026-03-05 14:04] ACTION: Updated TASK_325D1B00-130A-45CF-BC18-2BA2074FFC5B status -> Completed.
 [2026-03-05 14:04] ACTION: Completed TASK_325D1B00-130A-45CF-BC18-2BA2074FFC5B.
+[2026-03-05 14:17] ACTION: Started TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25 (Implement PARTITION A parser grammar and keyword lexicon).
+[2026-03-05 14:17] ACTION: Updated TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25 status -> In Progress.
+[2026-03-05 14:17] CMD: git switch -c sprint/mn-211-integration-pA
+[2026-03-05 14:17] OUT: Switched to new partition branch `sprint/mn-211-integration-pA`.
+[2026-03-05 14:19] ACTION: Added `mindnavigator/sprint_parser.py` with keyword lexicon aliases and title parser for short and extended header formats.
+[2026-03-05 14:19] ACTION: Added `tests/test_sprint_parser.py` with coverage for canonical tokens, aliases, supported formats, and malformed headers.
+[2026-03-05 14:19] CMD: python -m compileall mindnavigator main.py
+[2026-03-05 14:19] OUT: OK.
+[2026-03-05 14:19] CMD: PYTHONPATH=. pytest tests -k sprint_parser -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-05 14:19] OUT: 6 passed, 117 deselected.
+[2026-03-05 14:19] ACTION: Updated TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25 status -> Completed.
+[2026-03-05 14:19] ACTION: Completed TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25.
