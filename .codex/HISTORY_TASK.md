@@ -120,3 +120,11 @@ Status: Completed
 | TASK_3ED7E7F2-C87E-4611-85D7-AF271D6E4D31 | 6 | Notes multiline save bugfix | fix | Completed |
 | TASK_04E6A669-898B-498F-827D-FD51B4C678D2 | 6 | Tasks list marker property immediate refresh | fix | Completed |
 | TASK_6BFC8077-FB99-46CE-876D-AEA9492371C6 | 6 | Static-analysis remediation by error type with separate commits | parity | Completed |
+
+## Sprint 8 - MindNavigator Integration Task Grammar
+Created: 2026-03-05
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_325D1B00-130A-45CF-BC18-2BA2074FFC5B | 8 | Compose sprint plan from MN-211 and nested tasks | chore | Completed |
