@@ -130,3 +130,4 @@ Status: In Progress
 | TASK_325D1B00-130A-45CF-BC18-2BA2074FFC5B | 8 | Compose sprint plan from MN-211 and nested tasks | chore | Completed |
 | TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25 | 8 | Implement PARTITION A parser grammar and keyword lexicon (MN-214, MN-222) | feat | Completed |
 | TASK_B6BF096B-3362-4D88-94A3-262E8D0DD379 | 8 | Implement PARTITION B sprint composition semantics (MN-215..MN-223) | feat | Completed |
+| TASK_93EEFC5D-CA39-4871-BB3E-F9844466DBDC | 8 | Implement PARTITION C keyword classification semantics (MN-225..MN-230) | feat | Completed |
