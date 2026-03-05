@@ -14,6 +14,7 @@ class TaskClassification:
     route: str
     description: str
     parity_candidate: bool
+    parity_handoff: bool = False
 
 
 _CLASSIFICATION_MAP: dict[str, TaskClassification] = {
@@ -53,6 +54,19 @@ _CLASSIFICATION_MAP: dict[str, TaskClassification] = {
         description="Refactor or regression-restoration workflow.",
         parity_candidate=True,
     ),
+    "ФИЧИ": TaskClassification(
+        keyword="ФИЧИ",
+        route="feature-adjacent",
+        description="Adjacent feature abstraction; author-specific specifics should move to parity.",
+        parity_candidate=True,
+        parity_handoff=True,
+    ),
+    "ПРОРАБОТКА": TaskClassification(
+        keyword="ПРОРАБОТКА",
+        route="enhancement",
+        description="Enhancement of existing functionality.",
+        parity_candidate=True,
+    ),
 }
 
 
@@ -86,4 +100,3 @@ def classify_mindnavigator_title(title: str) -> TaskClassification | None:
     if direct is not None:
         return direct
     return None
-
