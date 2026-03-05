@@ -198,11 +198,13 @@ class IdeasListModel(QAbstractListModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlags(Qt.ItemFlag.NoItemFlags)
         row = self._rows[index.row()]
         if isinstance(row, IdeaCategoryRow):
-            return Qt.ItemFlag.ItemIsEnabled
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags |= Qt.ItemFlag.ItemIsSelectable
+        return flags
 
     def set_items(self, items: list[IdeaItem]) -> None:
         self.beginResetModel()
@@ -248,7 +250,7 @@ class IdeasDelegate(QStyledItemDelegate):
         background = QColor("#2f3036" if selected else "#1f2024")
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(background)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, 10, 10)
 
         title = index.data(IdeaRoles.Title) or "Без названия"

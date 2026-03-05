@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, cast
 
 from .storage import Database, get_database
 
@@ -717,7 +717,7 @@ class EntityApiService(EntityApiPool):
         if value is None or value == "":
             return int(default)
         try:
-            return int(value)
+            return int(cast(Any, value))
         except (TypeError, ValueError) as exc:
             raise EntityApiError(f"Cannot parse integer value: {value!r}") from exc
 
@@ -726,7 +726,7 @@ class EntityApiService(EntityApiPool):
         if value is None or value == "":
             return default
         try:
-            return int(value)
+            return int(cast(Any, value))
         except (TypeError, ValueError) as exc:
             raise EntityApiError(f"Cannot parse optional integer value: {value!r}") from exc
 

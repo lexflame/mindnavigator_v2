@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QListView,
     QStyledItemDelegate,
     QStyle,
+    QStyleOptionViewItem,
     QAbstractItemView,
     QTextEdit,
     QMenu,
@@ -197,13 +198,15 @@ class NotesModel(QAbstractListModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlags(Qt.ItemFlag.NoItemFlags)
         if self._loading:
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlags(Qt.ItemFlag.NoItemFlags)
         row = self._rows[index.row()]
         if isinstance(row, NoteCategoryRow):
-            return Qt.ItemFlag.ItemIsEnabled
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags |= Qt.ItemFlag.ItemIsSelectable
+        return flags
 
     def set_loading(self, loading: bool):
         if self._loading == loading:
@@ -441,7 +444,7 @@ class NoteCardDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self._card_radius = 12
 
-    def paint(self, painter: QPainter, option, index):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         row_type = index.data(NoteRoles.RowType)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -511,7 +514,7 @@ class NoteCardDelegate(QStyledItemDelegate):
 
         icon_y = rect.top() + 12
         icon_x = rect.right() - 18
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
 
         if index.data(NoteRoles.Locked):
             qta.icon("fa5s.lock", color="#8b8f96").paint(painter, QRect(icon_x, icon_y, 14, 14))
@@ -530,7 +533,7 @@ class NoteCardDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(rect, self._card_radius, self._card_radius)
 
         painter.setBrush(QColor("#2a2e36"))
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.top() + 14, rect.width() - 60, 12), 6, 6)
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.top() + 40, rect.width() - 30, 10), 6, 6)
         painter.drawRoundedRect(QRect(rect.left() + 14, rect.top() + 58, rect.width() - 40, 10), 6, 6)
@@ -556,7 +559,7 @@ class NoteCardDelegate(QStyledItemDelegate):
             title,
         )
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex):
         if index.data(NoteRoles.RowType) == "category":
             return QSize(260, 30)
         return QSize(260, 170)
@@ -614,7 +617,7 @@ class NoteWorkspace(QWidget):
         self.btn_new_note = QToolButton()
         self.btn_new_note.setIcon(qta.icon("fa5s.plus", color="#ffffff"))
         self.btn_new_note.setText("Новая")
-        self.btn_new_note.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.btn_new_note.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.btn_new_note.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_export = QToolButton()
         self.btn_export.setText("Экспорт")
@@ -744,7 +747,7 @@ class NoteWorkspace(QWidget):
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setAutoRaise(True)
-            btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
             self.filters_group.addButton(btn)
             return btn
 

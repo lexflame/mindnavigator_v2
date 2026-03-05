@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
 
 import qtawesome as qta
 
-from mindnavigator.collections_importer import FolderCollectionImporter, list_files
+from mindnavigator.collections_importer import list_files, scan_files
 from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
 from mindnavigator.ui.dialogs.collection_category_dialog import CollectionCategorySelectDialog
 from mindnavigator.ui.dialogs.collection_import_dialog import CollectionImportDialog
@@ -240,13 +240,13 @@ class ImagePreviewDialog(QDialog):
         self._update_image()
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key.Key_Left:
             self._show_previous()
             return
-        if event.key() == Qt.Key_Right:
+        if event.key() == Qt.Key.Key_Right:
             self._show_next()
             return
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.close()
             return
         super().keyPressEvent(event)
@@ -303,7 +303,11 @@ class ImagePreviewDialog(QDialog):
             self.image_label.setText("Изображение недоступно")
             return
         target_size = self.image_label.size()
-        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        scaled = pixmap.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
         self.image_label.setPixmap(scaled)
         self.image_label.setText("")
 
@@ -740,8 +744,8 @@ class FileWorkspace(QWidget):
                 if not pixmap.isNull():
                     scaled = pixmap.scaled(
                         self.file_grid.iconSize(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
                     )
                     return QIcon(scaled)
         if cache_key in self._icon_cache:
@@ -884,11 +888,10 @@ class FileWorkspace(QWidget):
             QMessageBox.warning(self, "FileTransfer", str(exc))
             return
 
-        importer = FolderCollectionImporter()
         files, list_errors = list_files(folder_path, include_subfolders=include_subfolders)
         if not self._confirm_large_folder(len(files)):
             return
-        items, errors = self._scan_with_progress(importer, folder_path, files)
+        items, errors = self._scan_with_progress(folder_path, files)
         errors = list_errors + errors
         entries = [
             {
@@ -940,14 +943,13 @@ class FileWorkspace(QWidget):
 
     def _scan_with_progress(
         self,
-        importer: FolderCollectionImporter,
         folder_path: Path,
         files: List[Path],
     ) -> tuple[list, list]:
         progress = QProgressDialog("Сканирование файлов...", "Отмена", 0, max(1, len(files)), self)
         progress.setWindowTitle("Импорт коллекции")
         progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
 
         def progress_cb(index: int, total: int | None, _path: Path) -> None:
             progress.setMaximum(total or max(1, len(files)))
@@ -957,7 +959,7 @@ class FileWorkspace(QWidget):
         def cancel_cb() -> bool:
             return progress.wasCanceled()
 
-        items, errors, cancelled = importer.scan_files(
+        items, errors, cancelled = scan_files(
             folder_path,
             files,
             progress_cb=progress_cb,

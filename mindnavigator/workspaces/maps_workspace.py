@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QComboBox, QLineEdit, QListView, QStyledItemDelegate, QSpinBox, QStyle,
     QDialog, QFormLayout, QDialogButtonBox, QMessageBox, QStackedWidget, QMenu,
     QFileDialog, QProgressBar, QSizePolicy, QSpacerItem,
-    QPushButton, QScrollArea, QColorDialog, QSplitter
+    QPushButton, QScrollArea, QColorDialog, QSplitter, QStyleOptionViewItem
 )
 from shiboken6 import isValid
 
@@ -316,7 +316,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         # Загружаем иконку карты.
         self._icon_map = qta.icon("fa5s.map-marked-alt", color="#cfcfcf")
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex):
         # Высота строки зависит от длины описания.
         desc = index.data(MapRoles.Description) or ""
         layout = self._row_layout(option.rect)
@@ -332,7 +332,7 @@ class MapsItemDelegate(QStyledItemDelegate):
         total_height = title_height + desc_height + 96
         return QSize(option.rect.width(), max(self.ROW_H_MIN, total_height))
 
-    def paint(self, painter: QPainter, option, index: QModelIndex):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         # Основная отрисовка карточки карты.
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -968,7 +968,7 @@ class MapCanvas(QWidget):
         # Инициализация канвы карты.
         super().__init__(parent)
         # Настройки взаимодействия и базовых параметров карты.
-        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
         self._scale = 1.0
         self._absolute_min_scale = 0.1
@@ -1321,7 +1321,7 @@ class MapCanvas(QWidget):
         # Отрисовка содержимого канвы.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.fillRect(self.rect(), QColor("#1a1c20"))
 
         # Применяем трансформации для масштаба и смещения.
@@ -1483,7 +1483,7 @@ class MapCanvas(QWidget):
                 continue
             if overlay.kind == "region":
                 polygon = QPolygonF(points)
-                if polygon.containsPoint(world_pos, Qt.OddEvenFill):
+                if polygon.containsPoint(world_pos, Qt.FillRule.OddEvenFill):
                     return overlay
                 if self._distance_to_polyline(world_pos, points, closed=True) <= tolerance:
                     return overlay
@@ -1613,7 +1613,7 @@ class MapCanvas(QWidget):
         self._map_pixmap = QPixmap(map_width, map_height)
         self._map_pixmap.fill(QColor(0, 0, 0, 0))
         painter = QPainter(self._map_pixmap)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         if base and base.exists():
             # Проходим по плиткам и рисуем их в общий холст.
             for row in range(1, self._tiles_h + 1):
@@ -1739,14 +1739,14 @@ class MapCanvas(QWidget):
     def _resize_handle_cursor(handle: str) -> Qt.CursorShape:
         # Возвращаем курсор для конкретной ручки изменения размера.
         if handle in ("nw", "se"):
-            return Qt.SizeFDiagCursor
+            return Qt.CursorShape.SizeFDiagCursor
         if handle in ("ne", "sw"):
-            return Qt.SizeBDiagCursor
+            return Qt.CursorShape.SizeBDiagCursor
         if handle in ("n", "s"):
-            return Qt.SizeVerCursor
+            return Qt.CursorShape.SizeVerCursor
         if handle in ("e", "w"):
-            return Qt.SizeHorCursor
-        return Qt.SizeAllCursor
+            return Qt.CursorShape.SizeHorCursor
+        return Qt.CursorShape.SizeAllCursor
 
     @staticmethod
     def _resize_scale_delta(handle: str, delta: QPointF) -> float:
@@ -1796,7 +1796,7 @@ class MapCanvas(QWidget):
         self.markerSelected.emit(marker)
         self._scale = target_scale
         self._offset = view_center - QPointF(marker.x, marker.y) * self._scale
-        self.setFocus(Qt.OtherFocusReason)
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
         self.update()
 
     def _adjust_marker_size(self, marker: Marker, delta: float) -> None:
@@ -1836,7 +1836,7 @@ class MapCanvas(QWidget):
                 else:
                     self._open_context_menu(event.pos())
                 return
-            if event.modifiers() & Qt.ControlModifier:
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 # Ctrl + ПКМ — открыть карточку выбранного маркера.
                 world_pos = self._map_to_world(event.position())
                 marker = self._marker_at(world_pos)
@@ -1972,7 +1972,7 @@ class MapCanvas(QWidget):
                     return
                 if self._selection_rect(marker).contains(world_pos):
                     if self._is_marker_drag_allowed():
-                        self.setCursor(Qt.SizeAllCursor)
+                        self.setCursor(Qt.CursorShape.SizeAllCursor)
                     else:
                         self.unsetCursor()
                     return
@@ -2076,7 +2076,7 @@ class MapCanvas(QWidget):
 
     def wheelEvent(self, event):
         # Обрабатываем масштабирование и изменение размера маркера.
-        if event.modifiers() & Qt.ControlModifier:
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             cursor_pos = event.position()
             world_pos = self._map_to_world(cursor_pos)
             marker = self._marker_at(world_pos)
@@ -2606,7 +2606,7 @@ class MapCanvas(QWidget):
         right_scroll = QScrollArea()
         right_scroll.setObjectName("MapLabelViewScroll")
         right_scroll.setWidgetResizable(True)
-        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         right_scroll.setWidget(right_panel)
 
         body_layout.addWidget(left_panel, 0)
@@ -2778,10 +2778,10 @@ class MapCanvas(QWidget):
                 self,
                 "Удаление геометрии",
                 f"Удалить {overlay_kind}?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            if confirm == QMessageBox.Yes:
+            if confirm == QMessageBox.StandardButton.Yes:
                 self._remove_overlay(overlay)
 
 
@@ -2941,7 +2941,7 @@ class MapEditorWorkspace(QWidget):
         self.info_scroll = QScrollArea()
         self.info_scroll.setObjectName("MapInfoScroll")
         self.info_scroll.setWidgetResizable(True)
-        self.info_scroll.setFrameShape(QFrame.NoFrame)
+        self.info_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.info_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         info_body = QWidget()
@@ -3420,7 +3420,7 @@ class MapEditorWorkspace(QWidget):
             and isValid(self.info_marker_type_preview)
         )
 
-    def _update_info_preview(self, marker: Marker) -> None:
+    def _update_info_preview(self, marker: Any) -> None:
         # Обновляем превью изображения маркера.
         if not self._info_widgets_alive():
             return
@@ -3885,7 +3885,7 @@ class MapsListWorkspace(QWidget):
         self.marker_search_results.setFixedHeight(180)
         self.marker_search_results.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.marker_search_results.setVisible(False)
-        self.marker_search_results.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.marker_search_results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.marker_search_model = MarkerSearchModel(self.marker_search_results)
         self.marker_search_results.setModel(self.marker_search_model)
@@ -4338,7 +4338,7 @@ class MapsListWorkspace(QWidget):
 
     def eventFilter(self, obj, event) -> bool:
         # Обрабатываем Esc в поле поиска, чтобы скрыть результаты.
-        if obj is self.marker_search and event.type() == QEvent.KeyPress:
+        if obj is self.marker_search and event.type() == QEvent.Type.KeyPress and hasattr(event, "key"):
             if event.key() == Qt.Key.Key_Escape:
                 if self.marker_search.text().strip() or self.marker_search_results.isVisible():
                     self._clear_marker_search()

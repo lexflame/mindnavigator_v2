@@ -628,3 +628,80 @@
 [2026-03-05 14:43] OUT: 15 passed, 117 deselected.
 [2026-03-05 14:43] ACTION: Updated TASK_93EEFC5D-CA39-4871-BB3E-F9844466DBDC status -> Completed.
 [2026-03-05 14:43] ACTION: Completed TASK_93EEFC5D-CA39-4871-BB3E-F9844466DBDC.
+[2026-03-05 14:44] CMD: git push -u origin sprint/mn-211-integration-pC
+[2026-03-05 14:44] OUT: Branch pushed to origin; PR suggestion link returned by remote.
+[2026-03-05 14:44] CMD: Create PR for `sprint/mn-211-integration-pC` via GitHub API.
+[2026-03-05 14:44] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/189.
+[2026-03-05 14:45] CMD: Poll GitHub check-runs for commit `bf2142f4822b59de6f32226d3e35524e59117953`.
+[2026-03-05 14:45] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 14:51] ACTION: Started TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 (Implement PARTITION D Russian abstraction semantics).
+[2026-03-05 14:51] ACTION: Updated TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 status -> In Progress.
+[2026-03-05 14:51] CMD: git switch -c sprint/mn-211-integration-pD
+[2026-03-05 14:51] OUT: Switched to new partition branch `sprint/mn-211-integration-pD`.
+[2026-03-05 14:52] ACTION: Extended `mindnavigator/sprint_classification.py` with PARTITION D abstractions (`Фичи`, `Проработка`) including parity handoff flag.
+[2026-03-05 14:52] ACTION: Extended `tests/test_sprint_classification.py` with PARTITION D routing and parity-handoff assertions.
+[2026-03-05 14:52] CMD: python -m compileall mindnavigator main.py
+[2026-03-05 14:52] OUT: OK.
+[2026-03-05 14:52] CMD: PYTHONPATH=. pytest tests -k "sprint_parser or sprint_composer or sprint_classification" -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-05 14:52] OUT: 17 passed, 117 deselected.
+[2026-03-05 14:52] ACTION: Updated TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 status -> Completed.
+[2026-03-05 14:52] ACTION: Completed TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3.
+[2026-03-05 14:53] CMD: git push -u origin sprint/mn-211-integration-pD
+[2026-03-05 14:53] OUT: Branch pushed to origin; PR suggestion link returned by remote.
+[2026-03-05 14:53] CMD: Create PR for `sprint/mn-211-integration-pD` via GitHub API.
+[2026-03-05 14:53] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/190.
+[2026-03-05 14:54] CMD: Poll GitHub check-runs for commit `3ccdfbb8ec0986107c60218998bab8b552a763b6`.
+[2026-03-05 14:54] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 14:54] ACTION: Started TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22 (Register Sprint 8 partition PR and pipeline parity closure).
+[2026-03-05 14:54] ACTION: Updated TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22 status -> Completed.
+[2026-03-05 14:54] ACTION: Completed TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22.
+[2026-03-05 15:32] ACTION: Operator confirmed build and test run success for Sprint 8 post-partition parity gate.
+[2026-03-05 15:32] ACTION: Requested PyCharm inspection execution from operator as the next mandatory gate before release flow.
+[2026-03-05 16:40] ACTION: Started TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 (Fix PyCharm inspection findings from docs/inspect).
+[2026-03-05 16:40] ACTION: Updated TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 status -> In Progress.
+[2026-03-05 16:40] ACTION: Applied technical inspection fixes across main_window, workspaces, dialogs, dragdrop controller, hotkeys export typing, and entity API casting.
+[2026-03-05 16:40] CMD: python -m compileall mindnavigator main.py
+[2026-03-05 16:40] OUT: OK.
+[2026-03-05 16:40] CMD: $env:PYTHONPATH='.'; pytest tests\test_hotkeys.py tests\test_entity_api.py tests\test_dragdrop_controller.py tests\test_dragdrop_model.py tests\test_dragdrop_policy.py tests\test_dragdrop_integration.py tests\test_settings_workspace_backup_safety.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-05 16:40] OUT: 44 passed.
+[2026-03-05 16:40] ACTION: Updated TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 status -> Completed.
+[2026-03-05 16:40] ACTION: Completed TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124.
+[2026-03-05 16:45] CMD: git commit -m "fix//:: TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 Close Sprint 8 inspection findings"
+[2026-03-05 16:45] OUT: Created commit a819a56 with inspection fixes and history updates.
+[2026-03-05 16:45] CMD: git push origin sprint/mn-211-integration-pD
+[2026-03-05 16:45] OUT: Remote branch updated to a819a56; local remote-tracking ref update emitted known lock warning.
+[2026-03-05 16:45] CMD: Poll GitHub check-runs for commit `a819a56`.
+[2026-03-05 16:45] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 16:45] ACTION: Sent Telegram status notification for TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 completion and CI pass.
+[2026-03-05 16:46] CMD: git commit -m "fix//:: TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 Log push, CI and telegram notification"
+[2026-03-05 16:46] OUT: Created commit fde6df3 with history-action audit entries.
+[2026-03-05 16:46] CMD: git push origin sprint/mn-211-integration-pD
+[2026-03-05 16:46] OUT: Remote branch updated to fde6df3; local remote-tracking ref update emitted known lock warning.
+[2026-03-05 16:46] CMD: Poll GitHub check-runs for commit `fde6df3`.
+[2026-03-05 16:46] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 22:10] ACTION: Started TASK_148126AA-979F-422E-9211-E75F3A9AD34E (Finalize Sprint 8 closure and sync MN-211 completion state).
+[2026-03-05 22:10] ACTION: Updated TASK_148126AA-979F-422E-9211-E75F3A9AD34E status -> In Progress.
+[2026-03-05 22:10] CMD: Query MindNavigator DB recursive tree for MN-211 done-state summary.
+[2026-03-05 22:10] OUT: Retrieved 23 nodes; open=23, done=0.
+[2026-03-05 22:10] CMD: Update MindNavigator DB recursive tree for MN-211 set done=1.
+[2026-03-05 22:10] OUT: Completion state updated; total=23, done=23, open=0.
+[2026-03-05 22:11] ACTION: Added AGENTS.md rules for mandatory description parsing of nested MindNavigator tasks and Telegram confirmation requests for operator gates.
+[2026-03-05 22:11] ACTION: Updated TASK_148126AA-979F-422E-9211-E75F3A9AD34E status -> Completed.
+[2026-03-05 22:11] ACTION: Updated Sprint 8 section status -> Completed.
+[2026-03-05 22:11] ACTION: Completed TASK_148126AA-979F-422E-9211-E75F3A9AD34E.
+[2026-03-05 22:16] CMD: where.exe TellYourCodex
+[2026-03-05 22:16] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-05 22:16] CMD: git commit -m "feat//:: TASK_148126AA-979F-422E-9211-E75F3A9AD34E Close Sprint 8 and sync MN-211 completion"
+[2026-03-05 22:16] OUT: Created commit 350f0b1 with Sprint 8 closure docs/history updates.
+[2026-03-05 22:16] CMD: git push origin sprint/mn-211-integration-pD
+[2026-03-05 22:16] OUT: Remote branch updated to 350f0b1; local remote-tracking ref update failed due lock-permission on refs/remotes/origin.
+[2026-03-05 22:16] CMD: git ls-remote origin refs/heads/sprint/mn-211-integration-pD
+[2026-03-05 22:16] OUT: Confirmed remote branch head at 350f0b12ec3f0fe1fdf25823e15a3a0e42045fb6.
+[2026-03-05 22:18] CMD: Query GitHub API check-runs for commit `2a85ee7215fd52d545d5d3689cd4999b5a09bcd7`.
+[2026-03-05 22:18] OUT: All 4 checks completed with `success` conclusion (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 22:18] ACTION: Confirmed Sprint 8 closure pipeline gate passed for branch sprint/mn-211-integration-pD.
+[2026-03-05 22:50] ACTION: Started TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 (Add explicit PSR-12-style comment/docblock rule and finalize closure alignment).
+[2026-03-05 22:50] ACTION: Updated TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 status -> In Progress.
+[2026-03-05 22:51] ACTION: Added AGENTS.md rule requiring PSR-12-style intent for class/function docblocks and non-obvious logic comments in sprint delivery tasks.
+[2026-03-05 22:51] ACTION: Updated TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 status -> Completed.
+[2026-03-05 22:51] ACTION: Completed TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478.

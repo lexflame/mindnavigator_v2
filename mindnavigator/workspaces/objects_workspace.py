@@ -28,8 +28,10 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
+    QAbstractItemView,
     QStyledItemDelegate,
     QStyle,
+    QStyleOptionViewItem,
     QSplitter,
     QTextEdit,
     QPlainTextEdit,
@@ -171,11 +173,13 @@ class ObjectsModel(QAbstractListModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlags(Qt.ItemFlag.NoItemFlags)
         row = self._rows[index.row()]
         if isinstance(row, ObjectCategoryRow):
-            return Qt.ItemFlag.ItemIsEnabled
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags = Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
+        flags |= Qt.ItemFlag.ItemIsSelectable
+        return flags
 
     def set_search(self, text: str) -> None:
         self._search = (text or "").strip().lower()
@@ -325,12 +329,12 @@ class ObjectCardDelegate(QStyledItemDelegate):
         self._font_desc = QFont()
         self._font_desc.setPointSize(9)
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex):
         if index.data(ObjectRoles.RowType) == "category":
             return QSize(option.rect.width(), 30)
         return QSize(option.rect.width(), self.ROW_H)
 
-    def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
         row_type = index.data(ObjectRoles.RowType)
         if row_type == "category":
@@ -507,7 +511,7 @@ class CloudDocPickerDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QListWidget.SingleSelection)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         for item in self._files:
             label = f"{item.name}"
             list_item = QListWidgetItem(label)
@@ -580,7 +584,7 @@ class CloudImagePickerDialog(QDialog):
 
         self.list_widget = QListWidget()
         self.list_widget.setViewMode(QListView.ViewMode.IconMode)
-        self.list_widget.setSelectionMode(QListWidget.MultiSelection)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
         self.list_widget.setResizeMode(QListView.ResizeMode.Adjust)
         self.list_widget.setIconSize(QSize(72, 72))
         self.list_widget.setGridSize(QSize(140, 120))
@@ -804,7 +808,7 @@ class ObjectWorkspace(QWidget):
         self.thumbnail_list.setGridSize(QSize(78, 78))
         self.thumbnail_list.setFixedHeight(92)
         self.thumbnail_list.setSpacing(6)
-        self.thumbnail_list.setSelectionMode(QListWidget.SingleSelection)
+        self.thumbnail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.thumbnail_list.currentRowChanged.connect(self._on_thumbnail_selected)
 
         self.image_label = QLabel("Нет изображений")
@@ -833,7 +837,7 @@ class ObjectWorkspace(QWidget):
         details_layout.addWidget(self.image_frame)
         details_layout.addStretch(1)
 
-        right_splitter = QSplitter(Qt.Vertical)
+        right_splitter = QSplitter(Qt.Orientation.Vertical)
         right_splitter.addWidget(self.card_list)
         right_splitter.addWidget(self.details_panel)
         right_splitter.setStretchFactor(0, 3)
@@ -1220,9 +1224,9 @@ class ObjectWorkspace(QWidget):
             self,
             "Удаление",
             "Удалить объект и все связанные изображения?",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if confirm != QMessageBox.Yes:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
         self._db.delete_object(obj.id)
         self.model.delete_object(obj.id)

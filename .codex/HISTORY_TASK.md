@@ -83,6 +83,7 @@ Status: Completed
 | TASK_3EE8F658-4E55-4A52-A2A7-6A7ACCB1D0F0 | 1 | Review unexpected file `.codex/manual/ERROR_GIT/git_runner.txt` | parity | Completed |
 | TASK_CE3BF9F0-A286-4ED6-BD37-B250D90ECEDB | 1 | Restore local automated test runner (`pytest`) in active Python environment | parity | Completed |
 | TASK_5743A7F2-2D90-41A8-9D25-663435E0B526 | 1 | Fix throttling-related regression in clamp motion test | parity | Completed |
+| TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22 | 8 | Register Sprint 8 partition PR and pipeline parity closure | parity | Completed |
 
 ## Ad Hoc Tasks
 Created: 2026-03-02
@@ -123,7 +124,7 @@ Status: Completed
 
 ## Sprint 8 - MindNavigator Integration Task Grammar
 Created: 2026-03-05
-Status: In Progress
+Status: Completed
 
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
@@ -131,3 +132,7 @@ Status: In Progress
 | TASK_1B3AD21F-A84D-4E81-92AA-0AD83BBF3F25 | 8 | Implement PARTITION A parser grammar and keyword lexicon (MN-214, MN-222) | feat | Completed |
 | TASK_B6BF096B-3362-4D88-94A3-262E8D0DD379 | 8 | Implement PARTITION B sprint composition semantics (MN-215..MN-223) | feat | Completed |
 | TASK_93EEFC5D-CA39-4871-BB3E-F9844466DBDC | 8 | Implement PARTITION C keyword classification semantics (MN-225..MN-230) | feat | Completed |
+| TASK_0A3C4817-F8BC-42D6-AA5E-7D207C3D0CE3 | 8 | Implement PARTITION D Russian abstraction semantics (MN-232, MN-233) | feat | Completed |
+| TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 | 8 | Fix PyCharm inspection findings from docs/inspect for Sprint 8 closure gate | fix | Completed |
+| TASK_148126AA-979F-422E-9211-E75F3A9AD34E | 8 | Finalize Sprint 8 closure and sync MN-211 completion state | chore | Completed |
+| TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 | 8 | Add explicit PSR-12-style comment/docblock rule to AGENTS and finalize closure alignment | docs | Completed |

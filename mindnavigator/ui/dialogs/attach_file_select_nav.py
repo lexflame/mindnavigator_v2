@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QSplitter,
@@ -92,9 +93,9 @@ class AttachFileSelectNav(QDialog):
         self.folder_tree.currentItemChanged.connect(self._on_tree_selection)
 
         self.file_grid = QListWidget()
-        self.file_grid.setViewMode(QListWidget.IconMode)
-        self.file_grid.setResizeMode(QListWidget.Adjust)
-        self.file_grid.setMovement(QListWidget.Static)
+        self.file_grid.setViewMode(QListView.ViewMode.IconMode)
+        self.file_grid.setResizeMode(QListView.ResizeMode.Adjust)
+        self.file_grid.setMovement(QListView.Movement.Static)
         self.file_grid.setSpacing(12)
         self.file_grid.setIconSize(QSize(64, 64))
         self.file_grid.setGridSize(QSize(150, 120))

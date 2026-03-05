@@ -218,6 +218,27 @@ It also stores:
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-9): migrated remaining legacy Qt constants in `main_window` and `tasks_workspace` (tray message icons, cursor/alignment enums, text interaction flags, dialog button lookup, gantt table selection/edit/resize enums).
   - validated unresolved batch-9 with compile + focused task/tray regressions (`tests/test_tray_task_navigation.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_task_attachment_class.py`, `tests/test_workspace_csv_transfer.py`): `16 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-10): migrated remaining map/idea UI enums in `maps_workspace`, `map_label_edit_dialog`, and `ideas_workspace` (text-interaction flags, size-policy enums, list/scroll modes, `QStyleOptionViewItem` delegate typing).
+
+### TASK_A5309C79-AAB3-4D9F-A2D3-3CC498AF6A22
+- Type: parity
+- Title: Register Sprint 8 partition PR and pipeline parity closure
+- Sprint: 8
+- Status: Done
+- Why:
+  Sprint 8 partition delivery requires explicit parity closure with per-partition PR links and pipeline outcomes.
+- Scope:
+  - register partition PR links for `pA`, `pB`, `pC`, `pD`;
+  - confirm all partition pipelines passed before parity closure;
+  - confirm no deferred parity tasks remained after partition execution.
+- Acceptance criteria:
+  - parity entry contains all four partition PR links;
+  - each partition has a recorded successful pipeline status;
+  - parity status is explicitly marked as `Done`.
+- Result:
+  - `pA` PR: https://github.com/lexflame/mindnavigator_v2/pull/187 (pipeline passed);
+  - `pB` PR: https://github.com/lexflame/mindnavigator_v2/pull/188 (pipeline passed);
+  - `pC` PR: https://github.com/lexflame/mindnavigator_v2/pull/189 (pipeline passed);
+  - `pD` PR: https://github.com/lexflame/mindnavigator_v2/pull/190 (pipeline passed).
   - validated unresolved batch-10 with compile + focused maps/workspace regressions (`tests/test_maps_simple_mouse_mode.py`, `tests/test_workspace_category_layout.py`, `tests/test_workspace_csv_transfer.py`): `10 passed`.
   - continued `PyUnresolvedReferencesInspection` cleanup (batch-11): migrated residual legacy Qt constants across navigation/list/dialog modules (`search_nav`, `base_workspace`, `tasks_workspace`, `objects_workspace`, `notes_workspace`, `maps_workspace`, `ideas_workspace`, `files_workspace`, `attach_file_select_nav`) to Qt6 enum namespaces.
   - validated unresolved batch-11 with compile + focused workspace/task/map regressions (`tests/test_workspace_category_layout.py`, `tests/test_workspace_csv_transfer.py`, `tests/test_maps_simple_mouse_mode.py`, `tests/test_tasks_marker_refresh.py`, `tests/test_tray_task_navigation.py`): `17 passed`.

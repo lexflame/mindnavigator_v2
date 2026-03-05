@@ -2,6 +2,7 @@
 
 ## Sprint Status
 - Planned: 2026-03-05
+- Completed: 2026-03-05
 - Source root: `MN-211`
 - Source project: `MindNavigator / CODEX` (`project_id=24`)
 
