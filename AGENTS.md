@@ -60,6 +60,8 @@
 48. Avoid protected cross-class calls such as `obj._handle_*`; expose a public method for inter-object calls.
 49. Keep method argument names lowercase, for example `supported_actions` and not `supportedActions`.
 50. Avoid variable shadowing in nested scopes; prefer explicit names such as `tab_button`, `project_row`, and `node`.
+51. For sprint decomposition from MindNavigator tasks, always read and use descriptions for the root task and all nested tasks; do not rely on titles only.
+52. If operator confirmation is required before a meaningful action, send a Telegram notification request and continue only after confirmation is received.
 
 ## History File Rules
 1. `HISTORY_TASK` source of truth is `.codex/HISTORY_TASK.md`.

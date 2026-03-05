@@ -679,3 +679,13 @@
 [2026-03-05 16:46] OUT: Remote branch updated to fde6df3; local remote-tracking ref update emitted known lock warning.
 [2026-03-05 16:46] CMD: Poll GitHub check-runs for commit `fde6df3`.
 [2026-03-05 16:46] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-05 22:10] ACTION: Started TASK_148126AA-979F-422E-9211-E75F3A9AD34E (Finalize Sprint 8 closure and sync MN-211 completion state).
+[2026-03-05 22:10] ACTION: Updated TASK_148126AA-979F-422E-9211-E75F3A9AD34E status -> In Progress.
+[2026-03-05 22:10] CMD: Query MindNavigator DB recursive tree for MN-211 done-state summary.
+[2026-03-05 22:10] OUT: Retrieved 23 nodes; open=23, done=0.
+[2026-03-05 22:10] CMD: Update MindNavigator DB recursive tree for MN-211 set done=1.
+[2026-03-05 22:10] OUT: Completion state updated; total=23, done=23, open=0.
+[2026-03-05 22:11] ACTION: Added AGENTS.md rules for mandatory description parsing of nested MindNavigator tasks and Telegram confirmation requests for operator gates.
+[2026-03-05 22:11] ACTION: Updated TASK_148126AA-979F-422E-9211-E75F3A9AD34E status -> Completed.
+[2026-03-05 22:11] ACTION: Updated Sprint 8 section status -> Completed.
+[2026-03-05 22:11] ACTION: Completed TASK_148126AA-979F-422E-9211-E75F3A9AD34E.
