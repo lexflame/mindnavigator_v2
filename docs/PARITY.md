@@ -310,3 +310,6 @@ It also stores:
 - `TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651` (`MN-202`) delivery synced.
 - Tasks workspace updates: `Gantt/Board/Dash` strip, top project quick links, attachment-aware row menu, row priority switch, marker-theme overlay visuals, and title-based project suggestion.
 - Validation synced: `python -m compileall mindnavigator main.py`; `PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`16 passed`).
+- `TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F` (`MN-206`) delivery synced.
+- Files workspace updates: smart-search block with hint chips, dedicated path-token index (`\\` split), and search-triggered large sketch mode with return to normal navigation on clear.
+- Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_files_workspace_mn206.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`3 passed`).
