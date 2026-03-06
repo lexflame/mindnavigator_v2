@@ -313,3 +313,6 @@ It also stores:
 - `TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F` (`MN-206`) delivery synced.
 - Files workspace updates: smart-search block with hint chips, dedicated path-token index (`\\` split), and search-triggered large sketch mode with return to normal navigation on clear.
 - Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_files_workspace_mn206.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`3 passed`).
+- `TASK_B201341A-69C2-410A-8B13-FFA8E6A956AD` (`MN-207`) delivery synced.
+- Collections workspace updates: entry-level remove action (DB-only, source file preserved), `Thumbs.db` exclusion in folder import listing, and white description text in details panel.
+- Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_collections_workspace_mn207.py tests/test_workspace_category_layout.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`10 passed`).

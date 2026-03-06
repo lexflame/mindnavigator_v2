@@ -275,6 +275,20 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Rollback:
 - revert commit for `TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F`; keep previous files workspace behavior and layout.
 
+### `MN-207` / `MN-280` / `MN-281` / `MN-282`
+- Scope:
+- add selective removal for individual collection entries without deleting the underlying files.
+- exclude `Thumbs.db` from collection folder import and refresh flows.
+- remaster collection details description text color to white for readable contrast.
+- Dependencies:
+- merged `MN-206` files partition output because collection import uses shared file ingestion pipeline patterns.
+- existing collection entry persistence in `mindnavigator/storage.py` and workspace rendering in `mindnavigator/workspaces/collections_workspace.py`.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- focused pytest suites for collections workspace, importer, and storage behavior.
+- Rollback:
+- revert commit for `TASK_B201341A-69C2-410A-8B13-FFA8E6A956AD`; keep previous collections behavior.
+
 ### `MN-201` / `MN-254` / `MN-255` / `MN-256`
 - Scope:
 - `MN-254`: add priority switch interaction in projects list row (delegate hit-zone plus model update path).
@@ -341,6 +355,18 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`11 passed`)
 - MindNavigator sync:
 - updated source statuses for `MN-269..MN-273` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-207` collections partition tasks (`MN-280`, `MN-281`, `MN-282`) on branch `sprint/mn-195-p207`.
+- Delivery notes:
+- added entry-level removal in collections workspace with confirmation and DB-only deletion (source files are preserved).
+- excluded `Thumbs.db` from collection folder listing for both recursive and flat import flows.
+- remastered collection details description text to explicit white for better readability.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_collections_workspace_mn207.py tests/test_workspace_category_layout.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`10 passed`)
+- MindNavigator sync:
+- source status update for `MN-207`, `MN-280`, `MN-281`, `MN-282` is pending manual external sync in this environment.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
 - `2026-03-06`: Completed `MN-206` files partition tasks (`MN-276`, `MN-277`, `MN-278`, `MN-279`) on branch `sprint/mn-195-p206`.
