@@ -261,6 +261,20 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Rollback:
 - revert commit for `TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651`; no schema migration is planned for this partition.
 
+### `MN-206` / `MN-276` / `MN-277` / `MN-278` / `MN-279`
+- Scope:
+- add smart-search block below sync/reindex controls in files workspace with contextual hints.
+- add sketch-mode switching for file search results and Pinterest-like large preview tiles.
+- implement deterministic path-token index behavior for file search (`\` path split).
+- Dependencies:
+- merged `MN-201` and `MN-202` because files workspace filters and topbar controls share the same interaction style baseline.
+- existing cloud-file index and search plumbing in `mindnavigator/workspaces/files_workspace.py`.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- focused pytest suites for files workspace and csv/cloud-file behavior.
+- Rollback:
+- revert commit for `TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F`; keep previous files workspace behavior and layout.
+
 ### `MN-201` / `MN-254` / `MN-255` / `MN-256`
 - Scope:
 - `MN-254`: add priority switch interaction in projects list row (delegate hit-zone plus model update path).
@@ -327,6 +341,19 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`11 passed`)
 - MindNavigator sync:
 - updated source statuses for `MN-269..MN-273` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-206` files partition tasks (`MN-276`, `MN-277`, `MN-278`, `MN-279`) on branch `sprint/mn-195-p206`.
+- Delivery notes:
+- added smart-search block under `Синхронизация`/`Переиндексация` controls with contextual token hints.
+- implemented dedicated path token index with normalized `\` separators and search tokenization for file lookup.
+- wired search query flow to switch workspace into large sketch tiles (Pinterest/Explorer-like) and restore normal navigation when query is cleared.
+- kept existing file actions (`open`, context menu, transfer actions) compatible in both normal and sketch modes.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_files_workspace_mn206.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`3 passed`)
+- MindNavigator sync:
+- source status update for `MN-206`, `MN-276`, `MN-277`, `MN-278`, `MN-279` is pending manual external sync in this environment.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
 - `2026-03-06`: Completed MN-268 preview-navigation tasks `MN-286`, `MN-287`, `MN-288` on branch `sprint/mn-195-p268`.

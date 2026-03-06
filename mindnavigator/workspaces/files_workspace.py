@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QLineEdit,
     QPlainTextEdit,
     QStackedWidget,
     QSplitter,
@@ -328,10 +329,15 @@ class FileWorkspace(QWidget):
         self._cloud_files: List[CloudFileData] = []
         self._folder_index: Dict[str, Dict[str, object]] = {}
         self._tree_items: Dict[str, QTreeWidgetItem] = {}
+        self._path_token_index: Dict[str, Set[int]] = {}
+        self._file_path_tokens: Dict[int, Set[str]] = {}
         self._current_folder = ""
         self._project_filter_id: Optional[int] = None
         self._icon_cache: Dict[str, QIcon] = {}
         self._default_mode_applied = False
+        self._sketch_mode_active = False
+        self._splitter_sizes_before_search: List[int] = []
+        self._search_hint_buttons: List[QPushButton] = []
         self._icon_folder = qta.icon("fa5s.folder", color="#d0a93e")
         self._icon_file_generic = qta.icon("fa5s.file", color="#cfcfcf")
         self._icon_file_image = qta.icon("fa5s.file-image", color="#6ab7ff")
@@ -381,6 +387,31 @@ class FileWorkspace(QWidget):
         header.addWidget(self.status_label, 1, Qt.AlignmentFlag.AlignLeft)
         header.addStretch(1)
         header.addLayout(mode_layout)
+
+        self.smart_search_edit = QLineEdit()
+        self.smart_search_edit.setObjectName("FilesSmartSearch")
+        self.smart_search_edit.setClearButtonEnabled(True)
+        self.smart_search_edit.setPlaceholderText("Умный поиск по файлам, папкам и индексу пути...")
+        self.smart_search_edit.textChanged.connect(self._on_smart_search_changed)
+
+        hints_row = QHBoxLayout()
+        hints_row.setSpacing(6)
+        self.smart_search_hints_label = QLabel("Подсказки:")
+        self.smart_search_hints_label.setObjectName("FilesSearchHintsLabel")
+        hints_row.addWidget(self.smart_search_hints_label, 0, Qt.AlignmentFlag.AlignLeft)
+        for _ in range(6):
+            hint_button = QPushButton("")
+            hint_button.setObjectName("FilesSearchHintButton")
+            hint_button.setVisible(False)
+            hint_button.clicked.connect(self._on_search_hint_clicked)
+            self._search_hint_buttons.append(hint_button)
+            hints_row.addWidget(hint_button, 0, Qt.AlignmentFlag.AlignLeft)
+        hints_row.addStretch(1)
+
+        smart_search_block = QVBoxLayout()
+        smart_search_block.setSpacing(6)
+        smart_search_block.addWidget(self.smart_search_edit)
+        smart_search_block.addLayout(hints_row)
 
         self.mode_stack = QStackedWidget()
 
@@ -461,6 +492,7 @@ class FileWorkspace(QWidget):
         self.mode_stack.setCurrentIndex(1)
 
         layout.addLayout(header)
+        layout.addLayout(smart_search_block)
         layout.addWidget(self.mode_stack, 1)
         self._smooth_scroll_controllers = [
             attach_smooth_scroll(self.log_output),
@@ -515,6 +547,31 @@ class FileWorkspace(QWidget):
                 color: #d6d6d6;
                 padding: 10px;
                 font-size: 11px;
+            }
+            QLineEdit#FilesSmartSearch {
+                background: #1b1d22;
+                border: 1px solid #2f3136;
+                border-radius: 8px;
+                color: #dfe3e8;
+                padding: 7px 10px;
+                font-size: 12px;
+            }
+            QLabel#FilesSearchHintsLabel {
+                color: #9da5af;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton#FilesSearchHintButton {
+                background: #242830;
+                border: 1px solid #353b46;
+                border-radius: 10px;
+                padding: 3px 10px;
+                color: #ccd2da;
+                font-size: 10px;
+                font-weight: 600;
+            }
+            QPushButton#FilesSearchHintButton:hover {
+                background: #2f3642;
             }
             QPushButton#FilesModeButton {
                 background: #1f2126;
@@ -588,7 +645,10 @@ class FileWorkspace(QWidget):
                 if self._file_matches_project(item, project)
             ]
         self._folder_index = self._build_folder_index(self._cloud_files)
+        self._path_token_index, self._file_path_tokens = self._build_path_token_index(self._cloud_files)
+        self._refresh_search_hints()
         self._rebuild_navigation()
+        self._apply_smart_search(self.smart_search_edit.text())
 
     @staticmethod
     def _file_matches_project(item: CloudFileData, project) -> bool:
@@ -635,6 +695,65 @@ class FileWorkspace(QWidget):
         return index
 
     @staticmethod
+    def _normalize_path_for_search(path_value: str) -> str:
+        normalized = (path_value or "").strip().replace("/", "\\")
+        return normalized.strip("\\")
+
+    @classmethod
+    def _tokenize_path_for_search(cls, path_value: str) -> Set[str]:
+        normalized_path = cls._normalize_path_for_search(path_value).lower()
+        tokens: Set[str] = set()
+        if not normalized_path:
+            return tokens
+        tokens.add(normalized_path)
+        for part in [chunk for chunk in normalized_path.split("\\") if chunk]:
+            tokens.add(part)
+            base_name, dot, extension = part.rpartition(".")
+            if dot and base_name:
+                tokens.add(base_name)
+                tokens.add(extension)
+            for fragment in re.split(r"[\s._-]+", part):
+                fragment = fragment.strip()
+                if fragment:
+                    tokens.add(fragment)
+        return tokens
+
+    @classmethod
+    def _build_path_token_index(
+        cls,
+        files: List[CloudFileData],
+    ) -> tuple[Dict[str, Set[int]], Dict[int, Set[str]]]:
+        index: Dict[str, Set[int]] = {}
+        file_tokens: Dict[int, Set[str]] = {}
+        for file_item in files:
+            tokens = cls._tokenize_path_for_search(file_item.rel_path)
+            file_tokens[file_item.id] = tokens
+            for token in tokens:
+                ids = index.setdefault(token, set())
+                ids.add(file_item.id)
+        return index, file_tokens
+
+    @staticmethod
+    def _tokenize_search_query(query: str) -> List[str]:
+        normalized_query = (query or "").strip().lower().replace("/", "\\")
+        if not normalized_query:
+            return []
+        tokens: List[str] = []
+        for chunk in [part for part in normalized_query.split() if part]:
+            split_parts = [piece for piece in chunk.split("\\") if piece]
+            if len(split_parts) > 1:
+                tokens.extend(split_parts)
+            else:
+                tokens.append(chunk)
+        unique_tokens: List[str] = []
+        seen: Set[str] = set()
+        for token in tokens:
+            if token not in seen:
+                unique_tokens.append(token)
+                seen.add(token)
+        return unique_tokens
+
+    @staticmethod
     def _sorted_folder_paths(raw_value: object) -> List[str]:
         if not isinstance(raw_value, set):
             return []
@@ -648,10 +767,126 @@ class FileWorkspace(QWidget):
         files = [file_item for file_item in raw_value if isinstance(file_item, CloudFileData)]
         return sorted(files, key=lambda cloud_file: cloud_file.name.lower())
 
+    def _refresh_search_hints(self) -> None:
+        scored_tokens: List[tuple[str, int]] = []
+        for token, file_ids in self._path_token_index.items():
+            if not token or len(token) < 2 or "\\" in token:
+                continue
+            if token.isdigit():
+                continue
+            scored_tokens.append((token, len(file_ids)))
+        scored_tokens.sort(key=lambda pair: (-pair[1], pair[0]))
+        hints = [token for token, _score in scored_tokens[: len(self._search_hint_buttons)]]
+        for index, button in enumerate(self._search_hint_buttons):
+            if index < len(hints):
+                button.setText(hints[index])
+                button.setVisible(True)
+            else:
+                button.setVisible(False)
+                button.setText("")
+        self.smart_search_hints_label.setVisible(bool(hints))
+
+    def _on_search_hint_clicked(self) -> None:
+        source = self.sender()
+        if not isinstance(source, QPushButton):
+            return
+        token = (source.text() or "").strip()
+        if not token:
+            return
+        current = (self.smart_search_edit.text() or "").strip()
+        if current:
+            self.smart_search_edit.setText(f"{current} {token}")
+        else:
+            self.smart_search_edit.setText(token)
+        self.smart_search_edit.setFocus()
+
+    def _set_sketch_mode(self, enabled: bool) -> None:
+        if enabled == self._sketch_mode_active:
+            return
+        self._sketch_mode_active = enabled
+        if enabled:
+            self._splitter_sizes_before_search = self.nav_splitter.sizes()
+            self.folder_tree.setEnabled(False)
+            self.file_grid.setIconSize(QSize(176, 126))
+            self.file_grid.setGridSize(QSize(260, 236))
+            self.file_grid.setSpacing(18)
+            self.nav_splitter.setSizes([0, 1])
+            return
+        self.folder_tree.setEnabled(True)
+        self.file_grid.setIconSize(QSize(64, 64))
+        self.file_grid.setGridSize(QSize(150, 120))
+        self.file_grid.setSpacing(12)
+        if len(self._splitter_sizes_before_search) == 2:
+            self.nav_splitter.setSizes(self._splitter_sizes_before_search)
+        else:
+            self.nav_splitter.setSizes([1, 2])
+
+    def _on_smart_search_changed(self, text: str) -> None:
+        if text.strip():
+            self.nav_mode_button.setChecked(True)
+            self.mode_stack.setCurrentIndex(1)
+        self._apply_smart_search(text)
+
+    def _file_matches_smart_search(self, file_item: CloudFileData, query_tokens: List[str]) -> bool:
+        path_tokens = self._file_path_tokens.get(file_item.id, set())
+        path_value = self._normalize_path_for_search(file_item.rel_path).lower()
+        description = self._format_description(file_item.description).lower()
+        combined = f"{file_item.name.lower()} {path_value} {description}"
+        for token in query_tokens:
+            if any(token in indexed_token for indexed_token in path_tokens):
+                continue
+            if token in combined:
+                continue
+            return False
+        return True
+
+    def _search_cloud_files(self, query: str) -> List[CloudFileData]:
+        query_tokens = self._tokenize_search_query(query)
+        if not query_tokens:
+            return []
+        matched = [item for item in self._cloud_files if self._file_matches_smart_search(item, query_tokens)]
+        return sorted(matched, key=lambda item: item.rel_path.lower())
+
+    def _apply_smart_search(self, query: str) -> None:
+        if not self._cloud_files:
+            self._set_sketch_mode(False)
+            return
+        normalized_query = (query or "").strip()
+        if not normalized_query:
+            self._set_sketch_mode(False)
+            active_item = self.folder_tree.currentItem()
+            if active_item is None:
+                self._set_current_folder("")
+            else:
+                self._set_current_folder(active_item.data(0, Qt.ItemDataRole.UserRole) or "")
+            return
+        self._set_sketch_mode(True)
+        self._render_search_results(normalized_query, self._search_cloud_files(normalized_query))
+
+    def _render_search_results(self, query: str, files: List[CloudFileData]) -> None:
+        self.file_grid.clear()
+        cloud_root = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="").strip()
+        cloud_root_path = Path(cloud_root) if cloud_root else None
+        for file_item in files:
+            description = self._format_description(file_item.description)
+            size = self._format_size(file_item.size)
+            normalized_path = self._normalize_path_for_search(file_item.rel_path)
+            folder_path = normalized_path.rsplit("\\", 1)[0] if "\\" in normalized_path else ""
+            path_preview = folder_path or "корень"
+            label = f"{file_item.name}\n{path_preview}\n{size} - {description}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ("file", file_item.rel_path))
+            item.setIcon(self._file_icon_for(file_item, cloud_root_path))
+            item.setToolTip(file_item.rel_path)
+            self.file_grid.addItem(item)
+        self.path_label.setText(f"Поиск: {query}")
+        self.count_label.setText(f"Найдено: {len(files)}")
+
     def _rebuild_navigation(self) -> None:
         has_data = bool(self._cloud_files)
         self.nav_mode_button.setEnabled(has_data)
         if not has_data:
+            self._set_sketch_mode(False)
             self.navigation_stack.setCurrentIndex(0)
             self.folder_tree.clear()
             self.file_grid.clear()
@@ -693,10 +928,14 @@ class FileWorkspace(QWidget):
     def _on_tree_selection(self, current: Optional[QTreeWidgetItem], _previous: Optional[QTreeWidgetItem]) -> None:
         if not current:
             return
+        if self._sketch_mode_active:
+            return
         folder_path = current.data(0, Qt.ItemDataRole.UserRole) or ""
         self._set_current_folder(folder_path)
 
     def _set_current_folder(self, folder_path: str) -> None:
+        if self._sketch_mode_active:
+            return
         self._current_folder = folder_path
         if folder_path:
             self.path_label.setText(f"Облако / {' / '.join(folder_path.split('/'))}")
