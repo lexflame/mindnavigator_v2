@@ -989,3 +989,11 @@
 [2026-03-06 19:40] ACTION: Updated TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE status -> Completed.
 [2026-03-06 19:40] ACTION: Completed TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE.
 [2026-03-06 19:40] ACTION: Synced Sprint 9 parity summary for TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE in docs/PARITY.md.
+[2026-03-06 20:00] CMD: Checked PR #200 CI check-runs via GitHub API.
+[2026-03-06 20:00] OUT: All build checks failed.
+[2026-03-06 20:00] ANALYSIS: Failures were caused by source-inspection tests still targeting legacy workspace file paths after MN-290 modular split.
+[2026-03-06 20:00] ACTION: Updated tests `test_ideas_relations_style.py` and `test_view_menu_geometry.py` to inspect new workspace source paths under per-workspace folders.
+[2026-03-06 20:00] CMD: $env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 20:00] OUT: 166 passed.
+[2026-03-06 20:00] CMD: $env:PYTHONPYCACHEPREFIX='.syntax_check'; $env:PYTHONPATH='.'; python -m compileall mindnavigator main.py
+[2026-03-06 20:00] OUT: OK.
