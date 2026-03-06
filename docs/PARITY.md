@@ -305,3 +305,8 @@ It also stores:
 - Result:
   - static-analysis cleanup was completed across multiple inspection groups (`PyUnboundLocalVariable`, `PyShadowingNames`, `PyUnresolvedReferences`, `PyTypeChecker`, and related follow-up batches);
   - the remediation stream is tracked as completed parity work in `.codex/HISTORY_TASK.md` and detailed in `.codex/HISTORY_ACTION.md`.
+
+## Sprint 9 - Delivery Sync
+- `TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651` (`MN-202`) delivery synced.
+- Tasks workspace updates: `Gantt/Board/Dash` strip, top project quick links, attachment-aware row menu, row priority switch, marker-theme overlay visuals, and title-based project suggestion.
+- Validation synced: `python -m compileall mindnavigator main.py`; `PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`16 passed`).

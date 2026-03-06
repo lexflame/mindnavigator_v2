@@ -29,9 +29,9 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - ## В рамках спринта провести ревизию на предмет неиспользуемых участков кода (сформировать внутри спринта отдельный PARTITION)
 
 ## Source Tree Summary
-- Total nodes including root: `70`
-- Partitions under root: `14`
-- Leaf and nested tasks: `55`
+- Total nodes including root: `71`
+- Partitions under root: `15`
+- Leaf and nested tasks: `56`
 
 ### Partitions
 - `MN-196` `## PARTITION :: Design :: Проработка режима `Задачи`` (children: `8`)
@@ -48,6 +48,7 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `MN-264` `## PARTITION :: Feat :: Worksapce`s :: Реализовать API для интеграции с CODEX и любыми другими ИИ.` (children: `3`)
 - `MN-268` `## PARTITION :: Feat :: View` (children: `8`)
 - `MN-289` `## PARTITION :: PARSE_DATA :: Импортировать в "Покупки" следующий список товаров со всеми свойствами` (children: `0`)
+- `MN-290` `## PARTITION :: Refactor :: Workspace modular split by workspace folders` (children: `0`)
 
 ## Execution Waves
 ### 1. Wave 1 - Foundation, API, and Critical Fixes
@@ -155,6 +156,11 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `MN-289` ## PARTITION :: PARSE_DATA :: Импортировать в "Покупки" следующий список товаров со всеми свойствами
 - `MN-208` ## PARTITION :: Feat :: Фичи для режима `Идеи`
 
+### 10. Wave 10 - Workspace Modular Split
+- Objective: perform the final structural refactor after feature delivery and avoid interference with runtime behavior fixes.
+- Task IDs:
+- `MN-290` ## PARTITION :: Refactor :: Разделить все файлы workspace-ов на классы и распределить по каталогам с именами workspace-ов
+
 ## Task Decomposition Matrix
 | Task | Type | Wave | Scope from title and description | Dependencies | Validation | Rollback |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -227,6 +233,7 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 | `MN-287` | task | 8 | TASK :: Remaster :: View :: Worksapce`s :: Навигацию внутри режима "Заметки" сделать по подобию навигации "Список задач" - превью в каждой строчке | Wave 7 outputs | compileall; pytest tests -k tasks | Revert MN-287 patch and keep previous behavior |
 | `MN-288` | task | 8 | TASK :: Remaster :: View :: Worksapce`s :: Навигацию внутри режима "Идеи" сделать по подобию навигации "Список задач" - превью в каждой строчке | Wave 7 outputs | compileall; pytest tests -k tasks | Revert MN-288 patch and keep previous behavior |
 | `MN-289` | partition | 9 | ## PARTITION :: PARSE_DATA :: Импортировать в "Покупки" следующий список товаров со всеми свойствами; https://krasnoyarsk.e2e4online.ru/catalog/item/633334/ | Wave 8 outputs | compileall; pytest tests -k purchases | Revert MN-289 patch and keep previous behavior |
+| `MN-290` | partition | 10 | ## PARTITION :: Refactor :: Разделить все файлы workspace-ов на классы и распределить по каталогам с именами workspace-ов | Wave 9 outputs | compileall; focused pytest by workspace modules | Revert MN-290 patch and restore previous workspace file layout |
 
 ## Delivery Rules For This Sprint
 - Implement partition branches per execution wave and avoid overlapping write scopes.
@@ -236,6 +243,24 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - When Telegram utility is unavailable, log the failed attempt and proceed with direct operator update.
 
 ## Current Task Decomposition
+### `MN-202` / `MN-237` / `MN-241` / `MN-242` / `MN-243` / `MN-244` / `MN-245` / `MN-246` / `MN-247` / `MN-248` / `MN-249` / `MN-250` / `MN-251` / `MN-252`
+- Scope:
+- add tasks topbar mode strip updates: `Gantt`, `Board`, `Dash`, and project quick links between day switch and priority filter.
+- deliver `Board` and `Dash` task views without breaking existing list and Gantt flows.
+- expand task row context menu with attachment navigation entries.
+- add smart project suggestion from task title in create-dialog flow.
+- strengthen marker-theme visual overlays for task rows while preserving marker color blending.
+- keep edit/create/view dialogs on overlay execution path for consistent modal UX.
+- Dependencies:
+- depends on merged Wave 3 geometry outputs (`MN-268`) because row layouts and delegate hit-zones are reused.
+- depends on merged Wave 2 tasks baseline (`MN-196`) because quick-create and row interaction handlers are shared.
+- existing `TasksWorkspace` stacked-view architecture and `TasksModel` update methods.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+- Rollback:
+- revert commit for `TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651`; no schema migration is planned for this partition.
+
 ### `MN-201` / `MN-254` / `MN-255` / `MN-256`
 - Scope:
 - `MN-254`: add priority switch interaction in projects list row (delegate hit-zone plus model update path).
@@ -263,6 +288,19 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - focused pytest for projects workspace and repository-probe behavior.
 - Rollback:
 - revert commit for `TASK_8D704D5E-6C2E-4A0D-B28A-6B7E5B32F931`; keep prior project edit schema and UI behavior.
+
+### `MN-290`
+- Scope:
+- split workspace modules into per-workspace directories and keep class responsibilities separated.
+- preserve imports, runtime behavior, and startup workspace registration compatibility.
+- Dependencies:
+- all feature waves must be merged first to minimize cross-branch churn.
+- existing workspace entrypoints and factory wiring in `mindnavigator/workspaces`.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- focused pytest suites per affected workspace modules.
+- Rollback:
+- revert commit for the MN-290 partition and restore previous single-file workspace layout.
 
 ## Execution Progress
 - `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
@@ -324,5 +362,23 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_projects_workspace_mn203.py tests/test_projects_workspace_mn201.py tests/test_entity_api.py tests/test_db_migrations.py -p no:cacheprovider` (`24 passed`)
 - MindNavigator sync:
 - update statuses for `MN-203` and `MN-235` to `done=1` (manual sync pending in external source DB).
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Added final partition `MN-290` to sprint plan as the last wave by operator request.
+- Delivery notes:
+- inserted Wave 10 and matrix/decomposition entries for workspace modular split by per-workspace directories.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-202` partition tasks (`MN-237`, `MN-241..MN-252`) on branch `sprint/mn-195-p202`.
+- Delivery notes:
+- added task view-mode strip `Gantt`/`Board`/`Dash` with dedicated board and dash pages.
+- added project quick links (top 5 by active task count) between day switch controls and priority filter.
+- extended row context menu with attachment navigation entries and attachment preview actions.
+- added row-level priority switch interaction and marker-theme visual overlays using themed badge assets/icons.
+- added smart project suggestion from task title in create-dialog flow.
+- unified task row delete/view modal flow on overlay path.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`16 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
