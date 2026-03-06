@@ -154,4 +154,5 @@ Status: In Progress
 | TASK_2A94E3B6-0F72-4F6A-BD9C-6D6DE3A4B77C | 9 | Add final partition MN-290 for workspace modular split in sprint plan | chore | Completed |
 | TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651 | 9 | Implement and close partition MN-202 tasks MN-237 and MN-241..MN-252 | feat | Completed |
 | TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F | 9 | Implement and close partition MN-206 files tasks MN-276..MN-279 | feat | Completed |
+| TASK_B201341A-69C2-410A-8B13-FFA8E6A956AD | 9 | Implement and close partition MN-207 collections tasks MN-280..MN-282 | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |

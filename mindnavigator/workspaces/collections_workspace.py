@@ -794,6 +794,7 @@ class CollectionsWorkspace(QWidget):
         self.details_links.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.details_links.setOpenExternalLinks(True)
         self.details_description = QLabel("")
+        self.details_description.setObjectName("CollectionsDescription")
         self.details_description.setWordWrap(True)
 
         actions = QHBoxLayout()
@@ -850,6 +851,10 @@ class CollectionsWorkspace(QWidget):
         self.entries_list = QListWidget()
         self.entries_list.setIconSize(self._entry_thumb_size)
         self.entries_list.itemDoubleClicked.connect(self._open_entry)
+        self.entries_list.currentItemChanged.connect(self._on_entry_current_changed)
+        self.remove_entry_button = QToolButton()
+        self.remove_entry_button.setText("Удалить элемент")
+        self.remove_entry_button.clicked.connect(self._remove_selected_entry)
 
         right_layout.addWidget(self.details_title)
         right_layout.addWidget(self.details_type)
@@ -864,6 +869,7 @@ class CollectionsWorkspace(QWidget):
         right_layout.addWidget(entries_title)
         right_layout.addLayout(entries_filters)
         right_layout.addWidget(self.entries_list, 2)
+        right_layout.addWidget(self.remove_entry_button, 0, Qt.AlignmentFlag.AlignRight)
 
         splitter.addWidget(category_panel)
         splitter.addWidget(list_panel)
@@ -947,6 +953,9 @@ class CollectionsWorkspace(QWidget):
                 font-size: 17px;
                 font-weight: 600;
             }
+            QLabel#CollectionsDescription {
+                color: #ffffff;
+            }
             QLabel#CollectionsRelationsTitle {
                 color: #d8d8d8;
                 font-size: 13px;
@@ -961,6 +970,7 @@ class CollectionsWorkspace(QWidget):
         self.refresh_import_button.setEnabled(has_selection)
         self.link_button.setEnabled(has_selection)
         self.remove_relation_button.setEnabled(has_selection)
+        self.remove_entry_button.setEnabled(False)
         if not has_selection:
             self.details_title.setText("Выберите элемент")
             self.details_type.setText("")
@@ -972,10 +982,13 @@ class CollectionsWorkspace(QWidget):
             self.entries_list.clear()
             self._entries = []
             self._entries_by_id = {}
+            return
+        self._sync_entry_action_state()
 
     def _refresh_entries(self) -> None:
         if self._current_item_id is None:
             self.entries_list.clear()
+            self._sync_entry_action_state()
             return
         self._entries = self._db.fetch_collection_entries(self._current_item_id)
         self._entries_by_id = {entry.id: entry for entry in self._entries}
@@ -1020,6 +1033,7 @@ class CollectionsWorkspace(QWidget):
             empty.setFlags(Qt.ItemFlag.ItemIsEnabled)
             empty.setData(Qt.ItemDataRole.UserRole, ("empty", None))
             self.entries_list.addItem(empty)
+        self._sync_entry_action_state()
 
     def _add_entry_item(self, entry: CollectionEntryData) -> None:
         label = entry.rel_path
@@ -1103,6 +1117,17 @@ class CollectionsWorkspace(QWidget):
             if payload[1] == entry_id:
                 item.setIcon(QIcon(thumb_path))
                 break
+
+    def _on_entry_current_changed(self, current: Optional[QListWidgetItem], _previous: Optional[QListWidgetItem]) -> None:
+        self._sync_entry_action_state(current)
+
+    def _sync_entry_action_state(self, current: Optional[QListWidgetItem] = None) -> None:
+        item = current if current is not None else self.entries_list.currentItem()
+        if item is None or self._current_item_id is None:
+            self.remove_entry_button.setEnabled(False)
+            return
+        payload = item.data(Qt.ItemDataRole.UserRole)
+        self.remove_entry_button.setEnabled(bool(payload and payload[0] == "entry"))
 
     def _open_entry(self, item: QListWidgetItem) -> None:
         payload = item.data(Qt.ItemDataRole.UserRole)
@@ -1770,6 +1795,32 @@ class CollectionsWorkspace(QWidget):
         self._db.delete_collection_relation(int(relation_id))
         self.refresh_collections()
 
+    def _remove_selected_entry(self) -> None:
+        if self._current_item_id is None:
+            return
+        current = self.entries_list.currentItem()
+        if current is None:
+            QMessageBox.information(self, "Коллекции", "Выберите элемент коллекции для удаления.")
+            return
+        payload = current.data(Qt.ItemDataRole.UserRole)
+        if not payload or payload[0] != "entry":
+            QMessageBox.information(self, "Коллекции", "Выберите файл в списке элементов коллекции.")
+            return
+        entry_id = int(payload[1])
+        entry = self._entries_by_id.get(entry_id)
+        entry_label = entry.rel_path if entry is not None else str(entry_id)
+        dialog = ConfirmDialog(
+            "Удалить элемент коллекции",
+            f"Удалить элемент «{entry_label}» из коллекции? Исходный файл удален не будет.",
+            parent=self,
+            confirm_text="Удалить",
+            cancel_text="Отмена",
+        )
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        self._db.delete_collection_entry(entry_id)
+        self._refresh_entries()
+
     def focus_item(self, item_id: int) -> None:
         self.refresh_collections()
         for row in range(self.items_list.count()):
@@ -1848,7 +1899,6 @@ class CollectionsWorkspace(QWidget):
             if item.data(Qt.ItemDataRole.UserRole) == item_id:
                 item.setIcon(icon)
                 break
-
 
 
 

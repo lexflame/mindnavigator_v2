@@ -29,15 +29,22 @@ def list_files(folder_path: Path, *, include_subfolders: bool = True) -> Tuple[L
     root = Path(folder_path)
     files: List[Path] = []
     errors: List[str] = []
+
+    def _is_ignored_file(path_value: Path) -> bool:
+        return path_value.name.lower() == "thumbs.db"
+
     if include_subfolders:
         for dirpath, _subdirs, filenames in os.walk(root, onerror=lambda walk_err: errors.append(str(walk_err))):
             for name in filenames:
-                files.append(Path(dirpath) / name)
+                file_path = Path(dirpath) / name
+                if _is_ignored_file(file_path):
+                    continue
+                files.append(file_path)
     else:
         try:
             for entry in root.iterdir():
                 try:
-                    if entry.is_file():
+                    if entry.is_file() and not _is_ignored_file(entry):
                         files.append(entry)
                 except Exception as entry_err:  # noqa: BLE001
                     errors.append(f"{entry}: {entry_err}")

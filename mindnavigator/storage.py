@@ -4698,6 +4698,11 @@ class Database:
             for row in rows
         ]
 
+    def delete_collection_entry(self, entry_id: int) -> None:
+        """Deletes a single entry row from a collection without touching source files."""
+        with self._conn:
+            self._conn.execute("DELETE FROM collection_item WHERE id = ?;", (entry_id,))
+
     def sync_collection_entries(
         self,
         collection_id: int,
