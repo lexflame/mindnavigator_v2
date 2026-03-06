@@ -718,6 +718,66 @@
 [2026-03-06 12:01] ACTION: Completed TASK_8702382F-50AD-42F4-A142-9869AB72D740.
 [2026-03-06 12:02] ACTION: Started TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 (Execute MN-195 sprint waves and produce release tag/version +1).
 [2026-03-06 12:02] ACTION: Updated TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 status -> In Progress.
+[2026-03-06 12:03] CMD: git push -u origin sprint/mn-195
+[2026-03-06 12:03] OUT: Branch pushed to origin; remote PR URL printed; local tracking ref update failed due lock-permission on refs/remotes/origin.
+[2026-03-06 12:04] CMD: git switch -c sprint/mn-195-p264
+[2026-03-06 12:04] OUT: Switched to new partition branch `sprint/mn-195-p264`.
+[2026-03-06 12:05] ACTION: Started TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 (Validate and close API integration partition MN-264..MN-267).
+[2026-03-06 12:05] ACTION: Updated TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 status -> In Progress.
+[2026-03-06 12:05] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:05] OUT: OK.
+[2026-03-06 12:05] CMD: PYTHONPATH=. pytest tests/test_entity_api.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:05] OUT: 12 passed.
+[2026-03-06 12:06] CMD: Update MindNavigator DB statuses for MN-264..MN-267 -> done=1.
+[2026-03-06 12:06] OUT: Updated 4 tasks; done state confirmed for 264, 265, 266, 267.
+[2026-03-06 12:06] CMD: where.exe TellYourCodex
+[2026-03-06 12:06] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:07] ACTION: Updated TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 status -> Completed.
+[2026-03-06 12:07] ACTION: Completed TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1.
+[2026-03-06 12:08] ACTION: Started TASK_C1F195B9-5873-4192-99AB-D541C0A007F8 (Close Wave 1 fix set for MN-253, MN-274, and MN-283).
+[2026-03-06 12:08] ACTION: Updated TASK_C1F195B9-5873-4192-99AB-D541C0A007F8 status -> In Progress.
+[2026-03-06 12:08] ACTION: Added explicit light text color for idea relations list in `mindnavigator/workspaces/ideas_workspace.py`.
+[2026-03-06 12:08] ACTION: Added test `tests/test_ideas_relations_style.py` to validate ideas relations list style contract.
+[2026-03-06 12:08] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:08] OUT: OK.
+[2026-03-06 12:08] CMD: PYTHONPATH=. pytest tests/test_ideas_relations_style.py tests/test_task_attachment_class.py tests/test_settings_workspace_backup_safety.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:08] OUT: 9 passed.
+[2026-03-06 12:09] CMD: Update MindNavigator DB statuses for MN-208, MN-253, MN-274, MN-283 -> done=1.
+[2026-03-06 12:09] OUT: Updated 4 tasks; done state confirmed for 208, 253, 274, 283.
+[2026-03-06 12:09] CMD: where.exe TellYourCodex
+[2026-03-06 12:09] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:10] ACTION: Updated TASK_C1F195B9-5873-4192-99AB-D541C0A007F8 status -> Completed.
+[2026-03-06 12:10] ACTION: Completed TASK_C1F195B9-5873-4192-99AB-D541C0A007F8.
+[2026-03-06 12:11] CMD: git push origin sprint/mn-195-p264
+[2026-03-06 12:11] OUT: Remote branch updated to `aa8fdb8`; local remote-tracking ref update failed due lock-permission on refs/remotes/origin.
+[2026-03-06 12:11] CMD: Create PR for `sprint/mn-195-p264` via GitHub API.
+[2026-03-06 12:11] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/191.
+[2026-03-06 12:12] CMD: Poll GitHub check-runs for commit `aa8fdb8`.
+[2026-03-06 12:12] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-06 12:18] CMD: git switch -c sprint/mn-195-p196
+[2026-03-06 12:18] OUT: Switched to new partition branch `sprint/mn-195-p196`.
+[2026-03-06 12:19] ACTION: Started TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 (Implement and close partition MN-196 tasks remaster block).
+[2026-03-06 12:19] ACTION: Updated TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 status -> In Progress.
+[2026-03-06 12:21] ACTION: Updated `mindnavigator/workspaces/tasks_workspace.py` for MN-196 requirements: Shift+LeftClick tree expansion, quick-add icon/button behavior, and quick-create time defaults.
+[2026-03-06 12:22] ACTION: Extended `tests/test_tasks_marker_refresh.py` with coverage for full-height quick buttons, subtree expansion, and quick-create default time behavior.
+[2026-03-06 12:23] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:23] OUT: OK.
+[2026-03-06 12:23] CMD: PYTHONPATH=. pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:23] OUT: 11 passed.
+[2026-03-06 12:24] CMD: Update MindNavigator DB statuses for MN-196, MN-197, MN-198, MN-200, MN-238, MN-239, MN-240, MN-253, MN-275 -> done=1.
+[2026-03-06 12:24] OUT: Partition MN-196 source tasks updated; all target tasks are done.
+[2026-03-06 12:24] CMD: where.exe TellYourCodex
+[2026-03-06 12:24] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:25] ACTION: Updated TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 status -> Completed.
+[2026-03-06 12:25] ACTION: Completed TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2.
+[2026-03-06 12:26] CMD: git commit -m "feat//:: TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 Close MN-196 tasks remaster partition"
+[2026-03-06 12:26] OUT: Created commit `4ae334a` with MN-196 implementation, tests, and history updates.
+[2026-03-06 12:26] CMD: git push -u origin sprint/mn-195-p196
+[2026-03-06 12:26] OUT: Branch pushed to origin; PR suggestion URL returned by remote.
+[2026-03-06 12:27] CMD: Create PR for `sprint/mn-195-p196` via GitHub API.
+[2026-03-06 12:27] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/192.
+[2026-03-06 12:28] CMD: Poll GitHub check-runs for commit `4ae334a`.
+[2026-03-06 12:28] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
 [2026-03-06 12:31] CMD: git switch -c sprint/mn-195-p268
 [2026-03-06 12:31] OUT: Switched to new partition branch `sprint/mn-195-p268`.
 [2026-03-06 12:32] ACTION: Started TASK_50793058-01F9-4FFB-9F68-F29565EF155D (Implement MN-268 view geometry core tasks MN-269..MN-273).

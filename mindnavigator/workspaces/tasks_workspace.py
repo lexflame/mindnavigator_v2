@@ -1251,6 +1251,34 @@ class TasksModel(QAbstractListModel):
             self._collapsed_subtask_ids.add(task.id)
         self._rebuild()
 
+    def expand_subtasks_tree_by_row(self, row_idx: int) -> None:
+        """?????????? ??? ????????? ????????? ??? ????????? ??????."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        by_parent: dict[Optional[int], list[int]] = {}
+        for item in self._all_rows:
+            if isinstance(item, TaskRow):
+                by_parent.setdefault(item.parent_id, []).append(item.id)
+
+        to_expand: set[int] = {task.id}
+        stack = list(by_parent.get(task.id, []))
+        while stack:
+            current_id = stack.pop()
+            if current_id in to_expand:
+                continue
+            to_expand.add(current_id)
+            stack.extend(by_parent.get(current_id, []))
+
+        changed = False
+        for task_id in to_expand:
+            if task_id in self._collapsed_subtask_ids:
+                self._collapsed_subtask_ids.remove(task_id)
+                changed = True
+        if changed:
+            self._rebuild()
+
+
     def mimeTypes(self) -> List[str]:
         """Возвращает поддерживаемые типы данных для drag and drop."""
         return ["application/x-mindnavigator-task-id"]
@@ -2807,6 +2835,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color="#cfcfcf")
         self._icon_subtask_open = qta.icon("fa5s.chevron-down", color="#8a8a8a")
         self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color="#8a8a8a")
+        self._icon_quick_add = qta.icon("fa5s.plus", color="#8a8a8a")
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -2903,17 +2932,17 @@ class TasksItemDelegate(QStyledItemDelegate):
         text_width = metrics.horizontalAdvance(header_text)
         today_badge_width = metrics.horizontalAdvance("СЕГОДНЯ") if include_today_badge else 0
         quick_width = 116
-        quick_height = row_rect.height() - 12
+        quick_height = row_rect.height()
         quick_x = text_left + text_width + 14 + today_badge_width
         max_right = row_rect.right() - 12
         if quick_x + quick_width > max_right:
             quick_x = max(text_left + 10, max_right - quick_width)
-        return QRect(quick_x, row_rect.top() + 6, quick_width, quick_height)
+        return QRect(quick_x, row_rect.top(), quick_width, quick_height)
 
     @staticmethod
     def _task_quick_rect(layout: dict, row_rect: QRect) -> QRect:
         quick_width = 22
-        quick_height = row_rect.height() - 14
+        quick_height = row_rect.height()
         toggle_rect = layout.get("subtask_toggle")
         if isinstance(toggle_rect, QRect) and not toggle_rect.isNull():
             anchor_left = toggle_rect.left()
@@ -2921,7 +2950,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             doc_rect = layout.get("doc")
             anchor_left = doc_rect.left() if isinstance(doc_rect, QRect) else row_rect.left() + 80
         quick_x = max(row_rect.left() + 8, anchor_left - quick_width - 4)
-        return QRect(quick_x, row_rect.top() + 7, quick_width, quick_height)
+        return QRect(quick_x, row_rect.top(), quick_width, quick_height)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
@@ -2959,12 +2988,13 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
             if option_state & QStyle.StateFlag.State_MouseOver:
+                painter.fillRect(quick_rect, QColor("#1f2227"))
                 painter.setPen(self.C_BORDER)
-                painter.setBrush(QColor("#1f2227"))
-                painter.drawRoundedRect(quick_rect, 4, 4)
+                painter.drawLine(quick_rect.left(), quick_rect.top(), quick_rect.left(), quick_rect.bottom())
+                painter.drawLine(quick_rect.right(), quick_rect.top(), quick_rect.right(), quick_rect.bottom())
                 painter.setFont(self._font_small)
                 painter.setPen(self.C_DIM)
-                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Добавить задачу")
+                painter.drawText(quick_rect.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "???????? ??????")
             painter.restore()
             return
         if row_type == "sort_header":
@@ -3225,12 +3255,21 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.drawRect(menu_rect)
         self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
         if option_state & QStyle.StateFlag.State_MouseOver:
+            painter.fillRect(quick_rect, QColor("#1f2227"))
             painter.setPen(self.C_BORDER)
-            painter.setBrush(QColor("#1f2227"))
-            painter.drawRoundedRect(quick_rect, 4, 4)
-            painter.setPen(self.C_DIM)
-            painter.setFont(self._font_small)
-            painter.drawText(quick_rect, Qt.AlignmentFlag.AlignCenter, "+")
+            painter.drawLine(quick_rect.left(), quick_rect.top(), quick_rect.left(), quick_rect.bottom())
+            painter.drawLine(quick_rect.right(), quick_rect.top(), quick_rect.right(), quick_rect.bottom())
+            icon_size = 12
+            self._icon_quick_add.paint(
+                painter,
+                QRect(
+                    quick_rect.center().x() - (icon_size // 2),
+                    quick_rect.center().y() - (icon_size // 2),
+                    icon_size,
+                    icon_size,
+                ),
+            )
+
 
         painter.restore()
 
@@ -3300,6 +3339,15 @@ class TasksItemDelegate(QStyledItemDelegate):
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
             quick_rect = self._task_quick_rect(layout, r)
+
+            if has_subtasks and bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                title_rect = layout.get("title")
+                if (
+                    (isinstance(toggle_rect, QRect) and toggle_rect.contains(pos))
+                    or (isinstance(title_rect, QRect) and title_rect.contains(pos))
+                ):
+                    tasks_model.expand_subtasks_tree_by_row(index.row())
+                    return True
 
             if has_subtasks and toggle_rect and toggle_rect.contains(pos):
                 tasks_model.toggle_subtasks_expanded_by_row(index.row())
@@ -3825,13 +3873,13 @@ class TasksWorkspace(BaseWorkspace):
         self.new_time = QTimeEdit()
         self.new_time.setDisplayFormat("HH:mm")
         self.new_time.setFixedWidth(90)
-        self.new_time.setTime(QTime.currentTime())
+        self.new_time.setTime(QTime.currentTime().addSecs(3600))
         self.new_time.setKeyboardTracking(False)
 
         self.new_time_toggle = QCheckBox("Время")
         self.new_time_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.new_time_toggle.setChecked(False)
-        self.new_time.setEnabled(False)
+        self.new_time_toggle.setChecked(True)
+        self.new_time.setEnabled(True)
         self.new_time_toggle.toggled.connect(self.new_time.setEnabled)
 
         datetime_block = QFrame()
@@ -4318,6 +4366,7 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_gantt_day()
 
         self.new_title.clear()
+        self.new_time.setTime(QTime.currentTime().addSecs(3600))
         self.new_title.setFocus()
 
     def open_create_task_dialog(self) -> None:
