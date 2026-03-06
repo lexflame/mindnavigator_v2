@@ -144,4 +144,5 @@ Status: In Progress
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_8702382F-50AD-42F4-A142-9869AB72D740 | 9 | Compose sprint plan from MN-195 and nested tasks | chore | Completed |
+| TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 | 9 | Validate and close API integration partition MN-264..MN-267 | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |
