@@ -21,6 +21,7 @@ MODE_MAPS = "\u041a\u0430\u0440\u0442\u044b"
 MODE_NOTES = "\u0417\u0430\u043c\u0435\u0442\u043a\u0438"
 MODE_FILES = "\u0424\u0430\u0439\u043b\u044b"
 MODE_OBJECTS = "\u041e\u0431\u044a\u0435\u043a\u0442\u044b"
+MODE_CHARACTERS = "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438"
 MODE_SETTINGS = "\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438"
 
 _MODE_LABELS: dict[str, dict[str, str]] = {
@@ -34,6 +35,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_NOTES: MODE_NOTES,
         MODE_FILES: MODE_FILES,
         MODE_OBJECTS: MODE_OBJECTS,
+        MODE_CHARACTERS: MODE_CHARACTERS,
         MODE_SETTINGS: MODE_SETTINGS,
     },
     "en": {
@@ -46,6 +48,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_NOTES: "Notes",
         MODE_FILES: "Files",
         MODE_OBJECTS: "Objects",
+        MODE_CHARACTERS: "Characters",
         MODE_SETTINGS: "Settings",
     },
     "de": {
@@ -58,6 +61,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_NOTES: "Notizen",
         MODE_FILES: "Dateien",
         MODE_OBJECTS: "Objekte",
+        MODE_CHARACTERS: "Charaktere",
         MODE_SETTINGS: "Einstellungen",
     },
     "fr": {
@@ -70,6 +74,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_NOTES: "Notes",
         MODE_FILES: "Fichiers",
         MODE_OBJECTS: "Objets",
+        MODE_CHARACTERS: "Personnages",
         MODE_SETTINGS: "Param\u00e8tres",
     },
     "zh": {
@@ -82,6 +87,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_NOTES: "\u7b14\u8bb0",
         MODE_FILES: "\u6587\u4ef6",
         MODE_OBJECTS: "\u5bf9\u8c61",
+        MODE_CHARACTERS: "\u89d2\u8272",
         MODE_SETTINGS: "\u8bbe\u7f6e",
     },
 }
