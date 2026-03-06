@@ -1082,6 +1082,11 @@ class Database:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_shop_parse_log_source ON shop_parse_log(source_id);")
 
         self._run_schema_migrations()
+        # Some deployed databases have user_version already advanced while a subset
+        # of projects columns is still missing. Enforce critical project columns
+        # unconditionally to keep startup queries backward compatible.
+        self._ensure_project_extended_columns()
+        self._ensure_project_marker_columns()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:

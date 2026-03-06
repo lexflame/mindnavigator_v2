@@ -1042,3 +1042,13 @@
 [2026-03-06 22:11] OUT: Pushed branch to remote and published PR link `https://github.com/lexflame/mindnavigator_v2/pull/new/sprint/mn-205-p260-263`; local remote ref lock required follow-up fetch.
 [2026-03-06 22:12] CMD: git fetch origin sprint/mn-205-p260-263
 [2026-03-06 22:12] OUT: Synced remote tracking ref after elevated retry; local branch now tracks `origin/sprint/mn-205-p260-263`.
+[2026-03-06 23:33] ACTION: Started TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 (Hotfix startup crash when projects.repository_catalog is missing in legacy DB with current user_version).
+[2026-03-06 23:33] ACTION: Updated TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 status -> In Progress.
+[2026-03-06 23:34] ACTION: Updated `mindnavigator/storage.py` to enforce projects extended/marker columns after versioned migrations for backward compatibility.
+[2026-03-06 23:35] ACTION: Added regression test `tests/test_db_migrations.py::test_database_backfills_project_columns_when_user_version_is_current`.
+[2026-03-06 23:35] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 23:35] OUT: OK.
+[2026-03-06 23:36] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 23:36] OUT: 15 passed.
+[2026-03-06 23:36] ACTION: Updated TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 status -> Completed.
+[2026-03-06 23:36] ACTION: Completed TASK_1280C84F-5C77-49BD-95AD-4EC76595F955.
