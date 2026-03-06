@@ -1005,3 +1005,20 @@
 [2026-03-06 20:19] OUT: OK.
 [2026-03-06 20:19] CMD: $env:PYTHONPATH='.'; pytest tests/test_update_service.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
 [2026-03-06 20:19] OUT: 4 passed.
+[2026-03-06 20:35] ACTION: Re-opened TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE for class-level workspace split rework based on operator clarification.
+[2026-03-06 20:35] ACTION: Updated TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE status -> In Progress.
+[2026-03-06 20:35] ACTION: Updated Sprint 9 planning artifacts with MN-290 class-level decomposition and set sprint status back to In Progress.
+[2026-03-06 20:35] CMD: where.exe TellYourCodex
+[2026-03-06 20:35] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 20:46] ACTION: Completed MN-290 class-level split rework by moving each workspace implementation to `module_impl.py` and generating dedicated class modules per workspace.
+[2026-03-06 20:46] ACTION: Updated source-inspection tests to target implementation files after module alias entrypoints (`module_impl.py`).
+[2026-03-06 20:46] CMD: $env:PYTHONPYCACHEPREFIX='.syntax_check'; $env:PYTHONPATH='.'; python -m compileall mindnavigator main.py
+[2026-03-06 20:46] OUT: OK.
+[2026-03-06 20:46] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_workspace_category_layout.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py tests/test_ideas_relations_style.py tests/test_view_menu_geometry.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 20:46] OUT: 36 passed.
+[2026-03-06 20:46] CMD: $env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 20:46] OUT: 166 passed.
+[2026-03-06 20:46] CMD: where.exe TellYourCodex
+[2026-03-06 20:46] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 20:46] ACTION: Updated TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE status -> Completed.
+[2026-03-06 20:46] ACTION: Completed TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE.

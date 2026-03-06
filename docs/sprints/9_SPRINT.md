@@ -330,6 +330,20 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Rollback:
 - revert commit for the MN-290 partition and restore previous single-file workspace layout.
 
+### `MN-290` (class-level rework)
+- Scope:
+- split large workspace implementation modules into class-focused files inside each workspace directory.
+- make `mindnavigator/workspaces/<workspace>/workspace.py` thin orchestration entrypoints instead of monolithic class containers.
+- keep legacy import paths and runtime behavior backward compatible.
+- Dependencies:
+- completed folder-level split from prior `MN-290` delivery.
+- stable public imports used by `main_window`, tests, and legacy wrapper modules.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- focused pytest for workspace behavior and source-inspection tests referencing workspace module layout.
+- Rollback:
+- revert class-level split commit and restore previous per-workspace monolithic implementation files.
+
 ### `MN-204` / `MN-257` / `MN-258` / `MN-259`
 - Scope:
 - add a dedicated workspace mode `Персонажи` with sidebar entry, visibility toggle in settings, mode i18n labels, and search navigation integration.
@@ -480,5 +494,16 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Validation for closure:
 - `python -m compileall mindnavigator main.py`
 - `$env:PYTHONPATH='.'; pytest tests/test_update_service.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`4 passed`)
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-290` class-level rework on branch `sprint/mn-195-p290-classes`.
+- Delivery notes:
+- transformed every `mindnavigator/workspaces/<workspace>/workspace.py` into a thin module alias entrypoint.
+- moved full workspace implementations into `module_impl.py` and generated dedicated class modules per class (`<snake_case_class>.py`) for each workspace package.
+- preserved legacy import compatibility (`mindnavigator/workspaces/*_workspace.py`) and runtime behavior through alias chaining.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_workspace_category_layout.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py tests/test_ideas_relations_style.py tests/test_view_menu_geometry.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`36 passed`)
+- `$env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`166 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
