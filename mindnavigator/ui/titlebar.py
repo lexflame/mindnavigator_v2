@@ -148,37 +148,37 @@ class TitleBar(QWidget):
                 font-size: 13px;
                 font-weight: 600;
             }}
-            QWidget#MinimizedDialogsHost {
+            QWidget#MinimizedDialogsHost {{
                 background: transparent;
-            }
-            QScrollArea#MinimizedDialogsScroll {
+            }}
+            QScrollArea#MinimizedDialogsScroll {{
                 background: transparent;
-            }
-            QWidget#MinimizedDialogsStrip {
+            }}
+            QWidget#MinimizedDialogsStrip {{
                 background: transparent;
-            }
-            QToolButton#MinimizedTaskChip {
+            }}
+            QToolButton#MinimizedTaskChip {{
                 color: #d8dbe7;
                 background: #2a2d36;
                 border: 1px solid #3a3f4b;
                 border-radius: 7px;
                 padding: 2px 8px;
                 min-height: 22px;
-            }
-            QToolButton#MinimizedTaskChip:hover {
+            }}
+            QToolButton#MinimizedTaskChip:hover {{
                 background: #343a49;
-            }
-            QToolButton#MinimizedDialogsArrow {
+            }}
+            QToolButton#MinimizedDialogsArrow {{
                 color: #cfcfcf;
                 background: #262a34;
                 border: 1px solid #3a3f4b;
                 border-radius: 6px;
                 font-size: 10px;
                 padding: 0;
-            }
-            QToolButton#MinimizedDialogsArrow:hover {
+            }}
+            QToolButton#MinimizedDialogsArrow:hover {{
                 background: #303647;
-            }
+            }}
             QToolButton {{
                 color: #cfcfcf;
                 background: transparent;
