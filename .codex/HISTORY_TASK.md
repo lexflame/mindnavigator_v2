@@ -155,4 +155,5 @@ Status: In Progress
 | TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651 | 9 | Implement and close partition MN-202 tasks MN-237 and MN-241..MN-252 | feat | Completed |
 | TASK_3B934AFD-53C5-4F72-B386-5F2AFEFDF97F | 9 | Implement and close partition MN-206 files tasks MN-276..MN-279 | feat | Completed |
 | TASK_B201341A-69C2-410A-8B13-FFA8E6A956AD | 9 | Implement and close partition MN-207 collections tasks MN-280..MN-282 | feat | Completed |
+| TASK_A3D78EC8-32AE-4C1E-B9EA-44D459345397 | 9 | Implement and close partition MN-204 tasks MN-257..MN-259 (Characters mode and cross-entity links) | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |

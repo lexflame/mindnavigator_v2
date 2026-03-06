@@ -44,6 +44,7 @@ from .workspaces.notes_workspace import NoteWorkspace
 from .workspaces.settings_workspace import SettingsWorkspace
 from .workspaces.files_workspace import FileWorkspace
 from .workspaces.objects_workspace import ObjectWorkspace
+from .workspaces.characters_workspace import CharactersWorkspace
 from .workspaces.ideas_workspace import IdeasWorkspace
 from .workspaces.purchases_workspace import PurchasesWorkspace
 from .constants import APP_NAME
@@ -107,6 +108,7 @@ class MainWindow(QMainWindow):
     MODE_NOTES = "Заметки"
     MODE_FILES = "Файлы"
     MODE_OBJECTS = "Объекты"
+    MODE_CHARACTERS = "Персонажи"
     MODE_SETTINGS = "Настройки"
     APP_ENABLED_WORKSPACES_KEY = "app.enabled_workspaces"
     APP_LANGUAGE_KEY = "app.language"
@@ -203,6 +205,7 @@ class MainWindow(QMainWindow):
             "notes": self.MODE_NOTES,
             "files": self.MODE_FILES,
             "objects": self.MODE_OBJECTS,
+            "characters": self.MODE_CHARACTERS,
         }
 
     def _enabled_workspace_ids_from_raw(self, raw_value: str) -> set[str]:
@@ -244,6 +247,7 @@ class MainWindow(QMainWindow):
             self.MODE_NOTES,
             self.MODE_FILES,
             self.MODE_OBJECTS,
+            self.MODE_CHARACTERS,
             self.MODE_SETTINGS,
         ]
         for mode_name in ordered_modes:
@@ -494,6 +498,7 @@ class MainWindow(QMainWindow):
             self.MODE_NOTES: "Notes",
             self.MODE_FILES: "Files",
             self.MODE_OBJECTS: "Objects",
+            self.MODE_CHARACTERS: "Characters",
             self.MODE_SETTINGS: "Settings",
         }
         return mapping.get(self._current_mode, "Tasks")
@@ -632,6 +637,7 @@ class MainWindow(QMainWindow):
         self.page_notes = NoteWorkspace()
         self.page_files = FileWorkspace()
         self.page_objects = ObjectWorkspace()
+        self.page_characters = CharactersWorkspace()
         self.page_settings = SettingsWorkspace()
         self.page_settings.setting_changed.connect(self._on_setting_changed)
 
@@ -646,6 +652,7 @@ class MainWindow(QMainWindow):
             self.MODE_NOTES: self.workspace_stack.addWidget(self.page_notes),
             self.MODE_FILES: self.workspace_stack.addWidget(self.page_files),
             self.MODE_OBJECTS: self.workspace_stack.addWidget(self.page_objects),
+            self.MODE_CHARACTERS: self.workspace_stack.addWidget(self.page_characters),
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
@@ -769,6 +776,7 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_notes: self.MODE_NOTES,
             self.left_rail.btn_files: self.MODE_FILES,
             self.left_rail.btn_objects: self.MODE_OBJECTS,
+            self.left_rail.btn_characters: self.MODE_CHARACTERS,
             self.left_rail.btn_settings: self.MODE_SETTINGS,
         }
         self._mode_to_button = {mode_name: button for button, mode_name in self._btn_to_mode.items()}
@@ -808,6 +816,8 @@ class MainWindow(QMainWindow):
             self.page_projects.refresh_projects()
         elif mode_name == self.MODE_OBJECTS:
             self.page_objects.refresh_objects()
+        elif mode_name == self.MODE_CHARACTERS:
+            self.page_characters.refresh_characters()
 
         # Отмечаем выбранную кнопку в меню.
         for btn, m in self._btn_to_mode.items():
@@ -871,6 +881,12 @@ class MainWindow(QMainWindow):
                 self.page_objects.set_task_filter(None)
                 self.page_objects.set_marker_filter(None)
             return
+        if mode == self.MODE_CHARACTERS:
+            if kind in {"project", "task", "map", "marker"} and isinstance(entity_id, int):
+                self.page_characters.set_entity_filter(kind, entity_id)
+            elif kind == "clear":
+                self.page_characters.set_entity_filter(None, None)
+            return
 
     def _on_search_result_activated(self, payload: dict) -> None:
         # По типу найденной сущности переключаем нужный режим.
@@ -892,6 +908,11 @@ class MainWindow(QMainWindow):
             item_id = payload.get("id")
             if item_id is not None and hasattr(self.page_collections, "focus_item"):
                 self.page_collections.focus_item(int(item_id))
+        elif entity == "character":
+            self.set_mode(self.MODE_CHARACTERS)
+            character_id = payload.get("id")
+            if character_id is not None and hasattr(self.page_characters, "focus_character"):
+                self.page_characters.focus_character(int(character_id))
 
     def resizeEvent(self, event):
         """Обрабатывает ресайз окна, синхронизируя ширину навигации."""

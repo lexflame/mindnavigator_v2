@@ -252,6 +252,17 @@ class SearchNav(QWidget):
                         "id": obj.id,
                     }
                 )
+        for character in self._db.fetch_characters(search_text=query):
+            tooltip_parts = [character.role, ", ".join(character.tags), character.description]
+            tooltip = " · ".join(part for part in tooltip_parts if part)
+            matches.append(
+                {
+                    "entity": "character",
+                    "label": f"Персонаж: {character.name}",
+                    "tooltip": tooltip,
+                    "id": character.id,
+                }
+            )
         for collection in self._db.fetch_collection_items(search_text=query):
             entity_label = _COLLECTION_ENTITY_LABELS.get(collection.entity_type, collection.entity_type)
             tooltip_parts = [entity_label, collection.topic, collection.source_url]

@@ -60,6 +60,7 @@ class LeftRail(QWidget):
             "Заметки": "fa5s.sticky-note",
             "Файлы": "fa5s.file-alt",
             "Объекты": "fa5s.cube",
+            "Персонажи": "fa5s.user-friends",
             "Настройки": "fa5s.cog",
         }
 
@@ -86,6 +87,7 @@ class LeftRail(QWidget):
         self.btn_notes = btn(self._icons["Заметки"], "Заметки")
         self.btn_files = btn(self._icons["Файлы"], "Файлы")
         self.btn_objects = btn(self._icons["Объекты"], "Объекты")
+        self.btn_characters = btn(self._icons["Персонажи"], "Персонажи")
 
         layout.addStretch(1)
 
@@ -101,6 +103,7 @@ class LeftRail(QWidget):
             "Заметки": self.btn_notes,
             "Файлы": self.btn_files,
             "Объекты": self.btn_objects,
+            "Персонажи": self.btn_characters,
             "Настройки": self.btn_settings,
         }
         self._mode_order_top = list(self._mode_buttons.keys())[:-1]

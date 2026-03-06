@@ -13,6 +13,7 @@ def test_get_mode_labels_uses_selected_language() -> None:
     labels = i18n.get_mode_labels("de")
 
     assert labels[i18n.MODE_TASKS] == "Aufgaben"
+    assert labels[i18n.MODE_CHARACTERS] == "Charaktere"
     assert labels[i18n.MODE_SETTINGS] == "Einstellungen"
 
 

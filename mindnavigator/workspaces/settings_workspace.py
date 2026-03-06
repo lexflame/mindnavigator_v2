@@ -80,6 +80,7 @@ class SettingsWorkspace(QWidget):
         ("notes", "Заметки"),
         ("files", "Файлы"),
         ("objects", "Объекты"),
+        ("characters", "Персонажи"),
     ]
 
     def __init__(self, parent=None) -> None:

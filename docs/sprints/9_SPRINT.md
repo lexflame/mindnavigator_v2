@@ -330,6 +330,20 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Rollback:
 - revert commit for the MN-290 partition and restore previous single-file workspace layout.
 
+### `MN-204` / `MN-257` / `MN-258` / `MN-259`
+- Scope:
+- add a dedicated workspace mode `Персонажи` with sidebar entry, visibility toggle in settings, mode i18n labels, and search navigation integration.
+- implement character storage model (CRUD for characters plus relation table with links to app entities).
+- support linking one character to entities across the application (`task`, `project`, `note`, `idea`, `object`, `map`, `marker`, `file`, collections, purchases, wishlist).
+- Dependencies:
+- existing wave outputs for `MainWindow`, `LeftRail`, `SettingsWorkspace`, and `SearchNav` integration points.
+- storage layer APIs for all current entity domains (tasks/projects/notes/ideas/objects/maps/files/collections/purchases/wishlist).
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_characters_workspace_mn204.py tests/test_workspace_visibility_settings.py tests/test_i18n.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+- Rollback:
+- revert commit for `MN-204` partition; drop newly added characters mode usage while preserving prior workspace behavior.
+
 ## Execution Progress
 - `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
 - Validation for closure:
@@ -433,5 +447,15 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Validation for closure:
 - `python -m compileall mindnavigator main.py`
 - `PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`16 passed`)
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-204` characters partition tasks (`MN-257`, `MN-258`, `MN-259`) on branch `sprint/mn-195-p204`.
+- Delivery notes:
+- added new workspace `Персонажи` with card editor and entity-link management UI.
+- integrated mode in left rail, workspace visibility settings, i18n labels, and global search results.
+- added storage tables `characters` and `character_links` with CRUD/link APIs and indexed lookup/filter support.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_characters_workspace_mn204.py tests/test_workspace_visibility_settings.py tests/test_i18n.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`12 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.

@@ -316,3 +316,6 @@ It also stores:
 - `TASK_B201341A-69C2-410A-8B13-FFA8E6A956AD` (`MN-207`) delivery synced.
 - Collections workspace updates: entry-level remove action (DB-only, source file preserved), `Thumbs.db` exclusion in folder import listing, and white description text in details panel.
 - Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_collections_workspace_mn207.py tests/test_workspace_category_layout.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`10 passed`).
+- `TASK_A3D78EC8-32AE-4C1E-B9EA-44D459345397` (`MN-204`) delivery synced.
+- Characters mode updates: new workspace UI (`Персонажи`), storage CRUD/link model (`characters`, `character_links`), left-rail/settings/i18n/search integration, and cross-entity attachment support for application domains.
+- Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_characters_workspace_mn204.py tests/test_workspace_visibility_settings.py tests/test_i18n.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`12 passed`).
