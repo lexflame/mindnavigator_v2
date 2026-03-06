@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_ideas_relations_list_has_explicit_light_text_color() -> None:
-    source = Path("mindnavigator/workspaces/ideas/workspace.py").read_text(encoding="utf-8")
+    source = Path("mindnavigator/workspaces/ideas/module_impl.py").read_text(encoding="utf-8")
     match = re.search(
         r"QWidget#IdeasWorkspace QListWidget\s*\{(?P<body>.*?)\}",
         source,

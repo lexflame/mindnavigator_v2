@@ -325,3 +325,7 @@ It also stores:
 - `TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2` (Sprint 9 release closure) synced.
 - Release updates: set `APP_VERSION` to `2.0.0`, marked Sprint 9 and task ledger as completed, and prepared release tagging flow (`version +1`).
 - Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_update_service.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`4 passed`).
+- `TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE` (`MN-290`) class-level rework synced.
+- Workspace class split updates: for each workspace folder, `workspace.py` became a thin alias entrypoint, implementation moved to `module_impl.py`, and dedicated class modules were added per class (`<class>.py`).
+- Compatibility remained stable: legacy `*_workspace.py` imports and runtime behavior preserved via module-alias chain.
+- Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_workspace_category_layout.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py tests/test_ideas_relations_style.py tests/test_view_menu_geometry.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`36 passed`); `$env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`166 passed`).
