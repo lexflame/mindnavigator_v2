@@ -718,3 +718,19 @@
 [2026-03-06 12:01] ACTION: Completed TASK_8702382F-50AD-42F4-A142-9869AB72D740.
 [2026-03-06 12:02] ACTION: Started TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 (Execute MN-195 sprint waves and produce release tag/version +1).
 [2026-03-06 12:02] ACTION: Updated TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 status -> In Progress.
+[2026-03-06 12:18] CMD: git switch -c sprint/mn-195-p196
+[2026-03-06 12:18] OUT: Switched to new partition branch `sprint/mn-195-p196`.
+[2026-03-06 12:19] ACTION: Started TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 (Implement and close partition MN-196 tasks remaster block).
+[2026-03-06 12:19] ACTION: Updated TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 status -> In Progress.
+[2026-03-06 12:21] ACTION: Updated `mindnavigator/workspaces/tasks_workspace.py` for MN-196 requirements: Shift+LeftClick tree expansion, quick-add icon/button behavior, and quick-create time defaults.
+[2026-03-06 12:22] ACTION: Extended `tests/test_tasks_marker_refresh.py` with coverage for full-height quick buttons, subtree expansion, and quick-create default time behavior.
+[2026-03-06 12:23] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:23] OUT: OK.
+[2026-03-06 12:23] CMD: PYTHONPATH=. pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:23] OUT: 11 passed.
+[2026-03-06 12:24] CMD: Update MindNavigator DB statuses for MN-196, MN-197, MN-198, MN-200, MN-238, MN-239, MN-240, MN-253, MN-275 -> done=1.
+[2026-03-06 12:24] OUT: Partition MN-196 source tasks updated; all target tasks are done.
+[2026-03-06 12:24] CMD: where.exe TellYourCodex
+[2026-03-06 12:24] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:25] ACTION: Updated TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 status -> Completed.
+[2026-03-06 12:25] ACTION: Completed TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2.

@@ -144,4 +144,5 @@ Status: In Progress
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_8702382F-50AD-42F4-A142-9869AB72D740 | 9 | Compose sprint plan from MN-195 and nested tasks | chore | Completed |
+| TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 | 9 | Implement and close partition MN-196 tasks remaster block | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |
