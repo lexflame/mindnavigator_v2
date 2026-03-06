@@ -8,8 +8,11 @@ from mindnavigator.workspaces.collections_workspace import (
     group_collection_items_by_category,
 )
 from mindnavigator.workspaces.ideas_workspace import IdeaCategoryRow, IdeaItem, group_ideas_by_category
+from mindnavigator.workspaces.ideas_workspace import idea_preview_line
 from mindnavigator.workspaces.notes_workspace import NoteCategoryRow, NoteItem, group_notes_by_category
+from mindnavigator.workspaces.notes_workspace import note_preview_line
 from mindnavigator.workspaces.objects_workspace import ObjectCategoryRow, ObjectRow, group_objects_by_category
+from mindnavigator.workspaces.objects_workspace import object_preview_line
 
 
 def _now() -> datetime:
@@ -71,3 +74,21 @@ def test_group_collections_and_row_format() -> None:
     assert "Castle" in row_text
     assert "History" in row_text
     assert "#medieval" in row_text
+
+
+def test_object_preview_line_returns_first_non_empty_line() -> None:
+    text = "\n  \n  Первая строка описания  \nВторая строка\n"
+    assert object_preview_line(text) == "Первая строка описания"
+    assert object_preview_line("") == "Описание пока не добавлено."
+
+
+def test_note_preview_line_compacts_newlines_and_spaces() -> None:
+    text = "\r\n  Быстрое   превью заметки  \n\nСледующая строка"
+    assert note_preview_line(text) == "Быстрое превью заметки"
+    assert note_preview_line("   \n\t") == "Нет краткого описания."
+
+
+def test_idea_preview_line_prefers_summary_then_body() -> None:
+    assert idea_preview_line("  Кратко о идее  ", "Тело") == "Кратко о идее"
+    assert idea_preview_line("", "\n  Текст из body  \n") == "Текст из body"
+    assert idea_preview_line("", "") == "Нет превью идеи."

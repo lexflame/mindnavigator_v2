@@ -746,3 +746,17 @@
 [2026-03-06 12:54] ACTION: Confirmed MN-268 partition pipeline gate passed for branch sprint/mn-195-p268.
 [2026-03-06 12:54] CMD: where.exe TellYourCodex
 [2026-03-06 12:54] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 13:16] ACTION: Started TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A (Implement MN-268 navigation preview rows for objects, notes, ideas).
+[2026-03-06 13:16] ACTION: Updated TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A status -> In Progress.
+[2026-03-06 13:16] ACTION: Updated objects, notes, and ideas list delegates to compact task-like navigation rows with explicit preview text in each row.
+[2026-03-06 13:16] ACTION: Added preview-line helper tests in tests/test_workspace_category_layout.py for objects, notes, and ideas.
+[2026-03-06 13:16] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 13:16] OUT: OK.
+[2026-03-06 13:16] CMD: PYTHONPATH=. pytest tests/test_workspace_category_layout.py tests/test_notes_multiline_save.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 13:16] OUT: 9 passed.
+[2026-03-06 13:16] CMD: Update MindNavigator DB statuses for MN-286, MN-287, MN-288 and partition MN-268 -> done=1.
+[2026-03-06 13:16] OUT: Updated statuses confirmed as done for all target IDs.
+[2026-03-06 13:16] CMD: where.exe TellYourCodex
+[2026-03-06 13:16] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 13:16] ACTION: Updated TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A status -> Completed.
+[2026-03-06 13:16] ACTION: Completed TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A.

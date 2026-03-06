@@ -145,4 +145,5 @@ Status: In Progress
 | --- | --- | --- | --- | --- |
 | TASK_8702382F-50AD-42F4-A142-9869AB72D740 | 9 | Compose sprint plan from MN-195 and nested tasks | chore | Completed |
 | TASK_50793058-01F9-4FFB-9F68-F29565EF155D | 9 | Implement MN-268 view geometry core tasks MN-269..MN-273 | feat | Completed |
+| TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A | 9 | Implement MN-268 navigation preview rows for objects, notes, ideas (MN-286..MN-288) | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |

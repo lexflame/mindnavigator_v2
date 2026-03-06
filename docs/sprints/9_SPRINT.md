@@ -244,3 +244,14 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - updated source statuses for `MN-269..MN-273` to `done=1`.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed MN-268 preview-navigation tasks `MN-286`, `MN-287`, `MN-288` on branch `sprint/mn-195-p268`.
+- Delivery notes:
+- compacted `Objects`, `Notes`, and `Ideas` list delegates to task-like row navigation with explicit preview line in each row.
+- introduced helper preview normalizers: `object_preview_line`, `note_preview_line`, `idea_preview_line`.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_workspace_category_layout.py tests/test_notes_multiline_save.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`9 passed`)
+- MindNavigator sync:
+- updated source statuses for `MN-286`, `MN-287`, `MN-288`, and parent partition `MN-268` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.

@@ -105,6 +105,16 @@ def group_objects_by_category(items: List[ObjectRow]) -> List[ObjectListRow]:
     return rows
 
 
+def object_preview_line(description: str) -> str:
+    """Возвращает компактное превью первой непустой строки описания объекта."""
+    normalized = (description or "").replace("\r\n", "\n").replace("\r", "\n")
+    for raw_line in normalized.split("\n"):
+        preview = " ".join(raw_line.strip().split())
+        if preview:
+            return preview
+    return "Описание пока не добавлено."
+
+
 class ObjectsModel(QAbstractListModel):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -310,7 +320,7 @@ class ObjectsModel(QAbstractListModel):
 
 
 class ObjectCardDelegate(QStyledItemDelegate):
-    ROW_H = 86
+    ROW_H = 72
 
     C_BG = QColor("#171a20")
     C_BORDER = QColor("#2f333b")
@@ -326,8 +336,8 @@ class ObjectCardDelegate(QStyledItemDelegate):
         self._font_meta = QFont()
         self._font_meta.setPointSize(9)
 
-        self._font_desc = QFont()
-        self._font_desc.setPointSize(9)
+        self._font_preview = QFont()
+        self._font_preview.setPointSize(9)
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex):
         if index.data(ObjectRoles.RowType) == "category":
@@ -351,8 +361,8 @@ class ObjectCardDelegate(QStyledItemDelegate):
             painter.restore()
             return
 
-        rect = option.rect.adjusted(8, 4, -8, -4)
-        radius = 10
+        rect = option.rect.adjusted(8, 3, -8, -3)
+        radius = 8
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         bg = QColor(self.C_BG)
@@ -367,9 +377,10 @@ class ObjectCardDelegate(QStyledItemDelegate):
         object_type = index.data(ObjectRoles.ObjectType) or ""
         status = index.data(ObjectRoles.Status) or ""
         description = index.data(ObjectRoles.Description) or ""
+        preview_text = object_preview_line(description)
 
         x = rect.x() + 14
-        y = rect.y() + 10
+        y = rect.y() + 8
         w = rect.width() - 28
 
         painter.setPen(self.C_TEXT)
@@ -378,23 +389,25 @@ class ObjectCardDelegate(QStyledItemDelegate):
         title_text = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, w)
         painter.drawText(QRect(x, y, w, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title_text)
 
-        meta_y = y + 24
+        meta_y = y + 20
         painter.setFont(self._font_meta)
         painter.setPen(self.C_MUTED)
         meta_parts = [part for part in [catalog, object_type, status] if part]
-        meta_text = " · ".join(meta_parts) if meta_parts else "Без каталога"
+        meta_text = " | ".join(meta_parts) if meta_parts else "Без каталога"
         meta_metrics = QFontMetrics(self._font_meta)
         meta_text = meta_metrics.elidedText(meta_text, Qt.TextElideMode.ElideRight, w)
         painter.drawText(QRect(x, meta_y, w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, meta_text)
 
-        desc_y = meta_y + 18
-        painter.setFont(self._font_desc)
-        painter.setPen(self.C_TEXT)
-        desc_rect = QRect(x, desc_y, w, rect.height() - 38)
-        desc_text = description.strip() or "Описание пока не добавлено."
-        desc_metrics = QFontMetrics(self._font_desc)
-        desc_text = desc_metrics.elidedText(desc_text.replace("\n", " "), Qt.TextElideMode.ElideRight, w * 2)
-        painter.drawText(desc_rect, Qt.TextFlag.TextWordWrap, desc_text)
+        preview_y = meta_y + 18
+        painter.setFont(self._font_preview)
+        painter.setPen(QColor("#b8bec6"))
+        preview_metrics = QFontMetrics(self._font_preview)
+        preview_text = preview_metrics.elidedText(preview_text, Qt.TextElideMode.ElideRight, w)
+        painter.drawText(
+            QRect(x, preview_y, w, 18),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            preview_text,
+        )
 
         painter.restore()
 
