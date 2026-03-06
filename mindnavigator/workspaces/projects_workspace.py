@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
+import subprocess
 from typing import Dict, List, Union, Optional, Any, cast
 import json
 
@@ -62,6 +64,7 @@ class ProjectRow:
     linked_object_id: Optional[int] = None
     marker_color: str = ""
     marker_theme: str = ""
+    repository_catalog: str = ""
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,53 @@ ATTACHMENT_BADGE_COLORS = {
 }
 
 
+@dataclass(frozen=True)
+class RepositoryProbeState:
+    available: bool
+    branch_name: str = ""
+    has_local_changes: bool = False
+    message: str = ""
+
+
+class RepositoryProbe:
+    def inspect(self, repository_catalog: str) -> RepositoryProbeState:
+        repo_path = (repository_catalog or "").strip()
+        if not repo_path:
+            return RepositoryProbeState(False, message="Каталог репозитория не указан.")
+        path = Path(repo_path)
+        if not path.exists() or not path.is_dir():
+            return RepositoryProbeState(False, message="Каталог репозитория не найден.")
+        try:
+            branch_proc = subprocess.run(
+                ["git", "-C", str(path), "rev-parse", "--abbrev-ref", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return RepositoryProbeState(False, message=str(exc))
+        if branch_proc.returncode != 0:
+            error_text = (branch_proc.stderr or "").strip() or "Невозможно определить ветку репозитория."
+            return RepositoryProbeState(False, message=error_text)
+        branch_name = (branch_proc.stdout or "").strip() or "(detached)"
+        try:
+            status_proc = subprocess.run(
+                ["git", "-C", str(path), "status", "--porcelain"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return RepositoryProbeState(False, message=str(exc))
+        if status_proc.returncode != 0:
+            error_text = (status_proc.stderr or "").strip() or "Невозможно получить состояние репозитория."
+            return RepositoryProbeState(False, message=error_text)
+        has_changes = bool((status_proc.stdout or "").strip())
+        return RepositoryProbeState(True, branch_name=branch_name, has_local_changes=has_changes)
+
+
 class ProjectRoles:
     RowType = int(Qt.ItemDataRole.UserRole) + 1   # header | project
     Area = int(Qt.ItemDataRole.UserRole) + 2
@@ -108,6 +158,7 @@ class ProjectRoles:
     MarkerColor = int(Qt.ItemDataRole.UserRole) + 12
     MarkerTheme = int(Qt.ItemDataRole.UserRole) + 13
     AttachmentSummary = int(Qt.ItemDataRole.UserRole) + 14
+    RepositoryCatalog = int(Qt.ItemDataRole.UserRole) + 15
 
 
 class ProjectsModel(QAbstractListModel):
@@ -122,6 +173,7 @@ class ProjectsModel(QAbstractListModel):
         self._project_has_children_cache: Dict[int, bool] = {}
         self._project_attachment_summary: Dict[int, List[tuple[str, int]]] = {}
         self._attachment_summary_dirty = True
+        self._repository_probe = RepositoryProbe()
         self._collapsed_project_ids: set[int] = set()
         self._collapsed_state_key = "projects_workspace.collapsed_ids"
         self._load_collapsed_state()
@@ -151,6 +203,7 @@ class ProjectsModel(QAbstractListModel):
                 p.linked_object_id,
                 p.marker_color,
                 p.marker_theme,
+                p.repository_catalog,
             )
             for p in projects
         ]
@@ -218,6 +271,8 @@ class ProjectsModel(QAbstractListModel):
             return r.marker_theme
         if role == ProjectRoles.AttachmentSummary:
             return self._project_attachment_summary.get(r.id, [])
+        if role == ProjectRoles.RepositoryCatalog:
+            return r.repository_catalog
         if role == Qt.ItemDataRole.DisplayRole:
             return r.title
         return None
@@ -345,6 +400,7 @@ class ProjectsModel(QAbstractListModel):
         linked_object_id: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
+        repository_catalog: str = "",
     ):
         """Добавляет новый проект и пересобирает список."""
         project = self._db.create_project(
@@ -361,6 +417,7 @@ class ProjectsModel(QAbstractListModel):
             linked_object_id=linked_object_id,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            repository_catalog=repository_catalog,
         )
         self._all_rows.append(
             ProjectRow(
@@ -378,6 +435,7 @@ class ProjectsModel(QAbstractListModel):
                 project.linked_object_id,
                 project.marker_color,
                 project.marker_theme,
+                project.repository_catalog,
             )
         )
         self._attachment_summary_dirty = True
@@ -426,6 +484,7 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_object_id,
                     it.marker_color,
                     it.marker_theme,
+                    it.repository_catalog,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -463,6 +522,7 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_object_id,
                     it.marker_color,
                     it.marker_theme,
+                    it.repository_catalog,
                 )
             new_all.append(it)
         self._all_rows = new_all
@@ -496,6 +556,7 @@ class ProjectsModel(QAbstractListModel):
         linked_object_id: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
+        repository_catalog: str = "",
     ):
         """Обновляет проект по индексу строки."""
         r = self.project_at_row(row_idx)
@@ -516,6 +577,7 @@ class ProjectsModel(QAbstractListModel):
             linked_object_id=linked_object_id,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            repository_catalog=repository_catalog,
         )
 
         new_all: List[Row] = []
@@ -536,6 +598,7 @@ class ProjectsModel(QAbstractListModel):
                     updated_project.linked_object_id,
                     updated_project.marker_color,
                     updated_project.marker_theme,
+                    updated_project.repository_catalog,
                 )
             new_all.append(it)
 
@@ -568,6 +631,7 @@ class ProjectsModel(QAbstractListModel):
             linked_object_id=project_row.linked_object_id,
             marker_color=project_row.marker_color,
             marker_theme=project_row.marker_theme,
+            repository_catalog=project_row.repository_catalog,
         )
         new_all: List[Row] = []
         for row in self._all_rows:
@@ -587,10 +651,17 @@ class ProjectsModel(QAbstractListModel):
                     updated_project.linked_object_id,
                     updated_project.marker_color,
                     updated_project.marker_theme,
+                    updated_project.repository_catalog,
                 )
             new_all.append(row)
         self._all_rows = new_all
         self._rebuild()
+
+    def repository_probe_by_row(self, row_idx: int) -> RepositoryProbeState:
+        project_row = self.project_at_row(row_idx)
+        if project_row is None:
+            return RepositoryProbeState(False, message="Проект не найден.")
+        return self._repository_probe.inspect(project_row.repository_catalog)
 
     def toggle_archive_by_row(self, row_idx: int):
         """Переключает архивный статус проекта по строке."""
@@ -620,6 +691,7 @@ class ProjectsModel(QAbstractListModel):
                     it.linked_object_id,
                     it.marker_color,
                     it.marker_theme,
+                    it.repository_catalog,
                 )
             new_all.append(it)
 
@@ -1281,6 +1353,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             }
         """)
         act_edit = menu.addAction("Редактировать")
+        act_repository_status = menu.addAction("Статус репозитория")
         menu.addSeparator()
         archived = bool(index.data(ProjectRoles.Archived))
         act_archive = menu.addAction("Восстановить" if archived else "Архивировать")
@@ -1289,6 +1362,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         chosen = menu.exec(QCursor.pos())
         if chosen == act_edit:
             self._edit_project(index)
+            return
+        if chosen == act_repository_status:
+            self._show_repository_status(index, menu.parentWidget() or None)
             return
         if chosen == act_archive:
             model = index.model()
@@ -1315,6 +1391,27 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if hasattr(model, "delete_project_by_row"):
             model.delete_project_by_row(index.row())
             self._refresh_area_combo()
+
+    def _show_repository_status(self, index: QModelIndex, parent: Optional[QWidget]) -> None:
+        model = index.model()
+        if not isinstance(model, ProjectsModel):
+            QMessageBox.information(parent or self.parent(), "Репозиторий проекта", "Модель проекта недоступна.")
+            return
+        state = model.repository_probe_by_row(index.row())
+        repository_catalog = (index.data(ProjectRoles.RepositoryCatalog) or "").strip()
+        if not state.available:
+            details = state.message or "Статус репозитория недоступен."
+            if repository_catalog:
+                details = f"Каталог: {repository_catalog}\n{details}"
+            QMessageBox.information(parent or self.parent(), "Репозиторий проекта", details)
+            return
+        dirty_text = "изменения есть" if state.has_local_changes else "чисто"
+        message = (
+            f"Каталог: {repository_catalog}\n"
+            f"Ветка: {state.branch_name}\n"
+            f"Состояние: {dirty_text}"
+        )
+        QMessageBox.information(parent or self.parent(), "Репозиторий проекта", message)
 
     def _show_area_menu(self, index: QModelIndex):
         """Показывает меню действий области проектов."""
@@ -1425,6 +1522,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     linked_object_id=values["linked_object_id"],
                     marker_color=values["marker_color"],
                     marker_theme=values["marker_theme"],
+                    repository_catalog=values["repository_catalog"],
                 )
                 self._refresh_area_combo(values["area"])
             except ValueError as exc:
@@ -1461,7 +1559,7 @@ class ProjectEditDialog(QDialog):
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(640, 620)
+        self.setFixedSize(640, 660)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1571,6 +1669,9 @@ class ProjectEditDialog(QDialog):
         if marker_theme_idx >= 0:
             self.marker_theme_edit.setCurrentIndex(marker_theme_idx)
 
+        self.repository_catalog_edit = QLineEdit((project.repository_catalog if project else "") or "")
+        self.repository_catalog_edit.setPlaceholderText("Путь к локальному репозиторию")
+
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
 
@@ -1586,6 +1687,7 @@ class ProjectEditDialog(QDialog):
         form.addRow("Linked object", self.linked_object_edit)
         form.addRow("Маркер (цвет)", self.marker_color_edit)
         form.addRow("Тема маркера", self.marker_theme_edit)
+        form.addRow("Каталог репозитория", self.repository_catalog_edit)
         form.addRow("", self.archived_edit)
 
         layout.addLayout(form)
@@ -1675,6 +1777,7 @@ class ProjectEditDialog(QDialog):
             "linked_object_id": self.linked_object_edit.currentData(),
             "marker_color": self.marker_color_edit.currentData() or "",
             "marker_theme": self.marker_theme_edit.currentData() or "",
+            "repository_catalog": self.repository_catalog_edit.text().strip(),
             "archived": self.archived_edit.isChecked(),
         }
 
@@ -2106,6 +2209,7 @@ class ProjectsWorkspace(QWidget):
                 linked_object_id=values["linked_object_id"],
                 marker_color=values["marker_color"],
                 marker_theme=values["marker_theme"],
+                repository_catalog=values["repository_catalog"],
             )
             self._refresh_area_combo(values["area"])
         except ValueError as exc:

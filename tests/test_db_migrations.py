@@ -90,6 +90,7 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "sort_order" in project_columns
         assert "parent_project_id" in project_columns
         assert "marker_color" in project_columns
+        assert "repository_catalog" in project_columns
         assert "project_id" in task_columns
         assert "description" in task_columns
         assert "parent_id" in task_columns
