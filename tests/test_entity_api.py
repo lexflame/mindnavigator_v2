@@ -124,6 +124,7 @@ def test_entity_api_service_project_create_update_delete(unique_temp_path) -> No
                 "title": "API Project",
                 "updated": "2026-03-02",
                 "priority": "Medium",
+                "repository_catalog": "D:/repo/main",
             },
         )
 
@@ -133,13 +134,16 @@ def test_entity_api_service_project_create_update_delete(unique_temp_path) -> No
             {
                 "archived": True,
                 "title": "API Project Updated",
+                "repository_catalog": "D:/repo/updated",
             },
         )
         deleted = service.delete_entity("project", created["id"])
 
         assert created["area"] == "API"
+        assert created["repository_catalog"] == "D:/repo/main"
         assert updated["archived"] is True
         assert updated["title"] == "API Project Updated"
+        assert updated["repository_catalog"] == "D:/repo/updated"
         assert deleted["deleted"] is True
     finally:
         database.close()

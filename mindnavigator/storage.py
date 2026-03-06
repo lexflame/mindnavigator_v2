@@ -69,6 +69,7 @@ class ProjectData:
     sort_order: int = 0
     marker_color: str = ""
     marker_theme: str = ""
+    repository_catalog: str = ""
 
 
 @dataclass(frozen=True)
@@ -582,6 +583,7 @@ class Database:
                     linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
                     linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
                     linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL,
+                    repository_catalog TEXT NOT NULL DEFAULT '',
                     marker_color TEXT NOT NULL DEFAULT '',
                     marker_theme TEXT NOT NULL DEFAULT ''
                 );
@@ -1079,6 +1081,7 @@ class Database:
             "linked_map_id": "ALTER TABLE projects ADD COLUMN linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL;",
             "linked_note_id": "ALTER TABLE projects ADD COLUMN linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL;",
             "linked_object_id": "ALTER TABLE projects ADD COLUMN linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL;",
+            "repository_catalog": "ALTER TABLE projects ADD COLUMN repository_catalog TEXT NOT NULL DEFAULT '';",
         }
         with self._conn:
             for column, ddl in additions.items():
@@ -1592,6 +1595,7 @@ class Database:
                 linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
                 linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
                 linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL,
+                repository_catalog TEXT NOT NULL DEFAULT '',
                 marker_color TEXT NOT NULL DEFAULT '',
                 marker_theme TEXT NOT NULL DEFAULT ''
             );
@@ -1620,6 +1624,7 @@ class Database:
                 linked_map_id,
                 linked_note_id,
                 linked_object_id,
+                repository_catalog,
                 marker_color,
                 marker_theme
             )
@@ -1637,6 +1642,7 @@ class Database:
                 {_source("linked_map_id", "NULL")},
                 {_source("linked_note_id", "NULL")},
                 {_source("linked_object_id", "NULL")},
+                COALESCE({_source("repository_catalog", "''")}, ''),
                 COALESCE({_source("marker_color", "''")}, ''),
                 COALESCE({_source("marker_theme", "''")}, '')
             FROM projects_old;
@@ -2454,6 +2460,7 @@ class Database:
                 id, area, title, updated, priority, archived,
                 parent_project_id, default_task_priority, force_recurrence_kind,
                 linked_map_id, linked_note_id, linked_object_id,
+                repository_catalog,
                 marker_color, marker_theme,
                 COALESCE(sort_order, 0) AS sort_order
             FROM projects
@@ -2479,6 +2486,7 @@ class Database:
                     sort_order=int(row["sort_order"] or 0),
                     marker_color=(row["marker_color"] or "").strip(),
                     marker_theme=(row["marker_theme"] or "").strip(),
+                    repository_catalog=(row["repository_catalog"] or "").strip(),
                 )
             )
         return projects
@@ -2497,6 +2505,7 @@ class Database:
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        repository_catalog: str = "",
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
@@ -2506,6 +2515,7 @@ class Database:
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        repository_catalog = (repository_catalog or "").strip()
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
@@ -2523,9 +2533,9 @@ class Database:
                 INSERT INTO projects (
                     area, title, updated, priority, archived,
                     parent_project_id, sort_order, default_task_priority, force_recurrence_kind,
-                    linked_map_id, linked_note_id, linked_object_id, marker_color, marker_theme
+                    linked_map_id, linked_note_id, linked_object_id, repository_catalog, marker_color, marker_theme
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     area,
@@ -2540,6 +2550,7 @@ class Database:
                     linked_map_id,
                     linked_note_id,
                     linked_object_id,
+                    repository_catalog,
                     marker_color,
                     marker_theme,
                 ),
@@ -2560,6 +2571,7 @@ class Database:
             sort_order=sort_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            repository_catalog=repository_catalog,
         )
 
 
@@ -2578,6 +2590,7 @@ class Database:
         linked_map_id: Optional[int] = None,
         linked_note_id: Optional[int] = None,
         linked_object_id: Optional[int] = None,
+        repository_catalog: str = "",
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
@@ -2587,6 +2600,7 @@ class Database:
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
+        repository_catalog = (repository_catalog or "").strip()
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
@@ -2626,7 +2640,7 @@ class Database:
                 UPDATE projects
                 SET area = ?, title = ?, updated = ?, priority = ?, archived = ?,
                     parent_project_id = ?, sort_order = ?, default_task_priority = ?, force_recurrence_kind = ?,
-                    linked_map_id = ?, linked_note_id = ?, linked_object_id = ?, marker_color = ?, marker_theme = ?
+                    linked_map_id = ?, linked_note_id = ?, linked_object_id = ?, repository_catalog = ?, marker_color = ?, marker_theme = ?
                 WHERE id = ?;
                 """,
                 (
@@ -2642,6 +2656,7 @@ class Database:
                     linked_map_id,
                     linked_note_id,
                     linked_object_id,
+                    repository_catalog,
                     marker_color,
                     marker_theme,
                     project_id,
@@ -2663,6 +2678,7 @@ class Database:
             sort_order=sort_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            repository_catalog=repository_catalog,
         )
 
     def fetch_project_tree(self) -> List[ProjectData]:
@@ -2677,6 +2693,7 @@ class Database:
                 id, area, title, updated, priority, archived,
                 parent_project_id, default_task_priority, force_recurrence_kind,
                 linked_map_id, linked_note_id, linked_object_id,
+                repository_catalog,
                 marker_color, marker_theme,
                 COALESCE(sort_order, 0) AS sort_order
             FROM projects
@@ -2704,6 +2721,7 @@ class Database:
                     sort_order=int(row["sort_order"] or 0),
                     marker_color=(row["marker_color"] or "").strip(),
                     marker_theme=(row["marker_theme"] or "").strip(),
+                    repository_catalog=(row["repository_catalog"] or "").strip(),
                 )
             )
         return children

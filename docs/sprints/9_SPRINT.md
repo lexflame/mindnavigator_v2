@@ -250,6 +250,20 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Rollback:
 - Revert commit for `TASK_5C7040F0-AC1E-4D20-BD9D-A3E4A2F4D6D6`; no schema migration is planned for this partition.
 
+### `MN-203` / `MN-235`
+- Scope:
+- add project property `Repository catalog` in project model and edit dialog.
+- implement lightweight repository probe helper for local branch name and working-tree state.
+- expose repository status in projects list workflow without breaking existing create/edit behavior.
+- Dependencies:
+- merged `MN-201` (`dc4e725`) because MN-235 extends the same `projects_workspace.py` surfaces.
+- existing project storage/update paths in `mindnavigator/storage.py`.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- focused pytest for projects workspace and repository-probe behavior.
+- Rollback:
+- revert commit for `TASK_8D704D5E-6C2E-4A0D-B28A-6B7E5B32F931`; keep prior project edit schema and UI behavior.
+
 ## Execution Progress
 - `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
 - Validation for closure:
@@ -298,5 +312,17 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_projects_workspace_mn201.py tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`17 passed`)
 - MindNavigator sync:
 - updated source statuses for `MN-201`, `MN-254`, `MN-255`, `MN-256` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-203` partition task `MN-235` on branch `sprint/mn-195-p203`.
+- Delivery notes:
+- added project property `Repository catalog` in storage (`projects` schema/migrations), model roles, and create/update paths.
+- added repository status probing class for branch name and local dirty/clean state with safe subprocess error handling.
+- wired project context menu action `Статус репозитория` and dialog field `Каталог репозитория`.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_projects_workspace_mn203.py tests/test_projects_workspace_mn201.py tests/test_entity_api.py tests/test_db_migrations.py -p no:cacheprovider` (`24 passed`)
+- MindNavigator sync:
+- update statuses for `MN-203` and `MN-235` to `done=1` (manual sync pending in external source DB).
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.

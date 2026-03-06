@@ -178,7 +178,15 @@ class EntityApiPool:
                 title="Project",
                 identity_field="id",
                 list_fields=("id", "title", "area", "priority", "archived", "parent_project_id"),
-                mutable_fields=("title", "area", "updated", "priority", "archived", "parent_project_id"),
+                mutable_fields=(
+                    "title",
+                    "area",
+                    "updated",
+                    "priority",
+                    "archived",
+                    "parent_project_id",
+                    "repository_catalog",
+                ),
                 execute_actions=("archive", "unarchive"),
             ),
             EntityKindSpec(
@@ -347,6 +355,7 @@ class EntityApiService(EntityApiPool):
                 linked_map_id=self._optional_int(data.get("linked_map_id")),
                 linked_note_id=self._optional_int(data.get("linked_note_id")),
                 linked_object_id=self._optional_int(data.get("linked_object_id")),
+                repository_catalog=self._string(data.get("repository_catalog")),
                 marker_color=self._string(data.get("marker_color")),
                 marker_theme=self._string(data.get("marker_theme")),
             )
@@ -442,6 +451,7 @@ class EntityApiService(EntityApiPool):
                 linked_map_id=self._optional_int(data.get("linked_map_id"), current.linked_map_id),
                 linked_note_id=self._optional_int(data.get("linked_note_id"), current.linked_note_id),
                 linked_object_id=self._optional_int(data.get("linked_object_id"), current.linked_object_id),
+                repository_catalog=self._string(data.get("repository_catalog"), current.repository_catalog),
                 marker_color=self._string(data.get("marker_color"), current.marker_color),
                 marker_theme=self._string(data.get("marker_theme"), current.marker_theme),
             )
