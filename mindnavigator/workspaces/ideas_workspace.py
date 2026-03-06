@@ -148,6 +148,18 @@ def group_ideas_by_category(items: List[IdeaItem]) -> List[IdeaRow]:
     return rows
 
 
+def idea_preview_line(summary: str, body_md: str) -> str:
+    """Возвращает компактное превью идеи из summary или текста описания."""
+    sources = [summary or "", body_md or ""]
+    for source in sources:
+        normalized = source.replace("\r\n", "\n").replace("\r", "\n")
+        for raw_line in normalized.split("\n"):
+            line = " ".join(raw_line.strip().split())
+            if line:
+                return line
+    return "Нет превью идеи."
+
+
 class IdeasListModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -245,13 +257,13 @@ class IdeasDelegate(QStyledItemDelegate):
             self._paint_category(painter, option, index)
             painter.restore()
             return
-        rect = option.rect.adjusted(10, 6, -10, -6)
+        rect = option.rect.adjusted(10, 3, -10, -3)
         selected = option.state & QStyle.StateFlag.State_Selected
         background = QColor("#2f3036" if selected else "#1f2024")
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(background)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(rect, 10, 10)
+        painter.drawRoundedRect(rect, 8, 8)
 
         title = index.data(IdeaRoles.Title) or "Без названия"
         project = index.data(IdeaRoles.ProjectTitle) or "Без проекта"
@@ -259,31 +271,53 @@ class IdeasDelegate(QStyledItemDelegate):
         idea_type = TYPE_LABELS.get(index.data(IdeaRoles.Type), "")
         value_score = index.data(IdeaRoles.ValueScore)
         effort_score = index.data(IdeaRoles.EffortScore)
+        summary = index.data(IdeaRoles.Summary) or ""
+        body_md = index.data(IdeaRoles.Body) or ""
+        preview_text = idea_preview_line(summary, body_md)
 
         title_font = QFont(option.font)
         title_font.setPointSize(title_font.pointSize() + 1)
         title_font.setBold(True)
         painter.setFont(title_font)
         painter.setPen(QColor("#f2f2f2"))
-        painter.drawText(rect.adjusted(12, 8, -12, -36), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, title)
+        painter.drawText(
+            rect.adjusted(12, 8, -12, -46),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            title,
+        )
 
         meta_font = QFont(option.font)
         meta_font.setPointSize(meta_font.pointSize() - 1)
         painter.setFont(meta_font)
         painter.setPen(QColor("#c0c0c0"))
-        meta_text = f"{project} • {status} • {idea_type}"
-        painter.drawText(rect.adjusted(12, 30, -12, -16), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, meta_text)
+        meta_text = " | ".join(part for part in [project, status, idea_type] if part)
+        painter.drawText(
+            rect.adjusted(12, 28, -12, -28),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            meta_text,
+        )
 
-        score_text = f"⭐ {value_score}  ⚙ {effort_score}"
-        painter.setPen(QColor("#a8d4ff"))
-        painter.drawText(rect.adjusted(12, 52, -12, -4), Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft, score_text)
+        painter.setPen(QColor("#adb3bc"))
+        painter.drawText(
+            rect.adjusted(12, 46, -12, -10),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            preview_text,
+        )
+
+        score_text = f"Value {value_score} | Effort {effort_score}"
+        painter.setPen(QColor("#8bb5e8"))
+        painter.drawText(
+            rect.adjusted(12, 64, -12, -2),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            score_text,
+        )
 
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         if index.data(IdeaRoles.RowType) == "category":
             return QSize(option.rect.width(), 30)
-        return QSize(option.rect.width(), 86)
+        return QSize(option.rect.width(), 88)
 
     @staticmethod
     def _paint_category(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:

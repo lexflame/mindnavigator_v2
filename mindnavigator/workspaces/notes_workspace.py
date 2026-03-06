@@ -98,6 +98,16 @@ def normalize_note_body(text: str) -> str:
     return raw.replace("\r\n", "\n").replace("\r", "\n")
 
 
+def note_preview_line(preview: str) -> str:
+    """Возвращает компактное однострочное превью заметки для списка навигации."""
+    normalized = normalize_note_body(preview)
+    for raw_line in normalized.split("\n"):
+        line = " ".join(raw_line.strip().split())
+        if line:
+            return line
+    return "Нет краткого описания."
+
+
 def normalize_note_category(project: str) -> str:
     value = (project or "").strip()
     return value if value else "Без проекта"
@@ -440,16 +450,18 @@ class NotesController(QObject):
 
 
 class NoteCardDelegate(QStyledItemDelegate):
+    ROW_H = 88
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._card_radius = 12
+        self._card_radius = 10
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         row_type = index.data(NoteRoles.RowType)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        rect = option.rect.adjusted(6, 6, -6, -6)
+        rect = option.rect.adjusted(6, 3, -6, -3)
         if row_type == "skeleton":
             self._paint_skeleton(painter, rect)
             painter.restore()
@@ -478,11 +490,24 @@ class NoteCardDelegate(QStyledItemDelegate):
         tags = index.data(NoteRoles.Tags) or []
         updated = index.data(NoteRoles.Updated)
         project = index.data(NoteRoles.Project) or ""
+        preview_text = note_preview_line(preview)
 
-        title_rect = QRect(rect.left() + 14, rect.top() + 12, rect.width() - 28, 24)
-        preview_rect = QRect(rect.left() + 14, rect.top() + 38, rect.width() - 28, 52)
-        tags_rect = QRect(rect.left() + 14, rect.bottom() - 50, rect.width() - 28, 20)
-        meta_rect = QRect(rect.left() + 14, rect.bottom() - 28, rect.width() - 28, 18)
+        icon_y = rect.top() + 10
+        icon_x = rect.right() - 18
+        painter.setPen(Qt.PenStyle.NoPen)
+        if index.data(NoteRoles.Locked):
+            qta.icon("fa5s.lock", color="#8b8f96").paint(painter, QRect(icon_x, icon_y, 14, 14))
+            icon_x -= 18
+        if index.data(NoteRoles.Attachment):
+            qta.icon("fa5s.paperclip", color="#8b8f96").paint(painter, QRect(icon_x, icon_y, 14, 14))
+            icon_x -= 18
+        if index.data(NoteRoles.Favorite):
+            qta.icon("fa5s.star", color="#f4c560").paint(painter, QRect(icon_x, icon_y, 14, 14))
+
+        text_right = icon_x - 8
+        title_rect = QRect(rect.left() + 14, rect.top() + 9, text_right - rect.left() - 14, 20)
+        preview_rect = QRect(rect.left() + 14, rect.top() + 30, text_right - rect.left() - 14, 18)
+        meta_rect = QRect(rect.left() + 14, rect.bottom() - 26, rect.width() - 28, 16)
 
         painter.setPen(QColor("#e6e6e6"))
         title_font = QFont()
@@ -495,35 +520,18 @@ class NoteCardDelegate(QStyledItemDelegate):
         preview_font = QFont()
         preview_font.setPointSize(9)
         painter.setFont(preview_font)
-        painter.drawText(preview_rect, Qt.TextFlag.TextWordWrap, preview)
-
-        painter.setPen(QColor("#7d828a"))
-        tag_font = QFont()
-        tag_font.setPointSize(8)
-        painter.setFont(tag_font)
-        painter.drawText(tags_rect, Qt.TextFlag.TextSingleLine, "  ".join(f"#{t}" for t in tags[:3]))
+        painter.drawText(preview_rect, Qt.TextFlag.TextSingleLine, preview_text)
 
         painter.setPen(QColor("#6b7078"))
         meta_font = QFont()
         meta_font.setPointSize(8)
         painter.setFont(meta_font)
-        meta_text = project
+        tags_text = " ".join(f"#{tag}" for tag in tags[:3])
+        meta_parts = [part for part in [tags_text, project] if part]
         if isinstance(updated, datetime):
-            meta_text = f"{project} · {updated:%d %b %H:%M}"
+            meta_parts.append(f"{updated:%d %b %H:%M}")
+        meta_text = " | ".join(meta_parts) if meta_parts else "Без метаданных"
         painter.drawText(meta_rect, Qt.TextFlag.TextSingleLine, meta_text)
-
-        icon_y = rect.top() + 12
-        icon_x = rect.right() - 18
-        painter.setPen(Qt.PenStyle.NoPen)
-
-        if index.data(NoteRoles.Locked):
-            qta.icon("fa5s.lock", color="#8b8f96").paint(painter, QRect(icon_x, icon_y, 14, 14))
-            icon_x -= 18
-        if index.data(NoteRoles.Attachment):
-            qta.icon("fa5s.paperclip", color="#8b8f96").paint(painter, QRect(icon_x, icon_y, 14, 14))
-            icon_x -= 18
-        if index.data(NoteRoles.Favorite):
-            qta.icon("fa5s.star", color="#f4c560").paint(painter, QRect(icon_x, icon_y, 14, 14))
 
         painter.restore()
 
@@ -562,7 +570,7 @@ class NoteCardDelegate(QStyledItemDelegate):
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex):
         if index.data(NoteRoles.RowType) == "category":
             return QSize(260, 30)
-        return QSize(260, 170)
+        return QSize(260, self.ROW_H)
 
 
 class NoteWorkspace(QWidget):

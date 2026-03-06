@@ -778,3 +778,45 @@
 [2026-03-06 12:27] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/192.
 [2026-03-06 12:28] CMD: Poll GitHub check-runs for commit `4ae334a`.
 [2026-03-06 12:28] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-06 12:31] CMD: git switch -c sprint/mn-195-p268
+[2026-03-06 12:31] OUT: Switched to new partition branch `sprint/mn-195-p268`.
+[2026-03-06 12:32] ACTION: Started TASK_50793058-01F9-4FFB-9F68-F29565EF155D (Implement MN-268 view geometry core tasks MN-269..MN-273).
+[2026-03-06 12:32] ACTION: Updated TASK_50793058-01F9-4FFB-9F68-F29565EF155D status -> In Progress.
+[2026-03-06 12:36] ACTION: Updated `tasks_workspace` and `projects_workspace` delegate geometry for full-height square menu block and matching task checkbox size.
+[2026-03-06 12:36] ACTION: Updated project tree marker rendering to chevron icons aligned with tasks subtree behavior.
+[2026-03-06 12:37] ACTION: Added tests `tests/test_view_menu_geometry.py` for menu and checkbox geometry contracts.
+[2026-03-06 12:38] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:38] OUT: OK.
+[2026-03-06 12:38] CMD: PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:38] OUT: 11 passed.
+[2026-03-06 12:41] CMD: Update MindNavigator DB statuses for MN-269, MN-270, MN-271, MN-272, MN-273 -> done=1.
+[2026-03-06 12:41] OUT: Updated 5 tasks; all target statuses set to done.
+[2026-03-06 12:41] CMD: where.exe TellYourCodex
+[2026-03-06 12:41] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:42] ACTION: Updated TASK_50793058-01F9-4FFB-9F68-F29565EF155D status -> Completed.
+[2026-03-06 12:42] ACTION: Completed TASK_50793058-01F9-4FFB-9F68-F29565EF155D.
+[2026-03-06 12:54] CMD: git commit -m "feat//:: TASK_50793058-01F9-4FFB-9F68-F29565EF155D Close MN-269..MN-273 core view geometry tasks"
+[2026-03-06 12:54] OUT: Created commit 1013a7a with view-geometry updates, tests, and sprint history sync.
+[2026-03-06 12:54] CMD: git push -u origin sprint/mn-195-p268
+[2026-03-06 12:54] OUT: Branch pushed to origin; local remote-tracking ref update emitted known lock warning.
+[2026-03-06 12:54] CMD: Create PR for `sprint/mn-195-p268` via GitHub API.
+[2026-03-06 12:54] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/193.
+[2026-03-06 12:54] CMD: Poll GitHub check-runs for commit `1013a7a5033523f89597693639bc19dab78280b0`.
+[2026-03-06 12:54] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-06 12:54] ACTION: Confirmed MN-268 partition pipeline gate passed for branch sprint/mn-195-p268.
+[2026-03-06 12:54] CMD: where.exe TellYourCodex
+[2026-03-06 12:54] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 13:16] ACTION: Started TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A (Implement MN-268 navigation preview rows for objects, notes, ideas).
+[2026-03-06 13:16] ACTION: Updated TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A status -> In Progress.
+[2026-03-06 13:16] ACTION: Updated objects, notes, and ideas list delegates to compact task-like navigation rows with explicit preview text in each row.
+[2026-03-06 13:16] ACTION: Added preview-line helper tests in tests/test_workspace_category_layout.py for objects, notes, and ideas.
+[2026-03-06 13:16] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 13:16] OUT: OK.
+[2026-03-06 13:16] CMD: PYTHONPATH=. pytest tests/test_workspace_category_layout.py tests/test_notes_multiline_save.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 13:16] OUT: 9 passed.
+[2026-03-06 13:16] CMD: Update MindNavigator DB statuses for MN-286, MN-287, MN-288 and partition MN-268 -> done=1.
+[2026-03-06 13:16] OUT: Updated statuses confirmed as done for all target IDs.
+[2026-03-06 13:16] CMD: where.exe TellYourCodex
+[2026-03-06 13:16] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 13:16] ACTION: Updated TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A status -> Completed.
+[2026-03-06 13:16] ACTION: Completed TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A.

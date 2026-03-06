@@ -144,6 +144,8 @@ Status: In Progress
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_8702382F-50AD-42F4-A142-9869AB72D740 | 9 | Compose sprint plan from MN-195 and nested tasks | chore | Completed |
+| TASK_50793058-01F9-4FFB-9F68-F29565EF155D | 9 | Implement MN-268 view geometry core tasks MN-269..MN-273 | feat | Completed |
+| TASK_64E27214-13F9-4DFD-A9F8-CE6673355F3A | 9 | Implement MN-268 navigation preview rows for objects, notes, ideas (MN-286..MN-288) | feat | Completed |
 | TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 | 9 | Implement and close partition MN-196 tasks remaster block | feat | Completed |
 | TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 | 9 | Validate and close API integration partition MN-264..MN-267 | feat | Completed |
 | TASK_C1F195B9-5873-4192-99AB-D541C0A007F8 | 9 | Close Wave 1 fix set for MN-253, MN-274, and MN-283 | fix | Completed |
