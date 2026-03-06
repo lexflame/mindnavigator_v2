@@ -136,3 +136,12 @@ Status: Completed
 | TASK_DEBE102A-3B8B-44D3-9660-F76D32DF5124 | 8 | Fix PyCharm inspection findings from docs/inspect for Sprint 8 closure gate | fix | Completed |
 | TASK_148126AA-979F-422E-9211-E75F3A9AD34E | 8 | Finalize Sprint 8 closure and sync MN-211 completion state | chore | Completed |
 | TASK_ACF8A049-5DB7-4371-9F3A-B8441299F478 | 8 | Add explicit PSR-12-style comment/docblock rule to AGENTS and finalize closure alignment | docs | Completed |
+
+## Sprint 9 - Modern Modes And Redesign (MN-195)
+Created: 2026-03-06
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_8702382F-50AD-42F4-A142-9869AB72D740 | 9 | Compose sprint plan from MN-195 and nested tasks | chore | Completed |
+| TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |
