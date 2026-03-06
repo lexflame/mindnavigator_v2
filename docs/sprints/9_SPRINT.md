@@ -235,6 +235,21 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Sync `docs/PARITY.md`, `.codex/HISTORY_TASK.md`, and `.codex/HISTORY_ACTION.md` as each task is completed.
 - When Telegram utility is unavailable, log the failed attempt and proceed with direct operator update.
 
+## Current Task Decomposition
+### `MN-201` / `MN-254` / `MN-255` / `MN-256`
+- Scope:
+- `MN-254`: add priority switch interaction in projects list row (delegate hit-zone plus model update path).
+- `MN-255`: show colored attachment badges on project row hover, aggregated from all tasks linked to project and child projects.
+- `MN-256`: add `GRAPH` quick-action button in projects topbar to the right of `Импорт` with safe default handler.
+- Dependencies:
+- Completed Wave 4 outputs (`MN-196`, `MN-202`, `MN-268`) to avoid overlap in shared delegates and list geometry.
+- Existing `projects_workspace.py` delegate/menu architecture and storage task-attachment APIs.
+- Validation:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+- Rollback:
+- Revert commit for `TASK_5C7040F0-AC1E-4D20-BD9D-A3E4A2F4D6D6`; no schema migration is planned for this partition.
+
 ## Execution Progress
 - `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
 - Validation for closure:
@@ -271,5 +286,17 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_workspace_category_layout.py tests/test_notes_multiline_save.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`9 passed`)
 - MindNavigator sync:
 - updated source statuses for `MN-286`, `MN-287`, `MN-288`, and parent partition `MN-268` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-201` project-design partition tasks `MN-254`, `MN-255`, `MN-256` on branch `sprint/mn-195-p201`.
+- Delivery notes:
+- added inline priority switch hit-zone in projects rows with cycle `Low -> Medium -> High`.
+- added hover-only centered color attachment badges with aggregate counts from project and descendant project tasks.
+- added `GRAPH` quick-action button to projects topbar and wired safe placeholder handler.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_projects_workspace_mn201.py tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`17 passed`)
+- MindNavigator sync:
+- updated source statuses for `MN-201`, `MN-254`, `MN-255`, `MN-256` to `done=1`.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.

@@ -149,4 +149,5 @@ Status: In Progress
 | TASK_F26871EB-B716-4E16-B0F3-105EE1E3C1B2 | 9 | Implement and close partition MN-196 tasks remaster block | feat | Completed |
 | TASK_3D7349A2-1BC7-47A6-8F2C-C34075F7ACF1 | 9 | Validate and close API integration partition MN-264..MN-267 | feat | Completed |
 | TASK_C1F195B9-5873-4192-99AB-D541C0A007F8 | 9 | Close Wave 1 fix set for MN-253, MN-274, and MN-283 | fix | Completed |
+| TASK_5C7040F0-AC1E-4D20-BD9D-A3E4A2F4D6D6 | 9 | Implement and close partition MN-201 tasks MN-254..MN-256 | feat | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | In Progress |
