@@ -459,3 +459,16 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `$env:PYTHONPATH='.'; pytest tests/test_characters_workspace_mn204.py tests/test_workspace_visibility_settings.py tests/test_i18n.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`12 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed `MN-290` partition (workspace modular split) on branch `sprint/mn-195-p290`.
+- Delivery notes:
+- moved workspace implementations from flat module files to per-workspace directories under `mindnavigator/workspaces/<workspace>/workspace.py`.
+- added package entrypoints (`__init__.py`) for every workspace folder and switched shell imports to package paths.
+- preserved backward compatibility for legacy module imports via explicit module-alias wrappers (`mindnavigator/workspaces/*_workspace.py`).
+- added compatibility test `tests/test_workspace_module_split_mn290.py` for old/new import path identity.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`25 passed`)
+- MindNavigator sync:
+- source status update for `MN-290` is pending manual external sync in this environment.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.

@@ -319,3 +319,6 @@ It also stores:
 - `TASK_A3D78EC8-32AE-4C1E-B9EA-44D459345397` (`MN-204`) delivery synced.
 - Characters mode updates: new workspace UI (`Персонажи`), storage CRUD/link model (`characters`, `character_links`), left-rail/settings/i18n/search integration, and cross-entity attachment support for application domains.
 - Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_characters_workspace_mn204.py tests/test_workspace_visibility_settings.py tests/test_i18n.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`12 passed`).
+- `TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE` (`MN-290`) delivery synced.
+- Workspace modular split updates: moved workspace implementations into per-workspace directories (`mindnavigator/workspaces/<workspace>/workspace.py`), kept package exports, and added legacy module aliases for backward-compatible import paths.
+- Validation synced: `python -m compileall mindnavigator main.py`; `$env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`25 passed`).
