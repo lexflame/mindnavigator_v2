@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import qtawesome as qta
-from PySide6.QtCore import QEvent, QTimer, Qt, QSize
+from PySide6.QtCore import QEvent, QTimer, Qt, QSize, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QButtonGroup, QFrame, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
@@ -12,6 +12,8 @@ from .animations import WidthExpandAnimationConfig, WidthExpandAnimator
 
 class LeftRail(QWidget):
     """Compact left rail with mode icons and hover expansion labels."""
+
+    theme_toggled = Signal(str)
 
     WIDTH = 56
     HOVER_PANEL_WIDTH = 220
@@ -49,6 +51,7 @@ class LeftRail(QWidget):
 
         self._icon_color = "#cfcfcf"
         self._icon_color_active = "#ffffff"
+        self._theme_mode = "dark"
 
         self._icons = {
             "Проекты": "fa5s.folder-open",
@@ -61,6 +64,7 @@ class LeftRail(QWidget):
             "Файлы": "fa5s.file-alt",
             "Объекты": "fa5s.cube",
             "Персонажи": "fa5s.user-friends",
+            "MindDraw": "fa5s.sitemap",
             "Настройки": "fa5s.cog",
         }
 
@@ -88,8 +92,18 @@ class LeftRail(QWidget):
         self.btn_files = btn(self._icons["Файлы"], "Файлы")
         self.btn_objects = btn(self._icons["Объекты"], "Объекты")
         self.btn_characters = btn(self._icons["Персонажи"], "Персонажи")
+        self.btn_minddraw = btn(self._icons["MindDraw"], "MindDraw")
 
         layout.addStretch(1)
+
+        self.btn_theme_toggle = QToolButton()
+        self.btn_theme_toggle.setObjectName("ThemeToggleSwitch")
+        self.btn_theme_toggle.setCheckable(True)
+        self.btn_theme_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_theme_toggle.setFixedHeight(36)
+        self.btn_theme_toggle.setIconSize(QSize(20, 20))
+        self.btn_theme_toggle.clicked.connect(self._on_theme_toggle_clicked)
+        layout.addWidget(self.btn_theme_toggle)
 
         self.btn_settings = btn(self._icons["Настройки"], "Настройки")
 
@@ -104,6 +118,7 @@ class LeftRail(QWidget):
             "Файлы": self.btn_files,
             "Объекты": self.btn_objects,
             "Персонажи": self.btn_characters,
+            "MindDraw": self.btn_minddraw,
             "Настройки": self.btn_settings,
         }
         self._mode_order_top = list(self._mode_buttons.keys())[:-1]
@@ -115,28 +130,8 @@ class LeftRail(QWidget):
             button.toggled.connect(self._refresh_icons)
         self._refresh_icons()
 
-        self.setStyleSheet(
-            """
-            QWidget#LeftRail {
-                background: #1e1f22;
-                border-right: 1px solid #2a2b2f;
-            }
-            QToolButton {
-                border: none;
-                border-radius: 8px;
-                padding: 6px;
-                background: transparent;
-            }
-            QToolButton:hover { background: #2a2b2f; }
-            QToolButton:checked { background: #35363c; }
-            QToolTip {
-                background-color: #2a2b2f;
-                color: #e0e0e0;
-                border: 1px solid #3a3b40;
-                padding: 6px;
-            }
-            """
-        )
+        self._apply_stylesheet()
+        self.set_theme_mode(self._theme_mode)
 
     def _refresh_icons(self) -> None:
         for button in self.group.buttons():
@@ -145,7 +140,80 @@ class LeftRail(QWidget):
                 continue
             color = self._icon_color_active if button.isChecked() else self._icon_color
             button.setIcon(qta.icon(icon_name, color=color))
+        self._refresh_theme_toggle_icon()
         self.refresh_hover_panel()
+
+    def _refresh_theme_toggle_icon(self) -> None:
+        is_light = self._theme_mode == "light"
+        icon_name = "fa5s.sun" if is_light else "fa5s.moon"
+        icon_color = self._icon_color_active if is_light else self._icon_color
+        self.btn_theme_toggle.setIcon(qta.icon(icon_name, color=icon_color))
+        self.btn_theme_toggle.setToolTip("Светлая тема" if is_light else "Тёмная тема")
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        normalized = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        self._theme_mode = normalized
+        self._apply_stylesheet()
+        is_light = normalized == "light"
+        self.btn_theme_toggle.blockSignals(True)
+        self.btn_theme_toggle.setChecked(is_light)
+        self.btn_theme_toggle.blockSignals(False)
+        self._refresh_theme_toggle_icon()
+
+    def _on_theme_toggle_clicked(self, checked: bool) -> None:
+        self._theme_mode = "light" if checked else "dark"
+        self._apply_stylesheet()
+        self._refresh_theme_toggle_icon()
+        self.theme_toggled.emit(self._theme_mode)
+
+    def _apply_stylesheet(self) -> None:
+        is_light = self._theme_mode == "light"
+        rail_bg = "#edf1f9" if is_light else "#1e1f22"
+        rail_border = "#cfd4de" if is_light else "#2a2b2f"
+        button_hover = "#dbe3f5" if is_light else "#2a2b2f"
+        button_checked = "#c9d6f1" if is_light else "#35363c"
+        tooltip_bg = "#f3f6fc" if is_light else "#2a2b2f"
+        tooltip_text = "#22304b" if is_light else "#e0e0e0"
+        tooltip_border = "#c3cde0" if is_light else "#3a3b40"
+        theme_border = "#b8c5e1" if is_light else "#3a3b40"
+        theme_bg = "#d9e2f6" if is_light else "#22252b"
+        theme_hover = "#c9d6f1" if is_light else "#2a2f38"
+        theme_checked_bg = "#b8caef" if is_light else "#3b4a7a"
+        theme_checked_border = "#8ca3d6" if is_light else "#5a70b3"
+        self.setStyleSheet(
+            f"""
+            QWidget#LeftRail {{
+                background: {rail_bg};
+                border-right: 1px solid {rail_border};
+            }}
+            QToolButton {{
+                border: none;
+                border-radius: 8px;
+                padding: 6px;
+                background: transparent;
+            }}
+            QToolButton:hover {{ background: {button_hover}; }}
+            QToolButton:checked {{ background: {button_checked}; }}
+            QToolButton#ThemeToggleSwitch {{
+                border: 1px solid {theme_border};
+                border-radius: 8px;
+                background: {theme_bg};
+            }}
+            QToolButton#ThemeToggleSwitch:hover {{
+                background: {theme_hover};
+            }}
+            QToolButton#ThemeToggleSwitch:checked {{
+                background: {theme_checked_bg};
+                border-color: {theme_checked_border};
+            }}
+            QToolTip {{
+                background-color: {tooltip_bg};
+                color: {tooltip_text};
+                border: 1px solid {tooltip_border};
+                padding: 6px;
+            }}
+            """
+        )
 
     def set_mode_labels(self, labels: dict[str, str]) -> None:
         for mode_key, button in self._mode_buttons.items():

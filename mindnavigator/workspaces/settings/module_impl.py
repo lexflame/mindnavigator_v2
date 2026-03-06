@@ -81,6 +81,7 @@ class SettingsWorkspace(QWidget):
         ("files", "Файлы"),
         ("objects", "Объекты"),
         ("characters", "Персонажи"),
+        ("minddraw", "MindDraw"),
     ]
 
     def __init__(self, parent=None) -> None:

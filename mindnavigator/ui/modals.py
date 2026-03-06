@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFrame, QLabel, QVBoxLayout, QWidget
 
 from .styles import MATH_PHYS_BACKGROUND
@@ -17,6 +17,8 @@ from .styles import MATH_PHYS_BACKGROUND
 
 class ModalOverlay(QFrame):
     """Полупрозрачный слой для затемнения интерфейса под модальными окнами."""
+
+    clicked = Signal()
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -36,6 +38,13 @@ class ModalOverlay(QFrame):
         if obj is self.parent() and event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.Show):
             self._sync_geometry()
         return super().eventFilter(obj, event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def closeEvent(self, event) -> None:
         parent = self.parent()

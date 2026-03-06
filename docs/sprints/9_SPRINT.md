@@ -507,3 +507,18 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `$env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`166 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed remaining Sprint 9 backlog block `MN-195`, `MN-289`, `MN-205`, `MN-260`, `MN-261`, `MN-262`, `MN-263`, `MN-209`, `MN-210`, `MN-236`, `MN-284`, `MN-285` on branch `sprint/mn-205-p260-263`.
+- Delivery notes:
+- completed MindDraw workspace prototype + integration (`MN-205`, `MN-260..MN-263`) with cross-entity binding and persisted canvas state.
+- completed task-dialog minimize flow into titlebar chips with overflow arrows and close guard for minimized edit dialogs (`MN-236`).
+- completed settings redesign outputs for language-change restart confirmation and top-left theme toggle switch (`MN-284`, `MN-285`, parent `MN-210`).
+- confirmed maps workspace refactor track (`MN-209`) remains compatible with workspace modular/class split.
+- imported `MN-289` purchase URLs through fallback transport `r.jina.ai` because direct e2e4 access returns `403` from this environment; persisted `10/10` sources with parsed prices and characteristics (`8..33` properties per item).
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_minddraw_workspace_state.py tests/test_i18n.py tests/test_tasks_workspace_mn202.py tests/test_workspace_module_split_mn290.py tests/test_maps_simple_mouse_mode.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`22 passed`)
+- MindNavigator sync:
+- updated source statuses to `done=1` for `MN-195`, `MN-289`, `MN-205`, `MN-260`, `MN-261`, `MN-262`, `MN-263`, `MN-209`, `MN-210`, `MN-236`, `MN-284`, `MN-285`.
+- recursive summary for `MN-195`: `70/70` tasks done.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.

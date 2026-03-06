@@ -40,10 +40,12 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
         MODE_FILES = MainWindow.MODE_FILES
         MODE_OBJECTS = MainWindow.MODE_OBJECTS
         MODE_CHARACTERS = MainWindow.MODE_CHARACTERS
+        MODE_MINDDRAW = MainWindow.MODE_MINDDRAW
 
     mapping = MainWindow._workspace_mode_map(_DummyWindow())
 
     assert mapping["characters"] == MainWindow.MODE_CHARACTERS
+    assert mapping["minddraw"] == MainWindow.MODE_MINDDRAW
 
 
 def test_normalize_nav_collapsed_setting_parses_known_values() -> None:
@@ -53,6 +55,13 @@ def test_normalize_nav_collapsed_setting_parses_known_values() -> None:
     assert normalize_nav_collapsed_setting("off") is False
     assert normalize_nav_collapsed_setting("") is True
     assert normalize_nav_collapsed_setting("unexpected") is True
+
+
+def test_normalize_theme_mode_defaults_to_dark() -> None:
+    assert MainWindow._normalize_theme_mode("light") == "light"
+    assert MainWindow._normalize_theme_mode(" LIGHT  ") == "light"
+    assert MainWindow._normalize_theme_mode("dark") == "dark"
+    assert MainWindow._normalize_theme_mode("unknown") == "dark"
 
 
 class _FakeDb:
@@ -79,14 +88,19 @@ def test_load_behavior_settings_uses_collapsed_nav_default(monkeypatch) -> None:
 
     class _DummyWindow:
         APP_LANGUAGE_KEY = MainWindow.APP_LANGUAGE_KEY
+        APP_THEME_KEY = MainWindow.APP_THEME_KEY
         APP_ENABLED_WORKSPACES_KEY = MainWindow.APP_ENABLED_WORKSPACES_KEY
         APP_NAV_COLLAPSED_KEY = MainWindow.APP_NAV_COLLAPSED_KEY
 
         def __init__(self) -> None:
             self.language_calls: list[str] = []
+            self.theme_calls: list[tuple[str, bool]] = []
             self.workspace_calls: list[str] = []
             self.nav_calls: list[tuple[bool, bool]] = []
             self._minimize_on_focus_lost = False
+
+        def _apply_theme_mode(self, theme_mode: str, *, persist: bool) -> None:
+            self.theme_calls.append((theme_mode, persist))
 
         def _apply_ui_language(self, code: str) -> None:
             self.language_calls.append(code)
@@ -103,6 +117,7 @@ def test_load_behavior_settings_uses_collapsed_nav_default(monkeypatch) -> None:
 
     assert window._minimize_on_focus_lost is True
     assert window.nav_calls == [(True, False)]
+    assert window.theme_calls == [("dark", False)]
     assert window.language_calls == ["ru"]
     assert window.workspace_calls == ['["tasks"]']
 
@@ -166,3 +181,42 @@ def test_set_nav_collapsed_persists_state(monkeypatch) -> None:
     assert window.nav_column.isVisible() is True
     assert fake_db.set_calls == [(MainWindow.APP_NAV_COLLAPSED_KEY, "1")]
     assert window.workspace_state_calls == [workspace, workspace]
+
+
+def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
+    fake_db = _FakeDb()
+    monkeypatch.setattr(main_window, "get_database", lambda: fake_db)
+
+    class _DummyLeftRail:
+        def __init__(self) -> None:
+            self.values: list[str] = []
+
+        def set_theme_mode(self, theme_mode: str) -> None:
+            self.values.append(theme_mode)
+
+    class _DummyWindow:
+        APP_THEME_KEY = MainWindow.APP_THEME_KEY
+
+        def __init__(self) -> None:
+            self.left_rail = _DummyLeftRail()
+            self._theme_mode = "dark"
+            self.titlebar_calls = 0
+            self.root_calls = 0
+
+        def _apply_titlebar_style(self) -> None:
+            self.titlebar_calls += 1
+
+        def _apply_root_style(self) -> None:
+            self.root_calls += 1
+
+        _normalize_theme_mode = staticmethod(MainWindow._normalize_theme_mode)
+
+    window = _DummyWindow()
+
+    MainWindow._apply_theme_mode(window, "light", persist=True)
+
+    assert window._theme_mode == "light"
+    assert window.left_rail.values == ["light"]
+    assert window.titlebar_calls == 1
+    assert window.root_calls == 1
+    assert fake_db.set_calls == [(MainWindow.APP_THEME_KEY, "light")]

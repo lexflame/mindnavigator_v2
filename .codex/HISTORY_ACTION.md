@@ -1022,3 +1022,17 @@
 [2026-03-06 20:46] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
 [2026-03-06 20:46] ACTION: Updated TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE status -> Completed.
 [2026-03-06 20:46] ACTION: Completed TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE.
+[2026-03-06 22:06] ACTION: Started TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 (Finalize remaining Sprint 9 tasks MN-195, MN-289, MN-205, MN-260..MN-263, MN-209, MN-210, MN-236, MN-284, MN-285).
+[2026-03-06 22:06] ACTION: Updated TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 status -> In Progress.
+[2026-03-06 22:06] CMD: where.exe TellYourCodex
+[2026-03-06 22:06] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 22:07] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 22:07] OUT: OK.
+[2026-03-06 22:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_minddraw_workspace_state.py tests/test_i18n.py tests/test_tasks_workspace_mn202.py tests/test_workspace_module_split_mn290.py tests/test_maps_simple_mouse_mode.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 22:07] OUT: 22 passed.
+[2026-03-06 22:08] CMD: Import MN-289 URLs into external MindNavigator DB through r.jina.ai fallback parser and persist shop item/source/properties/history/log rows.
+[2026-03-06 22:08] OUT: Imported 10/10 URLs; created shop_source rows 6..15 with properties per item (8..33 each).
+[2026-03-06 22:09] CMD: Update MindNavigator DB statuses for MN-195, MN-289, MN-205, MN-260, MN-261, MN-262, MN-263, MN-209, MN-210, MN-236, MN-284, MN-285 -> done=1.
+[2026-03-06 22:09] OUT: Updated 12 rows; recursive summary for MN-195 is 70/70 done.
+[2026-03-06 22:09] ACTION: Updated TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 status -> Completed.
+[2026-03-06 22:09] ACTION: Completed TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3.

@@ -45,6 +45,7 @@ from .workspaces.settings import SettingsWorkspace
 from .workspaces.files import FileWorkspace
 from .workspaces.objects import ObjectWorkspace
 from .workspaces.characters import CharactersWorkspace
+from .workspaces.minddraw import MindDrawWorkspace
 from .workspaces.ideas import IdeasWorkspace
 from .workspaces.purchases import PurchasesWorkspace
 from .constants import APP_NAME
@@ -109,9 +110,11 @@ class MainWindow(QMainWindow):
     MODE_FILES = "Файлы"
     MODE_OBJECTS = "Объекты"
     MODE_CHARACTERS = "Персонажи"
+    MODE_MINDDRAW = "MindDraw"
     MODE_SETTINGS = "Настройки"
     APP_ENABLED_WORKSPACES_KEY = "app.enabled_workspaces"
     APP_LANGUAGE_KEY = "app.language"
+    APP_THEME_KEY = "app.theme"
     APP_NAV_COLLAPSED_KEY = "app.nav_collapsed"
     _TRAY_RESTORE_HOTKEY_ID = 0x4D4E57
     _WM_HOTKEY = 0x0312
@@ -153,8 +156,10 @@ class MainWindow(QMainWindow):
         self._minimize_on_focus_lost = True
         self._enabled_workspace_ids: set[str] = set()
         self._language_code = DEFAULT_LANGUAGE
+        self._theme_mode = "dark"
         self._mode_labels = get_mode_labels(DEFAULT_LANGUAGE)
         self._current_mode = self.MODE_TASKS
+        self._minimized_task_dialogs: dict[int, dict[str, object]] = {}
 
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
@@ -178,6 +183,8 @@ class MainWindow(QMainWindow):
         self._minimize_on_focus_lost = value == "1"
         nav_collapsed_value = db.get_setting(self.APP_NAV_COLLAPSED_KEY, "1")
         self._set_nav_collapsed(normalize_nav_collapsed_setting(nav_collapsed_value), persist=False)
+        theme_mode = db.get_setting(self.APP_THEME_KEY, "dark")
+        self._apply_theme_mode(theme_mode, persist=False)
         language_code = db.get_setting(self.APP_LANGUAGE_KEY, DEFAULT_LANGUAGE)
         self._apply_ui_language(language_code)
         enabled_workspaces_raw = db.get_setting(self.APP_ENABLED_WORKSPACES_KEY, "")
@@ -187,8 +194,23 @@ class MainWindow(QMainWindow):
         if key == "app.minimize_on_focus_lost":
             self._minimize_on_focus_lost = value == "1"
             return
+        if key == self.APP_THEME_KEY:
+            self._apply_theme_mode(value, persist=False)
+            return
         if key == self.APP_LANGUAGE_KEY:
-            self._apply_ui_language(value)
+            normalized = normalize_language_code(value)
+            if normalized == self._language_code:
+                return
+            self._apply_ui_language(normalized)
+            answer = QMessageBox.question(
+                self,
+                "Смена языка",
+                "Для полного применения нового языка требуется перезапуск. Перезапустить сейчас?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                QApplication.quit()
             return
         if key == self.APP_ENABLED_WORKSPACES_KEY:
             self._apply_workspace_visibility_from_raw(value)
@@ -206,6 +228,7 @@ class MainWindow(QMainWindow):
             "files": self.MODE_FILES,
             "objects": self.MODE_OBJECTS,
             "characters": self.MODE_CHARACTERS,
+            "minddraw": self.MODE_MINDDRAW,
         }
 
     def _enabled_workspace_ids_from_raw(self, raw_value: str) -> set[str]:
@@ -248,6 +271,7 @@ class MainWindow(QMainWindow):
             self.MODE_FILES,
             self.MODE_OBJECTS,
             self.MODE_CHARACTERS,
+            self.MODE_MINDDRAW,
             self.MODE_SETTINGS,
         ]
         for mode_name in ordered_modes:
@@ -258,6 +282,22 @@ class MainWindow(QMainWindow):
     def _mode_caption(self, mode_name: str) -> str:
         return self._mode_labels.get(mode_name, mode_name)
 
+    @staticmethod
+    def _normalize_theme_mode(theme_mode: str) -> str:
+        return "light" if str(theme_mode).strip().lower() == "light" else "dark"
+
+    def _on_theme_toggled_from_rail(self, theme_mode: str) -> None:
+        self._apply_theme_mode(theme_mode, persist=True)
+
+    def _apply_theme_mode(self, theme_mode: str, *, persist: bool) -> None:
+        normalized = self._normalize_theme_mode(theme_mode)
+        self._theme_mode = normalized
+        self.left_rail.set_theme_mode(normalized)
+        self._apply_titlebar_style()
+        self._apply_root_style()
+        if persist:
+            get_database().set_setting(self.APP_THEME_KEY, normalized)
+
     def _apply_ui_language(self, language_code: str) -> None:
         self._language_code = normalize_language_code(language_code)
         self._mode_labels = get_mode_labels(self._language_code)
@@ -266,6 +306,40 @@ class MainWindow(QMainWindow):
         mode_caption = self._mode_caption(current_mode)
         self.title_bar.title_label.setText(f"{APP_NAME} · {mode_caption}")
         self.projects_nav.set_mode_title(mode_caption)
+
+    def minimize_task_dialog(self, dialog: QWidget, task_id: int, is_edit_dialog: bool) -> None:
+        key = id(dialog)
+        if key in self._minimized_task_dialogs:
+            return
+
+        def _restore() -> None:
+            self._restore_minimized_task_dialog(dialog)
+
+        self._minimized_task_dialogs[key] = {
+            "dialog": dialog,
+            "task_id": int(task_id),
+            "is_edit_dialog": bool(is_edit_dialog),
+        }
+        dialog.finished.connect(lambda _result, d=dialog: self._forget_minimized_task_dialog(d))
+        self.title_bar.register_minimized_task_dialog(dialog, int(task_id), bool(is_edit_dialog), _restore)
+        dialog.hide()
+
+    def _restore_minimized_task_dialog(self, dialog: QWidget) -> None:
+        key = id(dialog)
+        if key not in self._minimized_task_dialogs:
+            return
+        self.title_bar.unregister_minimized_task_dialog(dialog)
+        self._minimized_task_dialogs.pop(key, None)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _forget_minimized_task_dialog(self, dialog: QWidget) -> None:
+        key = id(dialog)
+        if key not in self._minimized_task_dialogs:
+            return
+        self.title_bar.unregister_minimized_task_dialog(dialog)
+        self._minimized_task_dialogs.pop(key, None)
 
     def _register_system_restore_hotkey(self) -> None:
         self._system_restore_hotkey_registered = False
@@ -499,6 +573,7 @@ class MainWindow(QMainWindow):
             self.MODE_FILES: "Files",
             self.MODE_OBJECTS: "Objects",
             self.MODE_CHARACTERS: "Characters",
+            self.MODE_MINDDRAW: "MindDraw",
             self.MODE_SETTINGS: "Settings",
         }
         return mapping.get(self._current_mode, "Tasks")
@@ -587,6 +662,7 @@ class MainWindow(QMainWindow):
         self.left_rail = LeftRail()
         body_layout.addWidget(self.left_rail)
         self.left_rail.set_expand_host(body)
+        self.left_rail.theme_toggled.connect(self._on_theme_toggled_from_rail)
 
         # Контейнер кнопки сворачивания навигации.
         self.nav_toggle_container = QWidget()
@@ -638,6 +714,7 @@ class MainWindow(QMainWindow):
         self.page_files = FileWorkspace()
         self.page_objects = ObjectWorkspace()
         self.page_characters = CharactersWorkspace()
+        self.page_minddraw = MindDrawWorkspace()
         self.page_settings = SettingsWorkspace()
         self.page_settings.setting_changed.connect(self._on_setting_changed)
 
@@ -653,6 +730,7 @@ class MainWindow(QMainWindow):
             self.MODE_FILES: self.workspace_stack.addWidget(self.page_files),
             self.MODE_OBJECTS: self.workspace_stack.addWidget(self.page_objects),
             self.MODE_CHARACTERS: self.workspace_stack.addWidget(self.page_characters),
+            self.MODE_MINDDRAW: self.workspace_stack.addWidget(self.page_minddraw),
             self.MODE_SETTINGS: self.workspace_stack.addWidget(self.page_settings),
         }
 
@@ -693,55 +771,110 @@ class MainWindow(QMainWindow):
 
     def _apply_titlebar_style(self) -> None:
         """Применяет стили к заголовку окна."""
+        is_light = self._theme_mode == "light"
+        title_background = (
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            " stop:0 #f1f4ff, stop:0.5 #e9edf8, stop:0.5001 #e4e8f1, stop:1 #e4e8f1);"
+            if is_light
+            else TITLEBAR_BACKGROUND
+        )
+        border_color = "#cfd4de" if is_light else "#2a2b2f"
+        title_color = "#1d2435" if is_light else "#eef1ff"
+        button_color = "#374056" if is_light else "#cfcfcf"
+        hover_bg = "#dbe3f5" if is_light else "#2a2b2f"
+        pressed_bg = "#cbd7f0" if is_light else "#35363c"
+        chip_text = "#27324b" if is_light else "#d8dbe7"
+        chip_bg = "#d9e2f6" if is_light else "#2a2d36"
+        chip_border = "#b8c5e1" if is_light else "#3a3f4b"
+        chip_hover = "#c9d6f1" if is_light else "#343a49"
+        arrow_text = "#2f3b57" if is_light else "#cfcfcf"
+        arrow_bg = "#d7e0f2" if is_light else "#262a34"
+        arrow_border = "#b7c3de" if is_light else "#3a3f4b"
+        arrow_hover = "#c4d2ef" if is_light else "#303647"
         # Устанавливаем стили для заголовка и кнопок управления.
         self.title_bar.setStyleSheet(f"""
             QWidget#TitleBar {{
-                {TITLEBAR_BACKGROUND}
-                border-bottom: 1px solid #2a2b2f;
+                {title_background}
+                border-bottom: 1px solid {border_color};
             }}
             QLabel#TitleText {{
-                color: #eef1ff;
+                color: {title_color};
                 font-size: 13px;
                 font-weight: 600;
             }}
             QToolButton {{
-                color: #cfcfcf;
+                color: {button_color};
                 background: transparent;
                 border: none;
                 border-radius: 6px;
                 font-size: 14px;
             }}
-            QToolButton:hover {{ background: #2a2b2f; }}
-            QToolButton:pressed {{ background: #35363c; }}
+            QToolButton:hover {{ background: {hover_bg}; }}
+            QToolButton:pressed {{ background: {pressed_bg}; }}
             QToolButton:last-child:hover {{
                 background: #b23b3b;
                 color: #ffffff;
+            }}
+            QToolButton#MinimizedTaskChip {{
+                color: {chip_text};
+                background: {chip_bg};
+                border: 1px solid {chip_border};
+                border-radius: 7px;
+                padding: 2px 8px;
+                min-height: 22px;
+            }}
+            QToolButton#MinimizedTaskChip:hover {{
+                background: {chip_hover};
+            }}
+            QToolButton#MinimizedDialogsArrow {{
+                color: {arrow_text};
+                background: {arrow_bg};
+                border: 1px solid {arrow_border};
+                border-radius: 6px;
+                font-size: 10px;
+                padding: 0;
+            }}
+            QToolButton#MinimizedDialogsArrow:hover {{
+                background: {arrow_hover};
             }}
         """)
 
     def _apply_root_style(self) -> None:
         """Применяет базовые стили к корневому контейнеру."""
+        is_light = self._theme_mode == "light"
+        outer_background = (
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            "stop:0 #eef2fb, stop:0.5 #e8edf8, stop:0.6001 #e7ecf7, stop:1 #e7ecf7);"
+            if is_light
+            else "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            "stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);"
+        )
+        container_border = "#cad0dc" if is_light else "#2a2b2f"
+        nav_toggle_bg = "#edf1f9" if is_light else "#1e1f22"
+        nav_toggle_border = "#cfd4de" if is_light else "#2a2b2f"
+        nav_button_color = "#344056" if is_light else "#cfcfcf"
+        nav_button_hover = "#dbe3f5" if is_light else "#2a2b2f"
         # Прописываем стили для фона, контейнера и кнопки навигации.
         self.centralWidget().setStyleSheet(f"""
             QWidget#OuterRoot {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1c181b, stop:0.5 #101217, stop:0.6001 #101217, stop:1 #101217);
+                {outer_background}
                 background-position: top left;
                 background-repeat: repeat;
             }}
-            QWidget#Container {{ border: 1px solid #2a2b2f; }}
+            QWidget#Container {{ border: 1px solid {container_border}; }}
             QWidget#NavToggleContainer {{
-                background: #1e1f22;
-                border-right: 1px solid #2a2b2f;
+                background: {nav_toggle_bg};
+                border-right: 1px solid {nav_toggle_border};
             }}
             QToolButton#NavToggleButton {{
                 background: transparent;
                 border: none;
-                color: #cfcfcf;
+                color: {nav_button_color};
                 font-size: 16px;
                 padding: 4px 2px;
             }}
             QToolButton#NavToggleButton:hover {{
-                background: #2a2b2f;
+                background: {nav_button_hover};
             }}
         """)
 
@@ -777,6 +910,7 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_files: self.MODE_FILES,
             self.left_rail.btn_objects: self.MODE_OBJECTS,
             self.left_rail.btn_characters: self.MODE_CHARACTERS,
+            self.left_rail.btn_minddraw: self.MODE_MINDDRAW,
             self.left_rail.btn_settings: self.MODE_SETTINGS,
         }
         self._mode_to_button = {mode_name: button for button, mode_name in self._btn_to_mode.items()}
@@ -929,6 +1063,15 @@ class MainWindow(QMainWindow):
             self._restore_geom = self.geometry()
 
     def closeEvent(self, event):
+        if self.title_bar.has_minimized_task_edit_dialogs():
+            QMessageBox.warning(
+                self,
+                "Незавершённые окна",
+                "Нельзя закрыть приложение: есть свёрнутые окна редактирования задач. "
+                "Восстановите или закройте их перед выходом.",
+            )
+            event.ignore()
+            return
         self._unregister_system_restore_hotkey()
         if hasattr(self, "hotkey_store") and hasattr(self, "hotkeys"):
             try:
