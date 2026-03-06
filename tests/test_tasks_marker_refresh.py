@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtCore import QRect
+from PySide6.QtCore import QTime
 from PySide6.QtGui import QColor
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QApplication
@@ -188,3 +189,96 @@ def test_tasks_workspace_get_selection_is_safe_before_list_init() -> None:
     workspace.model = None
 
     assert tasks_workspace.TasksWorkspace.get_selection(workspace) == []
+
+
+def test_task_quick_buttons_use_full_row_height_and_icon() -> None:
+    _app = QApplication.instance() or QApplication([])
+    delegate = tasks_workspace.TasksItemDelegate()
+
+    header_row = QRect(0, 0, 1000, delegate.HEADER_H)
+    header_text = delegate.format_header(date.today())
+    header_quick = delegate._header_quick_rect(header_row, header_text, include_today_badge=False)
+    assert header_quick.top() == header_row.top()
+    assert header_quick.height() == header_row.height()
+
+    task_row = QRect(0, 0, 1000, delegate.ROW_H)
+    layout = delegate._row_layout(task_row, depth=0, has_subtasks=True)
+    task_quick = delegate._task_quick_rect(layout, task_row)
+    assert task_quick.top() == task_row.top()
+    assert task_quick.height() == task_row.height()
+    assert hasattr(delegate, "_icon_quick_add")
+
+
+def test_tasks_model_expand_subtasks_tree_by_row_expands_nested_branch(monkeypatch, unique_temp_path) -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = unique_temp_path("tasks_expand_tree", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        child = database.create_task(
+            title="Child",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:30",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        _grand = database.create_task(
+            title="Grand",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="10:00",
+            priority="Medium",
+            parent_id=child.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        root_row = -1
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            if index.data(TaskRoles.RowType) != "task":
+                continue
+            if index.data(TaskRoles.TaskId) == root.id:
+                root_row = row
+                break
+        assert root_row >= 0
+        assert root.id in model._collapsed_subtask_ids
+        assert child.id in model._collapsed_subtask_ids
+
+        model.expand_subtasks_tree_by_row(root_row)
+
+        assert root.id not in model._collapsed_subtask_ids
+        assert child.id not in model._collapsed_subtask_ids
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_quick_create_defaults_to_enabled_time_plus_one_hour(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_quick_create_defaults", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = tasks_workspace.TasksWorkspace()
+    try:
+        assert workspace.new_time_toggle is not None
+        assert workspace.new_time is not None
+        assert workspace.new_time_toggle.isChecked() is True
+        assert workspace.new_time.isEnabled() is True
+
+        expected = QTime.currentTime().addSecs(3600)
+        actual = workspace.new_time.time()
+        diff = abs(actual.secsTo(expected))
+        diff = min(diff, 24 * 3600 - diff)
+        assert diff <= 120
+    finally:
+        workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)

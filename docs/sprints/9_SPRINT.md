@@ -236,6 +236,12 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - When Telegram utility is unavailable, log the failed attempt and proceed with direct operator update.
 
 ## Execution Progress
+- `2026-03-06`: Completed `MN-196` partition closure (`MN-196`, `MN-197`, `MN-198`, `MN-200`, `MN-238`, `MN-239`, `MN-240`, `MN-253`, `MN-275`) on branch `sprint/mn-195-p196`.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`11 passed`)
+- MindNavigator sync:
+- updated source statuses for `MN-196`, `MN-197`, `MN-198`, `MN-200`, `MN-238`, `MN-239`, `MN-240`, `MN-253`, `MN-275` to `done=1`.
 - `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
 - Validation for closure:
 - `python -m compileall mindnavigator main.py`
