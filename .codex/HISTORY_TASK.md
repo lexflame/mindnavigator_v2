@@ -158,3 +158,5 @@ Status: Completed
 | TASK_A3D78EC8-32AE-4C1E-B9EA-44D459345397 | 9 | Implement and close partition MN-204 tasks MN-257..MN-259 (Characters mode and cross-entity links) | feat | Completed |
 | TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE | 9 | Implement MN-290 workspace modular split by per-workspace folders | chore | Completed |
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | Completed |
+| TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 | 9 | Finalize remaining Sprint 9 tasks MN-195, MN-289, MN-205, MN-260..MN-263, MN-209, MN-210, MN-236, MN-284, MN-285 | feat | Completed |
+| TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 | 9 | Hotfix startup crash when projects.repository_catalog is missing in legacy DB with current user_version | fix | Completed |

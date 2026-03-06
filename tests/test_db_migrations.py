@@ -283,3 +283,65 @@ def test_database_migration_recovers_from_stale_projects_old_table(unique_temp_p
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_database_backfills_project_columns_when_user_version_is_current(unique_temp_path) -> None:
+    db_path = unique_temp_path("projects_columns_backfill", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            """
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            "INSERT INTO projects(area, title, updated, priority, archived) VALUES (?, ?, ?, ?, ?);",
+            ("Work", "Legacy project", "2026-01-01", "Medium", 0),
+        )
+        legacy_conn.execute(
+            "INSERT INTO tasks(title, day, time_text, priority, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);",
+            ("Legacy task", "2026-02-25", "10:00", "Medium", 0, now, now),
+        )
+        # Simulate DB that already reports current user_version but still misses
+        # extended projects columns.
+        legacy_conn.execute("PRAGMA user_version = 3;")
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        project_columns = {
+            row["name"] for row in database._conn.execute("PRAGMA table_info(projects);").fetchall()
+        }
+        assert "repository_catalog" in project_columns
+        assert "marker_color" in project_columns
+        assert "marker_theme" in project_columns
+
+        projects = database.fetch_projects()
+        assert projects
+        assert projects[0].repository_catalog == ""
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)

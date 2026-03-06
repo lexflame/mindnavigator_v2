@@ -14,5 +14,6 @@ from .notes import NoteWorkspace
 from .files import FileWorkspace
 from .objects import ObjectWorkspace
 from .characters import CharactersWorkspace
+from .minddraw import MindDrawWorkspace
 from .ideas import IdeasWorkspace
 from .purchases import PurchasesWorkspace

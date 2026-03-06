@@ -74,6 +74,7 @@ def enable_frameless_qdialogs() -> None:
             self.accepted.connect(overlay.deleteLater)
             self.rejected.connect(overlay.deleteLater)
             self.finished.connect(overlay.deleteLater)
+            _bind_overlay_click_behavior(self, overlay)
         if _should_animate_dialog(self):
             QTimer.singleShot(0, lambda dialog=self: _dialog_appear_animator().play(dialog))
         return _ORIGINAL_EXEC(self)
@@ -117,6 +118,32 @@ def _dialog_category(dialog: QDialog) -> str:
 def _should_animate_dialog(dialog: QDialog) -> bool:
     disabled = dialog.property("disable_dialog_appear_animation")
     return not bool(disabled)
+
+
+def _bind_overlay_click_behavior(dialog: QDialog, overlay: ModalOverlay) -> None:
+    if not bool(dialog.property("task_dialog_minimizable")):
+        return
+    overlay.clicked.connect(lambda d=dialog, o=overlay: _handle_task_dialog_overlay_click(d, o))
+
+
+def _handle_task_dialog_overlay_click(dialog: QDialog, overlay: ModalOverlay) -> None:
+    if not dialog.isVisible():
+        return
+    raw_task_id = dialog.property("task_dialog_id")
+    try:
+        task_id = int(raw_task_id)
+    except (TypeError, ValueError):
+        return
+    if task_id <= 0:
+        return
+    dialog_kind = str(dialog.property("task_dialog_kind") or "").strip().lower()
+    window = dialog.parentWidget().window() if dialog.parentWidget() is not None else QApplication.activeWindow()
+    minimize_fn = getattr(window, "minimize_task_dialog", None)
+    if not callable(minimize_fn):
+        return
+    dialog.setWindowModality(Qt.WindowModality.NonModal)
+    overlay.deleteLater()
+    minimize_fn(dialog=dialog, task_id=task_id, is_edit_dialog=(dialog_kind == "edit"))
 
 
 def _dialog_appear_animator() -> DialogAppearAnimator:

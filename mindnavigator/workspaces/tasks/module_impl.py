@@ -1509,6 +1509,9 @@ class TaskDetailsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Подробности задачи")
         self.setObjectName("TaskDetailsDialog")
+        self.setProperty("task_dialog_minimizable", True)
+        self.setProperty("task_dialog_id", int(task.id))
+        self.setProperty("task_dialog_kind", "details")
         self.setMinimumWidth(760)
         self.setMinimumHeight(680)
 
@@ -1961,6 +1964,9 @@ class TaskEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Редактирование задачи")
         self.setObjectName("TaskEditDialog")
+        self.setProperty("task_dialog_minimizable", True)
+        self.setProperty("task_dialog_id", int(task.id))
+        self.setProperty("task_dialog_kind", "edit")
         self.setProperty("dialog_category", "keep_size")
         self.setMinimumWidth(460)
         self.setMinimumHeight(420)
@@ -2868,6 +2874,9 @@ class TaskCreateDialog(TaskEditDialog):
             parent_id=None,
         )
         super().__init__(task, parent=parent)
+        self.setProperty("task_dialog_minimizable", False)
+        self.setProperty("task_dialog_id", 0)
+        self.setProperty("task_dialog_kind", "create")
         self.setWindowTitle("Создание задачи")
         title_labels = self.findChildren(QLabel, "DialogTitle")
         if title_labels:

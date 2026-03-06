@@ -1022,3 +1022,33 @@
 [2026-03-06 20:46] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
 [2026-03-06 20:46] ACTION: Updated TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE status -> Completed.
 [2026-03-06 20:46] ACTION: Completed TASK_9BFC4D13-C8AA-453A-AB26-264751A2EDFE.
+[2026-03-06 22:06] ACTION: Started TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 (Finalize remaining Sprint 9 tasks MN-195, MN-289, MN-205, MN-260..MN-263, MN-209, MN-210, MN-236, MN-284, MN-285).
+[2026-03-06 22:06] ACTION: Updated TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 status -> In Progress.
+[2026-03-06 22:06] CMD: where.exe TellYourCodex
+[2026-03-06 22:06] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 22:07] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 22:07] OUT: OK.
+[2026-03-06 22:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_minddraw_workspace_state.py tests/test_i18n.py tests/test_tasks_workspace_mn202.py tests/test_workspace_module_split_mn290.py tests/test_maps_simple_mouse_mode.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 22:07] OUT: 22 passed.
+[2026-03-06 22:08] CMD: Import MN-289 URLs into external MindNavigator DB through r.jina.ai fallback parser and persist shop item/source/properties/history/log rows.
+[2026-03-06 22:08] OUT: Imported 10/10 URLs; created shop_source rows 6..15 with properties per item (8..33 each).
+[2026-03-06 22:09] CMD: Update MindNavigator DB statuses for MN-195, MN-289, MN-205, MN-260, MN-261, MN-262, MN-263, MN-209, MN-210, MN-236, MN-284, MN-285 -> done=1.
+[2026-03-06 22:09] OUT: Updated 12 rows; recursive summary for MN-195 is 70/70 done.
+[2026-03-06 22:09] ACTION: Updated TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 status -> Completed.
+[2026-03-06 22:09] ACTION: Completed TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3.
+[2026-03-06 22:11] CMD: git commit -m "feat//:: TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 Close MN-195 remaining partitions and sync statuses"
+[2026-03-06 22:11] OUT: Created commit `e706910` with MindDraw/settings/dialog-minimize delivery, Sprint 9 docs/history sync, and MN status closure.
+[2026-03-06 22:11] CMD: git push -u origin sprint/mn-205-p260-263
+[2026-03-06 22:11] OUT: Pushed branch to remote and published PR link `https://github.com/lexflame/mindnavigator_v2/pull/new/sprint/mn-205-p260-263`; local remote ref lock required follow-up fetch.
+[2026-03-06 22:12] CMD: git fetch origin sprint/mn-205-p260-263
+[2026-03-06 22:12] OUT: Synced remote tracking ref after elevated retry; local branch now tracks `origin/sprint/mn-205-p260-263`.
+[2026-03-06 23:33] ACTION: Started TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 (Hotfix startup crash when projects.repository_catalog is missing in legacy DB with current user_version).
+[2026-03-06 23:33] ACTION: Updated TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 status -> In Progress.
+[2026-03-06 23:34] ACTION: Updated `mindnavigator/storage.py` to enforce projects extended/marker columns after versioned migrations for backward compatibility.
+[2026-03-06 23:35] ACTION: Added regression test `tests/test_db_migrations.py::test_database_backfills_project_columns_when_user_version_is_current`.
+[2026-03-06 23:35] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 23:35] OUT: OK.
+[2026-03-06 23:36] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 23:36] OUT: 15 passed.
+[2026-03-06 23:36] ACTION: Updated TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 status -> Completed.
+[2026-03-06 23:36] ACTION: Completed TASK_1280C84F-5C77-49BD-95AD-4EC76595F955.
