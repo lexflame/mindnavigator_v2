@@ -2,7 +2,7 @@
 
 ## Sprint Status
 - Planned: 2026-03-06
-- Status: In Progress
+- Status: Completed
 - Source root: `MN-195`
 - Source project: `MindNavigator / CODEX` (`project_id=24`)
 - Source DB: `\\gtx\YandexDisk\.mindnavigator\mindnavigator.db`
@@ -470,5 +470,15 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `$env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_tasks_marker_refresh.py tests/test_projects_workspace_mn201.py tests/test_projects_workspace_mn203.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`25 passed`)
 - MindNavigator sync:
 - source status update for `MN-290` is pending manual external sync in this environment.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Completed Sprint 9 release closure task `TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2` on branch `sprint/mn-195-release`.
+- Release notes:
+- bumped application version from `2.0.0-dev` to `2.0.0` in `mindnavigator/constants.py`.
+- marked Sprint 9 execution and task ledger as completed in history/docs.
+- prepared git tag/release publication as `v2.0.0` (`version +1` milestone).
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_update_service.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`4 passed`)
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
