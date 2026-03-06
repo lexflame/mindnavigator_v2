@@ -242,5 +242,19 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - `PYTHONPATH=. pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`11 passed`)
 - MindNavigator sync:
 - updated source statuses for `MN-196`, `MN-197`, `MN-198`, `MN-200`, `MN-238`, `MN-239`, `MN-240`, `MN-253`, `MN-275` to `done=1`.
+- `2026-03-06`: Completed `MN-264` partition closure (`MN-264`, `MN-265`, `MN-266`, `MN-267`) on branch `sprint/mn-195-p264`.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_entity_api.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`12 passed`)
+- MindNavigator sync:
+- updated recursive source statuses for `MN-264..MN-267` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Closed Wave 1 fix set (`MN-253`, `MN-274`, `MN-283`) and parent `MN-208`.
+- Validation for fix set:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_ideas_relations_style.py tests/test_task_attachment_class.py tests/test_settings_workspace_backup_safety.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`9 passed`)
+- MindNavigator sync:
+- updated statuses for `MN-208`, `MN-253`, `MN-274`, `MN-283` to `done=1`.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
