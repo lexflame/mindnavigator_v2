@@ -71,6 +71,27 @@ class HeaderRow:
 
 Row = Union[ProjectRow, HeaderRow]
 
+PROJECT_PRIORITY_SEQUENCE = ("Low", "Medium", "High")
+ATTACHMENT_BADGE_ORDER = ("note", "idea", "object", "map", "marker", "file", "image")
+ATTACHMENT_BADGE_LABELS = {
+    "note": "NOTE",
+    "idea": "IDEA",
+    "object": "OBJECT",
+    "map": "MAP",
+    "marker": "MARK",
+    "file": "FILE",
+    "image": "IMG",
+}
+ATTACHMENT_BADGE_COLORS = {
+    "note": QColor("#3b82f6"),
+    "idea": QColor("#a855f7"),
+    "object": QColor("#14b8a6"),
+    "map": QColor("#f59e0b"),
+    "marker": QColor("#ef4444"),
+    "file": QColor("#64748b"),
+    "image": QColor("#22c55e"),
+}
+
 
 class ProjectRoles:
     RowType = int(Qt.ItemDataRole.UserRole) + 1   # header | project
@@ -86,6 +107,7 @@ class ProjectRoles:
     IsCollapsed = int(Qt.ItemDataRole.UserRole) + 11
     MarkerColor = int(Qt.ItemDataRole.UserRole) + 12
     MarkerTheme = int(Qt.ItemDataRole.UserRole) + 13
+    AttachmentSummary = int(Qt.ItemDataRole.UserRole) + 14
 
 
 class ProjectsModel(QAbstractListModel):
@@ -98,6 +120,8 @@ class ProjectsModel(QAbstractListModel):
         self._project_title_cache: Dict[int, str] = {}
         self._project_depth_cache: Dict[int, int] = {}
         self._project_has_children_cache: Dict[int, bool] = {}
+        self._project_attachment_summary: Dict[int, List[tuple[str, int]]] = {}
+        self._attachment_summary_dirty = True
         self._collapsed_project_ids: set[int] = set()
         self._collapsed_state_key = "projects_workspace.collapsed_ids"
         self._load_collapsed_state()
@@ -105,6 +129,7 @@ class ProjectsModel(QAbstractListModel):
         self._search = ""
         self._area_focus: Optional[str] = None
         self._task_filter_id: Optional[int] = None
+        self._priority_filter: Optional[str] = None
         self._reload_from_db()
 
     def _reload_from_db(self):
@@ -134,6 +159,7 @@ class ProjectsModel(QAbstractListModel):
         self._collapsed_project_ids = {pid for pid in self._collapsed_project_ids if pid in valid_ids}
         if before != self._collapsed_project_ids:
             self._save_collapsed_state()
+        self._attachment_summary_dirty = True
         self._rebuild()
 
     def refresh(self) -> None:
@@ -190,6 +216,8 @@ class ProjectsModel(QAbstractListModel):
             return r.marker_color
         if role == ProjectRoles.MarkerTheme:
             return r.marker_theme
+        if role == ProjectRoles.AttachmentSummary:
+            return self._project_attachment_summary.get(r.id, [])
         if role == Qt.ItemDataRole.DisplayRole:
             return r.title
         return None
@@ -295,6 +323,13 @@ class ProjectsModel(QAbstractListModel):
         self._task_filter_id = task_id
         self._rebuild()
 
+    def set_priority_filter(self, priority: Optional[str]) -> None:
+        if priority is None:
+            self._priority_filter = None
+        else:
+            self._priority_filter = normalize_priority(priority)
+        self._rebuild()
+
     def add_project(
         self,
         area: str,
@@ -345,6 +380,7 @@ class ProjectsModel(QAbstractListModel):
                 project.marker_theme,
             )
         )
+        self._attachment_summary_dirty = True
         self._rebuild()
 
     def quick_add_project(
@@ -403,6 +439,7 @@ class ProjectsModel(QAbstractListModel):
         ]
         if self._area_focus == area:
             self._area_focus = None
+        self._attachment_summary_dirty = True
         self._rebuild()
 
     def rename_area(self, area: str, new_area: str):
@@ -431,6 +468,7 @@ class ProjectsModel(QAbstractListModel):
         self._all_rows = new_all
         if self._area_focus == area:
             self._area_focus = new_area
+        self._attachment_summary_dirty = True
         self._rebuild()
 
     def project_at_row(self, row_idx: int) -> Optional[ProjectRow]:
@@ -502,6 +540,56 @@ class ProjectsModel(QAbstractListModel):
             new_all.append(it)
 
         self._all_rows = new_all
+        self._attachment_summary_dirty = True
+        self._rebuild()
+
+    def cycle_priority_by_row(self, row_idx: int) -> None:
+        project_row = self.project_at_row(row_idx)
+        if project_row is None:
+            return
+        current = normalize_priority(project_row.priority)
+        if current not in PROJECT_PRIORITY_SEQUENCE:
+            next_priority = "Medium"
+        else:
+            next_index = (PROJECT_PRIORITY_SEQUENCE.index(current) + 1) % len(PROJECT_PRIORITY_SEQUENCE)
+            next_priority = PROJECT_PRIORITY_SEQUENCE[next_index]
+        updated_project = self._db.update_project(
+            project_id=project_row.id,
+            area=project_row.area,
+            title=project_row.title,
+            updated=project_row.updated,
+            priority=next_priority,
+            archived=project_row.archived,
+            parent_project_id=project_row.parent_project_id,
+            default_task_priority=project_row.default_task_priority,
+            force_recurrence_kind=project_row.force_recurrence_kind,
+            linked_map_id=project_row.linked_map_id,
+            linked_note_id=project_row.linked_note_id,
+            linked_object_id=project_row.linked_object_id,
+            marker_color=project_row.marker_color,
+            marker_theme=project_row.marker_theme,
+        )
+        new_all: List[Row] = []
+        for row in self._all_rows:
+            if isinstance(row, ProjectRow) and row.id == project_row.id:
+                row = ProjectRow(
+                    updated_project.id,
+                    updated_project.area,
+                    updated_project.title,
+                    updated_project.updated,
+                    updated_project.priority,
+                    updated_project.archived,
+                    updated_project.parent_project_id,
+                    updated_project.default_task_priority,
+                    updated_project.force_recurrence_kind,
+                    updated_project.linked_map_id,
+                    updated_project.linked_note_id,
+                    updated_project.linked_object_id,
+                    updated_project.marker_color,
+                    updated_project.marker_theme,
+                )
+            new_all.append(row)
+        self._all_rows = new_all
         self._rebuild()
 
     def toggle_archive_by_row(self, row_idx: int):
@@ -545,11 +633,14 @@ class ProjectsModel(QAbstractListModel):
             return
         self._db.delete_project(r.id)
         self._all_rows = [it for it in self._all_rows if not (isinstance(it, ProjectRow) and it.id == r.id)]
+        self._attachment_summary_dirty = True
         self._rebuild()
 
     def _rebuild(self):
         """Пересобирает список проектов с учетом фильтров."""
         self._rebuild_project_title_cache()
+        if self._attachment_summary_dirty:
+            self._rebuild_attachment_summary_cache()
         search = self._search
         task_project_id = None
         if self._task_filter_id is not None:
@@ -585,6 +676,8 @@ class ProjectsModel(QAbstractListModel):
                     continue
 
             if self._area_focus is not None and it.area != self._area_focus:
+                continue
+            if self._priority_filter is not None and normalize_priority(it.priority) != self._priority_filter:
                 continue
 
             if self._filter_mode in ("Все", "Активные") and it.archived:
@@ -691,6 +784,69 @@ class ProjectsModel(QAbstractListModel):
         self._project_depth_cache = depth_cache
         self._project_has_children_cache = has_children_cache
 
+    def _rebuild_attachment_summary_cache(self) -> None:
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+        children_map: Dict[int, List[int]] = {}
+        for project_row in project_map.values():
+            parent_id = project_row.parent_project_id
+            if isinstance(parent_id, int) and parent_id in project_map:
+                children_map.setdefault(parent_id, []).append(project_row.id)
+
+        direct_counts: Dict[int, Dict[str, int]] = {}
+        for task in self._db.fetch_tasks():
+            project_id = task.project_id
+            if not isinstance(project_id, int):
+                continue
+            attachments = self._db.fetch_task_attachments(task.id)
+            if not attachments:
+                continue
+            project_counts = direct_counts.setdefault(project_id, {})
+            for attachment in attachments:
+                kind = (attachment.kind or "").strip().lower()
+                if not kind:
+                    continue
+                project_counts[kind] = project_counts.get(kind, 0) + 1
+
+        aggregate_cache: Dict[int, Dict[str, int]] = {}
+
+        def aggregate(project_id: int, seen: set[int]) -> Dict[str, int]:
+            cached = aggregate_cache.get(project_id)
+            if cached is not None:
+                return cached
+            if project_id in seen:
+                return {}
+            counts = dict(direct_counts.get(project_id, {}))
+            for child_id in children_map.get(project_id, []):
+                child_counts = aggregate(child_id, seen | {project_id})
+                for kind, value in child_counts.items():
+                    counts[kind] = counts.get(kind, 0) + value
+            aggregate_cache[project_id] = counts
+            return counts
+
+        summary_cache: Dict[int, List[tuple[str, int]]] = {}
+        for project_id in project_map.keys():
+            counts = aggregate(project_id, set())
+            if not counts:
+                continue
+            ordered_kinds = [kind for kind in ATTACHMENT_BADGE_ORDER if kind in counts]
+            ordered_kinds.extend(
+                kind for kind in sorted(counts.keys())
+                if kind not in ATTACHMENT_BADGE_ORDER
+            )
+            badges = [
+                (kind, int(counts[kind]))
+                for kind in ordered_kinds
+                if int(counts.get(kind, 0)) > 0
+            ]
+            if badges:
+                summary_cache[project_id] = badges
+
+        self._project_attachment_summary = summary_cache
+        self._attachment_summary_dirty = False
+
 
 class ProjectsItemDelegate(QStyledItemDelegate):
     ROW_H = 42
@@ -761,6 +917,59 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if quick_x > max_x:
             quick_x = max(title_rect.left(), max_x)
         return QRect(quick_x, title_rect.top() + 7, quick_w, quick_h)
+
+    @staticmethod
+    def _project_priority_rect(pr_rect: QRect, row_rect: QRect) -> QRect:
+        priority_width = min(76, max(54, pr_rect.width() // 2))
+        return QRect(pr_rect.left(), row_rect.top(), priority_width, row_rect.height())
+
+    def _draw_attachment_badges(
+        self,
+        painter: QPainter,
+        row_rect: QRect,
+        attachment_summary: List[tuple[str, int]],
+    ) -> None:
+        if not attachment_summary:
+            return
+        metrics = QFontMetrics(self._font_small)
+        badge_height = 18
+        gap = 6
+        max_width = max(80, row_rect.width() - 80)
+        entries: List[tuple[str, QColor]] = []
+        for kind, count in attachment_summary:
+            label = ATTACHMENT_BADGE_LABELS.get(kind, (kind or "item").upper())
+            text = f"{label} {count}" if count > 1 else label
+            color = ATTACHMENT_BADGE_COLORS.get(kind, QColor("#475569"))
+            entries.append((text, color))
+
+        def total_width(items: List[tuple[str, QColor]]) -> int:
+            if not items:
+                return 0
+            widths = [max(28, metrics.horizontalAdvance(text) + 12) for text, _ in items]
+            return sum(widths) + gap * (len(widths) - 1)
+
+        hidden = 0
+        while len(entries) > 1 and total_width(entries) > max_width:
+            hidden += 1
+            entries.pop()
+        if hidden:
+            entries.append((f"+{hidden}", QColor("#374151")))
+
+        widths = [max(28, metrics.horizontalAdvance(text) + 12) for text, _ in entries]
+        total = sum(widths) + gap * (len(widths) - 1)
+        x = row_rect.center().x() - total // 2
+        y = row_rect.center().y() - badge_height // 2
+        for idx, (text, color) in enumerate(entries):
+            width = widths[idx]
+            badge_rect = QRect(x, y, width, badge_height)
+            painter.setPen(self.C_BORDER)
+            painter.setBrush(color)
+            painter.drawRoundedRect(badge_rect, 8, 8)
+            luminance = color.red() * 0.299 + color.green() * 0.587 + color.blue() * 0.114
+            painter.setPen(QColor("#111827") if luminance >= 160 else QColor("#f8fafc"))
+            painter.setFont(self._font_small)
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, text)
+            x += width + gap
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         """Рисует строку проекта или заголовок области."""
@@ -894,19 +1103,33 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         )
         painter.drawText(title_text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
+        raw_attachment_summary = index.data(ProjectRoles.AttachmentSummary) or []
+        attachment_summary: List[tuple[str, int]] = []
+        for entry in raw_attachment_summary:
+            if not isinstance(entry, (tuple, list)) or len(entry) != 2:
+                continue
+            kind = (str(entry[0]) or "").strip().lower()
+            try:
+                count = int(entry[1])
+            except (TypeError, ValueError):
+                continue
+            if kind and count > 0:
+                attachment_summary.append((kind, count))
+        if state & QStyle.StateFlag.State_MouseOver and attachment_summary:
+            self._draw_attachment_badges(painter, r, attachment_summary)
+
         pr_color = self.C_ARCH if archived else self._prio_color(priority)
         painter.setFont(self._font_small)
         painter.setPen(pr_color)
 
-        priority_w = 60
         pin_w = 16
         priority_gap = 8
         pin_gap = 10
-        priority_rect = QRect(pr_rect.left(), r.top(), priority_w, r.height())
+        priority_rect = self._project_priority_rect(pr_rect, r)
         date_rect = QRect(
             priority_rect.right() + priority_gap,
             r.top(),
-            pr_rect.width() - priority_w - priority_gap - pin_w - pin_gap,
+            pr_rect.width() - priority_rect.width() - priority_gap - pin_w - pin_gap,
             r.height(),
         )
 
@@ -995,6 +1218,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top(), quick_w, r.height())
             pr_w = 160
             pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
+            priority_rect = self._project_priority_rect(pr_rect, r)
             title_rect = QRect(x + 18, r.top(), pr_rect.left() - (x + 18) - 10, r.height())
             title = index.data(ProjectRoles.Title) or ""
             marker_theme = (index.data(ProjectRoles.MarkerTheme) or "").strip()
@@ -1009,6 +1233,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             if box_rect.contains(pos):
                 typed_model = cast(ProjectsModel, model)
                 typed_model.toggle_archive_by_row(index.row())
+                return True
+            if priority_rect.contains(pos):
+                typed_model = cast(ProjectsModel, model)
+                typed_model.cycle_priority_by_row(index.row())
                 return True
 
             if menu_rect.contains(pos):
@@ -1681,11 +1909,15 @@ class ProjectsWorkspace(QWidget):
         self.btn_import = QToolButton()
         self.btn_import.setText("Импорт")
         self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_graph = QToolButton()
+        self.btn_graph.setText("GRAPH")
+        self.btn_graph.setCursor(Qt.CursorShape.PointingHandCursor)
 
         top_layout.addWidget(self.cmb_priority)
         top_layout.addWidget(self.btn_create)
         top_layout.addWidget(self.btn_export)
         top_layout.addWidget(self.btn_import)
+        top_layout.addWidget(self.btn_graph)
 
         top_layout.addStretch(1)
 
@@ -1722,9 +1954,11 @@ class ProjectsWorkspace(QWidget):
 
         self.search.textChanged.connect(self.model.set_search)
         self.cmb_area.currentTextChanged.connect(self._on_area_changed)
+        self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
         self.btn_create.clicked.connect(self._on_create_project)
         self.btn_export.clicked.connect(self._export_projects_csv)
         self.btn_import.clicked.connect(self._import_projects_csv)
+        self.btn_graph.clicked.connect(self._on_graph_clicked)
 
         self.setStyleSheet("""
             QWidget#ProjectsWorkspace { background: #16171a; }
@@ -1876,3 +2110,14 @@ class ProjectsWorkspace(QWidget):
             self._refresh_area_combo(values["area"])
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
+
+    def _on_priority_filter_changed(self, value: str) -> None:
+        priority = None if value == "Любой" else value
+        self.model.set_priority_filter(priority)
+
+    def _on_graph_clicked(self) -> None:
+        QMessageBox.information(
+            self,
+            "Projects",
+            "Режим GRAPH запланирован как отдельный PARTITION и будет закрыт отдельным шагом.",
+        )
