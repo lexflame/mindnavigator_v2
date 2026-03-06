@@ -587,6 +587,7 @@ class IdeasWorkspace(BaseWorkspace):
 
             QWidget#IdeasWorkspace QListWidget {
                 background: #16171a;
+                color: #e6e6e6;
                 border: 1px solid #2a2b2f;
                 border-radius: 8px;
                 padding: 6px;

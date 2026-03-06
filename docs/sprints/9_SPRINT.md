@@ -244,3 +244,11 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - updated recursive source statuses for `MN-264..MN-267` to `done=1`.
 - Telegram notify:
 - attempted `where.exe TellYourCodex`, utility missing in current environment.
+- `2026-03-06`: Closed Wave 1 fix set (`MN-253`, `MN-274`, `MN-283`) and parent `MN-208`.
+- Validation for fix set:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_ideas_relations_style.py tests/test_task_attachment_class.py tests/test_settings_workspace_backup_safety.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`9 passed`)
+- MindNavigator sync:
+- updated statuses for `MN-208`, `MN-253`, `MN-274`, `MN-283` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.
