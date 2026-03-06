@@ -882,3 +882,17 @@
 [2026-03-06 15:44] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
 [2026-03-06 15:44] ACTION: Updated TASK_2A94E3B6-0F72-4F6A-BD9C-6D6DE3A4B77C status -> Completed.
 [2026-03-06 15:44] ACTION: Completed TASK_2A94E3B6-0F72-4F6A-BD9C-6D6DE3A4B77C.
+[2026-03-06 15:51] ACTION: Started TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651 (Implement and close partition MN-202 tasks MN-237 and MN-241..MN-252).
+[2026-03-06 15:51] ACTION: Updated TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651 status -> In Progress.
+[2026-03-06 15:51] CMD: where.exe TellYourCodex
+[2026-03-06 15:51] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 16:22] ACTION: Updated `mindnavigator/workspaces/tasks_workspace.py` for MN-202 (Board/Dash modes, top project links, marker theme overlay visuals, row priority switch, attachment context menu, smart project suggestion, overlay modal consistency).
+[2026-03-06 16:22] ACTION: Added tests `tests/test_tasks_workspace_mn202.py` for MN-202 behavior coverage.
+[2026-03-06 16:22] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 16:22] OUT: OK.
+[2026-03-06 16:22] CMD: PYTHONPATH=. pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 16:22] OUT: 16 passed.
+[2026-03-06 16:22] CMD: where.exe TellYourCodex
+[2026-03-06 16:22] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 16:22] ACTION: Updated TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651 status -> Completed.
+[2026-03-06 16:22] ACTION: Completed TASK_EC9B9B77-2D33-4A4A-A5F8-3A0E4258B651.

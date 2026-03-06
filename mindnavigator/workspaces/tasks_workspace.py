@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
     QCheckBox, QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QAbstractItemView, QPlainTextEdit, QScrollArea, QStyleOptionViewItem,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog
+    QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog, QListWidget, QListWidgetItem
 )
 
 from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
@@ -217,6 +217,11 @@ def _linkify_description_text(text: str) -> str:
 
 def should_show_today_badge(header_day: date) -> bool:
     return header_day == date.today()
+
+
+def _tokenize_text_for_match(text: str) -> list[str]:
+    tokens = re.findall(r"[A-Za-zА-Яа-я0-9]+", (text or "").lower())
+    return [token for token in tokens if len(token) >= 2]
 
 
 @dataclass(frozen=True)
@@ -819,6 +824,32 @@ class TasksModel(QAbstractListModel):
         new_done = not r.done
         self._db.set_task_done(r.id, new_done)
         self._reload_from_db()
+
+    def cycle_priority_by_row(self, row_idx: int) -> None:
+        """Циклически переключает приоритет задачи в строке."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        cycle = ["Low", "Medium", "High", "Отложенная"]
+        try:
+            current_index = cycle.index(task.priority)
+        except ValueError:
+            current_index = 1
+        next_priority = cycle[(current_index + 1) % len(cycle)]
+        self.update_task_by_row(
+            row_idx,
+            title=task.title,
+            description=task.description,
+            day=task.day,
+            time_text=task.time_text,
+            priority=next_priority,
+            done=task.done,
+            project_id=task.project_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
+        )
 
     def delete_task_by_row(self, row_idx: int):
         """Удаляет задачу по индексу строки."""
@@ -1959,6 +1990,10 @@ class TaskEditDialog(QDialog):
 
         self.project_edit = QComboBox()
         self._populate_projects(task.project_id)
+        self._project_autosuggest_enabled = False
+        self._project_autosuggest_internal = False
+        self._project_autosuggest_active = True
+        self.project_edit.currentIndexChanged.connect(self._on_project_selection_changed)
 
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
@@ -2318,6 +2353,60 @@ class TaskEditDialog(QDialog):
             if idx >= 0:
                 self.project_edit.setCurrentIndex(idx)
         self.project_edit.blockSignals(False)
+
+    def _on_project_selection_changed(self, _index: int) -> None:
+        if self._project_autosuggest_internal:
+            return
+        if not self._project_autosuggest_enabled:
+            return
+        current_project_id = self.project_edit.currentData()
+        self._project_autosuggest_active = current_project_id is None
+
+    def _best_project_index_for_title(self, title: str) -> Optional[int]:
+        title_tokens = set(_tokenize_text_for_match(title))
+        if not title_tokens:
+            return None
+
+        best_index: Optional[int] = None
+        best_score = 0
+        best_length = 10**9
+        for combo_index in range(1, self.project_edit.count()):
+            project_id = self.project_edit.itemData(combo_index)
+            if project_id is None:
+                continue
+            project_text = self.project_edit.itemText(combo_index)
+            project_tokens = set(_tokenize_text_for_match(project_text))
+            if not project_tokens:
+                continue
+            overlap = title_tokens & project_tokens
+            if not overlap:
+                continue
+            overlap_weight = sum(len(token) for token in overlap)
+            score = overlap_weight + len(overlap) * 3
+            text_length = len(project_text)
+            if score > best_score or (score == best_score and text_length < best_length):
+                best_score = score
+                best_index = combo_index
+                best_length = text_length
+        return best_index
+
+    def _apply_project_suggestion(self, title: str) -> None:
+        if not self._project_autosuggest_enabled or not self._project_autosuggest_active:
+            return
+        suggested_index = self._best_project_index_for_title(title)
+        target_index = suggested_index if suggested_index is not None else 0
+        if target_index == self.project_edit.currentIndex():
+            return
+        self._project_autosuggest_internal = True
+        try:
+            self.project_edit.setCurrentIndex(target_index)
+        finally:
+            self._project_autosuggest_internal = False
+
+    def _enable_title_project_suggestion(self) -> None:
+        self._project_autosuggest_enabled = True
+        self._project_autosuggest_active = self.project_edit.currentData() is None
+        self.title_edit.textChanged.connect(self._apply_project_suggestion)
 
     def _open_project_create_dialog(self) -> None:
         dialog = QuickProjectCreateDialog(parent=self)
@@ -2792,6 +2881,8 @@ class TaskCreateDialog(TaskEditDialog):
             save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
             if save_button is not None:
                 save_button.setText("Создать")
+        self._enable_title_project_suggestion()
+        self._apply_project_suggestion(self.title_edit.text())
         self.title_edit.setFocus()
 
 
@@ -2836,6 +2927,25 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_subtask_open = qta.icon("fa5s.chevron-down", color="#8a8a8a")
         self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color="#8a8a8a")
         self._icon_quick_add = qta.icon("fa5s.plus", color="#8a8a8a")
+        self._marker_theme_icons = {
+            "movies": qta.icon("fa5s.film", color="#4f7ecf"),
+            "games": qta.icon("fa5s.gamepad", color="#4caf50"),
+            "books": qta.icon("fa5s.book", color="#d0a93e"),
+            "music": qta.icon("fa5s.music", color="#b17cff"),
+            "work": qta.icon("fa5s.briefcase", color="#5fb7d9"),
+            "personal": qta.icon("fa5s.user", color="#d98f5f"),
+            "dev": qta.icon("fa5s.code", color="#8f9cff"),
+        }
+        self._marker_theme_asset_names = {
+            "movies": "movie.png",
+            "games": "game.png",
+            "books": "book.png",
+            "music": "music.png",
+            "work": "main.png",
+            "personal": "main.png",
+            "dev": "develop.png",
+        }
+        self._marker_theme_pixmap_cache: Dict[str, QPixmap] = {}
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -2952,6 +3062,65 @@ class TasksItemDelegate(QStyledItemDelegate):
         quick_x = max(row_rect.left() + 8, anchor_left - quick_width - 4)
         return QRect(quick_x, row_rect.top(), quick_width, quick_height)
 
+    def _marker_theme_asset_pixmap(self, marker_theme: str) -> QPixmap:
+        theme_key = (marker_theme or "").strip().lower()
+        if not theme_key:
+            return QPixmap()
+        cached = self._marker_theme_pixmap_cache.get(theme_key)
+        if cached is not None:
+            return cached
+        asset_name = self._marker_theme_asset_names.get(theme_key)
+        if not asset_name:
+            pixmap = QPixmap()
+            self._marker_theme_pixmap_cache[theme_key] = pixmap
+            return pixmap
+        asset_path = Path(__file__).resolve().parents[2] / "assets" / "badge" / asset_name
+        pixmap = QPixmap(str(asset_path))
+        self._marker_theme_pixmap_cache[theme_key] = pixmap
+        return pixmap
+
+    def _draw_marker_theme_overlay(self, painter: QPainter, row_rect: QRect, marker_theme: str) -> None:
+        theme_key = (marker_theme or "").strip().lower()
+        if not theme_key:
+            return
+        overlay_rect = QRect(
+            row_rect.right() - 118,
+            row_rect.top() + 2,
+            112,
+            max(18, row_rect.height() - 4),
+        )
+        asset_pixmap = self._marker_theme_asset_pixmap(theme_key)
+        if not asset_pixmap.isNull():
+            themed_pixmap = asset_pixmap.scaled(
+                overlay_rect.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            target_rect = QRect(
+                overlay_rect.right() - themed_pixmap.width(),
+                overlay_rect.center().y() - themed_pixmap.height() // 2,
+                themed_pixmap.width(),
+                themed_pixmap.height(),
+            )
+            painter.save()
+            painter.setOpacity(0.14)
+            painter.drawPixmap(target_rect, themed_pixmap)
+            painter.restore()
+            return
+        theme_icon = self._marker_theme_icons.get(theme_key)
+        if theme_icon is None:
+            return
+        icon_rect = QRect(
+            overlay_rect.center().x() - 10,
+            overlay_rect.center().y() - 10,
+            20,
+            20,
+        )
+        painter.save()
+        painter.setOpacity(0.2)
+        theme_icon.paint(painter, icon_rect)
+        painter.restore()
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
@@ -3045,6 +3214,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
+        self._draw_marker_theme_overlay(painter, r, marker_theme)
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
 
@@ -3216,22 +3386,27 @@ class TasksItemDelegate(QStyledItemDelegate):
         # --- PRIORITY BLOCK (fixed layout) ---
         value_text = "OVERDUE" if overdue else priority
         value_color = self.C_OVERDUE if overdue else self._prio_color(priority)
+        priority_hovered = bool(option_state & QStyle.StateFlag.State_MouseOver)
+        priority_chip_rect = pr_rect.adjusted(2, 6, -2, -6)
+        painter.setPen(QColor("#3a3b40"))
+        painter.setBrush(QColor("#21252d") if priority_hovered else QColor("#1a1d23"))
+        painter.drawRoundedRect(priority_chip_rect, 6, 6)
 
         # Жёсткая сетка справа
         icon_w = 18
         value_w = 72
         gap = 10
-        label_w = pr_rect.width() - value_w - icon_w - gap
+        label_w = priority_chip_rect.width() - value_w - icon_w - gap
 
         value_rect = QRect(
-            pr_rect.left() + label_w,
-            pr_rect.top(),
+            priority_chip_rect.left() + label_w,
+            priority_chip_rect.top(),
             value_w,
-            pr_rect.height()
+            priority_chip_rect.height()
         )
 
         icon_rect = QRect(
-            pr_rect.right() - icon_w,
+            priority_chip_rect.right() - icon_w,
             cy - 8,
             16,
             16
@@ -3336,6 +3511,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             cb_rect = layout["checkbox"]
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
+            priority_rect = layout["priority"]
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
             quick_rect = self._task_quick_rect(layout, r)
@@ -3388,11 +3564,24 @@ class TasksItemDelegate(QStyledItemDelegate):
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
                 return True
+            if priority_rect.contains(pos):
+                tasks_model.cycle_priority_by_row(index.row())
+                return True
             if quick_rect.contains(pos):
                 task = tasks_model.task_at_row(index.row())
                 if task is not None:
                     tasks_model.quick_add_subtask(task.id)
                     return True
+
+        if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.RightButton:
+            pos = event.position().toPoint()
+            r = getattr(option, "rect", QRect())
+            depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
+            has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+            layout = self._row_layout(r, depth, has_subtasks)
+            if layout["menu"].contains(pos) or r.contains(pos):
+                self._show_row_menu(index)
+                return True
 
         return False
 
@@ -3422,8 +3611,20 @@ class TasksItemDelegate(QStyledItemDelegate):
         act_open = menu.addAction("Открыть")
         menu.addSeparator()
         act_edit = menu.addAction("Редактировать")
-        # menu.addAction("Проект")
-        menu.addSeparator()
+        attachment_actions: Dict[QAction, TaskAttachmentData] = {}
+        tasks_model = self._tasks_model(index.model())
+        task = tasks_model.task_at_row(index.row()) if tasks_model is not None else None
+        if task is not None:
+            attachments = get_database().fetch_task_attachments(task.id)
+            if attachments:
+                attachments_menu = menu.addMenu("Вложения")
+                for attachment in attachments[:12]:
+                    display_name = self._attachment_display_name(attachment)
+                    action = attachments_menu.addAction(
+                        f"{attachment_kind_label(attachment.kind)}: {display_name}"
+                    )
+                    attachment_actions[action] = attachment
+                menu.addSeparator()
         act_del = menu.addAction("Удалить")
 
         chosen = menu.exec(QCursor.pos())
@@ -3432,6 +3633,10 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
         if chosen == act_edit:
             self._edit_task(index)
+            return
+        attachment = attachment_actions.get(chosen)
+        if attachment is not None:
+            self._open_attachment_preview(attachment)
             return
         if chosen != act_del:
             return
@@ -3446,13 +3651,93 @@ class TasksItemDelegate(QStyledItemDelegate):
             confirm_text="Удалить",
             cancel_text="Отмена",
         )
-        if show_dialog_standard(dialog, parent) != QDialog.DialogCode.Accepted:
+        if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
             return
 
-        m = index.model()
-        tasks_model = self._tasks_model(m)
         if tasks_model is not None:
             tasks_model.delete_task_by_row(index.row())
+
+    @staticmethod
+    def _attachment_display_name(attachment: TaskAttachmentData) -> str:
+        db = get_database()
+        kind = (attachment.kind or "").strip().lower()
+        if kind == "note":
+            note = next((item for item in db.fetch_notes() if item.id == attachment.ref_id), None)
+            return note.title if note is not None else f"id={attachment.ref_id}"
+        if kind == "idea":
+            idea = next((item for item in db.fetch_ideas(archived=True) if item.id == attachment.ref_id), None)
+            return idea.title if idea is not None else f"id={attachment.ref_id}"
+        if kind == "object":
+            obj = next((item for item in db.fetch_objects() if item.id == attachment.ref_id), None)
+            return obj.title if obj is not None else f"id={attachment.ref_id}"
+        if kind == "map":
+            map_item = next((item for item in db.fetch_maps() if item.id == attachment.ref_id), None)
+            return map_item.title if map_item is not None else f"id={attachment.ref_id}"
+        if kind == "marker":
+            marker = next((item for item in db.fetch_map_markers() if item.id == attachment.ref_id), None)
+            return marker.name if marker is not None else f"id={attachment.ref_id}"
+        if kind in {"file", "image"}:
+            cloud_file = next((item for item in db.fetch_cloud_files() if item.id == attachment.ref_id), None)
+            if cloud_file is None:
+                return f"id={attachment.ref_id}"
+            return cloud_file.name or cloud_file.rel_path or f"id={attachment.ref_id}"
+        return f"id={attachment.ref_id}"
+
+    def _open_attachment_preview(self, attachment: TaskAttachmentData) -> None:
+        db = get_database()
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        title = attachment_kind_label(attachment.kind)
+        kind = (attachment.kind or "").strip().lower()
+        if kind == "note":
+            note = next((item for item in db.fetch_notes() if item.id == attachment.ref_id), None)
+            if note is None:
+                QMessageBox.information(parent, title, "Вложенная заметка не найдена.")
+                return
+            QMessageBox.information(parent, title, f"{note.title}\n\n{(note.preview or '').strip()[:700]}")
+            return
+        if kind == "idea":
+            idea = next((item for item in db.fetch_ideas(archived=True) if item.id == attachment.ref_id), None)
+            if idea is None:
+                QMessageBox.information(parent, title, "Вложенная идея не найдена.")
+                return
+            summary = (idea.summary or "").strip()
+            details = (idea.body_md or "").strip()
+            text = f"{idea.title}\n\n{summary or details[:700]}"
+            QMessageBox.information(parent, title, text)
+            return
+        if kind == "object":
+            obj = next((item for item in db.fetch_objects() if item.id == attachment.ref_id), None)
+            if obj is None:
+                QMessageBox.information(parent, title, "Вложенный объект не найден.")
+                return
+            details = (obj.description or "").strip()
+            QMessageBox.information(parent, title, f"{obj.title}\n\n{details[:700]}")
+            return
+        if kind == "map":
+            map_item = next((item for item in db.fetch_maps() if item.id == attachment.ref_id), None)
+            if map_item is None:
+                QMessageBox.information(parent, title, "Вложенная карта не найдена.")
+                return
+            QMessageBox.information(parent, title, f"{map_item.title}\n\nПроект: {map_item.project or '—'}")
+            return
+        if kind == "marker":
+            marker = next((item for item in db.fetch_map_markers() if item.id == attachment.ref_id), None)
+            if marker is None:
+                QMessageBox.information(parent, title, "Вложенная метка карты не найдена.")
+                return
+            QMessageBox.information(parent, title, f"{marker.name}\n\nТип: {marker.type}")
+            return
+        if kind in {"file", "image"}:
+            cloud_file = next((item for item in db.fetch_cloud_files() if item.id == attachment.ref_id), None)
+            if cloud_file is None:
+                QMessageBox.information(parent, title, "Вложенный файл не найден.")
+                return
+            cloud_root = db.get_setting("cloud_storage_path", default="").strip()
+            relative_path = cloud_file.rel_path or cloud_file.name
+            full_path = str((Path(cloud_root) / relative_path) if cloud_root else Path(relative_path))
+            QMessageBox.information(parent, title, f"{cloud_file.name}\n\n{full_path}")
+            return
+        QMessageBox.information(parent, title, f"Вложение id={attachment.ref_id}")
 
     def _edit_task(self, index: QModelIndex):
         """Открывает диалог редактирования задачи."""
@@ -3500,7 +3785,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         dialog = TaskDetailsDialog(task, parent=parent)
-        show_dialog_standard(dialog, parent)
+        exec_with_overlay(dialog, parent)
 
     def open_task_view(self, index: QModelIndex) -> None:
         self._open_task_view(index)
@@ -3665,6 +3950,8 @@ class TasksWorkspace(BaseWorkspace):
         self._focus_day = date.today()
         self._applying_filters = False
         self._gantt_mode = False
+        self._board_mode = False
+        self._dash_mode = False
         self._smooth_scroll_controllers: list[object] = []
         self.new_title = None
         self.new_day = None
@@ -3678,6 +3965,17 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header = None
         self.content_stack = None
         self.gantt_page = None
+        self.board_page = None
+        self.dash_page = None
+        self.btn_gantt = None
+        self.btn_board = None
+        self.btn_dash = None
+        self._project_quick_links_host = None
+        self._project_quick_links_layout = None
+        self._project_quick_link_buttons: List[QToolButton] = []
+        self.board_columns: Dict[str, QListWidget] = {}
+        self.dash_summary_label = None
+        self.dash_projects_list = None
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
@@ -3822,6 +4120,39 @@ class TasksWorkspace(BaseWorkspace):
                 color: #aeb3bf;
                 padding: 2px 4px;
             }
+
+            QLabel#TasksBoardHint,
+            QLabel#TasksDashSummary,
+            QLabel#TasksDashProjectsTitle {
+                color: #aeb3bf;
+                padding: 2px 4px;
+            }
+
+            QFrame#TasksBoardColumn {
+                background: #1b1c20;
+                border: 1px solid #2a2b2f;
+                border-radius: 8px;
+            }
+
+            QLabel#TasksBoardColumnTitle {
+                color: #d7dbe3;
+                font-weight: 600;
+                padding: 2px 4px;
+            }
+
+            QListWidget#TasksBoardList,
+            QListWidget#TasksDashProjectsList {
+                background: #16171a;
+                color: #cfcfcf;
+                border: 1px solid #2a2b2f;
+                border-radius: 6px;
+            }
+
+            QListWidget#TasksBoardList::item,
+            QListWidget#TasksDashProjectsList::item {
+                padding: 4px 6px;
+                border-bottom: 1px solid #202127;
+            }
         """)
 
     def create_actions(self) -> dict[str, QAction]:
@@ -3948,12 +4279,20 @@ class TasksWorkspace(BaseWorkspace):
         self.content_stack.addWidget(self.list)
         self.gantt_page = self._build_gantt_page()
         self.content_stack.addWidget(self.gantt_page)
+        self.board_page = self._build_board_page()
+        self.content_stack.addWidget(self.board_page)
+        self.dash_page = self._build_dash_page()
+        self.content_stack.addWidget(self.dash_page)
         self.content_stack.setCurrentWidget(self.list)
         content_layout.addWidget(self.content_stack, 1)
         self._smooth_scroll_controllers = [
             attach_smooth_scroll(self.list),
             attach_smooth_scroll(self.gantt_table),
         ]
+        for board_column in self.board_columns.values():
+            self._smooth_scroll_controllers.append(attach_smooth_scroll(board_column))
+        if isinstance(self.dash_projects_list, QListWidget):
+            self._smooth_scroll_controllers.append(attach_smooth_scroll(self.dash_projects_list))
         self._update_sticky_day_header()
 
         self.set_content(content)
@@ -3993,6 +4332,133 @@ class TasksWorkspace(BaseWorkspace):
         self.gantt_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.gantt_table, 1)
         return page
+
+    def _build_board_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        board_hint = QLabel("Режим Board: группировка задач выбранного дня по приоритету.")
+        board_hint.setObjectName("TasksBoardHint")
+        board_hint.setWordWrap(True)
+        layout.addWidget(board_hint)
+
+        columns_host = QWidget(page)
+        columns_layout = QHBoxLayout(columns_host)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        columns_layout.setSpacing(8)
+
+        priorities = [
+            ("High", "High"),
+            ("Medium", "Medium"),
+            ("Low", "Low"),
+            ("Отложенная", "Deferred"),
+        ]
+        self.board_columns = {}
+        for priority_key, header in priorities:
+            column_frame = QFrame(columns_host)
+            column_frame.setObjectName("TasksBoardColumn")
+            column_layout = QVBoxLayout(column_frame)
+            column_layout.setContentsMargins(8, 8, 8, 8)
+            column_layout.setSpacing(6)
+
+            label = QLabel(header)
+            label.setObjectName("TasksBoardColumnTitle")
+            column_layout.addWidget(label)
+
+            list_widget = QListWidget(column_frame)
+            list_widget.setObjectName("TasksBoardList")
+            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+            column_layout.addWidget(list_widget, 1)
+            columns_layout.addWidget(column_frame, 1)
+            self.board_columns[priority_key] = list_widget
+
+        layout.addWidget(columns_host, 1)
+        return page
+
+    def _build_dash_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.dash_summary_label = QLabel("Dash: сводка загрузки задач по выбранному дню.")
+        self.dash_summary_label.setObjectName("TasksDashSummary")
+        self.dash_summary_label.setWordWrap(True)
+        layout.addWidget(self.dash_summary_label)
+
+        projects_title = QLabel("Топ проектов по активным задачам")
+        projects_title.setObjectName("TasksDashProjectsTitle")
+        layout.addWidget(projects_title)
+
+        self.dash_projects_list = QListWidget(page)
+        self.dash_projects_list.setObjectName("TasksDashProjectsList")
+        self.dash_projects_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        layout.addWidget(self.dash_projects_list, 1)
+
+        return page
+
+    def _fetch_tasks_for_focus_day(self) -> List:
+        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
+        priority_filter = None if priority_value == "Любой" else priority_value
+        tasks = [
+            task
+            for task in self._db.fetch_tasks()
+            if task.day == self._focus_day and not task.done
+        ]
+        if priority_filter is not None:
+            tasks = [task for task in tasks if task.priority == priority_filter]
+        tasks.sort(key=lambda task: (self._parse_task_datetime(task.day, task.time_text), task.id))
+        return tasks
+
+    def _refresh_board_day(self) -> None:
+        if not self.board_columns:
+            return
+        tasks = self._fetch_tasks_for_focus_day()
+        grouped: Dict[str, List] = {"High": [], "Medium": [], "Low": [], "Отложенная": []}
+        for task in tasks:
+            grouped.setdefault(task.priority, []).append(task)
+        for priority_key, list_widget in self.board_columns.items():
+            list_widget.clear()
+            for task in grouped.get(priority_key, []):
+                time_text = task.time_text or "—"
+                item = QListWidgetItem(f"{time_text} · {task.title}")
+                list_widget.addItem(item)
+
+    def _refresh_dash_day(self) -> None:
+        if self.dash_summary_label is None or self.dash_projects_list is None:
+            return
+        tasks = self._fetch_tasks_for_focus_day()
+        total = len(tasks)
+        high = sum(1 for task in tasks if task.priority == "High")
+        medium = sum(1 for task in tasks if task.priority == "Medium")
+        low = sum(1 for task in tasks if task.priority == "Low")
+        deferred = sum(1 for task in tasks if task.priority == "Отложенная")
+        self.dash_summary_label.setText(
+            f"Dash на {self._focus_day.isoformat()}: всего {total}, High {high}, Medium {medium}, Low {low}, Deferred {deferred}."
+        )
+
+        projects = {project.id: project for project in self._db.fetch_projects() if not project.archived}
+        counts: Dict[int, int] = {}
+        for task in tasks:
+            if task.project_id is None:
+                continue
+            counts[task.project_id] = counts.get(task.project_id, 0) + 1
+        ranked = sorted(
+            counts.items(),
+            key=lambda entry: (
+                -entry[1],
+                (projects.get(entry[0]).title if projects.get(entry[0]) else "").lower(),
+                entry[0],
+            ),
+        )[:12]
+        self.dash_projects_list.clear()
+        for project_id, count in ranked:
+            project = projects.get(project_id)
+            if project is None:
+                continue
+            self.dash_projects_list.addItem(f"{project.area} · {project.title} ({count})")
 
     class _GanttBarWidget(QWidget):
         def __init__(self, start_minutes: int, end_minutes: int, day_start: int, day_end: int, parent=None):
@@ -4102,6 +4568,18 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_gantt.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_gantt.setAutoRaise(True)
         self.btn_gantt.setVisible(False)
+        self.btn_board = QToolButton()
+        self.btn_board.setText("Board")
+        self.btn_board.setCheckable(True)
+        self.btn_board.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_board.setAutoRaise(True)
+        self.btn_board.setVisible(False)
+        self.btn_dash = QToolButton()
+        self.btn_dash.setText("Dash")
+        self.btn_dash.setCheckable(True)
+        self.btn_dash.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_dash.setAutoRaise(True)
+        self.btn_dash.setVisible(False)
 
         self.lbl_day = QLabel()
         self.lbl_day.setObjectName("TasksDayLabel")
@@ -4120,14 +4598,24 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.lbl_day)
         self.filter_layout.addWidget(self.btn_next_day)
         self.filter_layout.addWidget(self.btn_gantt)
+        self.filter_layout.addWidget(self.btn_board)
+        self.filter_layout.addWidget(self.btn_dash)
+        self.filter_layout.addSpacing(8)
+        self._project_quick_links_host = QWidget(self)
+        self._project_quick_links_layout = QHBoxLayout(self._project_quick_links_host)
+        self._project_quick_links_layout.setContentsMargins(0, 0, 0, 0)
+        self._project_quick_links_layout.setSpacing(4)
+        self.filter_layout.addWidget(self._project_quick_links_host, 1)
         self.filter_layout.addSpacing(12)
-        self.filter_layout.addStretch(1)
         self.filter_layout.addWidget(self.cmb_priority)
         self._relocate_search()
+        self._refresh_project_quick_links()
 
         self.btn_prev_day.clicked.connect(lambda: self._shift_day(-1))
         self.btn_next_day.clicked.connect(lambda: self._shift_day(+1))
         self.btn_gantt.toggled.connect(self._set_gantt_mode)
+        self.btn_board.toggled.connect(self._set_board_mode)
+        self.btn_dash.toggled.connect(self._set_dash_mode)
         self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
 
     def _relocate_search(self) -> None:
@@ -4141,11 +4629,70 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.search_input)
         self.filter_layout.addWidget(self.clear_button)
 
+    def _refresh_project_quick_links(self) -> None:
+        if self._project_quick_links_layout is None:
+            return
+        while self._project_quick_links_layout.count():
+            item = self._project_quick_links_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._project_quick_link_buttons = []
+
+        projects = {project.id: project for project in self._db.fetch_projects() if not project.archived}
+        counts: Dict[int, int] = {}
+        for task in self._db.fetch_tasks():
+            if task.done or task.project_id is None:
+                continue
+            if task.project_id not in projects:
+                continue
+            counts[task.project_id] = counts.get(task.project_id, 0) + 1
+
+        top_projects = sorted(
+            counts.items(),
+            key=lambda item: (
+                -item[1],
+                (projects[item[0]].title or "").lower(),
+                item[0],
+            ),
+        )[:5]
+        for project_id, count in top_projects:
+            project = projects[project_id]
+            button = QToolButton(self._project_quick_links_host)
+            button.setText(f"{project.title} ({count})")
+            button.setCheckable(True)
+            button.setAutoRaise(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip(f"{project.area} · {project.title}")
+            button.setProperty("project_id", project_id)
+            button.clicked.connect(
+                lambda _checked=False, selected_project_id=project_id: self.set_project_filter(selected_project_id)
+            )
+            self._project_quick_links_layout.addWidget(button)
+            self._project_quick_link_buttons.append(button)
+        self._project_quick_links_layout.addStretch(1)
+        self._sync_project_quick_links_selection()
+
+    def _sync_project_quick_links_selection(self) -> None:
+        active_project_id = None
+        if hasattr(self, "model") and self.model is not None:
+            active_project_id = getattr(self.model, "_project_filter_id", None)
+        for button in self._project_quick_link_buttons:
+            button_project_id = button.property("project_id")
+            button.blockSignals(True)
+            button.setChecked(button_project_id is not None and button_project_id == active_project_id)
+            button.blockSignals(False)
+
     def refresh(self) -> None:
         """Перезагружает список задач из базы."""
         self.model.refresh()
         if self._gantt_mode:
             self._refresh_gantt_day()
+        elif self._board_mode:
+            self._refresh_board_day()
+        elif self._dash_mode:
+            self._refresh_dash_day()
+        self._refresh_project_quick_links()
 
     def _export_tasks_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -4222,6 +4769,9 @@ class TasksWorkspace(BaseWorkspace):
                 self.cmb_priority.setCurrentText(priority)
             else:
                 self.cmb_priority.setCurrentText("Любой")
+            self._sync_project_quick_links_selection()
+            if self._gantt_mode or self._board_mode or self._dash_mode:
+                self._refresh_secondary_view()
         finally:
             self._applying_filters = False
 
@@ -4264,17 +4814,26 @@ class TasksWorkspace(BaseWorkspace):
     def focus_task(self, task_id: int) -> bool:
         index = self._index_for_task_id(task_id)
         if index is None:
-            if self._gantt_mode:
+            if self._gantt_mode or self._board_mode or self._dash_mode:
                 self._gantt_mode = False
+                self._board_mode = False
+                self._dash_mode = False
                 self.btn_gantt.blockSignals(True)
+                self.btn_board.blockSignals(True)
+                self.btn_dash.blockSignals(True)
                 self.btn_gantt.setChecked(False)
+                self.btn_board.setChecked(False)
+                self.btn_dash.setChecked(False)
                 self.btn_gantt.blockSignals(False)
+                self.btn_board.blockSignals(False)
+                self.btn_dash.blockSignals(False)
                 self.content_stack.setCurrentWidget(self.list)
             self._apply_tab("plan")
             self.model.set_project_filter(None)
             self.model.set_priority_filter(None)
             self.model.set_search("")
             self.cmb_priority.setCurrentText("Любой")
+            self._sync_project_quick_links_selection()
             self.search_input.blockSignals(True)
             self.search_input.clear()
             self.search_input.blockSignals(False)
@@ -4327,9 +4886,9 @@ class TasksWorkspace(BaseWorkspace):
         self._focus_day = self._focus_day + timedelta(days=delta)
         self._update_day_label()
         self._update_sticky_day_header()
-        if self._gantt_mode:
+        if self._gantt_mode or self._board_mode or self._dash_mode:
             self._remember_filter("focus_day", self._focus_day.isoformat())
-            self._refresh_gantt_day()
+            self._refresh_secondary_view()
             return
         if not self._applying_filters:
             self._filters["focus_day"] = self._focus_day.isoformat()
@@ -4362,8 +4921,9 @@ class TasksWorkspace(BaseWorkspace):
             QMessageBox.warning(self, "Проверка", str(exc))
             return
 
-        if self._gantt_mode and d == self._focus_day:
-            self._refresh_gantt_day()
+        if (self._gantt_mode or self._board_mode or self._dash_mode) and d == self._focus_day:
+            self._refresh_secondary_view()
+        self._refresh_project_quick_links()
 
         self.new_title.clear()
         self.new_time.setTime(QTime.currentTime().addSecs(3600))
@@ -4390,8 +4950,9 @@ class TasksWorkspace(BaseWorkspace):
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
-        if self._gantt_mode and values["day"] == self._focus_day:
-            self._refresh_gantt_day()
+        if (self._gantt_mode or self._board_mode or self._dash_mode) and values["day"] == self._focus_day:
+            self._refresh_secondary_view()
+        self._refresh_project_quick_links()
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.list.viewport() and event.type() == QEvent.Type.Resize:
@@ -4422,9 +4983,11 @@ class TasksWorkspace(BaseWorkspace):
         """Обновляет фильтр по проекту."""
         if self._applying_filters:
             self.model.set_project_filter(project_id)
+            self._sync_project_quick_links_selection()
             return
         self._remember_filter("project_id", project_id)
         self.model.set_project_filter(project_id)
+        self._sync_project_quick_links_selection()
 
     def refresh_tasks(self) -> None:
         """Перезагружает список задач из базы."""
@@ -4455,31 +5018,49 @@ class TasksWorkspace(BaseWorkspace):
             self._apply_mode("Все", focus_day=focus_day)
 
     def _apply_mode(self, mode: str, focus_day: Optional[date] = None) -> None:
+        def _set_secondary_buttons_visible(visible: bool) -> None:
+            self.btn_gantt.setVisible(visible)
+            self.btn_board.setVisible(visible)
+            self.btn_dash.setVisible(visible)
+
+        def _reset_secondary_modes() -> None:
+            self._gantt_mode = False
+            self._board_mode = False
+            self._dash_mode = False
+            self.btn_gantt.blockSignals(True)
+            self.btn_board.blockSignals(True)
+            self.btn_dash.blockSignals(True)
+            self.btn_gantt.setChecked(False)
+            self.btn_board.setChecked(False)
+            self.btn_dash.setChecked(False)
+            self.btn_gantt.blockSignals(False)
+            self.btn_board.blockSignals(False)
+            self.btn_dash.blockSignals(False)
+
         if mode == "Сегодня":
-            if self._gantt_mode:
-                self.btn_gantt.setChecked(False)
+            _reset_secondary_modes()
             self.model.set_filter_mode("Сегодня")
             self._focus_day = date.today()
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
-            self.btn_gantt.setVisible(False)
+            _set_secondary_buttons_visible(False)
+            self.content_stack.setCurrentWidget(self.list)
             self.tab_today.setChecked(True)
         elif mode == "Выполнено":
-            if self._gantt_mode:
-                self.btn_gantt.setChecked(False)
+            _reset_secondary_modes()
             self.model.set_filter_mode("Выполнено")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
-            self.btn_gantt.setVisible(False)
+            _set_secondary_buttons_visible(False)
+            self.content_stack.setCurrentWidget(self.list)
             self.tab_done.setChecked(True)
         elif mode == "План":
             self.model.set_filter_mode("План")
-            self.btn_gantt.setVisible(True)
-            if self._gantt_mode:
+            _set_secondary_buttons_visible(True)
+            if self._gantt_mode or self._board_mode or self._dash_mode:
                 self.model.set_focus_day(self._focus_day)
                 self._set_drag_drop_state(False)
-                self.content_stack.setCurrentWidget(self.gantt_page)
-                self._refresh_gantt_day()
+                self._refresh_secondary_view()
             else:
                 self.model.set_focus_day(None)
                 self._set_drag_drop_state(True)
@@ -4487,23 +5068,23 @@ class TasksWorkspace(BaseWorkspace):
             if hasattr(self, "tab_plan"):
                 self.tab_plan.setChecked(True)
         elif mode == "Отложенные":
-            if self._gantt_mode:
-                self.btn_gantt.setChecked(False)
+            _reset_secondary_modes()
             self.model.set_filter_mode("Отложенные")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
-            self.btn_gantt.setVisible(False)
+            _set_secondary_buttons_visible(False)
+            self.content_stack.setCurrentWidget(self.list)
             if hasattr(self, "tab_deferred"):
                 self.tab_deferred.setChecked(True)
         else:
-            if self._gantt_mode:
-                self.btn_gantt.setChecked(False)
+            _reset_secondary_modes()
             self.model.set_filter_mode("Все")
             if focus_day is not None:
                 self._focus_day = focus_day
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
-            self.btn_gantt.setVisible(False)
+            _set_secondary_buttons_visible(False)
+            self.content_stack.setCurrentWidget(self.list)
             self.tab_all.setChecked(True)
         self._update_day_label()
         self._update_sticky_day_header()
@@ -4521,34 +5102,80 @@ class TasksWorkspace(BaseWorkspace):
         priority = None if value == "Любой" else value
         self._remember_filter("priority", priority)
         self.model.set_priority_filter(priority)
-        if self._gantt_mode:
-            self._refresh_gantt_day()
+        self._refresh_secondary_view()
 
-    def _set_gantt_mode(self, enabled: bool) -> None:
+    def _set_secondary_mode(self, mode: str, enabled: bool) -> None:
         plan_mode = self.model.filter_mode() == "План"
         if enabled and not plan_mode:
-            self.btn_gantt.blockSignals(True)
-            self.btn_gantt.setChecked(False)
-            self.btn_gantt.blockSignals(False)
+            button_by_mode = {
+                "gantt": self.btn_gantt,
+                "board": self.btn_board,
+                "dash": self.btn_dash,
+            }
+            target_button = button_by_mode.get(mode)
+            if target_button is not None:
+                target_button.blockSignals(True)
+                target_button.setChecked(False)
+                target_button.blockSignals(False)
             return
-        self._gantt_mode = bool(enabled and plan_mode)
-        if self._gantt_mode:
+
+        self._gantt_mode = bool(enabled and mode == "gantt" and plan_mode)
+        self._board_mode = bool(enabled and mode == "board" and plan_mode)
+        self._dash_mode = bool(enabled and mode == "dash" and plan_mode)
+
+        self.btn_gantt.blockSignals(True)
+        self.btn_board.blockSignals(True)
+        self.btn_dash.blockSignals(True)
+        self.btn_gantt.setChecked(self._gantt_mode)
+        self.btn_board.setChecked(self._board_mode)
+        self.btn_dash.setChecked(self._dash_mode)
+        self.btn_gantt.blockSignals(False)
+        self.btn_board.blockSignals(False)
+        self.btn_dash.blockSignals(False)
+
+        if self._gantt_mode or self._board_mode or self._dash_mode:
             self.model.set_filter_mode("План")
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
-            self.content_stack.setCurrentWidget(self.gantt_page)
-            self._refresh_gantt_day()
         else:
             if plan_mode:
                 self.model.set_filter_mode("План")
                 self.model.set_focus_day(None)
                 self._set_drag_drop_state(True)
             self.content_stack.setCurrentWidget(self.list)
+
+        self._refresh_secondary_view()
         self._update_sticky_day_header()
+
+    def _set_gantt_mode(self, enabled: bool) -> None:
+        self._set_secondary_mode("gantt", enabled)
+
+    def _set_board_mode(self, enabled: bool) -> None:
+        self._set_secondary_mode("board", enabled)
+
+    def _set_dash_mode(self, enabled: bool) -> None:
+        self._set_secondary_mode("dash", enabled)
+
+    def _refresh_secondary_view(self) -> None:
+        if self._gantt_mode:
+            self.content_stack.setCurrentWidget(self.gantt_page)
+            self._refresh_gantt_day()
+            return
+        if self._board_mode:
+            self.content_stack.setCurrentWidget(self.board_page)
+            self._refresh_board_day()
+            return
+        if self._dash_mode:
+            self.content_stack.setCurrentWidget(self.dash_page)
+            self._refresh_dash_day()
+            return
+        self.content_stack.setCurrentWidget(self.list)
 
     def _is_sticky_header_enabled(self) -> bool:
         return (
             not self._gantt_mode
+            and not self._board_mode
+            and not self._dash_mode
             and self.content_stack.currentWidget() is self.list
         )
 
