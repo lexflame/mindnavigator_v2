@@ -234,3 +234,13 @@ Deliver a staged redesign and feature expansion from `MN-195` with conflict-safe
 - Run focused tests first using `PYTHONPATH=. pytest tests -k <scope> -p no:cacheprovider --basetemp .pytest_dir/run_tmp`.
 - Sync `docs/PARITY.md`, `.codex/HISTORY_TASK.md`, and `.codex/HISTORY_ACTION.md` as each task is completed.
 - When Telegram utility is unavailable, log the failed attempt and proceed with direct operator update.
+
+## Execution Progress
+- `2026-03-06`: Completed MN-268 core view geometry tasks `MN-269`, `MN-270`, `MN-271`, `MN-272`, `MN-273` on branch `sprint/mn-195-p268`.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp` (`11 passed`)
+- MindNavigator sync:
+- updated source statuses for `MN-269..MN-273` to `done=1`.
+- Telegram notify:
+- attempted `where.exe TellYourCodex`, utility missing in current environment.

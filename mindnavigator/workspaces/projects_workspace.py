@@ -716,6 +716,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
         self._icon_pin = qta.icon("fa5s.thumbtack", color="#d0a93e")
+        self._icon_tree_open = qta.icon("fa5s.chevron-down", color="#8a8a8a")
+        self._icon_tree_closed = qta.icon("fa5s.chevron-right", color="#8a8a8a")
 
         self._font = QFont()
         self._font.setPointSize(10)
@@ -738,17 +740,17 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         return QSize(width, self.ROW_H)
 
     def _area_quick_rect(self, row_rect: QRect, area: str) -> QRect:
-        left_pad = 10
-        menu_w = 24
+        left_pad = 0
+        menu_w = max(18, row_rect.height())
         text_left = row_rect.left() + left_pad + menu_w + 8
         quick_w = 112
-        quick_h = row_rect.height() - 10
+        quick_h = row_rect.height()
         area_w = QFontMetrics(self._font_header).horizontalAdvance(area or "")
         quick_x = text_left + area_w + 12
         max_right = row_rect.right() - 12
         if quick_x + quick_w > max_right:
             quick_x = max(text_left + 10, max_right - quick_w)
-        return QRect(quick_x, row_rect.top() + 5, quick_w, quick_h)
+        return QRect(quick_x, row_rect.top(), quick_w, quick_h)
 
     def _project_quick_rect(self, title_rect: QRect, display_title: str) -> QRect:
         quick_w = 120
@@ -775,9 +777,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             painter.fillRect(r, self.C_BG)
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
-            left_pad = 10
-            menu_w = 24
-            menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
+            left_pad = 0
+            menu_w = max(18, r.height())
+            menu_rect = QRect(r.left() + left_pad, r.top(), menu_w, r.height())
             quick_rect = self._area_quick_rect(r, area)
             text_rect = QRect(menu_rect.right() + 8, r.top(), quick_rect.left() - menu_rect.right() - 12, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, area)
@@ -855,22 +857,25 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         depth = max(0, min(depth, 6))
         x += depth * 14
 
-        marker_rect = QRect(x, cy - 7, 14, 14)
-        painter.setFont(self._font_small)
-        painter.setPen(self.C_DIM)
-        marker_text = ">" if (has_children and is_collapsed) else ("v" if has_children else ".")
-        painter.drawText(marker_rect, Qt.AlignmentFlag.AlignCenter, marker_text)
+        marker_rect = QRect(x, cy - 8, 16, 16)
+        if has_children:
+            marker_icon = self._icon_tree_closed if is_collapsed else self._icon_tree_open
+            marker_icon.paint(painter, marker_rect)
+        else:
+            painter.setFont(self._font_small)
+            painter.setPen(self.C_DIM)
+            painter.drawText(marker_rect, Qt.AlignmentFlag.AlignCenter, ".")
         x += 18
 
         painter.setFont(self._font)
         painter.setPen(self.C_TEXT if not archived else self.C_DIM)
 
-        right_pad = 18
-        menu_w = 30
+        right_pad = 8
+        menu_w = max(18, r.height())
         quick_w = 120
         pr_w = 160
-        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-        quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
+        menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())
+        quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top(), quick_w, r.height())
         pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
 
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
@@ -944,9 +949,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 pos = event.position().toPoint()
                 opt = cast(Any, option)
                 r = opt.rect
-                left_pad = 10
-                menu_w = 24
-                menu_rect = QRect(r.left() + left_pad, r.top() + 4, menu_w, r.height() - 8)
+                left_pad = 0
+                menu_w = max(18, r.height())
+                menu_rect = QRect(r.left() + left_pad, r.top(), menu_w, r.height())
                 area = index.data(ProjectRoles.Area) or ""
                 quick_rect = self._area_quick_rect(r, area)
                 if menu_rect.contains(pos):
@@ -974,19 +979,20 @@ class ProjectsItemDelegate(QStyledItemDelegate):
 
             x = r.left() + 10
             x += 22
-            box_rect = QRect(x, cy - 7, 14, 14)
-            x += 22
+            box_side = max(18, r.height())
+            box_rect = QRect(x, r.top(), box_side, r.height())
+            x += box_side + 8
             x += 22
             depth: int = int(index.data(ProjectRoles.Depth) or 0)
             depth = max(0, min(depth, 6))
             x += depth * 14
-            marker_rect = QRect(x, cy - 7, 14, 14)
+            marker_rect = QRect(x, cy - 8, 16, 16)
 
-            right_pad = 18
-            menu_w = 30
+            right_pad = 8
+            menu_w = max(18, r.height())
             quick_w = 120
-            menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
-            quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top() + 7, quick_w, r.height() - 14)
+            menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())
+            quick_rect = QRect(menu_rect.left() - quick_w - 8, r.top(), quick_w, r.height())
             pr_w = 160
             pr_rect = QRect(quick_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
             title_rect = QRect(x + 18, r.top(), pr_rect.left() - (x + 18) - 10, r.height())

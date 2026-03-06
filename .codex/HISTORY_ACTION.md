@@ -718,3 +718,20 @@
 [2026-03-06 12:01] ACTION: Completed TASK_8702382F-50AD-42F4-A142-9869AB72D740.
 [2026-03-06 12:02] ACTION: Started TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 (Execute MN-195 sprint waves and produce release tag/version +1).
 [2026-03-06 12:02] ACTION: Updated TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 status -> In Progress.
+[2026-03-06 12:31] CMD: git switch -c sprint/mn-195-p268
+[2026-03-06 12:31] OUT: Switched to new partition branch `sprint/mn-195-p268`.
+[2026-03-06 12:32] ACTION: Started TASK_50793058-01F9-4FFB-9F68-F29565EF155D (Implement MN-268 view geometry core tasks MN-269..MN-273).
+[2026-03-06 12:32] ACTION: Updated TASK_50793058-01F9-4FFB-9F68-F29565EF155D status -> In Progress.
+[2026-03-06 12:36] ACTION: Updated `tasks_workspace` and `projects_workspace` delegate geometry for full-height square menu block and matching task checkbox size.
+[2026-03-06 12:36] ACTION: Updated project tree marker rendering to chevron icons aligned with tasks subtree behavior.
+[2026-03-06 12:37] ACTION: Added tests `tests/test_view_menu_geometry.py` for menu and checkbox geometry contracts.
+[2026-03-06 12:38] CMD: python -m compileall mindnavigator main.py
+[2026-03-06 12:38] OUT: OK.
+[2026-03-06 12:38] CMD: PYTHONPATH=. pytest tests/test_view_menu_geometry.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-06 12:38] OUT: 11 passed.
+[2026-03-06 12:41] CMD: Update MindNavigator DB statuses for MN-269, MN-270, MN-271, MN-272, MN-273 -> done=1.
+[2026-03-06 12:41] OUT: Updated 5 tasks; all target statuses set to done.
+[2026-03-06 12:41] CMD: where.exe TellYourCodex
+[2026-03-06 12:41] OUT: Utility not found in PATH; Telegram notification command unavailable in current environment.
+[2026-03-06 12:42] ACTION: Updated TASK_50793058-01F9-4FFB-9F68-F29565EF155D status -> Completed.
+[2026-03-06 12:42] ACTION: Completed TASK_50793058-01F9-4FFB-9F68-F29565EF155D.

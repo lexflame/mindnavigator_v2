@@ -3031,10 +3031,19 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         if done:
             painter.setPen(QColor("#cfcfcf"))
-            painter.drawLine(cb_rect.left() + 3, cb_rect.center().y(),
-                             cb_rect.center().x() - 1, cb_rect.bottom() - 3)
-            painter.drawLine(cb_rect.center().x() - 1, cb_rect.bottom() - 3,
-                             cb_rect.right() - 2, cb_rect.top() + 3)
+            check_pad = max(3, min(8, cb_rect.height() // 4))
+            painter.drawLine(
+                cb_rect.left() + check_pad,
+                cb_rect.center().y(),
+                cb_rect.center().x() - 1,
+                cb_rect.bottom() - check_pad,
+            )
+            painter.drawLine(
+                cb_rect.center().x() - 1,
+                cb_rect.bottom() - check_pad,
+                cb_rect.right() - check_pad,
+                cb_rect.top() + check_pad,
+            )
 
         painter.setFont(self._font_small)
         painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)
@@ -3543,8 +3552,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         grip_rect = QRect(x, cy - 8, 16, 16)
         x += 22
 
-        cb_rect = QRect(x, cy - 7, 14, 14)
-        x += 22
+        block_side = max(18, r.height())
+        cb_rect = QRect(x, r.top(), block_side, r.height())
+        x += block_side + 8
 
         tomorrow_rect = QRect(x, cy - 8, 20, 20)
         x += 28
@@ -3566,10 +3576,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         doc_rect = QRect(x, cy - 8, 16, 16)
         x += 22
 
-        right_pad = 20
-        menu_w = 30
+        right_pad = 8
+        menu_w = max(18, r.height())
         pr_w = 140
-        menu_rect = QRect(r.right() - right_pad - menu_w, r.top() + 6, menu_w, r.height() - 12)
+        menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())
         quick_rect = QRect()
         pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
         title_rect = QRect(x, r.top(), pr_rect.left() - x - 10, r.height())
