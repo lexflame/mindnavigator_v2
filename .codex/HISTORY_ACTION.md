@@ -1083,3 +1083,31 @@
 [2026-03-10 16:24] OUT: 17 passed.
 [2026-03-10 16:24] ACTION: Updated TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 status -> Completed.
 [2026-03-10 16:24] ACTION: Completed TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11.
+[2026-03-10 16:38] CMD: Create PR for `sprint/transfer-sprint-task1` via GitHub API.
+[2026-03-10 16:38] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/211.
+[2026-03-10 16:39] CMD: Poll GitHub check-runs for commit `2381c1f3eff6507e20e2bcf626177c73b8ce8aad`.
+[2026-03-10 16:39] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-10 16:40] CMD: Merge PR #211 via GitHub API.
+[2026-03-10 16:40] OUT: Pull request merged successfully (merge sha `b45474aa87f0bee603196e1b725997b9d0367f5a`).
+[2026-03-10 16:41] CMD: git switch main
+[2026-03-10 16:41] OUT: Switched to branch `main`.
+[2026-03-10 16:41] CMD: git fetch origin main
+[2026-03-10 16:41] OUT: Updated `origin/main` from `173aeb2` to `b45474a`.
+[2026-03-10 16:41] CMD: git merge origin/main
+[2026-03-10 16:41] OUT: Fast-forwarded local `main` to merge commit `b45474a`.
+[2026-03-10 16:42] CMD: git switch -c sprint/transfer-shop-task2
+[2026-03-10 16:42] OUT: Switched to a new branch `sprint/transfer-shop-task2`.
+[2026-03-10 16:42] ACTION: Started TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 (move shop modules into transfer/shop).
+[2026-03-10 16:42] ACTION: Updated TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 status -> In Progress.
+[2026-03-10 16:43] ACTION: Created docs/sprints/TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202_PLAN.md.
+[2026-03-10 16:48] ACTION: Moved shop parser implementations and parsing service into `mindnavigator/transfer/shop/` and reduced legacy top-level modules to compatibility exports.
+[2026-03-10 16:48] ACTION: Updated `mindnavigator/workspaces/purchases/_shared.py`, `mindnavigator/ui/dialogs/purchase_add_dialog.py`, and `docs/diagramm/CLASS.md` for the transfer shop layout.
+[2026-03-10 16:48] ACTION: Added regression test `tests/test_shop_transfer_split.py` for legacy import compatibility and basic shop parse service flow.
+[2026-03-10 16:48] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 16:48] OUT: OK.
+[2026-03-10 16:48] CMD: $env:PYTHONPATH='.'; pytest tests/test_shop_transfer_split.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-10 16:48] OUT: 3 passed.
+[2026-03-10 16:48] CMD: Runtime import smoke for `mindnavigator.ui.dialogs.purchase_add_dialog` and `mindnavigator.workspaces.purchases._shared`.
+[2026-03-10 16:48] OUT: Imports resolved to transfer shop modules without circular import errors.
+[2026-03-10 16:48] ACTION: Updated TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 status -> Completed.
+[2026-03-10 16:48] ACTION: Completed TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202.

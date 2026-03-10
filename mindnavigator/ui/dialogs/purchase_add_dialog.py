@@ -30,9 +30,8 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.http_client import HttpClient, HttpClientError
-from mindnavigator.shop_parsing import ParsedShopResult, ShopParseService
-from mindnavigator.shop_parsers import build_default_parsers
 from mindnavigator.storage import Database, ShopItemData, ShopSourceData
+from mindnavigator.transfer.shop import ParsedShopResult, ShopParseService, build_default_parsers
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 
 
