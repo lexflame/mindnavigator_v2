@@ -1,5 +1,16 @@
 """MapRow class module for maps workspace."""
 
-from .module_impl import MapRow
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+class MapRow:
+    id: int
+    title: str
+    description: str
+    project: str
+    tiles_path: str
+    tiles_h: int
+    tiles_w: int
 
 __all__ = ["MapRow"]
