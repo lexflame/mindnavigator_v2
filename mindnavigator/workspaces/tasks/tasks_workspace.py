@@ -243,6 +243,10 @@ class TasksWorkspace(BaseWorkspace):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+        mode_buttons = [self.btn_gantt, self.btn_board, self.btn_dash]
+        for button in mode_buttons:
+            if isinstance(button, QToolButton):
+                self.toolbar_layout.addWidget(button)
         self.toolbar_layout.addStretch(1)
         for action in actions.values():
             button = QToolButton()
@@ -669,9 +673,6 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.btn_prev_day)
         self.filter_layout.addWidget(self.lbl_day)
         self.filter_layout.addWidget(self.btn_next_day)
-        self.filter_layout.addWidget(self.btn_gantt)
-        self.filter_layout.addWidget(self.btn_board)
-        self.filter_layout.addWidget(self.btn_dash)
         self.filter_layout.addSpacing(8)
         self._project_quick_links_host = QWidget(self)
         self._project_quick_links_layout = QHBoxLayout(self._project_quick_links_host)
@@ -689,6 +690,7 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_board.toggled.connect(self._set_board_mode)
         self.btn_dash.toggled.connect(self._set_dash_mode)
         self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
+        self.build_toolbar(self.actions)
 
     def _relocate_search(self) -> None:
         """Перемещает строку поиска в панель фильтров."""
