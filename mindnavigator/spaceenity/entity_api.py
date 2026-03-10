@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime
 from typing import Any, Iterable, Mapping, cast
 
-from .storage import Database, get_database
+from mindnavigator.storage import Database, get_database
 
 API_NAME = "mindnavigator.entity_api"
 API_SCHEMA_VERSION = "2026-03-02"
@@ -811,6 +811,3 @@ class CodexEntityAdapter:
     ) -> dict[str, Any]:
         self.handshake()
         return self._service.execute_entity_action(entity_kind, entity_id, action, payload)
-
-
-from .spaceenity.entity_api import *  # noqa: F401,F403,E402

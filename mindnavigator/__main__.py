@@ -8,8 +8,8 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import QTimer, QObject
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
-from .constants import APP_NAME
-from .resources import resource_path
+from .spaceenity.constants import APP_NAME
+from .spaceenity.resources import resource_path
 from .ui.splash import show_splash
 from .window.collections import MainWindow
 from .storage import get_database

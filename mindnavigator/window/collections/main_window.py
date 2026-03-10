@@ -31,10 +31,10 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QPoint, QRect, QEvent, QTimer, QByteArray
 from pathlib import Path
 
-from mindnavigator.constants import APP_NAME
+from mindnavigator.spaceenity.constants import APP_NAME
 from mindnavigator.hotkeys import HotkeyEventFilter, HotkeyManager, HotkeyOverridesStore, load_commands_from_json
-from mindnavigator.i18n import DEFAULT_LANGUAGE, get_mode_labels, normalize_language_code
-from mindnavigator.resources import resource_path
+from mindnavigator.spaceenity.i18n import DEFAULT_LANGUAGE, get_mode_labels, normalize_language_code
+from mindnavigator.spaceenity.resources import resource_path
 from mindnavigator.storage import DEFERRED_PRIORITY, get_database as _storage_get_database
 from mindnavigator.ui.leftrail import LeftRail
 from mindnavigator.ui.projects_nav import ProjectsNav

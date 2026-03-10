@@ -67,22 +67,31 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/hotkeys/models.py`
   - classes: HotkeyCommand, HotkeyBinding, Conflict
   - functions: -
-- `mindnavigator/http_client.py`
+- `mindnavigator/spaceenity/http_client.py`
   - classes: HttpResponse, HttpCacheEntry, HttpClientError, HttpCache, DomainRateLimiter, HttpClient
   - functions: _decode_content
-- `mindnavigator/i18n.py`
+- `mindnavigator/spaceenity/i18n.py`
   - classes: -
   - functions: normalize_language_code, get_mode_label, get_mode_labels
-- `mindnavigator/db_migrations.py`
+- `mindnavigator/spaceenity/db_migrations.py`
   - classes: MigrationStep
   - functions: get_user_version, set_user_version, apply_migrations
-- `mindnavigator/update_service.py`
+- `mindnavigator/spaceenity/update_service.py`
   - classes: UpdateServiceError, UpdateInfo, UpdateService
   - functions: normalize_version, is_newer_version
+- `mindnavigator/spaceenity/constants.py`
+  - classes: -
+  - functions: -
+- `mindnavigator/spaceenity/resources.py`
+  - classes: -
+  - functions: resource_path
+- `mindnavigator/spaceenity/entity_api.py`
+  - classes: EntityOperationSpec, EntityKindSpec, BootstrapExample, EntityApiError, EntityNotFoundError, EntityApiPool, EntityApiService, CodexEntityAdapter
+  - functions: -
 - `mindnavigator/window/collections/main_window.py`
   - classes: MainWindow
   - functions: _on_tray_message_clicked, _open_task_from_tray_notification
-- `mindnavigator/marker_types.py`
+- `mindnavigator/spaceenity/marker_types.py`
   - classes: MarkerTypeOption
   - functions: marker_type_options, default_marker_type, marker_type_by_key, marker_type_by_label, marker_type_for_color, marker_type_icon, ...
 - `mindnavigator/transfer/shop/shop_parsers.py`

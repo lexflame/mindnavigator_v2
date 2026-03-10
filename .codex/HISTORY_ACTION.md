@@ -1167,3 +1167,23 @@
 [2026-03-10 17:36] OUT: Startup and legacy window imports resolved to `mindnavigator.window.collections` without circular import errors.
 [2026-03-10 17:36] ACTION: Updated TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 status -> Completed.
 [2026-03-10 17:36] ACTION: Completed TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404.
+[2026-03-10 17:42] CMD: git switch -c sprint/spaceenity-task5
+[2026-03-10 17:42] OUT: Switched to a new branch `sprint/spaceenity-task5`.
+[2026-03-10 17:45] ACTION: Started TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55 (move shared core modules into spaceenity).
+[2026-03-10 17:45] ACTION: Updated TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55 status -> In Progress.
+[2026-03-10 18:14] ACTION: Created docs/sprints/TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55_PLAN.md.
+[2026-03-10 18:14] ACTION: Moved constants, migrations, entity API, HTTP client, i18n, marker types, resources, and update service into `mindnavigator/spaceenity/` with legacy compatibility exports.
+[2026-03-10 18:14] ACTION: Updated startup, settings workspace, maps shared, purchases shared, purchase dialog, map dialog, shop parsers, and `docs/diagramm/CLASS.md` for the `spaceenity` layout.
+[2026-03-10 18:14] ACTION: Added regression test `tests/test_spaceenity_transfer_split.py` for legacy import compatibility and internal import smoke.
+[2026-03-10 18:14] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 18:14] OUT: OK.
+[2026-03-10 18:14] CMD: $env:PYTHONPATH='.'; pytest tests/test_spaceenity_transfer_split.py tests/test_entity_api.py tests/test_db_migrations.py tests/test_i18n.py tests/test_update_service.py tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_task5
+[2026-03-10 18:14] OUT: 38 passed.
+[2026-03-10 18:14] CMD: Runtime import smoke for `mindnavigator.__main__`, settings workspace, maps shared, and purchases shared.
+[2026-03-10 18:14] OUT: Imports resolved to `mindnavigator.spaceenity` modules without circular import errors.
+[2026-03-10 18:15] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 18:15] OUT: OK.
+[2026-03-10 18:15] CMD: $env:PYTHONPATH='.'; pytest tests/test_spaceenity_transfer_split.py tests/test_update_service.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_task5b
+[2026-03-10 18:15] OUT: 6 passed.
+[2026-03-10 18:15] ACTION: Updated TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55 status -> Completed.
+[2026-03-10 18:15] ACTION: Completed TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55.

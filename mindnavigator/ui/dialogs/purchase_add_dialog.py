@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
 )
 
-from mindnavigator.http_client import HttpClient, HttpClientError
+from mindnavigator.spaceenity.http_client import HttpClient, HttpClientError
 from mindnavigator.storage import Database, ShopItemData, ShopSourceData
 from mindnavigator.transfer.shop import ParsedShopResult, ShopParseService, build_default_parsers
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND

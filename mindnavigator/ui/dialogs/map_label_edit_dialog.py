@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
-from mindnavigator.marker_types import (
+from mindnavigator.spaceenity.marker_types import (
     marker_type_by_key,
     marker_type_for_color,
     marker_type_icon,

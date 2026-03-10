@@ -1,4 +1,4 @@
-"""Настройки типовых маркеров карты."""
+"""Marker type helpers and assets."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPixmap
 
-from mindnavigator.spaceenity.resources import resource_path
+from .resources import resource_path
 
 
 @dataclass(frozen=True)
@@ -100,6 +100,3 @@ def marker_type_pixmap(option: MarkerTypeOption, size: QSize) -> QPixmap | None:
         Qt.AspectRatioMode.KeepAspectRatio,
         Qt.TransformationMode.SmoothTransformation,
     )
-
-
-from .spaceenity.marker_types import *  # noqa: F401,F403,E402

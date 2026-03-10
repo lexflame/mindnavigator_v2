@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QUrl
 
 from mindnavigator.storage import get_database
-from mindnavigator.http_client import HttpClient, HttpClientError
+from mindnavigator.spaceenity.http_client import HttpClient, HttpClientError
 from mindnavigator.transfer.shop import ShopParseService, build_default_parsers
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.dialogs.purchase_add_dialog import PurchaseAddByUrlDialog

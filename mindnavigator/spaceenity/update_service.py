@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from .spaceenity.http_client import HttpClient, HttpClientError
+from .http_client import HttpClient, HttpClientError
 
 
 class UpdateServiceError(RuntimeError):
@@ -105,6 +105,3 @@ class UpdateService:
             published_at=published_at,
             raw_tag=raw_tag,
         )
-
-
-from .spaceenity.update_service import *  # noqa: F401,F403,E402
