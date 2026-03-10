@@ -51,15 +51,15 @@ description = "Fast codebase explorer for read-heavy tasks."
 config_file = "agents/custom-explorer.toml"
 
 [mcp_servers.context7]
-command = "cmd"
-args = ["/d", "/c", "set npm_config_cache=.npm-cache && npx.cmd -y @upstash/context7-mcp"]
+command = "node"
+args = [".codex/mcp-local/node_modules/@upstash/context7-mcp/dist/index.js"]
 enabled = true
 startup_timeout_sec = 120
 tool_timeout_sec = 120
 
 [mcp_servers.filesystem]
-command = "cmd"
-args = ["/d", "/c", "set npm_config_cache=.npm-cache && npx.cmd -y @modelcontextprotocol/server-filesystem ."]
+command = "node"
+args = [".codex/mcp-local/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", "."]
 enabled = true
 startup_timeout_sec = 120
 tool_timeout_sec = 120

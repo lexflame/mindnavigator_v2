@@ -21,6 +21,7 @@ dist/MindNavigator (windows 11 x64)/_internal/base_library.zip
 
 .ai
 /.npm-cache
+/.codex/mcp-local/
 /.test_runtime
 /defenition/artifacts
 /defenition/dist
