@@ -630,7 +630,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
             has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
             layout = self._row_layout(r, depth, has_subtasks)
-            cb_rect = layout["checkbox"]
+            cb_rect = layout.get("checkbox_hit", layout["checkbox"])
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
             priority_rect = layout["priority"]
@@ -1007,9 +1007,13 @@ class TasksItemDelegate(QStyledItemDelegate):
         grip_rect = QRect(x, cy - 8, 16, 16)
         x += 22
 
-        block_side = max(18, r.height())
-        cb_rect = QRect(x, r.top(), block_side, r.height())
-        x += block_side + 8
+        checkbox_slot_side = max(18, r.height())
+        checkbox_side = max(10, r.height() // 2)
+        checkbox_y = cy - (checkbox_side // 2)
+        checkbox_x = x + (checkbox_slot_side - checkbox_side) // 2
+        cb_rect = QRect(checkbox_x, checkbox_y, checkbox_side, checkbox_side)
+        cb_hit_rect = QRect(x, r.top(), checkbox_slot_side, r.height())
+        x += checkbox_slot_side + 8
 
         tomorrow_rect = QRect(x, cy - 8, 20, 20)
         x += 28
@@ -1042,6 +1046,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return {
             "grip": grip_rect,
             "checkbox": cb_rect,
+            "checkbox_hit": cb_hit_rect,
             "tomorrow": tomorrow_rect,
             "date": time_rect,
             "project": project_rect,
