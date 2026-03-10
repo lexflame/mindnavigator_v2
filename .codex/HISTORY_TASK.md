@@ -92,6 +92,7 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 | adhoc | Show task number beside task title in tasks list (`MN-<id>: <title>`) | feat | Completed |
+| TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 | adhoc | Split `mindnavigator/workspaces/tasks/module_impl.py` into real class files and include pending tasks UI text fix | chore | Completed |
 
 ## Sprint 6 - Notes, Export, Import
 Created: 2026-02-25

@@ -1,5 +1,32 @@
 """TaskRoles class module for tasks workspace."""
 
-from .module_impl import TaskRoles
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+
+class TaskRoles:
+    RowType = Qt.ItemDataRole.UserRole + 1  # header | task
+    Day = Qt.ItemDataRole.UserRole + 2
+    TimeText = Qt.ItemDataRole.UserRole + 3
+    Title = Qt.ItemDataRole.UserRole + 4
+    Description = Qt.ItemDataRole.UserRole + 5
+    Priority = Qt.ItemDataRole.UserRole + 6
+    Done = Qt.ItemDataRole.UserRole + 7
+    TaskId = Qt.ItemDataRole.UserRole + 8
+    SortKey = Qt.ItemDataRole.UserRole + 9
+    SortDirection = Qt.ItemDataRole.UserRole + 10
+    DisplayTime = Qt.ItemDataRole.UserRole + 11
+    ProjectTitle = Qt.ItemDataRole.UserRole + 12
+    Expanded = Qt.ItemDataRole.UserRole + 13
+    HasSubtasks = Qt.ItemDataRole.UserRole + 14
+    SubtasksExpanded = Qt.ItemDataRole.UserRole + 15
+    SubtaskDepth = Qt.ItemDataRole.UserRole + 16
+    ProjectArea = Qt.ItemDataRole.UserRole + 17
+    AttachmentSummary = Qt.ItemDataRole.UserRole + 18
+    RecurrenceKind = Qt.ItemDataRole.UserRole + 19
+    CompletionDelayMinutes = Qt.ItemDataRole.UserRole + 20
+    ParentTaskId = Qt.ItemDataRole.UserRole + 21
+    MarkerColor = Qt.ItemDataRole.UserRole + 22
+    MarkerTheme = Qt.ItemDataRole.UserRole + 23
 
 __all__ = ["TaskRoles"]
