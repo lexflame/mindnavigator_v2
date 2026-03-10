@@ -1,5 +1,13 @@
 """ScanSummary class module for files workspace."""
 
-from .module_impl import ScanSummary
+from __future__ import annotations
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ScanSummary:
+    total: int
+    valid: int
+    invalid: int
+    skipped: int
 
 __all__ = ["ScanSummary"]

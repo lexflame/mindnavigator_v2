@@ -38,7 +38,7 @@ def test_projects_delegate_has_tree_icons_and_full_height_area_quick_rect() -> N
 
 
 def test_projects_workspace_uses_full_height_square_menu_rects_in_delegate() -> None:
-    source = Path("mindnavigator/workspaces/projects/module_impl.py").read_text(encoding="utf-8")
+    source = Path("mindnavigator/workspaces/projects/projects_item_delegate.py").read_text(encoding="utf-8")
 
     assert 'menu_rect = QRect(r.left() + left_pad, r.top(), menu_w, r.height())' in source
     assert 'menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())' in source

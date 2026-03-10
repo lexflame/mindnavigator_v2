@@ -1,5 +1,10 @@
 """NoteCategoryRow class module for notes workspace."""
 
-from .module_impl import NoteCategoryRow
+from __future__ import annotations
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class NoteCategoryRow:
+    category: str
 
 __all__ = ["NoteCategoryRow"]
