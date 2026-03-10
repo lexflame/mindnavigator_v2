@@ -85,10 +85,10 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/marker_types.py`
   - classes: MarkerTypeOption
   - functions: marker_type_options, default_marker_type, marker_type_by_key, marker_type_by_label, marker_type_for_color, marker_type_icon, ...
-- `mindnavigator/shop_parsers.py`
+- `mindnavigator/transfer/shop/shop_parsers.py`
   - classes: BaseShopParser, E2E4Parser, ChipDipParser, DNSParser, WildberriesParser
   - functions: _normalize_price, _extract_title, _extract_jsonld, _find_product_ld, _extract_product_from_ld, _strip_html, ...
-- `mindnavigator/shop_parsing.py`
+- `mindnavigator/transfer/shop/shop_parsing.py`
   - classes: ParsedShopProperty, ParsedShopResult, IShopParser, ShopParseService
   - functions: -
 - `mindnavigator/transfer/sprint/sprint_parser.py`

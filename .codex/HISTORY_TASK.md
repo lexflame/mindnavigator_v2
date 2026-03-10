@@ -169,3 +169,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 | transfer | Move sprint modules into `mindnavigator/transfer/sprint` with compatibility exports | chore | Completed |
+
+## Transfer Refactor - Shop Modules
+Created: 2026-03-10
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 | transfer | Move shop modules into `mindnavigator/transfer/shop` with compatibility exports | chore | Completed |

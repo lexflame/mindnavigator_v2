@@ -42,8 +42,7 @@ from PySide6.QtCore import QUrl
 
 from mindnavigator.storage import get_database
 from mindnavigator.http_client import HttpClient, HttpClientError
-from mindnavigator.shop_parsing import ShopParseService
-from mindnavigator.shop_parsers import build_default_parsers
+from mindnavigator.transfer.shop import ShopParseService, build_default_parsers
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.dialogs.purchase_add_dialog import PurchaseAddByUrlDialog
 from mindnavigator.ui.dialogs.purchase_edit_dialog import PurchaseEditDialog

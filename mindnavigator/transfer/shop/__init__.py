@@ -1,6 +1,6 @@
-"""Compatibility exports for shop parser implementations."""
+"""Shop transfer package exports."""
 
-from .transfer.shop.shop_parsers import (
+from .shop_parsers import (
     BaseShopParser,
     ChipDipParser,
     DNSParser,
@@ -8,12 +8,17 @@ from .transfer.shop.shop_parsers import (
     WildberriesParser,
     build_default_parsers,
 )
+from .shop_parsing import IShopParser, ParsedShopProperty, ParsedShopResult, ShopParseService
 
 __all__ = [
     "BaseShopParser",
     "ChipDipParser",
     "DNSParser",
     "E2E4Parser",
+    "IShopParser",
+    "ParsedShopProperty",
+    "ParsedShopResult",
+    "ShopParseService",
     "WildberriesParser",
     "build_default_parsers",
 ]
