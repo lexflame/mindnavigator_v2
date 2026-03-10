@@ -94,6 +94,10 @@ def test_tasks_workspace_switches_board_and_dash_modes(monkeypatch, unique_temp_
     monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
     workspace = tasks_workspace.TasksWorkspace()
     try:
+        assert workspace.btn_gantt.text() == "GANTT"
+        assert workspace.btn_board.text() == "BOARD"
+        assert workspace.btn_dash.text() == "DASH"
+
         workspace.btn_board.setChecked(True)
         assert workspace._board_mode is True
         assert workspace._dash_mode is False
