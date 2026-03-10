@@ -97,6 +97,18 @@ def test_tasks_workspace_switches_board_and_dash_modes(monkeypatch, unique_temp_
         assert workspace.btn_gantt.text() == "GANTT"
         assert workspace.btn_board.text() == "BOARD"
         assert workspace.btn_dash.text() == "DASH"
+        assert workspace.btn_gantt.parent() is workspace.toolbar_row
+        assert workspace.btn_board.parent() is workspace.toolbar_row
+        assert workspace.btn_dash.parent() is workspace.toolbar_row
+
+        toolbar_texts = [
+            widget.text()
+            for idx in range(workspace.toolbar_layout.count())
+            if (item := workspace.toolbar_layout.itemAt(idx)) is not None
+            if (widget := item.widget()) is not None
+            if isinstance(widget, tasks_workspace.QToolButton)
+        ]
+        assert toolbar_texts[:3] == ["GANTT", "BOARD", "DASH"]
 
         workspace.btn_board.setChecked(True)
         assert workspace._board_mode is True
