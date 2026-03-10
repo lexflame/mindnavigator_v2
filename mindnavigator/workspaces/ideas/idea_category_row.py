@@ -1,5 +1,10 @@
 """IdeaCategoryRow class module for ideas workspace."""
 
-from .module_impl import IdeaCategoryRow
+from __future__ import annotations
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class IdeaCategoryRow:
+    category: str
 
 __all__ = ["IdeaCategoryRow"]
