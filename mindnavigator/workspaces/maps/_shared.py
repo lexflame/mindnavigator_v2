@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from mindnavigator.storage import CloudFileData, get_database as _storage_get_database
-from mindnavigator.marker_types import (
+from mindnavigator.spaceenity.marker_types import (
     default_marker_type,
     marker_type_for_color,
     marker_type_icon,
@@ -52,7 +52,7 @@ from mindnavigator.marker_types import (
 )
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
-from mindnavigator.resources import resource_path
+from mindnavigator.spaceenity.resources import resource_path
 
 
 def _parse_marker_properties_blob(raw: str) -> tuple[str, list[tuple[str, str]]]:

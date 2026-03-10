@@ -193,3 +193,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 | window | Move main window modules into `mindnavigator/window/collections` with compatibility exports | chore | Completed |
+
+## Core Refactor - Spaceenity Modules
+Created: 2026-03-10
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_A27D5C68-2B8F-4AF7-8D42-6E4C3F9A5D55 | spaceenity | Move core shared modules into `mindnavigator/spaceenity` with compatibility exports | chore | Completed |

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
-from mindnavigator.http_client import HttpClient, HttpClientError
+from mindnavigator.spaceenity.http_client import HttpClient, HttpClientError
 
 from .shop_parsing import IShopParser, ParsedShopProperty, ParsedShopResult
 

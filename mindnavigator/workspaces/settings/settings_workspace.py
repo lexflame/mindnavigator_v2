@@ -37,8 +37,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from mindnavigator.constants import APP_VERSION, UPDATE_REPOSITORY_NAME, UPDATE_REPOSITORY_OWNER
-from mindnavigator.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalize_language_code
+from mindnavigator.spaceenity.constants import APP_VERSION, UPDATE_REPOSITORY_NAME, UPDATE_REPOSITORY_OWNER
+from mindnavigator.spaceenity.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalize_language_code
 from mindnavigator.storage import (
     default_db_path,
     get_configured_db_path,
@@ -46,7 +46,7 @@ from mindnavigator.storage import (
     is_network_database_path,
     set_configured_db_path,
 )
-from mindnavigator.update_service import UpdateService, UpdateServiceError
+from mindnavigator.spaceenity.update_service import UpdateService, UpdateServiceError
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 
 

@@ -26,10 +26,8 @@ class HttpResponse:
 
 
 @dataclass(frozen=True)
-# noinspection SpellCheckingInspection
 class HttpCacheEntry:
     url: str
-    # noinspection SpellCheckingInspection,GrazieInspection
     etag: str
     last_modified: str
     body_hash: str
@@ -50,7 +48,6 @@ class HttpCache:
 
     def _init_db(self) -> None:
         with self._conn:
-            # noinspection SpellCheckingInspection
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS http_cache (
@@ -65,7 +62,6 @@ class HttpCache:
             )
 
     def get(self, url: str) -> Optional[HttpCacheEntry]:
-        # noinspection SpellCheckingInspection
         row = self._conn.execute(
             """
             SELECT url, etag, last_modified, body_hash, saved_at, content
@@ -78,7 +74,6 @@ class HttpCache:
             return None
         return HttpCacheEntry(
             row["url"],
-            # noinspection SpellCheckingInspection,GrazieInspection
             row["etag"] or "",
             row["last_modified"] or "",
             row["body_hash"] or "",
@@ -88,7 +83,6 @@ class HttpCache:
 
     def set(self, entry: HttpCacheEntry) -> None:
         with self._conn:
-            # noinspection SpellCheckingInspection
             self._conn.execute(
                 """
                 INSERT INTO http_cache (url, etag, last_modified, body_hash, saved_at, content)
@@ -155,7 +149,7 @@ class HttpClient:
     def fetch(self, url: str, *, use_cache: bool = True) -> HttpResponse | None:
         url = (url or "").strip()
         if not url:
-            raise HttpClientError("URL не должен быть пустым.")
+            raise HttpClientError("URL must not be empty.")
 
         cache_entry = self.cache.get(url) if use_cache else None
         headers = {
@@ -194,7 +188,6 @@ class HttpClient:
                     text = _decode_content(body, resp_headers)
                     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
                     if use_cache:
-                        # noinspection SpellCheckingInspection
                         etag = resp_headers.get("ETag", "")
                         last_modified = resp_headers.get("Last-Modified", "")
                         body_hash = hashlib.sha256(body).hexdigest()
@@ -233,7 +226,7 @@ class HttpClient:
                     self._sleep_backoff(attempt)
                     attempt += 1
                     continue
-                message = f"HTTP ошибка {status} для {url}"
+                message = f"HTTP error {status} for {url}"
                 self._report_error(message)
                 raise HttpClientError(message) from exc
             except URLError as exc:
@@ -241,7 +234,7 @@ class HttpClient:
                     self._sleep_backoff(attempt)
                     attempt += 1
                     continue
-                message = f"Сетевая ошибка для {url}: {exc}"
+                message = f"Network error for {url}: {exc}"
                 self._report_error(message)
                 raise HttpClientError(message) from exc
 
@@ -266,6 +259,3 @@ def _decode_content(content: bytes, headers: dict[str, str]) -> str:
         return content.decode(charset, errors="replace")
     except LookupError:
         return content.decode("utf-8", errors="replace")
-
-
-from .spaceenity.http_client import *  # noqa: F401,F403,E402
