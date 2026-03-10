@@ -1070,3 +1070,16 @@
 [2026-03-10 14:38] OUT: 20 passed.
 [2026-03-10 14:38] ACTION: Updated TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 status -> Completed.
 [2026-03-10 14:38] ACTION: Completed TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74.
+[2026-03-10 16:15] CMD: git switch -c sprint/transfer-sprint-task1
+[2026-03-10 16:15] OUT: Switched to a new branch `sprint/transfer-sprint-task1`.
+[2026-03-10 16:15] ACTION: Started TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 (move sprint modules into transfer/sprint).
+[2026-03-10 16:15] ACTION: Updated TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 status -> In Progress.
+[2026-03-10 16:15] ACTION: Created docs/sprints/TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11_PLAN.md.
+[2026-03-10 16:24] ACTION: Moved sprint parser, composer, and classification implementations into `mindnavigator/transfer/sprint/` and reduced legacy top-level modules to compatibility exports.
+[2026-03-10 16:24] ACTION: Updated `docs/diagramm/CLASS.md` for the transfer sprint module layout.
+[2026-03-10 16:24] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 16:24] OUT: OK.
+[2026-03-10 16:24] CMD: $env:PYTHONPATH='.'; pytest tests/test_sprint_parser.py tests/test_sprint_composer.py tests/test_sprint_classification.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-10 16:24] OUT: 17 passed.
+[2026-03-10 16:24] ACTION: Updated TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 status -> Completed.
+[2026-03-10 16:24] ACTION: Completed TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11.

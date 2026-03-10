@@ -91,6 +91,15 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/shop_parsing.py`
   - classes: ParsedShopProperty, ParsedShopResult, IShopParser, ShopParseService
   - functions: -
+- `mindnavigator/transfer/sprint/sprint_parser.py`
+  - classes: ParsedSprintHeader
+  - functions: normalize_keyword, parse_sprint_header
+- `mindnavigator/transfer/sprint/sprint_composer.py`
+  - classes: SprintSourceNode, SprintTaskEntry, SprintPartitionEntry, ComposedSprint
+  - functions: compose_sprint, extract_semantic_token
+- `mindnavigator/transfer/sprint/sprint_classification.py`
+  - classes: TaskClassification
+  - functions: classify_keyword, classify_mindnavigator_title
 - `mindnavigator/storage.py`
   - classes: TaskData, ProjectData, MapData, MapMarkerData, MapOverlayData, TaskAttachmentData, ...
   - functions: default_db_path, get_configured_db_path, set_configured_db_path, get_database, reset_database, validate_title, validate_area, normalize_priority, validate_time_text, parse_project_date, ...
