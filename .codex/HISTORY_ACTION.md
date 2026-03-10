@@ -1139,3 +1139,31 @@
 [2026-03-10 17:15] OUT: Imports resolved to transfer collections modules without circular import errors.
 [2026-03-10 17:15] ACTION: Updated TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 status -> Completed.
 [2026-03-10 17:15] ACTION: Completed TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3.
+[2026-03-10 17:23] CMD: Create PR for `sprint/transfer-collections-task3` via GitHub API.
+[2026-03-10 17:23] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/213.
+[2026-03-10 17:24] CMD: Poll GitHub check-runs for commit `577a00b086a1d1620a8937f4118b28a0b0bccdf6`.
+[2026-03-10 17:24] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-10 17:24] CMD: Merge PR #213 via GitHub API.
+[2026-03-10 17:24] OUT: Pull request merged successfully (merge sha `87312aac2d2fbefd9cbb8d4c2128a89e06e036fd`).
+[2026-03-10 17:24] CMD: git switch main
+[2026-03-10 17:24] OUT: Switched to branch `main`.
+[2026-03-10 17:24] CMD: git fetch origin main
+[2026-03-10 17:24] OUT: Updated `origin/main` from `c40b059` to `87312aa`.
+[2026-03-10 17:24] CMD: git merge origin/main
+[2026-03-10 17:24] OUT: Fast-forwarded local `main` to merge commit `87312aa`.
+[2026-03-10 17:25] CMD: git switch -c sprint/window-collections-task4
+[2026-03-10 17:25] OUT: Switched to a new branch `sprint/window-collections-task4`.
+[2026-03-10 17:25] ACTION: Started TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 (move main window modules into window/collections).
+[2026-03-10 17:25] ACTION: Updated TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 status -> In Progress.
+[2026-03-10 17:27] ACTION: Created docs/sprints/TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404_PLAN.md.
+[2026-03-10 17:36] ACTION: Moved main window and windowing implementations into `mindnavigator/window/collections/` and reduced legacy top-level modules to compatibility exports.
+[2026-03-10 17:36] ACTION: Updated `mindnavigator/__main__.py` and `docs/diagramm/CLASS.md` for the window collections layout and startup import path.
+[2026-03-10 17:36] ACTION: Added regression test `tests/test_window_transfer_split.py` for legacy import compatibility of `main_window` and `windowing`.
+[2026-03-10 17:36] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 17:36] OUT: OK.
+[2026-03-10 17:36] CMD: $env:PYTHONPATH='.'; pytest tests/test_window_transfer_split.py tests/test_tray_task_navigation.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_task4
+[2026-03-10 17:36] OUT: 14 passed.
+[2026-03-10 17:36] CMD: Runtime import smoke for `mindnavigator.__main__`, `mindnavigator.main_window`, and `mindnavigator.windowing`.
+[2026-03-10 17:36] OUT: Startup and legacy window imports resolved to `mindnavigator.window.collections` without circular import errors.
+[2026-03-10 17:36] ACTION: Updated TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 status -> Completed.
+[2026-03-10 17:36] ACTION: Completed TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404.

@@ -185,3 +185,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 | transfer | Move collection transfer modules into `mindnavigator/transfer/collections` with compatibility exports | chore | Completed |
+
+## Window Refactor - Main Window Modules
+Created: 2026-03-10
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_91E7B2F0-1FCE-4E8E-9C6D-54B5A2E7D404 | window | Move main window modules into `mindnavigator/window/collections` with compatibility exports | chore | Completed |
