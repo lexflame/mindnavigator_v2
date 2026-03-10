@@ -8,6 +8,7 @@ from typing import List
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QColor
 
+@dataclass(frozen=True)
 class MapOverlay:
     id: int
     kind: str  # "region" | "path"
