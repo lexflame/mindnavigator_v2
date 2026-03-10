@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace

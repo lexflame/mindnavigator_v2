@@ -1111,3 +1111,31 @@
 [2026-03-10 16:48] OUT: Imports resolved to transfer shop modules without circular import errors.
 [2026-03-10 16:48] ACTION: Updated TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 status -> Completed.
 [2026-03-10 16:48] ACTION: Completed TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202.
+[2026-03-10 17:04] CMD: Create PR for `sprint/transfer-shop-task2` via GitHub API.
+[2026-03-10 17:04] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/212.
+[2026-03-10 17:05] CMD: Poll GitHub check-runs for commit `5b33982653dc338f94e4c9aef0228cbcd03a3a66`.
+[2026-03-10 17:05] OUT: Pipeline passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-10 17:05] CMD: Merge PR #212 via GitHub API.
+[2026-03-10 17:05] OUT: Pull request merged successfully (merge sha `c40b05989c2ce592d15a707a09b6f250a6f4651b`).
+[2026-03-10 17:06] CMD: git switch main
+[2026-03-10 17:06] OUT: Switched to branch `main`.
+[2026-03-10 17:06] CMD: git fetch origin main
+[2026-03-10 17:06] OUT: Updated `origin/main` from `b45474a` to `c40b059`.
+[2026-03-10 17:06] CMD: git merge origin/main
+[2026-03-10 17:06] OUT: Fast-forwarded local `main` to merge commit `c40b059`.
+[2026-03-10 17:07] CMD: git switch -c sprint/transfer-collections-task3
+[2026-03-10 17:07] OUT: Switched to a new branch `sprint/transfer-collections-task3`.
+[2026-03-10 17:07] ACTION: Started TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 (move collection transfer modules into transfer/collections).
+[2026-03-10 17:07] ACTION: Updated TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 status -> In Progress.
+[2026-03-10 17:07] ACTION: Created docs/sprints/TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3_PLAN.md.
+[2026-03-10 17:15] ACTION: Moved collection import and CSV transfer implementations into `mindnavigator/transfer/collections/` and reduced legacy top-level modules to compatibility exports.
+[2026-03-10 17:15] ACTION: Updated collection, file, task, project, note, idea, and object workspace shared imports plus `docs/diagramm/CLASS.md` for the transfer collections layout.
+[2026-03-10 17:15] ACTION: Added regression test `tests/test_collections_transfer_split.py` for legacy import compatibility and collection file-scan behavior.
+[2026-03-10 17:15] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 17:15] OUT: OK.
+[2026-03-10 17:15] CMD: $env:PYTHONPATH='.'; pytest tests/test_csv_transfer.py tests/test_collections_transfer_split.py tests/test_collections_workspace_mn207.py tests/test_files_workspace_mn206.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_task3b
+[2026-03-10 17:15] OUT: 12 passed.
+[2026-03-10 17:15] CMD: Runtime import smoke for collection/file/task/project/note/idea/object workspace shared modules.
+[2026-03-10 17:15] OUT: Imports resolved to transfer collections modules without circular import errors.
+[2026-03-10 17:15] ACTION: Updated TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 status -> Completed.
+[2026-03-10 17:15] ACTION: Completed TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3.

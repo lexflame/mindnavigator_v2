@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QFormLayout, QMessageBox, QDateEdit, QCheckBox, QFileDialog
 )
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
     format_project_date,
     get_database,

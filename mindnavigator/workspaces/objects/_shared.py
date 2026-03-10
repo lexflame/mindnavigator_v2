@@ -45,7 +45,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
 from mindnavigator.ui.modals import show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
