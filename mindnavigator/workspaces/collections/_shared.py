@@ -48,8 +48,13 @@ except ImportError:
     QVideoWidget = None
     _MULTIMEDIA_AVAILABLE = False
 
-from mindnavigator.collections_importer import FolderCollectionImporter, list_files, scan_files
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
+from mindnavigator.transfer.collections import (
+    CsvTransferError,
+    CsvTransferService,
+    FolderCollectionImporter,
+    list_files,
+    scan_files,
+)
 from mindnavigator.storage import (
     CollectionCategoryData,
     CollectionEntryData,

@@ -49,10 +49,10 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `TaskCreateDialog`: `mindnavigator/workspaces/tasks_workspace.py:2316`
 
 ## Module Index (sampled)
-- `mindnavigator/collections_importer.py`
+- `mindnavigator/transfer/collections/collections_importer.py`
   - classes: CollectionImportItem, FolderCollectionImporter
-  - functions: -
-- `mindnavigator/csv_transfer.py`
+  - functions: list_files, scan_files
+- `mindnavigator/transfer/collections/csv_transfer.py`
   - classes: CsvTransferError, CsvTransferOptions, CsvTransferService
   - functions: -
 - `mindnavigator/workspaces/csv_workspace_transfer.py`

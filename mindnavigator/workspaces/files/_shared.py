@@ -48,7 +48,7 @@ from PySide6.QtWidgets import (
 
 import qtawesome as qta
 
-from mindnavigator.collections_importer import list_files, scan_files
+from mindnavigator.transfer.collections import list_files, scan_files
 from mindnavigator.storage import CloudFileData, Database, default_db_path, get_database
 from mindnavigator.ui.dialogs.collection_category_dialog import CollectionCategorySelectDialog
 from mindnavigator.ui.dialogs.collection_import_dialog import CollectionImportDialog

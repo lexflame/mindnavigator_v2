@@ -177,3 +177,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_B8D1A4C3-8E29-4A56-9F2E-3B1A77C6E202 | transfer | Move shop modules into `mindnavigator/transfer/shop` with compatibility exports | chore | Completed |
+
+## Transfer Refactor - Collections Modules
+Created: 2026-03-10
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_3C94F1AD-6B54-47C4-B5E2-8C92A0D1F3B3 | transfer | Move collection transfer modules into `mindnavigator/transfer/collections` with compatibility exports | chore | Completed |

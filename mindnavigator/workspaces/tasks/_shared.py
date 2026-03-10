@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QSpinBox, QHeaderView, QFileDialog, QListWidget, QListWidgetItem
 )
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
     CloudFileData,
     TaskAttachmentData,
