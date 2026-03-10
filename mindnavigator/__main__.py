@@ -11,7 +11,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from .constants import APP_NAME
 from .resources import resource_path
 from .ui.splash import show_splash
-from .main_window import MainWindow
+from .window.collections import MainWindow
 from .storage import get_database
 from .ui.dialogs.frameless_patch import enable_frameless_qdialogs
 from .ui.styles import APP_STYLESHEET

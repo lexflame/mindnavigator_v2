@@ -5,7 +5,7 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 ## Core Entrypoints
 - `main.py`: process entry.
 - `mindnavigator/__main__.py`: startup sequence and splash lifecycle.
-- `mindnavigator/main_window.py`: root UI composition, tray logic, mode switching, event routing.
+- `mindnavigator/window/collections/main_window.py`: root UI composition, tray logic, mode switching, event routing.
 
 ## Workspace Classes
 - `mindnavigator/workspaces/tasks_workspace.py`: `TasksWorkspace`, `TasksModel`, `TasksItemDelegate`.
@@ -79,7 +79,7 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/update_service.py`
   - classes: UpdateServiceError, UpdateInfo, UpdateService
   - functions: normalize_version, is_newer_version
-- `mindnavigator/main_window.py`
+- `mindnavigator/window/collections/main_window.py`
   - classes: MainWindow
   - functions: _on_tray_message_clicked, _open_task_from_tray_notification
 - `mindnavigator/marker_types.py`
@@ -174,7 +174,7 @@ Purpose: function/class map for AGENTS.md and SKILL.md workflow.
 - `mindnavigator/ui/workspaces/base_workspace.py`
   - classes: BaseWorkspace
   - functions: -
-- `mindnavigator/windowing.py`
+- `mindnavigator/window/collections/windowing.py`
   - classes: ResizeEdge
   - functions: -
 - `mindnavigator/workspaces/collections_workspace.py`

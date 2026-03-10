@@ -1,18 +1,5 @@
-"""Перечисления и вспомогательные структуры для изменения размеров окна.
+"""Compatibility exports for window resize helpers."""
 
-Входные данные:
-    События изменения размеров окна и направления ресайза.
+from .window.collections.windowing import ResizeEdge
 
-Выходные данные:
-    Флаги состояний для логики ресайза.
-"""
-
-from enum import Flag, auto
-
-
-class ResizeEdge(Flag):
-    NONE = 0
-    LEFT = auto()
-    TOP = auto()
-    RIGHT = auto()
-    BOTTOM = auto()
+__all__ = ["ResizeEdge"]
