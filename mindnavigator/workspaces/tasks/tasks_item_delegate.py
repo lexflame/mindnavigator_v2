@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from PySide6.QtGui import QPen
 from .task_details_dialog import TaskDetailsDialog
 from .task_edit_dialog import TaskEditDialog
 from .tasks_model import TasksModel
@@ -242,6 +243,32 @@ class TasksItemDelegate(QStyledItemDelegate):
         theme_icon.paint(painter, icon_rect)
         painter.restore()
 
+    @staticmethod
+    def _draw_done_checkbox(painter: QPainter, checkbox_rect: QRect, done: bool, border_color: QColor) -> None:
+        painter.setPen(border_color)
+        painter.setBrush(QColor("#16171a"))
+        painter.drawRect(checkbox_rect)
+
+        if not done:
+            return
+
+        check_pad = max(2, min(6, checkbox_rect.height() // 4))
+        first_point = QPoint(checkbox_rect.left() + check_pad, checkbox_rect.center().y())
+        middle_point = QPoint(checkbox_rect.center().x() - 1, checkbox_rect.bottom() - check_pad)
+        last_point = QPoint(checkbox_rect.right() - check_pad, checkbox_rect.top() + check_pad)
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        check_pen = QPen(QColor("#cfcfcf"))
+        check_pen.setWidth(max(2, checkbox_rect.width() // 5))
+        check_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        check_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(check_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(first_point, middle_point)
+        painter.drawLine(middle_point, last_point)
+        painter.restore()
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
@@ -347,25 +374,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_grip.paint(painter, grip_rect)
 
         cb_rect = layout["checkbox"]
-        painter.setPen(self.C_BORDER)
-        painter.setBrush(QColor("#16171a"))
-        painter.drawRect(cb_rect)
-
-        if done:
-            painter.setPen(QColor("#cfcfcf"))
-            check_pad = max(3, min(8, cb_rect.height() // 4))
-            painter.drawLine(
-                cb_rect.left() + check_pad,
-                cb_rect.center().y(),
-                cb_rect.center().x() - 1,
-                cb_rect.bottom() - check_pad,
-            )
-            painter.drawLine(
-                cb_rect.center().x() - 1,
-                cb_rect.bottom() - check_pad,
-                cb_rect.right() - check_pad,
-                cb_rect.top() + check_pad,
-            )
+        self._draw_done_checkbox(painter, cb_rect, done, self.C_BORDER)
 
         painter.setFont(self._font_small)
         painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)

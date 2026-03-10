@@ -47,3 +47,11 @@ def test_projects_workspace_uses_full_height_square_menu_rects_in_delegate() -> 
 
     assert 'menu_rect = QRect(r.left() + left_pad, r.top(), menu_w, r.height())' in source
     assert 'menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())' in source
+
+
+def test_tasks_delegate_uses_antialiasing_for_done_checkbox_checkmark() -> None:
+    source = Path("mindnavigator/workspaces/tasks/tasks_item_delegate.py").read_text(encoding="utf-8")
+
+    assert "QPainter.RenderHint.Antialiasing" in source
+    assert "Qt.PenCapStyle.RoundCap" in source
+    assert "Qt.PenJoinStyle.RoundJoin" in source
