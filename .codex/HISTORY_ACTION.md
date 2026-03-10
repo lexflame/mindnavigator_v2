@@ -1052,3 +1052,21 @@
 [2026-03-06 23:36] OUT: 15 passed.
 [2026-03-06 23:36] ACTION: Updated TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 status -> Completed.
 [2026-03-06 23:36] ACTION: Completed TASK_1280C84F-5C77-49BD-95AD-4EC76595F955.
+[2026-03-10 14:29] SESSION_START: Started ad hoc class-level split for tasks workspace module.
+[2026-03-10 14:29] CMD: git branch --show-current
+[2026-03-10 14:29] OUT: main
+[2026-03-10 14:29] CMD: git status --short --branch
+[2026-03-10 14:29] OUT: Pending local changes detected in .codex/config.toml, .gitignore, and mindnavigator/workspaces/tasks/module_impl.py before task start.
+[2026-03-10 14:29] CMD: git switch -c sprint/tasks-class-split
+[2026-03-10 14:29] OUT: Switched to a new branch `sprint/tasks-class-split`.
+[2026-03-10 14:29] ACTION: Started TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 (split tasks module_impl into real class files).
+[2026-03-10 14:29] ACTION: Updated TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 status -> In Progress.
+[2026-03-10 14:29] ACTION: Added docs/sprints/TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74_PLAN.md.
+[2026-03-10 14:38] ACTION: Split tasks workspace implementation into real class files under mindnavigator/workspaces/tasks/ and reduced module_impl.py to compatibility exports.
+[2026-03-10 14:38] ACTION: Preserved the pending delegate quick-action text fix inside the same task split.
+[2026-03-10 14:38] CMD: python -m compileall mindnavigator main.py
+[2026-03-10 14:38] OUT: OK.
+[2026-03-10 14:38] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_module_split_mn290.py tests/test_tasks_workspace_mn202.py tests/test_tasks_marker_refresh.py tests/test_view_menu_geometry.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp
+[2026-03-10 14:38] OUT: 20 passed.
+[2026-03-10 14:38] ACTION: Updated TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 status -> Completed.
+[2026-03-10 14:38] ACTION: Completed TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74.
