@@ -161,3 +161,11 @@ Status: Completed
 | TASK_BBA4C32C-28BD-492C-BC2B-AD733E3974E2 | 9 | Execute MN-195 sprint waves and produce release tag/version +1 | feat | Completed |
 | TASK_3C182479-00FB-439F-8E06-C1B0405AFFB3 | 9 | Finalize remaining Sprint 9 tasks MN-195, MN-289, MN-205, MN-260..MN-263, MN-209, MN-210, MN-236, MN-284, MN-285 | feat | Completed |
 | TASK_1280C84F-5C77-49BD-95AD-4EC76595F955 | 9 | Hotfix startup crash when projects.repository_catalog is missing in legacy DB with current user_version | fix | Completed |
+
+## Transfer Refactor - Sprint Modules
+Created: 2026-03-10
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_6F5C2E91-0D7A-4D33-A6C0-1E5F8D0B9A11 | transfer | Move sprint modules into `mindnavigator/transfer/sprint` with compatibility exports | chore | Completed |
