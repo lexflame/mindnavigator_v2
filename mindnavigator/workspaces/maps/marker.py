@@ -7,6 +7,7 @@ from typing import List
 
 from PySide6.QtGui import QColor
 
+@dataclass(frozen=True)
 class Marker:
     id: int
     name: str
