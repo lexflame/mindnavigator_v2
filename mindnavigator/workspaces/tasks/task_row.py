@@ -15,6 +15,7 @@ class TaskRow:
     description: str
     priority: str   # Low | Medium | High
     done: bool
+    board_column: str = "queue"
     project_id: Optional[int] = None
     project_title: str = ""
     project_area: str = ""

@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from mindnavigator.db_migrations import MigrationStep, apply_migrations, get_user_version
-from mindnavigator.storage import DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
+from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
@@ -92,13 +92,20 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "marker_color" in project_columns
         assert "repository_catalog" in project_columns
         assert "project_id" in task_columns
+        assert "board_column" in task_columns
         assert "description" in task_columns
         assert "parent_id" in task_columns
         assert "marker_theme" in task_columns
         assert "completion_delay_minutes" in task_columns
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 3
+        assert user_version == 4
+
+        board_rows = database._conn.execute(
+            "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
+        ).fetchall()
+        assert len(board_rows) == 1
+        assert board_rows[0]["board_column"] == BOARD_COLUMN_QUEUE
 
         root_rows = database._conn.execute(
             """
@@ -121,8 +128,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 3
-        assert database.apply_schema_updates() == 3
+        assert database.apply_schema_updates() == 4
+        assert database.apply_schema_updates() == 4
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -327,7 +334,7 @@ def test_database_backfills_project_columns_when_user_version_is_current(unique_
         )
         # Simulate DB that already reports current user_version but still misses
         # extended projects columns.
-        legacy_conn.execute("PRAGMA user_version = 3;")
+        legacy_conn.execute("PRAGMA user_version = 4;")
     legacy_conn.close()
 
     database = Database(path=db_path)
@@ -342,6 +349,51 @@ def test_database_backfills_project_columns_when_user_version_is_current(unique_
         projects = database.fetch_projects()
         assert projects
         assert projects[0].repository_catalog == ""
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_database_backfills_task_board_column_when_missing(unique_temp_path) -> None:
+    db_path = unique_temp_path("tasks_board_column_backfill", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            """
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            "INSERT INTO tasks(title, description, day, time_text, priority, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+            ("Deferred legacy", "", "2026-02-25", "10:00", DEFERRED_PRIORITY, 0, now, now),
+        )
+        legacy_conn.execute(
+            "INSERT INTO tasks(title, description, day, time_text, priority, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+            ("Queued legacy", "", "2026-02-25", "11:00", "Medium", 0, now, now),
+        )
+        legacy_conn.execute("PRAGMA user_version = 4;")
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        board_rows = {
+            row["title"]: row["board_column"]
+            for row in database._conn.execute("SELECT title, board_column FROM tasks;").fetchall()
+        }
+        assert board_rows["Deferred legacy"] == BOARD_COLUMN_DEFERRED
+        assert board_rows["Queued legacy"] == BOARD_COLUMN_QUEUE
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

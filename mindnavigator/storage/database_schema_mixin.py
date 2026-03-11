@@ -19,6 +19,7 @@ class DatabaseSchemaMixin:
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                    board_column TEXT NOT NULL DEFAULT 'queue' CHECK (board_column IN ('deferred', 'queue', 'in_progress', 'completed')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                     gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -526,8 +527,10 @@ class DatabaseSchemaMixin:
             MigrationStep(1, "core_task_project_schema", self._migration_v1_core_task_project_schema),
             MigrationStep(2, "map_marker_and_attachment_schema", self._migration_v2_map_marker_and_attachment_schema),
             MigrationStep(3, "collection_schema", self._migration_v3_collection_schema),
+            MigrationStep(4, "task_board_schema", self._migration_v4_task_board_schema),
         ]
         apply_migrations(self._conn, steps)
+        self._ensure_task_board_column()
 
     def apply_schema_updates(self) -> int:
         """РџСЂРёРјРµРЅСЏРµС‚ РІСЃРµ РґРѕСЃС‚СѓРїРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ user_version."""
@@ -563,6 +566,10 @@ class DatabaseSchemaMixin:
         self._ensure_collection_item_category_column()
         self._ensure_collection_item_extra_columns()
         self._ensure_collection_entry_columns()
+
+    def _migration_v4_task_board_schema(self, _connection: sqlite3.Connection) -> None:
+        """Добавляет колонку board_column для канбан-режима задач."""
+        self._ensure_task_board_column()
 
     def _ensure_task_project_column(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ project_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
@@ -699,6 +706,24 @@ class DatabaseSchemaMixin:
                 self._conn.execute(
                     "ALTER TABLE tasks ADD COLUMN gantt_forecasted INTEGER NOT NULL DEFAULT 0;"
                 )
+
+    def _ensure_task_board_column(self) -> None:
+        """Добавляет колонку board_column для канбан-статуса задач."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "board_column" in names:
+            return
+        with self._conn:
+            self._conn.execute("ALTER TABLE tasks ADD COLUMN board_column TEXT NOT NULL DEFAULT 'queue';")
+            self._conn.execute(
+                f"""
+                UPDATE tasks
+                SET board_column = CASE
+                    WHEN {self._priority_normalize_sql('priority')} = '{DEFERRED_PRIORITY}' THEN '{BOARD_COLUMN_DEFERRED}'
+                    ELSE '{BOARD_COLUMN_QUEUE}'
+                END;
+                """
+            )
 
     def _ensure_project_marker_columns(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° РїСЂРѕРµРєС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
@@ -1039,6 +1064,12 @@ class DatabaseSchemaMixin:
     def _rebuild_tasks_table(self) -> None:
         self._recover_rebuild_source_table("tasks")
         self._conn.execute("ALTER TABLE tasks RENAME TO tasks_old;")
+        task_columns = self._conn.execute("PRAGMA table_info(tasks_old);").fetchall()
+        task_column_names = {row["name"] for row in task_columns}
+
+        def _source(column_name: str, fallback_sql: str) -> str:
+            return column_name if column_name in task_column_names else fallback_sql
+
         self._conn.execute(
             """
             CREATE TABLE tasks (
@@ -1048,6 +1079,7 @@ class DatabaseSchemaMixin:
                 day TEXT NOT NULL,
                 time_text TEXT NOT NULL DEFAULT '',
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                board_column TEXT NOT NULL DEFAULT 'queue' CHECK (board_column IN ('deferred', 'queue', 'in_progress', 'completed')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                 gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
@@ -1066,13 +1098,19 @@ class DatabaseSchemaMixin:
         self._conn.execute(
             f"""
             INSERT INTO tasks (
-                id, title, description, day, time_text, priority, done, completion_delay_minutes, gantt_estimate_minutes,
+                id, title, description, day, time_text, priority, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
                 gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
             )
-            SELECT id, title, description, day, time_text, {self._priority_normalize_sql("priority")}, done, COALESCE(completion_delay_minutes, 0),
-                   COALESCE(gantt_estimate_minutes, 0), COALESCE(gantt_forecasted, 0), project_id, parent_id,
-                   COALESCE(recurrence_kind, ''), COALESCE(recurrence_interval, 1),
-                   COALESCE(marker_color, ''), COALESCE(marker_theme, ''), created_at, updated_at
+            SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
+                   CASE
+                       WHEN {self._priority_normalize_sql("priority")} = '{DEFERRED_PRIORITY}' THEN '{BOARD_COLUMN_DEFERRED}'
+                       WHEN COALESCE({_source("board_column", "''")}, '') IN ('{BOARD_COLUMN_QUEUE}', '{BOARD_COLUMN_IN_PROGRESS}', '{BOARD_COLUMN_COMPLETED}') THEN {_source("board_column", "''")}
+                       ELSE '{BOARD_COLUMN_QUEUE}'
+                   END,
+                   done, COALESCE({_source("completion_delay_minutes", "0")}, 0),
+                   COALESCE({_source("gantt_estimate_minutes", "0")}, 0), COALESCE({_source("gantt_forecasted", "0")}, 0), {_source("project_id", "NULL")}, {_source("parent_id", "NULL")},
+                   COALESCE({_source("recurrence_kind", "''")}, ''), COALESCE({_source("recurrence_interval", "1")}, 1),
+                   COALESCE({_source("marker_color", "''")}, ''), COALESCE({_source("marker_theme", "''")}, ''), created_at, updated_at
             FROM tasks_old;
             """
         )

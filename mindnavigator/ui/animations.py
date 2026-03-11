@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, QRect
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
@@ -36,9 +36,10 @@ class WidthExpandAnimationConfig:
 
 @dataclass(frozen=True)
 class DialogAppearAnimationConfig:
-    duration_ms: int = 160
-    offset_px: int = 14
-    start_opacity: float = 0.0
+    duration_ms: int = 180
+    offset_px: int = 10
+    inset_px: int = 10
+    start_opacity: float = 0.18
     end_opacity: float = 1.0
     easing: QEasingCurve.Type = QEasingCurve.Type.OutCubic
 
@@ -48,6 +49,29 @@ class DialogAppearAnimationConfig:
         return DialogAppearAnimationConfig(
             duration_ms=normalize_duration_ms(self.duration_ms),
             offset_px=max(0, int(self.offset_px)),
+            inset_px=max(0, int(self.inset_px)),
+            start_opacity=start,
+            end_opacity=end,
+            easing=self.easing,
+        )
+
+
+@dataclass(frozen=True)
+class DialogMinimizeAnimationConfig:
+    duration_ms: int = 150
+    offset_px: int = 56
+    inset_px: int = 12
+    start_opacity: float = 1.0
+    end_opacity: float = 0.0
+    easing: QEasingCurve.Type = QEasingCurve.Type.InCubic
+
+    def normalized(self) -> DialogMinimizeAnimationConfig:
+        start = max(0.0, min(1.0, float(self.start_opacity)))
+        end = max(0.0, min(1.0, float(self.end_opacity)))
+        return DialogMinimizeAnimationConfig(
+            duration_ms=normalize_duration_ms(self.duration_ms),
+            offset_px=max(0, int(self.offset_px)),
+            inset_px=max(0, int(self.inset_px)),
             start_opacity=start,
             end_opacity=end,
             easing=self.easing,
@@ -108,7 +132,7 @@ class WidthExpandAnimator:
 
 
 class DialogAppearAnimator:
-    """Fast fade + slide-in animation for dialog appearance."""
+    """Fast, slightly smooth reveal animation for dialog appearance."""
 
     def __init__(self, config: Optional[DialogAppearAnimationConfig] = None) -> None:
         self._config = (config or DialogAppearAnimationConfig()).normalized()
@@ -117,8 +141,7 @@ class DialogAppearAnimator:
     def play(self, widget: QWidget) -> None:
         cfg = self._config
         end_rect = widget.geometry()
-        start_rect = QRect(end_rect)
-        start_rect.translate(0, cfg.offset_px)
+        start_rect = self._build_start_rect(end_rect, cfg)
 
         opacity_effect = widget.graphicsEffect()
         if not isinstance(opacity_effect, QGraphicsOpacityEffect):
@@ -145,6 +168,78 @@ class DialogAppearAnimator:
         self._active_animations.append(group)
         group.start()
 
+    @staticmethod
+    def _build_start_rect(end_rect: QRect, config: DialogAppearAnimationConfig) -> QRect:
+        start_rect = QRect(end_rect)
+        if config.inset_px > 0:
+            start_rect.adjust(config.inset_px, config.inset_px, -config.inset_px, -config.inset_px)
+        if config.offset_px > 0:
+            start_rect.translate(0, config.offset_px)
+        return start_rect
+
     def _on_animation_finished(self, group: QParallelAnimationGroup) -> None:
         if group in self._active_animations:
             self._active_animations.remove(group)
+
+
+class DialogMinimizeAnimator:
+    """Fast downward hide animation for task dialogs minimized into the title bar."""
+
+    def __init__(self, config: Optional[DialogMinimizeAnimationConfig] = None) -> None:
+        self._config = (config or DialogMinimizeAnimationConfig()).normalized()
+        self._active_animations: list[QParallelAnimationGroup] = []
+
+    def play(
+        self,
+        widget: QWidget,
+        *,
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> QParallelAnimationGroup:
+        cfg = self._config
+        start_rect = QRect(widget.geometry())
+        end_rect = self._build_end_rect(start_rect, cfg)
+
+        opacity_effect = widget.graphicsEffect()
+        if not isinstance(opacity_effect, QGraphicsOpacityEffect):
+            opacity_effect = QGraphicsOpacityEffect(widget)
+            widget.setGraphicsEffect(opacity_effect)
+        opacity_effect.setOpacity(cfg.start_opacity)
+
+        geometry_animation = QPropertyAnimation(widget, b"geometry", widget)
+        geometry_animation.setDuration(cfg.duration_ms)
+        geometry_animation.setEasingCurve(cfg.easing)
+        geometry_animation.setStartValue(start_rect)
+        geometry_animation.setEndValue(end_rect)
+
+        opacity_animation = QPropertyAnimation(opacity_effect, b"opacity", widget)
+        opacity_animation.setDuration(cfg.duration_ms)
+        opacity_animation.setEasingCurve(cfg.easing)
+        opacity_animation.setStartValue(cfg.start_opacity)
+        opacity_animation.setEndValue(cfg.end_opacity)
+
+        group = QParallelAnimationGroup(widget)
+        group.addAnimation(geometry_animation)
+        group.addAnimation(opacity_animation)
+        group.finished.connect(lambda: self._on_animation_finished(group, on_finished))
+        self._active_animations.append(group)
+        group.start()
+        return group
+
+    @staticmethod
+    def _build_end_rect(start_rect: QRect, config: DialogMinimizeAnimationConfig) -> QRect:
+        end_rect = QRect(start_rect)
+        if config.inset_px > 0:
+            end_rect.adjust(config.inset_px, config.inset_px, -config.inset_px, -config.inset_px)
+        if config.offset_px > 0:
+            end_rect.translate(0, config.offset_px)
+        return end_rect
+
+    def _on_animation_finished(
+        self,
+        group: QParallelAnimationGroup,
+        on_finished: Optional[Callable[[], None]],
+    ) -> None:
+        if group in self._active_animations:
+            self._active_animations.remove(group)
+        if callable(on_finished):
+            on_finished()

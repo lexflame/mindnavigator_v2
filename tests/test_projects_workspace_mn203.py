@@ -6,6 +6,7 @@ from datetime import date
 from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
+from mindnavigator.workspaces.projects import project_edit_dialog
 from mindnavigator.workspaces import projects_workspace
 from mindnavigator.workspaces.projects_workspace import ProjectRoles
 
@@ -109,3 +110,24 @@ def test_repository_probe_rejects_missing_catalog() -> None:
     assert state.available is False
     assert state.branch_name == ""
     assert state.message != ""
+
+
+def test_project_dialog_task_priority_preset_uses_high_medium_low_order(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_default_task_priority_order", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        assert [dialog.default_task_priority_edit.itemText(idx) for idx in range(dialog.default_task_priority_edit.count())] == [
+            "None",
+            "High",
+            "Medium",
+            "Low",
+        ]
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)

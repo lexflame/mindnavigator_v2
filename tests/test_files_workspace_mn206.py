@@ -113,3 +113,55 @@ def test_files_workspace_populates_search_hints(monkeypatch, unique_temp_path) -
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_files_workspace_smart_search_tolerates_legacy_cloud_file_with_missing_strings(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+
+    class _FakeDb:
+        def fetch_cloud_files(self):
+            return [
+                CloudFileData(
+                    id=1,
+                    rel_path="docs/specs/guide.md",
+                    name="guide.md",
+                    description="spec guide",
+                    checksum="a" * 64,
+                    hash_value="a" * 64,
+                    size=123,
+                    is_image=False,
+                    valid=True,
+                    updated_at="2026-03-06T12:00:00+00:00",
+                ),
+                CloudFileData(  # type: ignore[arg-type]
+                    id=2,
+                    rel_path=None,
+                    name=None,
+                    description="broken legacy row",
+                    checksum="b" * 64,
+                    hash_value="b" * 64,
+                    size=456,
+                    is_image=False,
+                    valid=True,
+                    updated_at="2026-03-06T12:00:00+00:00",
+                ),
+            ]
+
+        def get_setting(self, *_args, **_kwargs):
+            return ""
+
+        def fetch_projects(self):
+            return []
+
+    monkeypatch.setattr(files_workspace, "get_database", lambda: _FakeDb())
+    workspace = files_workspace.FileWorkspace()
+    try:
+        workspace.smart_search_edit.setText("guide")
+        QApplication.processEvents()
+
+        assert workspace._sketch_mode_active is True
+        assert workspace.file_grid.count() == 1
+        payload = workspace.file_grid.item(0).data(files_workspace.Qt.ItemDataRole.UserRole)
+        assert payload == ("file", "docs/specs/guide.md")
+    finally:
+        workspace.deleteLater()

@@ -84,6 +84,15 @@ class _DummyDatabaseStatusWorkspace:
         self.db_path_status = _DummyLabel()
 
 
+class _DummyWorkspaceStatusWorkspace:
+    def __init__(self, checked_values: list[bool]) -> None:
+        self.workspace_checkboxes = {
+            f"workspace_{index}": _DummyCheckBox(checked)
+            for index, checked in enumerate(checked_values)
+        }
+        self.workspace_status = _DummyLabel()
+
+
 def test_backup_options_change_is_ignored_while_loading() -> None:
     workspace = _DummySettingsWorkspace(db=_DummyDB())
     workspace._loading_settings = True
@@ -114,8 +123,16 @@ def test_database_status_shows_network_compatibility_warning(monkeypatch) -> Non
     )
     monkeypatch.setattr(settings_workspace, "is_network_database_path", lambda _path: True)
 
-    SettingsWorkspace._update_database_status(workspace, "Database path updated.")  # type: ignore[arg-type]
+    SettingsWorkspace._update_database_status(workspace, "Путь к базе данных обновлён.")  # type: ignore[arg-type]
 
-    assert "Database path updated." in workspace.db_path_status.value
-    assert "Active database path." in workspace.db_path_status.value
-    assert "Network DB compatibility mode" in workspace.db_path_status.value
+    assert "Путь к базе данных обновлён." in workspace.db_path_status.value
+    assert "Активный путь к базе данных." in workspace.db_path_status.value
+    assert "Режим совместимости с сетевой БД" in workspace.db_path_status.value
+
+
+def test_workspace_status_uses_russian_label() -> None:
+    workspace = _DummyWorkspaceStatusWorkspace([True, False, True])
+
+    SettingsWorkspace._update_workspace_status(workspace)  # type: ignore[arg-type]
+
+    assert workspace.workspace_status.value == "Видимые разделы: 2"

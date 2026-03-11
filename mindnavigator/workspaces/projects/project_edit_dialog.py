@@ -59,9 +59,9 @@ class ProjectEditDialog(QDialog):
 
         self.default_task_priority_edit = QComboBox()
         self.default_task_priority_edit.addItem("None", "")
-        self.default_task_priority_edit.addItem("Low", "Low")
-        self.default_task_priority_edit.addItem("Medium", "Medium")
         self.default_task_priority_edit.addItem("High", "High")
+        self.default_task_priority_edit.addItem("Medium", "Medium")
+        self.default_task_priority_edit.addItem("Low", "Low")
         default_priority = (project.default_task_priority if project else "") or ""
         default_prio_idx = self.default_task_priority_edit.findData(default_priority)
         if default_prio_idx >= 0:

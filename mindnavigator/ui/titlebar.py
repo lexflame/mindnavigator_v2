@@ -44,6 +44,7 @@ class TitleBar(QWidget):
         self._minimized_restore_handlers: dict[int, Callable[[], None]] = {}
         self._minimized_is_edit: dict[int, bool] = {}
         self._minimized_buttons: dict[int, QToolButton] = {}
+        self._minimized_host_preferred_width = 420
 
         self.setFixedHeight(self.HEIGHT)
         self.setObjectName("TitleBar")
@@ -68,9 +69,17 @@ class TitleBar(QWidget):
         self.title_label = QLabel(APP_NAME)
         self.title_label.setObjectName("TitleText")
 
-        self.minimized_host = QWidget()
+        self.title_block = QWidget(self)
+        self.title_block_layout = QHBoxLayout(self.title_block)
+        self.title_block_layout.setContentsMargins(0, 0, 0, 0)
+        self.title_block_layout.setSpacing(8)
+        self.title_block_layout.addWidget(self.icon_label)
+        self.title_block_layout.addWidget(self.title_label)
+
+        self.minimized_host = QWidget(self)
         self.minimized_host.setObjectName("MinimizedDialogsHost")
-        self.minimized_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.minimized_host.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.minimized_host.setFixedHeight(28)
         minimized_host_layout = QHBoxLayout(self.minimized_host)
         minimized_host_layout.setContentsMargins(0, 0, 0, 0)
         minimized_host_layout.setSpacing(4)
@@ -94,8 +103,12 @@ class TitleBar(QWidget):
         self.minimized_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.minimized_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.minimized_scroll.setFixedHeight(28)
+        self.minimized_scroll.setAutoFillBackground(False)
+        self.minimized_scroll.viewport().setObjectName("MinimizedDialogsViewport")
+        self.minimized_scroll.viewport().setAutoFillBackground(False)
         self.minimized_strip = QWidget()
         self.minimized_strip.setObjectName("MinimizedDialogsStrip")
+        self.minimized_strip.setAutoFillBackground(False)
         self.minimized_strip_layout = QHBoxLayout(self.minimized_strip)
         self.minimized_strip_layout.setContentsMargins(5, 2, 5, 2)
         self.minimized_strip_layout.setSpacing(5)
@@ -129,14 +142,17 @@ class TitleBar(QWidget):
         self.btn_max.clicked.connect(self._toggle_max_restore)
         self.btn_close.clicked.connect(self._window.close)
 
-        layout.addWidget(self.icon_label)
-        layout.addWidget(self.title_label)
+        self.window_controls = QWidget(self)
+        self.window_controls_layout = QHBoxLayout(self.window_controls)
+        self.window_controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.window_controls_layout.setSpacing(0)
+        self.window_controls_layout.addWidget(self.btn_min)
+        self.window_controls_layout.addWidget(self.btn_max)
+        self.window_controls_layout.addWidget(self.btn_close)
+
+        layout.addWidget(self.title_block)
         layout.addStretch(1)
-        layout.addWidget(self.minimized_host, 1)
-        layout.addStretch(1)
-        layout.addWidget(self.btn_min)
-        layout.addWidget(self.btn_max)
-        layout.addWidget(self.btn_close)
+        layout.addWidget(self.window_controls)
 
         self.setStyleSheet(f"""
             QWidget#TitleBar {{
@@ -152,6 +168,9 @@ class TitleBar(QWidget):
                 background: transparent;
             }}
             QScrollArea#MinimizedDialogsScroll {{
+                background: transparent;
+            }}
+            QWidget#MinimizedDialogsViewport {{
                 background: transparent;
             }}
             QWidget#MinimizedDialogsStrip {{
@@ -220,7 +239,7 @@ class TitleBar(QWidget):
         self._minimized_is_edit[key] = bool(is_edit_dialog)
         self._minimized_buttons[key] = chip
         self.minimized_host.setVisible(True)
-        QTimer.singleShot(0, self._update_minimized_navigation)
+        QTimer.singleShot(0, self._update_minimized_host_layout)
 
     def unregister_minimized_task_dialog(self, dialog: QWidget) -> None:
         key = id(dialog)
@@ -232,7 +251,7 @@ class TitleBar(QWidget):
             chip.deleteLater()
         if not self._minimized_buttons:
             self.minimized_host.setVisible(False)
-        self._update_minimized_navigation()
+        self._update_minimized_host_layout()
 
     def has_minimized_task_edit_dialogs(self) -> bool:
         return any(self._minimized_is_edit.values())
@@ -254,6 +273,49 @@ class TitleBar(QWidget):
         self.minimized_left.setEnabled(has_overflow and bar.value() > bar.minimum())
         self.minimized_right.setEnabled(has_overflow and bar.value() < bar.maximum())
 
+    def _update_minimized_host_layout(self) -> None:
+        if not self.minimized_host.isVisible():
+            self.minimized_host.hide()
+            self._update_minimized_navigation()
+            return
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        margins = layout.contentsMargins() if layout is not None else None
+        left_margin = margins.left() if margins is not None else 10
+        right_margin = margins.right() if margins is not None else 10
+
+        title_block_geometry = self.title_block.geometry()
+        if title_block_geometry.width() > 0:
+            left_edge = title_block_geometry.right() + 16
+        else:
+            left_edge = left_margin + self.title_block.sizeHint().width() + 16
+
+        controls_geometry = self.window_controls.geometry()
+        if controls_geometry.width() > 0:
+            right_edge = controls_geometry.left() - 16
+        else:
+            right_edge = self.width() - right_margin - self.window_controls.sizeHint().width() - 16
+        available_width = max(0, right_edge - left_edge)
+        if available_width <= 0:
+            self.minimized_host.hide()
+            return
+
+        preferred_width = min(
+            max(220, self._minimized_host_preferred_width),
+            available_width,
+        )
+        host_x = (self.width() - preferred_width) // 2
+        if host_x < left_edge:
+            host_x = left_edge
+        if host_x + preferred_width > right_edge:
+            host_x = max(left_edge, right_edge - preferred_width)
+
+        host_y = (self.height() - self.minimized_host.height()) // 2
+        self.minimized_host.setGeometry(host_x, host_y, preferred_width, self.minimized_host.height())
+        self.minimized_host.raise_()
+        self._update_minimized_navigation()
+
     def _toggle_max_restore(self):
         """Переключает окно между нормальным и развернутым состояниями."""
         if not self._window.isMaximized() and hasattr(self._window, "_restore_geom"):
@@ -268,7 +330,7 @@ class TitleBar(QWidget):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
-        QTimer.singleShot(0, self._update_minimized_navigation)
+        QTimer.singleShot(0, self._update_minimized_host_layout)
 
     def mousePressEvent(self, e):
         """Запоминает старт перетаскивания заголовка."""

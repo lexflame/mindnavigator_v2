@@ -16,6 +16,7 @@ class DatabaseTasksMixin:
                 t.title,
                 t.description,
                 t.priority,
+                t.board_column,
                 t.done,
                 t.completion_delay_minutes,
                 t.gantt_estimate_minutes,
@@ -46,6 +47,7 @@ class DatabaseTasksMixin:
                     title=row["title"],
                     description=row["description"] or "",
                     priority=row["priority"],
+                    board_column=normalize_board_column(row["board_column"], row["priority"]),
                     done=bool(row["done"]),
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
                     gantt_estimate_minutes=max(0, int(row["gantt_estimate_minutes"] or 0)),
@@ -122,14 +124,15 @@ class DatabaseTasksMixin:
                         project_links.append((kind, int(ref_id)))
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        board_column = BOARD_COLUMN_DEFERRED if priority == DEFERRED_PRIORITY else BOARD_COLUMN_QUEUE
         with self._conn:
             cur = self._conn.execute(
                 """
                 INSERT INTO tasks (
-                    title, description, day, time_text, priority, done, project_id, parent_id,
+                    title, description, day, time_text, priority, board_column, done, project_id, parent_id,
                     recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -137,6 +140,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    board_column,
                     project_id,
                     parent_id,
                     recurrence_kind,
@@ -157,6 +161,7 @@ class DatabaseTasksMixin:
             description=description,
             priority=priority,
             done=False,
+            board_column=board_column,
             project_id=project_id,
             project_title=project_title,
             project_area=project_area,
@@ -188,10 +193,11 @@ class DatabaseTasksMixin:
     ) -> TaskData:
         """РћР±РЅРѕРІР»СЏРµС‚ Р·Р°РґР°С‡Сѓ."""
         prev_row = self._conn.execute(
-            "SELECT priority FROM tasks WHERE id = ?;",
+            "SELECT priority, board_column FROM tasks WHERE id = ?;",
             (task_id,),
         ).fetchone()
         prev_priority = prev_row["priority"] if prev_row else priority
+        prev_board_column = prev_row["board_column"] if prev_row else BOARD_COLUMN_QUEUE
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
@@ -244,11 +250,15 @@ class DatabaseTasksMixin:
                         project_links.append((kind, int(ref_id)))
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if priority == DEFERRED_PRIORITY:
+            board_column = BOARD_COLUMN_DEFERRED
+        else:
+            board_column = normalize_board_column(prev_board_column, priority)
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, done = ?, project_id = ?, parent_id = ?,
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
                     recurrence_kind = ?, recurrence_interval = ?, marker_color = ?, marker_theme = ?, updated_at = ?
                 WHERE id = ?;
                 """,
@@ -258,6 +268,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    board_column,
                     int(done),
                     project_id,
                     parent_id,
@@ -299,6 +310,7 @@ class DatabaseTasksMixin:
             description=description,
             priority=priority,
             done=bool(done),
+            board_column=board_column,
             project_id=project_id,
             project_title=project_title,
             project_area=project_area,
@@ -317,7 +329,7 @@ class DatabaseTasksMixin:
         row = self._conn.execute(
             """
             SELECT
-                id, title, description, day, time_text, priority, done, project_id, parent_id,
+                id, title, description, day, time_text, priority, board_column, done, project_id, parent_id,
                 recurrence_kind, recurrence_interval, marker_color, marker_theme
             FROM tasks
             WHERE id = ?;
@@ -380,10 +392,10 @@ class DatabaseTasksMixin:
                 self._conn.execute(
                     """
                     INSERT INTO tasks (
-                        title, description, day, time_text, priority, done, project_id, parent_id,
+                        title, description, day, time_text, priority, board_column, done, project_id, parent_id,
                         recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         row["title"],
@@ -391,6 +403,7 @@ class DatabaseTasksMixin:
                         next_day.isoformat(),
                         row["time_text"] or "",
                         row["priority"],
+                        BOARD_COLUMN_DEFERRED if row["priority"] == DEFERRED_PRIORITY else BOARD_COLUMN_QUEUE,
                         row["project_id"],
                         row["parent_id"],
                         recurrence_kind,
@@ -401,6 +414,38 @@ class DatabaseTasksMixin:
                         now_utc,
                     ),
                 )
+
+    def set_task_board_column(self, task_id: int, board_column: str) -> None:
+        """Обновляет канбан-колонку задачи без изменения done-статуса."""
+        row = self._conn.execute(
+            "SELECT priority FROM tasks WHERE id = ?;",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return
+        current_priority = normalize_priority(row["priority"])
+        requested_board_column = str(board_column or "").strip().lower()
+        if requested_board_column == BOARD_COLUMN_DEFERRED:
+            normalized_board_column = BOARD_COLUMN_DEFERRED
+        elif requested_board_column in {BOARD_COLUMN_QUEUE, BOARD_COLUMN_IN_PROGRESS, BOARD_COLUMN_COMPLETED}:
+            normalized_board_column = requested_board_column
+        else:
+            normalized_board_column = BOARD_COLUMN_QUEUE
+        next_priority = (
+            DEFERRED_PRIORITY
+            if normalized_board_column == BOARD_COLUMN_DEFERRED
+            else ("Medium" if current_priority == DEFERRED_PRIORITY else current_priority)
+        )
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET priority = ?, board_column = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (next_priority, normalized_board_column, now, task_id),
+            )
 
     def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:
         """РЎРѕС…СЂР°РЅСЏРµС‚ РѕС†РµРЅРєСѓ РІСЂРµРјРµРЅРё Р·Р°РґР°С‡Рё РґР»СЏ СЂРµР¶РёРјР° РґРёР°РіСЂР°РјРјС‹ Р“Р°РЅС‚Р°."""

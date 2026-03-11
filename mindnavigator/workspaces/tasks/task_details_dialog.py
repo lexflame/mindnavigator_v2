@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from PySide6.QtCore import QEvent, QTimer
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
 class TaskDetailsDialog(QDialog):
@@ -15,6 +16,7 @@ class TaskDetailsDialog(QDialog):
         self.setProperty("task_dialog_kind", "details")
         self.setMinimumWidth(760)
         self.setMinimumHeight(680)
+        self._auto_minimize_pending = False
 
         self._db = get_database()
         self._task = task
@@ -455,5 +457,44 @@ class TaskDetailsDialog(QDialog):
             cloud_root=Path(cloud_root),
         )
         show_dialog_standard(dialog, self)
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
+            self._schedule_auto_minimize_on_deactivate()
+        super().changeEvent(event)
+
+    def _schedule_auto_minimize_on_deactivate(self) -> None:
+        if self._auto_minimize_pending:
+            return
+        self._auto_minimize_pending = True
+        QTimer.singleShot(0, self._maybe_auto_minimize_on_deactivate)
+
+    def _maybe_auto_minimize_on_deactivate(self) -> None:
+        self._auto_minimize_pending = False
+        if not self.isVisible():
+            return
+        if QApplication.activePopupWidget() is not None and self._is_own_widget(QApplication.activePopupWidget()):
+            return
+        if QApplication.activeModalWidget() is not None and self._is_own_widget(QApplication.activeModalWidget()):
+            return
+        active_window = QApplication.activeWindow()
+        if isinstance(active_window, QWidget) and self._is_own_widget(active_window):
+            return
+        focus_widget = QApplication.focusWidget()
+        if isinstance(focus_widget, QWidget) and self._is_own_widget(focus_widget):
+            return
+        window = self.parentWidget().window() if self.parentWidget() is not None else QApplication.activeWindow()
+        minimize_fn = getattr(window, "minimize_task_dialog", None)
+        if not callable(minimize_fn):
+            return
+        minimize_fn(dialog=self, task_id=int(self.property("task_dialog_id") or 0), is_edit_dialog=False)
+
+    def _is_own_widget(self, widget: QWidget) -> bool:
+        current: QWidget | None = widget
+        while current is not None:
+            if current is self:
+                return True
+            current = current.parentWidget()
+        return False
 
 __all__ = ["TaskDetailsDialog"]

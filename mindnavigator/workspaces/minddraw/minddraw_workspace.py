@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
-from .minddraw_node_item import MindDrawNodeItem
 from .minddraw_entity_picker_dialog import MindDrawEntityPickerDialog
+from .minddraw_node_item import MindDrawNodeItem
+
 
 class MindDrawWorkspace(BaseWorkspace):
-    """Mind-map prototype workspace with lightweight entity integration."""
+    """Mind-map workspace with lightweight entity integration."""
 
     workspace_id = "minddraw"
     workspace_title = "MindDraw"
@@ -20,20 +21,24 @@ class MindDrawWorkspace(BaseWorkspace):
         self._node_items: dict[str, MindDrawNodeItem] = {}
         self._link_items: dict[tuple[str, str], QGraphicsPathItem] = {}
         super().__init__(parent)
+        self.setObjectName("MindDrawWorkspace")
         self.search_input.setPlaceholderText("Поиск по узлам MindDraw…")
+        self._apply_workspace_style()
         self._load_canvas_state()
 
     def _build_ui(self) -> None:
         super()._build_ui()
 
         canvas_wrap = QWidget()
+        canvas_wrap.setObjectName("MindDrawCanvasWrap")
         canvas_layout = QVBoxLayout(canvas_wrap)
         canvas_layout.setContentsMargins(0, 0, 0, 0)
-        canvas_layout.setSpacing(8)
+        canvas_layout.setSpacing(10)
 
         self.hint_label = QLabel(
-            "MindDraw prototype: добавляйте узлы, связывайте их и привязывайте сущности из любых режимов."
+            "Связывайте узлы между собой и прикрепляйте к ним задачи, проекты, заметки, карты и другие сущности."
         )
+        self.hint_label.setObjectName("MindDrawHint")
         self.hint_label.setWordWrap(True)
         canvas_layout.addWidget(self.hint_label)
 
@@ -46,10 +51,97 @@ class MindDrawWorkspace(BaseWorkspace):
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.view.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
+        self.view.setFrameShape(QFrame.Shape.NoFrame)
         self.view.setBackgroundBrush(QColor("#161a22"))
+        self.view.viewport().setObjectName("MindDrawCanvasViewport")
         canvas_layout.addWidget(self.view, 1)
 
         self.set_content(canvas_wrap)
+
+    def _apply_workspace_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QWidget#MindDrawWorkspace {
+                background: #16171a;
+            }
+            QWidget#MindDrawWorkspace QLabel {
+                color: #cfd4dd;
+            }
+            QWidget#MindDrawWorkspace QWidget#WorkspaceToolbar,
+            QWidget#MindDrawWorkspace QWidget#WorkspaceSearch,
+            QWidget#MindDrawWorkspace QWidget#WorkspaceFilters {
+                background: #1b1c1f;
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
+                padding: 6px;
+            }
+            QWidget#MindDrawWorkspace QWidget#WorkspaceStatus {
+                color: #aeb6c2;
+            }
+            QWidget#MindDrawWorkspace QToolButton {
+                color: #e4e8ef;
+                background: #252932;
+                border: 1px solid #353b46;
+                border-radius: 7px;
+                padding: 7px 12px;
+                min-height: 28px;
+            }
+            QWidget#MindDrawWorkspace QToolButton:hover {
+                background: #313743;
+            }
+            QWidget#MindDrawWorkspace QToolButton:disabled {
+                color: #6c7481;
+                background: #1c2028;
+                border-color: #2b313c;
+            }
+            QWidget#MindDrawWorkspace QLineEdit {
+                background: #1d2129;
+                color: #e5eaf2;
+                border: 1px solid #2f3642;
+                border-radius: 8px;
+                padding: 8px 10px;
+            }
+            QWidget#MindDrawWorkspace QLineEdit:focus {
+                border-color: #5b8ccf;
+            }
+            QWidget#MindDrawCanvasWrap {
+                background: transparent;
+            }
+            QLabel#MindDrawHint {
+                background: #1b1f27;
+                color: #d7deea;
+                border: 1px solid #2b3240;
+                border-radius: 12px;
+                padding: 12px 14px;
+            }
+            QGraphicsView#MindDrawCanvas {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #141821,
+                    stop: 0.55 #171b24,
+                    stop: 1 #10141b
+                );
+                border: 1px solid #2b3240;
+                border-radius: 16px;
+            }
+            QWidget#MindDrawCanvasViewport {
+                background: transparent;
+            }
+            QGraphicsView#MindDrawCanvas QScrollBar:vertical,
+            QGraphicsView#MindDrawCanvas QScrollBar:horizontal {
+                background: #151920;
+                border: none;
+                margin: 8px;
+            }
+            QGraphicsView#MindDrawCanvas QScrollBar::handle:vertical,
+            QGraphicsView#MindDrawCanvas QScrollBar::handle:horizontal {
+                background: #303845;
+                border-radius: 6px;
+                min-height: 28px;
+                min-width: 28px;
+            }
+            """
+        )
 
     def create_actions(self) -> dict[str, QAction]:
         action_add = QAction("Добавить узел", self)
@@ -67,7 +159,7 @@ class MindDrawWorkspace(BaseWorkspace):
         action_delete = QAction("Удалить выбранные", self)
         action_delete.triggered.connect(self._action_delete_selected)
 
-        action_clear = QAction("Очистить canvas", self)
+        action_clear = QAction("Очистить поле", self)
         action_clear.triggered.connect(self._action_clear)
 
         return {
@@ -107,14 +199,14 @@ class MindDrawWorkspace(BaseWorkspace):
             if not needle:
                 item.setOpacity(1.0)
                 continue
-            hay = f"{state.title} {state.entity_title} {state.entity_kind}".lower()
-            item.setOpacity(1.0 if needle in hay else 0.26)
+            haystack = f"{state.title} {state.entity_title} {state.entity_kind}".lower()
+            item.setOpacity(1.0 if needle in haystack else 0.26)
 
     def _action_add_node(self) -> None:
         text, accepted = QInputDialog.getText(self, "Новый узел", "Название")
         if not accepted:
             return
-        title = (text or "").strip() or f"Topic {len(self._nodes) + 1}"
+        title = (text or "").strip() or f"Тема {len(self._nodes) + 1}"
         offset = float(len(self._nodes) * 42)
         self._create_node(title=title, x=-60.0 + offset, y=-24.0 + offset)
         self.set_status(f"Добавлен узел: {title}")
@@ -341,7 +433,7 @@ class MindDrawWorkspace(BaseWorkspace):
         path.lineTo(arrow_b)
 
         item = QGraphicsPathItem(path)
-        item.setPen(QPen(QColor("#6e7fa4"), 2.0))
+        item.setPen(QPen(QColor("#6f84ac"), 2.0))
         return item
 
     def _save_canvas_state(self) -> None:
@@ -357,7 +449,7 @@ class MindDrawWorkspace(BaseWorkspace):
         nodes, links = deserialize_minddraw_state(raw_state)
         if not nodes:
             self._create_node(title="Central Topic", x=-110.0, y=-35.0)
-            self.set_status("MindDraw prototype ready")
+            self.set_status("MindDraw готов к работе")
             return
 
         self._nodes.clear()
@@ -371,7 +463,7 @@ class MindDrawWorkspace(BaseWorkspace):
             self._add_node_item(state)
         self._links = links
         self._rebuild_links()
-        self.set_status("MindDraw state restored")
+        self.set_status("Состояние MindDraw восстановлено")
         self.update_action_states()
 
     def _fetch_entity_options(self, kind: str, query: str) -> list[EntityOption]:
@@ -394,8 +486,7 @@ class MindDrawWorkspace(BaseWorkspace):
                     options.append(EntityOption("project", project.id, project.title, project.area or ""))
         elif kind == "idea":
             for idea in self._db.fetch_ideas(archived=True):
-                title = idea.title
-                if match(title):
+                if match(idea.title):
                     options.append(EntityOption("idea", idea.id, idea.title, idea.project_title or ""))
         elif kind == "note":
             for note in self._db.fetch_notes():
@@ -432,5 +523,6 @@ class MindDrawWorkspace(BaseWorkspace):
 
         options.sort(key=lambda row: (row.title.lower(), row.entity_id))
         return options[:500]
+
 
 __all__ = ["MindDrawWorkspace"]

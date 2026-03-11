@@ -19,7 +19,7 @@ import sys
 from typing import Dict, List, Union, Optional, Set, Tuple, Any, cast
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel, QVariantAnimation, QEasingCurve, Signal
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
@@ -30,9 +30,16 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import (
+    BOARD_COLUMN_COMPLETED,
+    BOARD_COLUMN_DEFERRED,
+    BOARD_COLUMN_IN_PROGRESS,
+    BOARD_COLUMN_QUEUE,
+    BOARD_COLUMNS,
     CloudFileData,
+    DEFERRED_PRIORITY,
     TaskAttachmentData,
     get_database as _storage_get_database,
+    normalize_board_column,
     normalize_priority,
     validate_area,
     validate_time_text,

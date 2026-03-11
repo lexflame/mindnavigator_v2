@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from PySide6.QtWidgets import QApplication
+
+from mindnavigator.workspaces.minddraw import module_impl as minddraw_module
 from mindnavigator.workspaces.minddraw.module_impl import (
     MindDrawLinkState,
     MindDrawNodeState,
@@ -41,3 +44,68 @@ def test_minddraw_deserialize_skips_invalid_links() -> None:
 
     assert [node.node_id for node in nodes] == ["n1", "n2"]
     assert links == [MindDrawLinkState("n1", "n2")]
+
+
+class _MindDrawDbStub:
+    def fetch_tasks(self):
+        return []
+
+    def fetch_projects(self):
+        return []
+
+    def fetch_ideas(self, archived=True):
+        return []
+
+    def fetch_notes(self):
+        return []
+
+    def fetch_maps(self):
+        return []
+
+    def fetch_objects(self):
+        return []
+
+    def fetch_characters(self):
+        return []
+
+    def fetch_cloud_files(self):
+        return []
+
+    def fetch_collection_items(self):
+        return []
+
+    def fetch_shop_items(self):
+        return []
+
+
+def test_minddraw_workspace_applies_local_theme(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(minddraw_module, "get_database", lambda: _MindDrawDbStub())
+    monkeypatch.setattr(minddraw_module.MindDrawWorkspace, "_load_canvas_state", lambda self: None)
+
+    workspace = minddraw_module.MindDrawWorkspace()
+    try:
+        assert workspace.objectName() == "MindDrawWorkspace"
+        assert workspace.hint_label.objectName() == "MindDrawHint"
+        assert workspace.view.objectName() == "MindDrawCanvas"
+        assert workspace.view.viewport().objectName() == "MindDrawCanvasViewport"
+        assert "QWidget#MindDrawWorkspace QWidget#WorkspaceToolbar" in workspace.styleSheet()
+        assert "QGraphicsView#MindDrawCanvas" in workspace.styleSheet()
+    finally:
+        workspace.deleteLater()
+
+
+def test_minddraw_entity_picker_uses_dialog_theme() -> None:
+    _app = QApplication.instance() or QApplication([])
+    dialog = minddraw_module.MindDrawEntityPickerDialog(lambda _kind, _query: [])
+    try:
+        assert dialog.objectName() == "MindDrawEntityPicker"
+        assert dialog.kind_combo.objectName() == "MindDrawEntityKind"
+        assert dialog.search_edit.objectName() == "MindDrawEntitySearch"
+        assert dialog.list_widget.objectName() == "MindDrawEntityList"
+        assert dialog.reload_btn.objectName() == "MindDrawEntityReload"
+        assert dialog.property("dialog_category") == "minimal_flex"
+        assert "QDialog#MindDrawEntityPicker" in dialog.styleSheet()
+        assert "QListWidget#MindDrawEntityList" in dialog.styleSheet()
+    finally:
+        dialog.deleteLater()

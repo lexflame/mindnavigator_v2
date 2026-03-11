@@ -167,9 +167,9 @@ class SettingsWorkspace(QWidget):
         db_layout.setContentsMargins(20, 18, 20, 18)
         db_layout.setSpacing(12)
 
-        db_title = QLabel("Database storage")
+        db_title = QLabel("Хранение базы данных")
         db_title.setObjectName("SettingsSectionTitle")
-        db_hint = QLabel("Choose where the local SQLite database file is stored.")
+        db_hint = QLabel("Выберите, где хранится локальный файл базы данных SQLite.")
         db_hint.setObjectName("SettingsHint")
         db_hint.setWordWrap(True)
         db_layout.addWidget(db_title)
@@ -180,9 +180,9 @@ class SettingsWorkspace(QWidget):
         db_text = QVBoxLayout()
         db_text.setSpacing(6)
 
-        db_label = QLabel("Database file")
+        db_label = QLabel("Файл базы данных")
         db_label.setObjectName("SettingsLabel")
-        db_desc = QLabel("Path applies on next app start. Current data is copied to the new location.")
+        db_desc = QLabel("Путь применится при следующем запуске приложения. Текущие данные будут скопированы в новое место.")
         db_desc.setObjectName("SettingsHint")
         db_desc.setWordWrap(True)
         db_text.addWidget(db_label)
@@ -192,20 +192,20 @@ class SettingsWorkspace(QWidget):
         self.db_path_edit = QLineEdit()
         self.db_path_edit.setObjectName("SettingsPath")
         self.db_path_edit.setReadOnly(True)
-        self.db_path_edit.setPlaceholderText("Not set")
+        self.db_path_edit.setPlaceholderText("Не задано")
 
         self.btn_db_dir = QToolButton()
-        self.btn_db_dir.setText("Choose")
+        self.btn_db_dir.setText("Выбрать")
         self.btn_db_dir.setObjectName("SettingsEditButton")
         self.btn_db_dir.clicked.connect(self._edit_database_storage)
 
         self.btn_db_open = QToolButton()
-        self.btn_db_open.setText("Open")
+        self.btn_db_open.setText("Открыть")
         self.btn_db_open.setObjectName("SettingsEditButton")
         self.btn_db_open.clicked.connect(self._open_database_storage)
 
         self.btn_check_updates = QToolButton()
-        self.btn_check_updates.setText("Check update")
+        self.btn_check_updates.setText("Проверить обновления")
         self.btn_check_updates.setObjectName("SettingsEditButton")
         self.btn_check_updates.clicked.connect(self._check_updates)
 
@@ -228,9 +228,9 @@ class SettingsWorkspace(QWidget):
         workspace_layout.setContentsMargins(20, 18, 20, 18)
         workspace_layout.setSpacing(12)
 
-        workspace_title = QLabel("Visible workspaces")
+        workspace_title = QLabel("Видимые разделы")
         workspace_title.setObjectName("SettingsSectionTitle")
-        workspace_hint = QLabel("Select which modes are shown in the left sidebar.")
+        workspace_hint = QLabel("Выберите, какие разделы показывать в левой боковой панели.")
         workspace_hint.setObjectName("SettingsHint")
         workspace_hint.setWordWrap(True)
         workspace_layout.addWidget(workspace_title)
@@ -596,7 +596,7 @@ class SettingsWorkspace(QWidget):
         start_dir = current_path.parent if current_path.parent.exists() else Path.home()
         selected_dir = QFileDialog.getExistingDirectory(
             self,
-            "Select database storage directory",
+            "Выберите папку для хранения базы данных",
             str(start_dir),
         )
         if not selected_dir:
@@ -607,22 +607,22 @@ class SettingsWorkspace(QWidget):
                 self._db.backup_to(target_db_path)
             set_configured_db_path(target_db_path)
         except Exception as exc:
-            QMessageBox.warning(self, "Database path", str(exc))
-            self._update_database_status(message="Failed to update database path.")
+            QMessageBox.warning(self, "Путь к базе данных", str(exc))
+            self._update_database_status(message="Не удалось обновить путь к базе данных.")
             return
         self.db_path_edit.setText(str(target_db_path))
         self.setting_changed.emit(self.APP_DATABASE_PATH_SIGNAL_KEY, str(target_db_path))
-        self._update_database_status(message="Database path updated. Restart app to switch active DB.")
+        self._update_database_status(message="Путь к базе данных обновлён. Перезапустите приложение, чтобы переключиться на новую БД.")
 
     def _open_database_storage(self) -> None:
         selected = self.db_path_edit.text().strip()
         if not selected:
-            self._update_database_status(message="Select database storage directory first.")
+            self._update_database_status(message="Сначала выберите папку хранения базы данных.")
             return
         db_path = Path(selected)
         target_dir = db_path.parent if db_path.suffix else db_path
         if not target_dir.exists():
-            self._update_database_status(message="Database directory not found.")
+            self._update_database_status(message="Папка с базой данных не найдена.")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target_dir)))
 
@@ -638,12 +638,12 @@ class SettingsWorkspace(QWidget):
             except OSError:
                 pending_switch = str(selected_path) != str(self._db.path)
             if pending_switch:
-                status_parts.append("Pending switch: restart required.")
+                status_parts.append("Ожидает переключения: требуется перезапуск.")
             else:
-                status_parts.append("Active database path.")
+                status_parts.append("Активный путь к базе данных.")
             if is_network_database_path(selected_path):
                 status_parts.append(
-                    "Network DB compatibility mode: WAL disabled, writes are serialized between app instances."
+                    "Режим совместимости с сетевой БД: WAL отключён, запись сериализуется между экземплярами приложения."
                 )
         self.db_path_status.setText(" ".join(status_parts).strip())
 
@@ -651,8 +651,8 @@ class SettingsWorkspace(QWidget):
         try:
             schema_version = self._db.apply_schema_updates()
         except Exception as exc:
-            QMessageBox.warning(self, "Check update", f"Failed to update DB schema: {exc}")
-            self._update_database_status(message="DB schema update failed.")
+            QMessageBox.warning(self, "Проверка обновлений", f"Не удалось обновить схему БД: {exc}")
+            self._update_database_status(message="Не удалось обновить схему БД.")
             return
 
         service = UpdateService(
@@ -662,23 +662,23 @@ class SettingsWorkspace(QWidget):
         try:
             update_info = service.check_for_update(APP_VERSION)
         except UpdateServiceError as exc:
-            message = f"DB schema is up to date (v{schema_version}). Version check failed: {exc}"
-            QMessageBox.information(self, "Check update", message)
+            message = f"Схема БД актуальна (v{schema_version}). Не удалось проверить версию приложения: {exc}"
+            QMessageBox.information(self, "Проверка обновлений", message)
             self._update_database_status(message=message)
             return
 
         if update_info.update_available:
             message = (
-                f"DB schema is up to date (v{schema_version}). "
-                f"New app version available: {update_info.latest_version}. "
-                f"Release: {update_info.release_url}"
+                f"Схема БД актуальна (v{schema_version}). "
+                f"Доступна новая версия приложения: {update_info.latest_version}. "
+                f"Релиз: {update_info.release_url}"
             )
         else:
             message = (
-                f"DB schema is up to date (v{schema_version}). "
-                f"Current app version {update_info.current_version} is latest."
+                f"Схема БД актуальна (v{schema_version}). "
+                f"Текущая версия приложения {update_info.current_version} является последней."
             )
-        QMessageBox.information(self, "Check update", message)
+        QMessageBox.information(self, "Проверка обновлений", message)
         self._update_database_status(message=message)
 
     def _edit_backup_dir(self) -> None:
@@ -723,7 +723,7 @@ class SettingsWorkspace(QWidget):
                 self._db.set_setting(self.BACKUP_FREQUENCY_KEY, frequency)
             self._db.set_setting(self.BACKUP_RETENTION_KEY, str(self.retention_spin.value()))
         except sqlite3.Error as exc:
-            self._update_backup_status(message=f"Backup settings were not saved: {exc}")
+            self._update_backup_status(message=f"Настройки резервного копирования не сохранены: {exc}")
             return
         self._update_backup_status()
 
@@ -790,7 +790,7 @@ class SettingsWorkspace(QWidget):
 
     def _update_workspace_status(self) -> None:
         enabled_count = sum(1 for checkbox in self.workspace_checkboxes.values() if checkbox.isChecked())
-        self.workspace_status.setText(f"Enabled workspaces: {enabled_count}")
+        self.workspace_status.setText(f"Видимые разделы: {enabled_count}")
 
     @staticmethod
     def _autostart_command() -> str:
@@ -956,7 +956,7 @@ class SettingsWorkspace(QWidget):
         try:
             self._db.set_setting(self.BACKUP_LAST_RUN_KEY, datetime.now().isoformat(timespec="seconds"))
         except sqlite3.Error as exc:
-            status_message = f"Backup created, but failed to save last run timestamp: {exc}"
+            status_message = f"Резервная копия создана, но не удалось сохранить время последнего запуска: {exc}"
         self._refresh_backup_list()
         self._prune_backups()
         self._update_backup_status(message=status_message)
