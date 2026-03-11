@@ -94,6 +94,14 @@ Status: Completed
 | TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 | adhoc | Show task number beside task title in tasks list (`MN-<id>: <title>`) | feat | Completed |
 | TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 | adhoc | Split `mindnavigator/workspaces/tasks/module_impl.py` into real class files and include pending tasks UI text fix | chore | Completed |
 
+## Post-Release Follow-ups - UI And Workflow Polish
+Created: 2026-03-11
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_AE69DCC4-F4DE-4824-AFB1-EFAD3E224379 | postrelease | Package UI/workflow follow-ups, publish branch/PR, sync main, and document delivery | feat | In Progress |
+
 ## Sprint 6 - Notes, Export, Import
 Created: 2026-02-25
 Status: Completed

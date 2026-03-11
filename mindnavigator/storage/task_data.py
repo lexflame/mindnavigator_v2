@@ -13,6 +13,7 @@ class TaskData:
     description: str
     priority: str
     done: bool
+    board_column: str = "queue"
     project_id: Optional[int] = None
     project_title: str = ""
     project_area: str = ""

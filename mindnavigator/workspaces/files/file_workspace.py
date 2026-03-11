@@ -458,7 +458,27 @@ class FileWorkspace(QWidget):
         if not isinstance(raw_value, list):
             return []
         files = [file_item for file_item in raw_value if isinstance(file_item, CloudFileData)]
-        return sorted(files, key=lambda cloud_file: cloud_file.name.lower())
+        return sorted(files, key=FileWorkspace._cloud_file_sort_key)
+
+    @staticmethod
+    def _file_name_text(file_item: CloudFileData) -> str:
+        name = file_item.name
+        if isinstance(name, str):
+            return name.strip() or "Без имени"
+        return "Без имени"
+
+    @staticmethod
+    def _file_rel_path_text(file_item: CloudFileData) -> str:
+        rel_path = file_item.rel_path
+        if isinstance(rel_path, str):
+            return rel_path.strip()
+        return ""
+
+    @classmethod
+    def _cloud_file_sort_key(cls, file_item: CloudFileData) -> tuple[str, str, int]:
+        rel_path = cls._file_rel_path_text(file_item).lower()
+        name = cls._file_name_text(file_item).lower()
+        return (rel_path or name, name, int(file_item.id))
 
     def _refresh_search_hints(self) -> None:
         scored_tokens: List[tuple[str, int]] = []
@@ -522,9 +542,9 @@ class FileWorkspace(QWidget):
 
     def _file_matches_smart_search(self, file_item: CloudFileData, query_tokens: List[str]) -> bool:
         path_tokens = self._file_path_tokens.get(file_item.id, set())
-        path_value = self._normalize_path_for_search(file_item.rel_path).lower()
+        path_value = self._normalize_path_for_search(self._file_rel_path_text(file_item)).lower()
         description = self._format_description(file_item.description).lower()
-        combined = f"{file_item.name.lower()} {path_value} {description}"
+        combined = f"{self._file_name_text(file_item).lower()} {path_value} {description}"
         for token in query_tokens:
             if any(token in indexed_token for indexed_token in path_tokens):
                 continue
@@ -538,7 +558,7 @@ class FileWorkspace(QWidget):
         if not query_tokens:
             return []
         matched = [item for item in self._cloud_files if self._file_matches_smart_search(item, query_tokens)]
-        return sorted(matched, key=lambda item: item.rel_path.lower())
+        return sorted(matched, key=self._cloud_file_sort_key)
 
     def _apply_smart_search(self, query: str) -> None:
         if not self._cloud_files:
@@ -563,14 +583,15 @@ class FileWorkspace(QWidget):
         for file_item in files:
             description = self._format_description(file_item.description)
             size = self._format_size(file_item.size)
-            normalized_path = self._normalize_path_for_search(file_item.rel_path)
+            rel_path = self._file_rel_path_text(file_item)
+            normalized_path = self._normalize_path_for_search(rel_path)
             folder_path = normalized_path.rsplit("\\", 1)[0] if "\\" in normalized_path else ""
             path_preview = folder_path or "корень"
-            label = f"{file_item.name}\n{path_preview}\n{size} - {description}"
+            label = f"{self._file_name_text(file_item)}\n{path_preview}\n{size} - {description}"
             item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, ("file", file_item.rel_path))
+            item.setData(Qt.ItemDataRole.UserRole, ("file", rel_path))
             item.setIcon(self._file_icon_for(file_item, cloud_root_path))
-            item.setToolTip(file_item.rel_path)
+            item.setToolTip(rel_path)
             self.file_grid.addItem(item)
         self.path_label.setText(f"Поиск: {query}")
         self.count_label.setText(f"Найдено: {len(files)}")
@@ -658,19 +679,22 @@ class FileWorkspace(QWidget):
         for file_item in files:
             description = self._format_description(file_item.description)
             size = self._format_size(file_item.size)
-            label = f"{file_item.name}\n{size} • {description}"
+            rel_path = self._file_rel_path_text(file_item)
+            label = f"{self._file_name_text(file_item)}\n{size} • {description}"
             item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, ("file", file_item.rel_path))
+            item.setData(Qt.ItemDataRole.UserRole, ("file", rel_path))
             item.setIcon(self._file_icon_for(file_item, cloud_root_path))
-            item.setToolTip(file_item.rel_path)
+            item.setToolTip(rel_path)
             self.file_grid.addItem(item)
         self.count_label.setText(f"{len(folders)} папок, {len(files)} файлов")
 
     def _file_icon_for(self, file_item: CloudFileData, cloud_root: Optional[Path]) -> QIcon:
-        ext = Path(file_item.name).suffix.lower()
+        file_name = self._file_name_text(file_item)
+        rel_path = self._file_rel_path_text(file_item)
+        ext = Path(file_name).suffix.lower()
         cache_key = ext or "file"
-        if file_item.is_image and cloud_root:
-            file_path = cloud_root / file_item.rel_path
+        if file_item.is_image and cloud_root and rel_path:
+            file_path = cloud_root / rel_path
             if file_path.is_file():
                 pixmap = QPixmap(str(file_path))
                 if not pixmap.isNull():
@@ -1037,7 +1061,7 @@ class FileWorkspace(QWidget):
         data = self._folder_index.get(self._current_folder, {})
         files = self._sorted_cloud_files(data.get("files"))
         image_files = [item for item in files if item.is_image]
-        return sorted(image_files, key=lambda item: item.name.lower())
+        return sorted(image_files, key=self._cloud_file_sort_key)
 
     def _open_image_preview(self, rel_path: str) -> None:
         file_item = self._find_file_by_rel_path(rel_path)

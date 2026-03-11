@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timedelta
 from typing import Mapping, cast
 from PySide6.QtWidgets import (
+    QDialog,
     QMainWindow,
     QWidget,
     QVBoxLayout,
@@ -39,6 +40,9 @@ from mindnavigator.storage import DEFERRED_PRIORITY, get_database as _storage_ge
 from mindnavigator.ui.leftrail import LeftRail
 from mindnavigator.ui.projects_nav import ProjectsNav
 from mindnavigator.ui.search_nav import SearchNav
+from mindnavigator.ui.animations import DialogMinimizeAnimator
+from mindnavigator.ui.dialogs.frameless_patch import restore_minimizable_task_dialog
+from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND
 from mindnavigator.ui.titlebar import TitleBar
 from mindnavigator.window.collections.windowing import ResizeEdge
@@ -179,6 +183,8 @@ class MainWindow(QMainWindow):
         self._mode_labels = get_mode_labels(DEFAULT_LANGUAGE)
         self._current_mode = self.MODE_TASKS
         self._minimized_task_dialogs: dict[int, dict[str, object]] = {}
+        self._minimized_task_dialog_animations: dict[int, object] = {}
+        self._dialog_minimize_animator = DialogMinimizeAnimator()
 
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
@@ -192,6 +198,10 @@ class MainWindow(QMainWindow):
         # Включаем отслеживание мыши и фильтр событий для собственного ресайза.
         self.setMouseTracking(True)
         self.installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+            app.applicationStateChanged.connect(self._on_application_state_changed)
 
         # Выставляем стартовый режим.
         self.set_mode(self.MODE_TASKS)
@@ -329,7 +339,12 @@ class MainWindow(QMainWindow):
     def minimize_task_dialog(self, dialog: QWidget, task_id: int, is_edit_dialog: bool) -> None:
         key = id(dialog)
         if key in self._minimized_task_dialogs:
+            debug_task_dialog(f"main_window minimize skipped duplicate task_id={task_id} dialog={type(dialog).__name__}")
             return
+        debug_task_dialog(
+            f"main_window minimize start task_id={task_id} dialog={type(dialog).__name__} "
+            f"is_edit={is_edit_dialog} visible={dialog.isVisible()}"
+        )
 
         def _restore() -> None:
             self._restore_minimized_task_dialog(dialog)
@@ -341,24 +356,134 @@ class MainWindow(QMainWindow):
         }
         dialog.finished.connect(lambda _result, d=dialog: self._forget_minimized_task_dialog(d))
         self.title_bar.register_minimized_task_dialog(dialog, int(task_id), bool(is_edit_dialog), _restore)
-        dialog.hide()
+        dialog.setEnabled(False)
+        animation = self._dialog_minimize_animator.play(
+            dialog,
+            on_finished=lambda d=dialog: self._finalize_task_dialog_minimize_animation(d),
+        )
+        self._minimized_task_dialog_animations[key] = animation
 
     def _restore_minimized_task_dialog(self, dialog: QWidget) -> None:
         key = id(dialog)
         if key not in self._minimized_task_dialogs:
             return
+        animation = self._minimized_task_dialog_animations.pop(key, None)
+        if animation is not None:
+            stop_fn = getattr(animation, "stop", None)
+            if callable(stop_fn):
+                stop_fn()
         self.title_bar.unregister_minimized_task_dialog(dialog)
         self._minimized_task_dialogs.pop(key, None)
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        dialog.setEnabled(True)
+        if isinstance(dialog, QDialog):
+            restore_minimizable_task_dialog(dialog)
+        else:
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
 
     def _forget_minimized_task_dialog(self, dialog: QWidget) -> None:
         key = id(dialog)
         if key not in self._minimized_task_dialogs:
             return
+        self._minimized_task_dialog_animations.pop(key, None)
         self.title_bar.unregister_minimized_task_dialog(dialog)
         self._minimized_task_dialogs.pop(key, None)
+
+    def _finalize_task_dialog_minimize_animation(self, dialog: QWidget) -> None:
+        key = id(dialog)
+        self._minimized_task_dialog_animations.pop(key, None)
+        if key not in self._minimized_task_dialogs:
+            return
+        dialog.hide()
+        dialog.setEnabled(True)
+
+    def _iter_visible_task_dialogs(self) -> list[QDialog]:
+        app = QApplication.instance()
+        if app is None:
+            return []
+        dialogs: list[QDialog] = []
+        for widget in app.topLevelWidgets():
+            if not isinstance(widget, QDialog):
+                continue
+            if not bool(widget.property("task_dialog_minimizable")):
+                continue
+            if not widget.isVisible():
+                continue
+            parent_window = widget.parentWidget().window() if widget.parentWidget() is not None else None
+            if parent_window is not self:
+                continue
+            dialogs.append(widget)
+        dialogs.sort(key=lambda dialog: (dialog is QApplication.activeWindow(), dialog.isActiveWindow()))
+        return dialogs
+
+    @staticmethod
+    def _widget_belongs_to_dialog(widget: QWidget, dialog: QDialog) -> bool:
+        current: QWidget | None = widget
+        while current is not None:
+            if current is dialog:
+                return True
+            current = current.parentWidget()
+        return False
+
+    def _maybe_minimize_task_dialog_from_app_click(self, global_pos: QPoint) -> bool:
+        if QApplication.activePopupWidget() is not None:
+            return False
+        visible_dialogs = self._iter_visible_task_dialogs()
+        if not visible_dialogs:
+            return False
+        debug_task_dialog(
+            f"main_window app_click visible_dialogs={len(visible_dialogs)} global_pos=({global_pos.x()},{global_pos.y()})"
+        )
+        clicked_widget = QApplication.widgetAt(global_pos)
+        target_dialog = visible_dialogs[-1]
+        for dialog in reversed(visible_dialogs):
+            if dialog.frameGeometry().contains(global_pos):
+                return False
+            if isinstance(clicked_widget, QWidget) and self._widget_belongs_to_dialog(clicked_widget, dialog):
+                return False
+            if dialog.isActiveWindow():
+                target_dialog = dialog
+                break
+        task_id = int(target_dialog.property("task_dialog_id") or 0)
+        if task_id <= 0:
+            return False
+        debug_task_dialog(
+            f"main_window app_click minimize task_id={task_id} dialog={type(target_dialog).__name__} "
+            f"clicked_widget={type(clicked_widget).__name__ if clicked_widget is not None else 'None'}"
+        )
+        self.minimize_task_dialog(
+            target_dialog,
+            task_id=task_id,
+            is_edit_dialog=str(target_dialog.property("task_dialog_kind") or "").strip().lower() == "edit",
+        )
+        return True
+
+    def _minimize_top_visible_task_dialog(self) -> bool:
+        visible_dialogs = self._iter_visible_task_dialogs()
+        if not visible_dialogs:
+            return False
+        target_dialog = visible_dialogs[-1]
+        for dialog in reversed(visible_dialogs):
+            if dialog.isActiveWindow():
+                target_dialog = dialog
+                break
+        task_id = int(target_dialog.property("task_dialog_id") or 0)
+        if task_id <= 0:
+            return False
+        self.minimize_task_dialog(
+            target_dialog,
+            task_id=task_id,
+            is_edit_dialog=str(target_dialog.property("task_dialog_kind") or "").strip().lower() == "edit",
+        )
+        return True
+
+    def _on_application_state_changed(self, state) -> None:
+        if state == Qt.ApplicationState.ApplicationActive:
+            return
+        state_value = getattr(state, "value", state)
+        debug_task_dialog(f"application_state_changed state={state_value}")
+        self._minimize_top_visible_task_dialog()
 
     def _register_system_restore_hotkey(self) -> None:
         self._system_restore_hotkey_registered = False
@@ -821,6 +946,18 @@ class MainWindow(QMainWindow):
                 color: {title_color};
                 font-size: 13px;
                 font-weight: 600;
+            }}
+            QWidget#MinimizedDialogsHost {{
+                background: transparent;
+            }}
+            QScrollArea#MinimizedDialogsScroll {{
+                background: transparent;
+            }}
+            QWidget#MinimizedDialogsViewport {{
+                background: transparent;
+            }}
+            QWidget#MinimizedDialogsStrip {{
+                background: transparent;
             }}
             QToolButton {{
                 color: {button_color};
@@ -1352,6 +1489,15 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         """Перехватывает события мыши для кастомного ресайза."""
+        if (
+            event.type() == QEvent.Type.MouseButtonPress
+            and hasattr(event, "button")
+            and hasattr(event, "globalPosition")
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
+            global_pos = event.globalPosition().toPoint()
+            if self._maybe_minimize_task_dialog_from_app_click(global_pos):
+                return False
         # Обрабатываем события только для самого окна.
         if obj is self:
             # 🔥 В maximized полностью выключаем hit-test и дергание курсора

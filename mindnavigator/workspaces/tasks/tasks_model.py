@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 class TasksModel(QAbstractListModel):
+    task_moved = Signal(int)
+
     def __init__(self, parent=None):
         """Создает модель данных задач для списка."""
         super().__init__(parent)
@@ -37,6 +39,7 @@ class TasksModel(QAbstractListModel):
                 t.description,
                 t.priority,
                 t.done,
+                t.board_column,
                 t.project_id,
                 t.project_title,
                 t.project_area,
@@ -114,6 +117,8 @@ class TasksModel(QAbstractListModel):
             return r.priority
         if role == TaskRoles.Done:
             return r.done
+        if role == TaskRoles.BoardColumn:
+            return r.board_column
         if role == TaskRoles.Expanded:
             return r.id in self._expanded_task_ids
         if role == TaskRoles.ProjectTitle:
@@ -228,6 +233,7 @@ class TasksModel(QAbstractListModel):
                 task.description,
                 task.priority,
                 task.done,
+                task.board_column,
                 task.project_id,
                 task.project_title,
                 task.project_area,
@@ -340,6 +346,7 @@ class TasksModel(QAbstractListModel):
             updated.description,
             updated.priority,
             updated.done,
+            updated.board_column,
             updated.project_id,
             updated.project_title,
             updated.project_area,
@@ -419,6 +426,58 @@ class TasksModel(QAbstractListModel):
             marker_theme=task.marker_theme,
         )
 
+    def step_priority_by_row(self, row_idx: int, direction: int) -> None:
+        """Сдвигает приоритет вверх или вниз без циклического перехода."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        ordered_priorities = ["Отложенная", "Low", "Medium", "High"]
+        try:
+            current_index = ordered_priorities.index(task.priority)
+        except ValueError:
+            current_index = ordered_priorities.index("Medium")
+        next_index = max(0, min(len(ordered_priorities) - 1, current_index + int(direction)))
+        next_priority = ordered_priorities[next_index]
+        if next_priority == task.priority:
+            return
+        self.update_task_by_row(
+            row_idx,
+            title=task.title,
+            description=task.description,
+            day=task.day,
+            time_text=task.time_text,
+            priority=next_priority,
+            done=task.done,
+            project_id=task.project_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
+        )
+
+    def step_board_column_by_row(self, row_idx: int, direction: int) -> None:
+        """Сдвигает стадию BOARD вперед или назад без циклического перехода."""
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return
+        ordered_columns = [
+            BOARD_COLUMN_DEFERRED,
+            BOARD_COLUMN_QUEUE,
+            BOARD_COLUMN_IN_PROGRESS,
+            BOARD_COLUMN_COMPLETED,
+        ]
+        current_column = normalize_board_column(task.board_column, task.priority)
+        try:
+            current_index = ordered_columns.index(current_column)
+        except ValueError:
+            current_index = ordered_columns.index(BOARD_COLUMN_QUEUE)
+        next_index = max(0, min(len(ordered_columns) - 1, current_index + int(direction)))
+        next_column = ordered_columns[next_index]
+        if next_column == current_column:
+            return
+        self._db.set_task_board_column(task.id, next_column)
+        self._reload_from_db()
+
     def delete_task_by_row(self, row_idx: int):
         """Удаляет задачу по индексу строки."""
         if row_idx < 0 or row_idx >= len(self._rows):
@@ -465,6 +524,7 @@ class TasksModel(QAbstractListModel):
                     updated.description,
                     updated.priority,
                     updated.done,
+                    updated.board_column,
                     updated.project_id,
                     updated.project_title,
                     updated.project_area,
@@ -478,6 +538,7 @@ class TasksModel(QAbstractListModel):
             new_all.append(it)
         self._all_rows = new_all
         self._rebuild()
+        self.task_moved.emit(task.id)
         return True
 
     def next_day_for_task(self, task: TaskRow) -> date:
@@ -538,6 +599,7 @@ class TasksModel(QAbstractListModel):
                     updated.description,
                     updated.priority,
                     updated.done,
+                    updated.board_column,
                     updated.project_id,
                     updated.project_title,
                     updated.project_area,
@@ -551,6 +613,7 @@ class TasksModel(QAbstractListModel):
             new_all.append(it)
         self._all_rows = new_all
         self._rebuild()
+        self.task_moved.emit(task.id)
         return True
 
     def task_by_id(self, task_id: int) -> Optional[TaskRow]:
@@ -604,6 +667,7 @@ class TasksModel(QAbstractListModel):
                     updated.description,
                     updated.priority,
                     updated.done,
+                    updated.board_column,
                     updated.project_id,
                     updated.project_title,
                     updated.project_area,
@@ -617,6 +681,7 @@ class TasksModel(QAbstractListModel):
             new_all.append(it)
         self._all_rows = new_all
         self._rebuild()
+        self.task_moved.emit(task.id)
         return True
 
     def _is_descendant(self, task_id: int, ancestor_id: int) -> bool:

@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
-from PySide6.QtGui import QAction, QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QFormLayout,
     QGraphicsItem,
     QGraphicsPathItem,

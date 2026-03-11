@@ -40,6 +40,16 @@ from .wishlist_item_data import WishlistItemData
 DEFERRED_PRIORITY = "Отложенная"
 LEGACY_DEFERRED_PRIORITY = "РћС‚Р»РѕР¶РµРЅРЅР°СЏ"
 PRIORITIES = ("Low", "Medium", "High", DEFERRED_PRIORITY)
+BOARD_COLUMN_DEFERRED = "deferred"
+BOARD_COLUMN_QUEUE = "queue"
+BOARD_COLUMN_IN_PROGRESS = "in_progress"
+BOARD_COLUMN_COMPLETED = "completed"
+BOARD_COLUMNS = (
+    BOARD_COLUMN_DEFERRED,
+    BOARD_COLUMN_QUEUE,
+    BOARD_COLUMN_IN_PROGRESS,
+    BOARD_COLUMN_COMPLETED,
+)
 MAX_TITLE_LEN = 160
 MAX_AREA_LEN = 80
 COLLECTION_ENTITY_TYPES = ("building", "city", "film", "game", "character", "other")
@@ -193,6 +203,18 @@ def normalize_priority(priority: str) -> str:
     if priority not in PRIORITIES:
         raise ValueError("Приоритет должен быть Low, Medium, High или Отложенная.")
     return priority
+
+
+def normalize_board_column(board_column: str, priority: str = "Medium") -> str:
+    normalized_priority = normalize_priority(priority)
+    normalized = str(board_column or "").strip().lower()
+    if normalized_priority == DEFERRED_PRIORITY:
+        return BOARD_COLUMN_DEFERRED
+    if normalized not in BOARD_COLUMNS:
+        return BOARD_COLUMN_QUEUE
+    if normalized == BOARD_COLUMN_DEFERRED:
+        return BOARD_COLUMN_QUEUE
+    return normalized
 
 
 def validate_time_text(time_text: str) -> str:

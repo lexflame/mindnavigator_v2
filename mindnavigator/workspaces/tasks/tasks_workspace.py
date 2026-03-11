@@ -14,6 +14,226 @@ class TasksWorkspace(BaseWorkspace):
     workspace_title = "Задачи"
     GANTT_DAY_START_HOUR = 8
     GANTT_DAY_END_HOUR = 22
+    BOARD_COLUMN_ORDER = [
+        (BOARD_COLUMN_DEFERRED, "Отложенные"),
+        (BOARD_COLUMN_QUEUE, "В очереди"),
+        (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
+        (BOARD_COLUMN_COMPLETED, "Выполнена"),
+    ]
+
+    class _BoardColumnListWidget(QListWidget):
+        _drag_task_id: int | None = None
+
+        def __init__(self, workspace: "TasksWorkspace", board_column: str, parent=None) -> None:
+            super().__init__(parent)
+            self._workspace = workspace
+            self._board_column = board_column
+            self.setObjectName("TasksBoardList")
+            self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+            self.setDefaultDropAction(Qt.DropAction.MoveAction)
+            self.setDragEnabled(True)
+            self.setAcceptDrops(True)
+            self.setDropIndicatorShown(True)
+
+        def startDrag(self, supported_actions: Qt.DropActions) -> None:
+            current_item = self.currentItem()
+            try:
+                type(self)._drag_task_id = int(current_item.data(Qt.ItemDataRole.UserRole)) if current_item else None
+            except (TypeError, ValueError):
+                type(self)._drag_task_id = None
+            super().startDrag(supported_actions)
+
+        def dropEvent(self, event) -> None:
+            if event.source() is self:
+                event.ignore()
+                type(self)._drag_task_id = None
+                return
+            task_id = type(self)._drag_task_id
+            super().dropEvent(event)
+            type(self)._drag_task_id = None
+            if task_id is None or not event.isAccepted():
+                return
+            self._workspace._move_task_to_board_column(task_id, self._board_column)
+
+    class _DashChartWidget(QWidget):
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            self._items: List[Tuple[str, int, QColor]] = []
+            self._progress = 1.0
+            self._animation = QVariantAnimation(self)
+            self._animation.setDuration(900)
+            self._animation.setStartValue(0.0)
+            self._animation.setEndValue(1.0)
+            self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._animation.valueChanged.connect(self._on_animation_value_changed)
+
+        def set_items(self, items: List[Tuple[str, int, QColor]], animate: bool = True) -> None:
+            self._items = list(items)
+            self._animation.stop()
+            if animate:
+                self._progress = 0.0
+                self._animation.start()
+            else:
+                self._progress = 1.0
+                self.update()
+
+        def _on_animation_value_changed(self, value) -> None:
+            self._progress = float(value)
+            self.update()
+
+    class _DashBarChartWidget(_DashChartWidget):
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            self.setObjectName("TasksDashBarChart")
+            self.setMinimumHeight(260)
+
+        def paintEvent(self, event) -> None:
+            super().paintEvent(event)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.fillRect(self.rect(), QColor("#17191f"))
+            chart_rect = self.rect().adjusted(18, 18, -18, -18)
+            if chart_rect.width() <= 0 or chart_rect.height() <= 0:
+                return
+            if not self._items:
+                painter.setPen(QColor("#8f95a3"))
+                painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
+                return
+
+            plot_rect = QRect(
+                chart_rect.left() + 8,
+                chart_rect.top() + 14,
+                max(10, chart_rect.width() - 16),
+                max(10, chart_rect.height() - 62),
+            )
+            baseline_y = plot_rect.bottom()
+            painter.setPen(QColor("#323641"))
+            painter.drawLine(plot_rect.left(), baseline_y, plot_rect.right(), baseline_y)
+
+            max_value = max((value for _, value, _ in self._items), default=0)
+            if max_value <= 0:
+                max_value = 1
+            slot_width = plot_rect.width() / max(1, len(self._items))
+            bar_width = max(24, int(slot_width * 0.52))
+            animated_values = [value * self._progress for _, value, _ in self._items]
+
+            value_font = painter.font()
+            value_font.setPointSize(max(8, value_font.pointSize() - 1))
+            label_font = painter.font()
+            label_font.setPointSize(max(8, label_font.pointSize() - 1))
+
+            for index, (label, value, color) in enumerate(self._items):
+                center_x = plot_rect.left() + int(slot_width * index + slot_width / 2.0)
+                current_value = animated_values[index]
+                bar_height = int(plot_rect.height() * current_value / max_value)
+                bar_rect = QRect(
+                    center_x - bar_width // 2,
+                    baseline_y - bar_height,
+                    bar_width,
+                    max(4, bar_height),
+                )
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(color)
+                painter.drawRoundedRect(bar_rect, 8, 8)
+
+                painter.setPen(QColor("#e6e8ed"))
+                painter.setFont(value_font)
+                value_rect = QRect(center_x - 32, max(chart_rect.top(), bar_rect.top() - 24), 64, 18)
+                painter.drawText(value_rect, Qt.AlignmentFlag.AlignCenter, str(int(round(current_value))))
+
+                painter.setPen(QColor("#9ea4b1"))
+                painter.setFont(label_font)
+                label_rect = QRect(center_x - int(slot_width / 2), baseline_y + 10, int(slot_width), 32)
+                painter.drawText(
+                    label_rect,
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
+                    label,
+                )
+
+    class _DashPieChartWidget(_DashChartWidget):
+        def __init__(self, parent=None) -> None:
+            super().__init__(parent)
+            self.setObjectName("TasksDashPieChart")
+            self.setMinimumHeight(260)
+
+        def paintEvent(self, event) -> None:
+            super().paintEvent(event)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.fillRect(self.rect(), QColor("#17191f"))
+            chart_rect = self.rect().adjusted(18, 18, -18, -18)
+            if chart_rect.width() <= 0 or chart_rect.height() <= 0:
+                return
+            if not self._items:
+                painter.setPen(QColor("#8f95a3"))
+                painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
+                return
+
+            total = sum(value for _, value, _ in self._items)
+            if total <= 0:
+                painter.setPen(QColor("#8f95a3"))
+                painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
+                return
+
+            legend_width = 150 if chart_rect.width() >= 430 else 0
+            pie_side = min(chart_rect.width() - legend_width - 12, chart_rect.height())
+            pie_side = max(120, pie_side)
+            pie_rect = QRect(chart_rect.left(), chart_rect.top(), pie_side, pie_side)
+            if legend_width > 0:
+                pie_rect.moveTop(chart_rect.top() + max(0, (chart_rect.height() - pie_side) // 2))
+            else:
+                pie_rect.moveLeft(chart_rect.left() + max(0, (chart_rect.width() - pie_side) // 2))
+
+            painter.setPen(QColor("#2b303b"))
+            painter.setBrush(QColor("#1f232c"))
+            painter.drawEllipse(pie_rect)
+
+            total_angle = int(round(360.0 * 16 * self._progress))
+            start_angle = 90 * 16
+            remaining_angle = total_angle
+            for label, value, color in self._items:
+                span_angle = int(round((value / total) * 360.0 * 16))
+                draw_angle = min(span_angle, remaining_angle)
+                if draw_angle > 0:
+                    painter.setPen(QColor("#17191f"))
+                    painter.setBrush(color)
+                    painter.drawPie(pie_rect, start_angle, -draw_angle)
+                    start_angle -= draw_angle
+                    remaining_angle -= draw_angle
+
+            inner_rect = pie_rect.adjusted(pie_rect.width() // 4, pie_rect.height() // 4, -pie_rect.width() // 4, -pie_rect.height() // 4)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#17191f"))
+            painter.drawEllipse(inner_rect)
+
+            painter.setPen(QColor("#eef1f7"))
+            total_font = painter.font()
+            total_font.setPointSize(max(10, total_font.pointSize() + 1))
+            total_font.setBold(True)
+            painter.setFont(total_font)
+            painter.drawText(inner_rect.adjusted(0, -8, 0, 0), Qt.AlignmentFlag.AlignCenter, str(int(round(total * self._progress))))
+            painter.setPen(QColor("#8f95a3"))
+            small_font = painter.font()
+            small_font.setPointSize(max(8, small_font.pointSize() - 1))
+            small_font.setBold(False)
+            painter.setFont(small_font)
+            painter.drawText(inner_rect.adjusted(0, 18, 0, 0), Qt.AlignmentFlag.AlignCenter, "всего")
+
+            legend_left = pie_rect.right() + 18 if legend_width > 0 else chart_rect.left()
+            legend_top = chart_rect.top() if legend_width > 0 else pie_rect.bottom() + 16
+            row_height = 24
+            for index, (label, value, color) in enumerate(self._items):
+                row_y = legend_top + index * row_height
+                if row_y + row_height > chart_rect.bottom() + 1:
+                    break
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(color)
+                painter.drawEllipse(QRect(legend_left, row_y + 5, 12, 12))
+                painter.setPen(QColor("#d7dbe3"))
+                painter.drawText(QRect(legend_left + 20, row_y, 96, row_height), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
+                painter.setPen(QColor("#8f95a3"))
+                painter.drawText(QRect(legend_left + 106, row_y, 42, row_height), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, str(value))
 
     def __init__(self, parent=None):
         """Создает интерфейс рабочей области задач."""
@@ -44,9 +264,13 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_dash = None
         self._project_quick_links_host = None
         self._project_quick_links_layout = None
+        self._project_filter_clear_button = None
         self._project_quick_link_buttons: List[QToolButton] = []
+        self._task_flash_animations: Dict[int, QVariantAnimation] = {}
         self.board_columns: Dict[str, QListWidget] = {}
         self.dash_summary_label = None
+        self.dash_bar_chart = None
+        self.dash_pie_chart = None
         self.dash_projects_list = None
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
@@ -195,9 +419,16 @@ class TasksWorkspace(BaseWorkspace):
 
             QLabel#TasksBoardHint,
             QLabel#TasksDashSummary,
-            QLabel#TasksDashProjectsTitle {
+            QLabel#TasksDashProjectsTitle,
+            QLabel#TasksDashChartTitle {
                 color: #aeb3bf;
                 padding: 2px 4px;
+            }
+
+            QFrame#TasksDashCard {
+                background: #1b1c20;
+                border: 1px solid #2a2b2f;
+                border-radius: 10px;
             }
 
             QFrame#TasksBoardColumn {
@@ -300,7 +531,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.new_priority = QComboBox()
         self.new_priority.setFixedWidth(110)
-        self.new_priority.addItems(["Low", "Medium", "High", "Отложенная"])
+        self.new_priority.addItems(["High", "Medium", "Low", "Отложенная"])
         self.new_priority.setCurrentText("Medium")
 
         self.btn_add = QToolButton()
@@ -326,6 +557,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self.model = TasksModel(self)
         self.list.setModel(self.model)
+        self.model.task_moved.connect(self._flash_task_after_move)
 
         self.delegate = TasksItemDelegate(self.list)
         self.list.setItemDelegate(self.delegate)
@@ -415,7 +647,7 @@ class TasksWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        board_hint = QLabel("Режим Board: группировка задач выбранного дня по приоритету.")
+        board_hint = QLabel("Режим Board: канбан по выбранному дню с независимым статусом колонки.")
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)
         layout.addWidget(board_hint)
@@ -425,14 +657,8 @@ class TasksWorkspace(BaseWorkspace):
         columns_layout.setContentsMargins(0, 0, 0, 0)
         columns_layout.setSpacing(8)
 
-        priorities = [
-            ("High", "High"),
-            ("Medium", "Medium"),
-            ("Low", "Low"),
-            ("Отложенная", "Deferred"),
-        ]
         self.board_columns = {}
-        for priority_key, header in priorities:
+        for board_column, header in self.BOARD_COLUMN_ORDER:
             column_frame = QFrame(columns_host)
             column_frame.setObjectName("TasksBoardColumn")
             column_layout = QVBoxLayout(column_frame)
@@ -443,12 +669,10 @@ class TasksWorkspace(BaseWorkspace):
             label.setObjectName("TasksBoardColumnTitle")
             column_layout.addWidget(label)
 
-            list_widget = QListWidget(column_frame)
-            list_widget.setObjectName("TasksBoardList")
-            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+            list_widget = self._BoardColumnListWidget(self, board_column, column_frame)
             column_layout.addWidget(list_widget, 1)
             columns_layout.addWidget(column_frame, 1)
-            self.board_columns[priority_key] = list_widget
+            self.board_columns[board_column] = list_widget
 
         layout.addWidget(columns_host, 1)
         return page
@@ -459,10 +683,41 @@ class TasksWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self.dash_summary_label = QLabel("Dash: сводка загрузки задач по выбранному дню.")
+        self.dash_summary_label = QLabel("DASH: пересчет статистики и наполнение диаграмм по выбранному дню.")
         self.dash_summary_label.setObjectName("TasksDashSummary")
         self.dash_summary_label.setWordWrap(True)
         layout.addWidget(self.dash_summary_label)
+
+        charts_host = QWidget(page)
+        charts_layout = QHBoxLayout(charts_host)
+        charts_layout.setContentsMargins(0, 0, 0, 0)
+        charts_layout.setSpacing(8)
+
+        totals_card = QFrame(charts_host)
+        totals_card.setObjectName("TasksDashCard")
+        totals_layout = QVBoxLayout(totals_card)
+        totals_layout.setContentsMargins(10, 10, 10, 10)
+        totals_layout.setSpacing(8)
+        totals_title = QLabel("Столбичная статистика")
+        totals_title.setObjectName("TasksDashChartTitle")
+        totals_layout.addWidget(totals_title)
+        self.dash_bar_chart = self._DashBarChartWidget(totals_card)
+        totals_layout.addWidget(self.dash_bar_chart, 1)
+
+        distribution_card = QFrame(charts_host)
+        distribution_card.setObjectName("TasksDashCard")
+        distribution_layout = QVBoxLayout(distribution_card)
+        distribution_layout.setContentsMargins(10, 10, 10, 10)
+        distribution_layout.setSpacing(8)
+        distribution_title = QLabel("Круговая доля сущностей")
+        distribution_title.setObjectName("TasksDashChartTitle")
+        distribution_layout.addWidget(distribution_title)
+        self.dash_pie_chart = self._DashPieChartWidget(distribution_card)
+        distribution_layout.addWidget(self.dash_pie_chart, 1)
+
+        charts_layout.addWidget(totals_card, 1)
+        charts_layout.addWidget(distribution_card, 1)
+        layout.addWidget(charts_host)
 
         projects_title = QLabel("Топ проектов по активным задачам")
         projects_title.setObjectName("TasksDashProjectsTitle")
@@ -492,30 +747,112 @@ class TasksWorkspace(BaseWorkspace):
         if not self.board_columns:
             return
         tasks = self._fetch_tasks_for_focus_day()
-        grouped: Dict[str, List] = {"High": [], "Medium": [], "Low": [], "Отложенная": []}
+        grouped: Dict[str, List] = {column: [] for column, _ in self.BOARD_COLUMN_ORDER}
         for task in tasks:
-            grouped.setdefault(task.priority, []).append(task)
-        for priority_key, list_widget in self.board_columns.items():
+            board_column = normalize_board_column(getattr(task, "board_column", ""), task.priority)
+            grouped.setdefault(board_column, []).append(task)
+        for board_column, list_widget in self.board_columns.items():
             list_widget.clear()
-            for task in grouped.get(priority_key, []):
+            for task in grouped.get(board_column, []):
                 time_text = task.time_text or "—"
                 item = QListWidgetItem(f"{time_text} · {task.title}")
+                item.setData(Qt.ItemDataRole.UserRole, task.id)
+                if task.project_title:
+                    item.setToolTip(task.project_title)
                 list_widget.addItem(item)
 
-    def _refresh_dash_day(self) -> None:
-        if self.dash_summary_label is None or self.dash_projects_list is None:
+    def _move_task_to_board_column(self, task_id: int, board_column: str) -> None:
+        self._db.set_task_board_column(task_id, board_column)
+        self.refresh()
+
+    def _flash_task_after_move(self, task_id: int) -> None:
+        if self.delegate is None or self.list is None:
             return
+        index = self._index_for_task_id(task_id)
+        if index is None:
+            return
+        self.list.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
+        active_animation = self._task_flash_animations.pop(task_id, None)
+        if active_animation is not None:
+            active_animation.stop()
+            active_animation.deleteLater()
+
+        animation = QVariantAnimation(self)
+        animation.setDuration(780)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.valueChanged.connect(
+            lambda value, moved_task_id=task_id: self._update_task_flash(moved_task_id, float(value))
+        )
+        animation.finished.connect(lambda moved_task_id=task_id: self._finish_task_flash(moved_task_id))
+        self._task_flash_animations[task_id] = animation
+        self._update_task_flash(task_id, 0.0)
+        animation.start()
+
+    def _update_task_flash(self, task_id: int, progress: float) -> None:
+        if self.delegate is None or self.list is None:
+            return
+        self.delegate.set_task_flash_progress(task_id, progress)
+        index = self._index_for_task_id(task_id)
+        if index is None:
+            self.list.viewport().update()
+            return
+        self.list.viewport().update(self.list.visualRect(index))
+
+    def _finish_task_flash(self, task_id: int) -> None:
+        animation = self._task_flash_animations.pop(task_id, None)
+        if animation is not None:
+            animation.deleteLater()
+        if self.delegate is None or self.list is None:
+            return
+        self.delegate.clear_task_flash(task_id)
+        index = self._index_for_task_id(task_id)
+        if index is None:
+            self.list.viewport().update()
+            return
+        self.list.viewport().update(self.list.visualRect(index))
+
+    def _refresh_dash_day(self) -> None:
+        if (
+            self.dash_summary_label is None
+            or self.dash_projects_list is None
+            or self.dash_bar_chart is None
+            or self.dash_pie_chart is None
+        ):
+            return
+        all_tasks = self._db.fetch_tasks()
+        all_projects = self._db.fetch_projects()
+        all_maps = self._db.fetch_maps()
+        all_markers = self._db.fetch_map_markers()
+        all_objects = self._db.fetch_objects()
+        all_notes = self._db.fetch_notes()
+
         tasks = self._fetch_tasks_for_focus_day()
         total = len(tasks)
         high = sum(1 for task in tasks if task.priority == "High")
         medium = sum(1 for task in tasks if task.priority == "Medium")
         low = sum(1 for task in tasks if task.priority == "Low")
         deferred = sum(1 for task in tasks if task.priority == "Отложенная")
+        entity_items = [
+            ("Задачи", len(all_tasks), QColor("#4f7ecf")),
+            ("Проекты", len(all_projects), QColor("#59c3c3")),
+            ("Карты", len(all_maps), QColor("#f4a261")),
+            ("Метки", len(all_markers), QColor("#e76f51")),
+            ("Объекты", len(all_objects), QColor("#90be6d")),
+            ("Заметки", len(all_notes), QColor("#e9c46a")),
+        ]
+        self.dash_bar_chart.set_items(entity_items, animate=True)
+        self.dash_pie_chart.set_items(entity_items, animate=True)
         self.dash_summary_label.setText(
-            f"Dash на {self._focus_day.isoformat()}: всего {total}, High {high}, Medium {medium}, Low {low}, Deferred {deferred}."
+            (
+                f"DASH на {self._focus_day.isoformat()}: диаграммы пересчитаны и заполнены заново.\n"
+                f"На {self._focus_day.isoformat()}: "
+                f"активных задач {total}, High {high}, Medium {medium}, Low {low}, Отложенных {deferred}."
+            )
         )
 
-        projects = {project.id: project for project in self._db.fetch_projects() if not project.archived}
+        projects = {project.id: project for project in all_projects if not project.archived}
         counts: Dict[int, int] = {}
         for task in tasks:
             if task.project_id is None:
@@ -661,7 +998,7 @@ class TasksWorkspace(BaseWorkspace):
         self.lbl_day.setObjectName("TasksDayLabel")
 
         self.cmb_priority = QComboBox()
-        self.cmb_priority.addItems(["Любой", "Low", "Medium", "High", "Отложенная"])
+        self.cmb_priority.addItems(["Любой", "High", "Medium", "Low", "Отложенная"])
         self.cmb_priority.setFixedWidth(110)
 
         self.filter_layout.addWidget(self.tab_all)
@@ -678,6 +1015,7 @@ class TasksWorkspace(BaseWorkspace):
         self._project_quick_links_layout = QHBoxLayout(self._project_quick_links_host)
         self._project_quick_links_layout.setContentsMargins(0, 0, 0, 0)
         self._project_quick_links_layout.setSpacing(4)
+        self._ensure_project_filter_clear_button()
         self.filter_layout.addWidget(self._project_quick_links_host, 1)
         self.filter_layout.addSpacing(12)
         self.filter_layout.addWidget(self.cmb_priority)
@@ -703,13 +1041,37 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self.search_input)
         self.filter_layout.addWidget(self.clear_button)
 
+    def _ensure_project_filter_clear_button(self) -> QToolButton:
+        button = self._project_filter_clear_button
+        if button is not None:
+            try:
+                if self._project_quick_links_host is not None and button.parent() is not self._project_quick_links_host:
+                    button.setParent(self._project_quick_links_host)
+                return button
+            except RuntimeError:
+                self._project_filter_clear_button = None
+        parent = self._project_quick_links_host
+        button = QToolButton(parent)
+        button.setIcon(qta.icon("fa5s.times", color="#cfcfcf"))
+        button.setAutoRaise(True)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip("Сбросить фильтр по проекту")
+        button.setVisible(False)
+        button.clicked.connect(lambda: self.set_project_filter(None))
+        self._project_filter_clear_button = button
+        return button
+
     def _refresh_project_quick_links(self) -> None:
         if self._project_quick_links_layout is None:
             return
+        clear_button = self._ensure_project_filter_clear_button()
         while self._project_quick_links_layout.count():
             item = self._project_quick_links_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                if widget is clear_button:
+                    widget.hide()
+                    continue
                 widget.deleteLater()
         self._project_quick_link_buttons = []
 
@@ -740,10 +1102,13 @@ class TasksWorkspace(BaseWorkspace):
             button.setToolTip(f"{project.area} · {project.title}")
             button.setProperty("project_id", project_id)
             button.clicked.connect(
-                lambda _checked=False, selected_project_id=project_id: self.set_project_filter(selected_project_id)
+                lambda checked=False, selected_project_id=project_id: self.set_project_filter(
+                    selected_project_id if checked else None
+                )
             )
             self._project_quick_links_layout.addWidget(button)
             self._project_quick_link_buttons.append(button)
+        self._project_quick_links_layout.addWidget(clear_button)
         self._project_quick_links_layout.addStretch(1)
         self._sync_project_quick_links_selection()
 
@@ -756,6 +1121,7 @@ class TasksWorkspace(BaseWorkspace):
             button.blockSignals(True)
             button.setChecked(button_project_id is not None and button_project_id == active_project_id)
             button.blockSignals(False)
+        self._ensure_project_filter_clear_button().setVisible(active_project_id is not None)
 
     def refresh(self) -> None:
         """Перезагружает список задач из базы."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtGui import QPen
 from .task_details_dialog import TaskDetailsDialog
@@ -78,12 +80,19 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header = QFont()
         self._font_header.setPointSize(9)
         self._font_header.setBold(True)
+        self._task_flash_progress: Dict[int, float] = {}
 
     @staticmethod
     def _tasks_model(model: QAbstractItemModel | None) -> Optional[TasksModel]:
         if isinstance(model, TasksModel):
             return model
         return None
+
+    def set_task_flash_progress(self, task_id: int, progress: float) -> None:
+        self._task_flash_progress[int(task_id)] = max(0.0, min(1.0, float(progress)))
+
+    def clear_task_flash(self, task_id: int) -> None:
+        self._task_flash_progress.pop(int(task_id), None)
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         """Возвращает размер строки списка."""
@@ -346,6 +355,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         marker_color: str = (index.data(TaskRoles.MarkerColor) or "").strip()
         marker_theme: str = (index.data(TaskRoles.MarkerTheme) or "").strip()
         priority: str = index.data(TaskRoles.Priority) or "Medium"
+        board_column: str = index.data(TaskRoles.BoardColumn) or BOARD_COLUMN_QUEUE
         done: bool = bool(index.data(TaskRoles.Done))
         completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
         overdue = self._is_overdue(day, done)
@@ -363,6 +373,17 @@ class TasksItemDelegate(QStyledItemDelegate):
         bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
+        task_id_value = index.data(TaskRoles.TaskId)
+        try:
+            flash_progress = self._task_flash_progress.get(int(task_id_value))
+        except (TypeError, ValueError):
+            flash_progress = None
+        if flash_progress is not None:
+            envelope = max(0.0, 1.0 - flash_progress)
+            pulse = (math.sin(flash_progress * math.pi * 4.0 + (math.pi / 2.0)) + 1.0) / 2.0
+            flash_color = QColor("#f3d36b")
+            flash_color.setAlpha(max(0, min(170, int(170 * envelope * (0.35 + pulse * 0.65)))))
+            painter.fillRect(r, flash_color)
         self._draw_marker_theme_overlay(painter, r, marker_theme)
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
@@ -514,47 +535,44 @@ class TasksItemDelegate(QStyledItemDelegate):
             text = QFontMetrics(self._font_small).elidedText(parent_move_text, Qt.TextElideMode.ElideRight, text_rect.width())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
 
-        # --- PRIORITY BLOCK (fixed layout) ---
-        value_text = "OVERDUE" if overdue else priority
-        value_color = self.C_OVERDUE if overdue else self._prio_color(priority)
+        # --- STAGE AND PRIORITY BLOCK ---
+        value_text = self._board_stage_label(board_column, priority)
+        value_color = self._board_stage_color(board_column, priority)
+        fire_color = self._prio_color(priority)
         priority_hovered = bool(option_state & QStyle.StateFlag.State_MouseOver)
         priority_chip_rect = pr_rect.adjusted(2, 6, -2, -6)
         painter.setPen(QColor("#3a3b40"))
         painter.setBrush(QColor("#21252d") if priority_hovered else QColor("#1a1d23"))
         painter.drawRoundedRect(priority_chip_rect, 6, 6)
 
-        # Жёсткая сетка справа
-        icon_w = 18
-        value_w = 72
-        gap = 10
-        label_w = priority_chip_rect.width() - value_w - icon_w - gap
+        controls = self._priority_control_rects(priority_chip_rect)
+        value_rect = controls["value"]
+        fire_rect = controls["icon"]
+        priority_arrows_rect = controls["priority_arrows"]
+        priority_up_rect = controls["priority_up"]
+        priority_down_rect = controls["priority_down"]
+        stage_arrows_rect = controls["stage_arrows"]
+        stage_up_rect = controls["stage_up"]
+        stage_down_rect = controls["stage_down"]
 
-        value_rect = QRect(
-            priority_chip_rect.left() + label_w,
-            priority_chip_rect.top(),
-            value_w,
-            priority_chip_rect.height()
-        )
-
-        icon_rect = QRect(
-            priority_chip_rect.right() - icon_w,
-            cy - 8,
-            16,
-            16
-        )
+        painter.setPen(QColor("#30343d"))
+        painter.drawLine(priority_arrows_rect.left(), priority_arrows_rect.top() + 3, priority_arrows_rect.left(), priority_arrows_rect.bottom() - 3)
+        painter.drawLine(priority_arrows_rect.left() + 2, priority_up_rect.bottom(), priority_arrows_rect.right() - 2, priority_up_rect.bottom())
+        painter.drawLine(stage_arrows_rect.left(), stage_arrows_rect.top() + 3, stage_arrows_rect.left(), stage_arrows_rect.bottom() - 3)
+        painter.drawLine(stage_arrows_rect.left() + 2, stage_up_rect.bottom(), stage_arrows_rect.right() - 2, stage_up_rect.bottom())
 
         painter.setFont(self._font_small)
 
-        # label
-        painter.setPen(self.C_DIM)
-        # painter.drawText(label_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "приоритет")
-
         # value
         painter.setPen(value_color)
-        painter.drawText(value_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, value_text)
+        painter.drawText(value_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, value_text)
+        qta.icon("fa5s.fire", color=fire_color.name()).paint(painter, fire_rect)
 
-        # icon
-        self._icon_fire.paint(painter, icon_rect)
+        painter.setPen(QColor("#b6bcc8"))
+        painter.drawText(priority_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
+        painter.drawText(priority_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
+        painter.drawText(stage_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
+        painter.drawText(stage_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
 
         painter.setPen(self.C_BORDER)
         painter.setBrush(QColor("#1f2227"))
@@ -643,6 +661,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
             priority_rect = layout["priority"]
+            priority_controls = self._priority_control_rects(priority_rect.adjusted(2, 6, -2, -6))
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
             quick_rect = self._task_quick_rect(layout, r)
@@ -695,8 +714,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
                 return True
+            if priority_controls["priority_up"].contains(pos):
+                tasks_model.step_priority_by_row(index.row(), +1)
+                return True
+            if priority_controls["priority_down"].contains(pos):
+                tasks_model.step_priority_by_row(index.row(), -1)
+                return True
+            if priority_controls["stage_up"].contains(pos):
+                tasks_model.step_board_column_by_row(index.row(), +1)
+                return True
+            if priority_controls["stage_down"].contains(pos):
+                tasks_model.step_board_column_by_row(index.row(), -1)
+                return True
             if priority_rect.contains(pos):
-                tasks_model.cycle_priority_by_row(index.row())
                 return True
             if quick_rect.contains(pos):
                 task = tasks_model.task_at_row(index.row())
@@ -933,6 +963,27 @@ class TasksItemDelegate(QStyledItemDelegate):
         return self.C_MED
 
     @staticmethod
+    def _board_stage_label(board_column: str, priority: str) -> str:
+        normalized = normalize_board_column(board_column, priority)
+        if normalized == BOARD_COLUMN_DEFERRED:
+            return "Отложенные"
+        if normalized == BOARD_COLUMN_IN_PROGRESS:
+            return "Выполняется"
+        if normalized == BOARD_COLUMN_COMPLETED:
+            return "Выполнена"
+        return "В очереди"
+
+    def _board_stage_color(self, board_column: str, priority: str) -> QColor:
+        normalized = normalize_board_column(board_column, priority)
+        if normalized == BOARD_COLUMN_DEFERRED:
+            return self.C_DEFER
+        if normalized == BOARD_COLUMN_IN_PROGRESS:
+            return QColor("#5fb7d9")
+        if normalized == BOARD_COLUMN_COMPLETED:
+            return QColor("#8f9cff")
+        return QColor("#d7dbe3")
+
+    @staticmethod
     def _is_overdue(d: date, done: bool) -> bool:
         """Проверяет, просрочена ли задача."""
         return (d < date.today()) and (not done)
@@ -1008,6 +1059,52 @@ class TasksItemDelegate(QStyledItemDelegate):
             y = title_rect.center().y() - (button_height // 2)
         return QRect(x, y, button_width, button_height)
 
+    @staticmethod
+    def _priority_control_rects(priority_chip_rect: QRect) -> dict[str, QRect]:
+        arrows_w = 18
+        icon_w = 16
+        stage_arrows_rect = QRect(
+            priority_chip_rect.right() - arrows_w,
+            priority_chip_rect.top() + 1,
+            arrows_w,
+            max(10, priority_chip_rect.height() - 2),
+        )
+        half_h = stage_arrows_rect.height() // 2
+        stage_up_rect = QRect(stage_arrows_rect.left(), stage_arrows_rect.top(), stage_arrows_rect.width(), half_h)
+        stage_down_rect = QRect(stage_arrows_rect.left(), stage_arrows_rect.top() + half_h, stage_arrows_rect.width(), stage_arrows_rect.height() - half_h)
+        priority_arrows_rect = QRect(
+            stage_arrows_rect.left() - arrows_w - 4,
+            priority_chip_rect.top() + 1,
+            arrows_w,
+            max(10, priority_chip_rect.height() - 2),
+        )
+        icon_rect = QRect(
+            priority_chip_rect.left() + 8,
+            priority_chip_rect.center().y() - (icon_w // 2),
+            icon_w,
+            icon_w,
+        )
+        priority_arrows_rect.moveLeft(icon_rect.right() + 6)
+        priority_half_h = priority_arrows_rect.height() // 2
+        priority_up_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top(), priority_arrows_rect.width(), priority_half_h)
+        priority_down_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top() + priority_half_h, priority_arrows_rect.width(), priority_arrows_rect.height() - priority_half_h)
+        value_rect = QRect(
+            priority_arrows_rect.right() + 8,
+            priority_chip_rect.top(),
+            max(16, stage_arrows_rect.left() - priority_arrows_rect.right() - 16),
+            priority_chip_rect.height(),
+        )
+        return {
+            "value": value_rect,
+            "icon": icon_rect,
+            "priority_arrows": priority_arrows_rect,
+            "priority_up": priority_up_rect,
+            "priority_down": priority_down_rect,
+            "stage_arrows": stage_arrows_rect,
+            "stage_up": stage_up_rect,
+            "stage_down": stage_down_rect,
+        }
+
     def _row_layout(self, r: QRect, depth: int = 0, has_subtasks: bool = False) -> dict:
         """Возвращает прямоугольники основных колонок строки."""
         x = r.left() + 10
@@ -1046,7 +1143,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         right_pad = 8
         menu_w = max(18, r.height())
-        pr_w = 140
+        pr_w = 220
         menu_rect = QRect(r.right() - right_pad - menu_w, r.top(), menu_w, r.height())
         quick_rect = QRect()
         pr_rect = QRect(menu_rect.left() - pr_w - 8, r.top(), pr_w, r.height())
