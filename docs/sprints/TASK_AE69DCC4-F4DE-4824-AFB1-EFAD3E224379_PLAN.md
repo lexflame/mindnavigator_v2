@@ -45,3 +45,11 @@ Package post-release UI and workflow follow-ups, publish a dedicated branch and 
 
 ## Notes
 - Runtime artifact `task_dialog_debug.log` is diagnostic output and is not part of the delivery payload.
+
+## Delivery Record
+- Branch: `sprint/postrelease-ui-followups`
+- Commit: `173bc9f`
+- PR: `https://github.com/lexflame/mindnavigator_v2/pull/219`
+- Validation result:
+  - focused suites: `68 passed`
+  - full suite: `221 passed`

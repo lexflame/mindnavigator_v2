@@ -96,11 +96,11 @@ Status: Completed
 
 ## Post-Release Follow-ups - UI And Workflow Polish
 Created: 2026-03-11
-Status: In Progress
+Status: Completed
 
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
-| TASK_AE69DCC4-F4DE-4824-AFB1-EFAD3E224379 | postrelease | Package UI/workflow follow-ups, publish branch/PR, sync main, and document delivery | feat | In Progress |
+| TASK_AE69DCC4-F4DE-4824-AFB1-EFAD3E224379 | postrelease | Package UI/workflow follow-ups, publish branch/PR, sync main, and document delivery | feat | Completed |
 
 ## Sprint 6 - Notes, Export, Import
 Created: 2026-02-25
