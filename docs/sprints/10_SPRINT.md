@@ -2,7 +2,7 @@
 
 ## Sprint Status
 - Planned: 2026-03-13
-- Status: In Progress
+- Status: Completed
 - Branch: `sprint/10_dossier_mode`
 - Workstream: new workspace mode
 
@@ -93,3 +93,14 @@ Deliver a new `Досье` mode that accumulates and stores structured knowledge
 - Keep each wave isolated in its own partition branch so rollback can happen at wave granularity.
 - Prefer additive migrations and explicit downgrade-safe fallbacks over in-place destructive refactors.
 - If cross-entity links destabilize unrelated modes, disable only dossier link entry points first and keep dossier CRUD available.
+
+## Release Summary
+- `2026-03-13`: Completed Sprint 10 Dossier Mode across partition branches `sprint/10_dossier_mode-p1` .. `sprint/10_dossier_mode-p6`.
+- Delivered:
+- persistent Dossier storage and migration support for typed metadata and cross-entity links;
+- standalone Dossier workspace shell, typed editor/details flows, link attach/detach UI, and grouped discovery UX with tag filters and aggregate summaries;
+- focused regression coverage for migrations, storage, dialogs, workspace behavior, visibility wiring, and persisted Wave 5 filter state.
+- Validation for closure:
+- `python -m compileall mindnavigator main.py`
+- `$env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_dossier_storage.py tests/test_dossier_workspace.py tests/test_dossier_dialogs.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p6_focus` (`30 passed`)
+- `$env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p6_full` (`243 passed`)

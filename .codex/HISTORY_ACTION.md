@@ -1281,3 +1281,16 @@
 [2026-03-13 18:21] OUT: 9 passed.
 [2026-03-13 18:21] ACTION: Updated TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 status -> Completed.
 [2026-03-13 18:21] ACTION: Completed TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65.
+[2026-03-13 18:21] CMD: git switch -c sprint/10_dossier_mode-p6
+[2026-03-13 18:21] OUT: Switched to a new branch 'sprint/10_dossier_mode-p6'
+[2026-03-13 18:21] ACTION: Updated TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 status -> In Progress.
+[2026-03-13 18:21] ACTION: Started TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 (Sprint 10 closure validation and release notes).
+[2026-03-13 18:37] ACTION: Added Sprint 10 closure regression for persisted Dossier filters and prepared release-summary documentation updates.
+[2026-03-13 18:37] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 18:37] OUT: OK.
+[2026-03-13 18:37] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_dossier_storage.py tests/test_dossier_workspace.py tests/test_dossier_dialogs.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p6_focus
+[2026-03-13 18:37] OUT: 30 passed.
+[2026-03-13 18:37] CMD: $env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p6_full
+[2026-03-13 18:37] OUT: 243 passed.
+[2026-03-13 18:37] ACTION: Updated TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 status -> Completed.
+[2026-03-13 18:37] ACTION: Completed TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76.
