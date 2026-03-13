@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Tuple
 
-from ..db_migrations import MigrationStep, apply_migrations
+from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations
 from .task_data import TaskData
 from .project_data import ProjectData
 from .map_data import MapData

@@ -3,16 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from mindnavigator.storage import CollectionCategoryData, CollectionItemData
-from mindnavigator.workspaces.collections_workspace import (
+from mindnavigator.workspaces.collections import (
     format_collection_item_row,
     group_collection_items_by_category,
 )
-from mindnavigator.workspaces.ideas_workspace import IdeaCategoryRow, IdeaItem, group_ideas_by_category
-from mindnavigator.workspaces.ideas_workspace import idea_preview_line
-from mindnavigator.workspaces.notes_workspace import NoteCategoryRow, NoteItem, group_notes_by_category
-from mindnavigator.workspaces.notes_workspace import note_preview_line
-from mindnavigator.workspaces.objects_workspace import ObjectCategoryRow, ObjectRow, group_objects_by_category
-from mindnavigator.workspaces.objects_workspace import object_preview_line
+from mindnavigator.workspaces.ideas import IdeaCategoryRow, IdeaItem, group_ideas_by_category
+from mindnavigator.workspaces.ideas import idea_preview_line
+from mindnavigator.workspaces.notes import NoteCategoryRow, NoteItem, group_notes_by_category
+from mindnavigator.workspaces.notes import note_preview_line
+from mindnavigator.workspaces.objects import ObjectCategoryRow, ObjectRow, group_objects_by_category
+from mindnavigator.workspaces.objects import object_preview_line
 
 
 def _now() -> datetime:

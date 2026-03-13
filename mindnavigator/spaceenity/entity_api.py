@@ -6,7 +6,7 @@ from typing import Any, Iterable, Mapping, cast
 
 from mindnavigator.storage import Database, get_database
 
-API_NAME = "mindnavigator.entity_api"
+API_NAME = "mindnavigator.spaceenity.entity_api"
 API_SCHEMA_VERSION = "2026-03-02"
 API_PROTOCOL_VERSION = "1.0"
 DEFAULT_SERVICE_NAME = "MindNavigator Entity API Pool"

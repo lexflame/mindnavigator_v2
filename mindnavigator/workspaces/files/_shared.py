@@ -54,14 +54,16 @@ from mindnavigator.ui.dialogs.collection_category_dialog import CollectionCatego
 from mindnavigator.ui.dialogs.collection_import_dialog import CollectionImportDialog
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
-from mindnavigator.workspaces.objects_workspace import DOC_EXTENSIONS, extract_text_from_document
+from mindnavigator.workspaces.objects import DOC_EXTENSIONS, extract_text_from_document
 
 import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.files.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.files", "mindnavigator.workspaces.files.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

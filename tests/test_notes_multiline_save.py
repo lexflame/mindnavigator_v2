@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mindnavigator.storage import Database
-from mindnavigator.workspaces.notes_workspace import normalize_note_body
+from mindnavigator.workspaces.notes import normalize_note_body
 
 def test_normalize_note_body_preserves_multiline_text() -> None:
     body = "first\r\nsecond\nthird\rfourth"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator.main_window import normalize_enabled_workspace_ids
+from mindnavigator.window.collections.main_window import normalize_enabled_workspace_ids
 
 
 def test_normalize_enabled_workspace_ids_uses_defaults_on_empty_or_invalid() -> None:

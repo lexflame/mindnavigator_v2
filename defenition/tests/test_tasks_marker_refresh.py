@@ -11,8 +11,8 @@ from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
-from mindnavigator.workspaces import tasks_workspace
-from mindnavigator.workspaces.tasks_workspace import (
+from mindnavigator.workspaces import tasks as tasks_workspace
+from mindnavigator.workspaces.tasks import (
     TaskRoles,
     blend_task_row_background,
     is_marker_only_task_update,

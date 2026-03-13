@@ -49,7 +49,7 @@ from mindnavigator.transfer.collections import CsvTransferError, CsvTransferServ
 from mindnavigator.storage import ObjectData, ObjectImageData, get_database
 from mindnavigator.ui.modals import show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     OBJECTS_CSV_FIELDS,
     export_objects_rows,
     import_objects_rows,
@@ -59,8 +59,10 @@ import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.objects.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.objects", "mindnavigator.workspaces.objects.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

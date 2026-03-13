@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from mindnavigator.workspaces.settings_workspace import SettingsWorkspace
+from mindnavigator.workspaces.settings import SettingsWorkspace
 
 
 class _DummyCheckBox:

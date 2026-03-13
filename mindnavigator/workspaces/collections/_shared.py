@@ -65,7 +65,7 @@ from mindnavigator.storage import (
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     COLLECTIONS_CSV_FIELDS,
     export_collections_rows,
     import_collections_rows,
@@ -76,8 +76,10 @@ _storage_get_database = get_database
 _modal_show_dialog_standard = show_dialog_standard
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.collections.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.collections", "mindnavigator.workspaces.collections.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()
@@ -85,8 +87,10 @@ def get_database():
 
 
 def show_dialog_standard(dialog, parent=None):
-    module = sys.modules.get("mindnavigator.workspaces.collections.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.collections", "mindnavigator.workspaces.collections.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "show_dialog_standard", None)
         if override is not None and override is not show_dialog_standard:
             return override(dialog, parent)

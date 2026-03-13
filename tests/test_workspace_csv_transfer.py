@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from mindnavigator.storage import Database
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     build_category_path_map,
     export_collections_rows,
     export_notes_rows,

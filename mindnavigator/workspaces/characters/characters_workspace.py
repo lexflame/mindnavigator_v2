@@ -29,20 +29,20 @@ from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 
 
 CHARACTER_LINK_KIND_LABELS = {
-    "task": "Р—Р°РґР°С‡Р°",
-    "project": "РџСЂРѕРµРєС‚",
-    "note": "Р—Р°РјРµС‚РєР°",
-    "idea": "РРґРµСЏ",
-    "object": "РћР±СЉРµРєС‚",
-    "map": "РљР°СЂС‚Р°",
-    "marker": "РњРµС‚РєР° РєР°СЂС‚С‹",
-    "file": "Р¤Р°Р№Р»",
-    "collection_item": "Р­Р»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё",
-    "collection_category": "РљР°С‚РµРіРѕСЂРёСЏ РєРѕР»Р»РµРєС†РёРё",
-    "shop_category": "РљР°С‚РµРіРѕСЂРёСЏ РїРѕРєСѓРїРѕРє",
-    "shop_item": "РџРѕРєСѓРїРєР°",
-    "shop_source": "РСЃС‚РѕС‡РЅРёРє С†РµРЅС‹",
-    "wishlist": "Р’РёС€Р»РёСЃС‚",
+    "task": "Задача",
+    "project": "Проект",
+    "note": "Заметка",
+    "idea": "Идея",
+    "object": "Объект",
+    "map": "Карта",
+    "marker": "Метка карты",
+    "file": "Файл",
+    "collection_item": "Элемент коллекции",
+    "collection_category": "Категория коллекции",
+    "shop_category": "Категория покупок",
+    "shop_item": "Покупка",
+    "shop_source": "Источник цены",
+    "wishlist": "Вишлист",
 }
 
 
@@ -69,18 +69,18 @@ class CharactersWorkspace(QWidget):
 
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
-        title = QLabel("РџРµСЂСЃРѕРЅР°Р¶Рё")
+        title = QLabel("Персонажи")
         title.setObjectName("CharactersTitle")
         self.search_input = QLineEdit()
         self.search_input.setObjectName("CharactersSearch")
-        self.search_input.setPlaceholderText("РџРѕРёСЃРє РїРѕ РёРјРµРЅРё, СЂРѕР»Рё, С‚РµРіР°Рј Рё РѕРїРёСЃР°РЅРёСЋ")
+        self.search_input.setPlaceholderText("Поиск по имени, роли, тегам и описанию")
 
         self.add_button = QToolButton()
         self.add_button.setObjectName("CharactersPrimaryButton")
-        self.add_button.setText("РќРѕРІС‹Р№")
+        self.add_button.setText("Новый")
         self.delete_button = QToolButton()
         self.delete_button.setObjectName("CharactersDangerButton")
-        self.delete_button.setText("РЈРґР°Р»РёС‚СЊ")
+        self.delete_button.setText("Удалить")
 
         header_layout.addWidget(title)
         header_layout.addStretch(1)
@@ -99,7 +99,7 @@ class CharactersWorkspace(QWidget):
         list_layout = QVBoxLayout(list_container)
         list_layout.setContentsMargins(10, 10, 10, 10)
         list_layout.setSpacing(8)
-        list_title = QLabel("РЎРїРёСЃРѕРє РїРµСЂСЃРѕРЅР°Р¶РµР№")
+        list_title = QLabel("Список персонажей")
         list_title.setObjectName("CharactersSectionTitle")
         self.characters_list = QListWidget()
         self.characters_list.setObjectName("CharactersList")
@@ -116,9 +116,9 @@ class CharactersWorkspace(QWidget):
 
         details_top_layout = QHBoxLayout()
         details_top_layout.setSpacing(8)
-        details_title = QLabel("РљР°СЂС‚РѕС‡РєР° РїРµСЂСЃРѕРЅР°Р¶Р°")
+        details_title = QLabel("Карточка персонажа")
         details_title.setObjectName("CharactersSectionTitle")
-        self.filter_label = QLabel("Р¤РёР»СЊС‚СЂ: РІСЃРµ СЃСѓС‰РЅРѕСЃС‚Рё")
+        self.filter_label = QLabel("Фильтр: все сущности")
         self.filter_label.setObjectName("CharactersHint")
         details_top_layout.addWidget(details_title)
         details_top_layout.addStretch(1)
@@ -129,34 +129,34 @@ class CharactersWorkspace(QWidget):
         self.name_edit = QLineEdit()
         self.role_edit = QLineEdit()
         self.tags_edit = QLineEdit()
-        self.tags_edit.setPlaceholderText("С‡РµСЂРµР· Р·Р°РїСЏС‚СѓСЋ")
+        self.tags_edit.setPlaceholderText("через запятую")
         self.description_edit = QPlainTextEdit()
         self.description_edit.setMinimumHeight(130)
-        form.addRow("РРјСЏ", self.name_edit)
-        form.addRow("Р РѕР»СЊ", self.role_edit)
-        form.addRow("РўРµРіРё", self.tags_edit)
-        form.addRow("РћРїРёСЃР°РЅРёРµ", self.description_edit)
+        form.addRow("Имя", self.name_edit)
+        form.addRow("Роль", self.role_edit)
+        form.addRow("Теги", self.tags_edit)
+        form.addRow("Описание", self.description_edit)
         details_layout.addLayout(form)
 
         details_actions_layout = QHBoxLayout()
         details_actions_layout.setSpacing(8)
         self.save_button = QToolButton()
         self.save_button.setObjectName("CharactersPrimaryButton")
-        self.save_button.setText("РЎРѕС…СЂР°РЅРёС‚СЊ")
+        self.save_button.setText("Сохранить")
         details_actions_layout.addWidget(self.save_button)
         details_actions_layout.addStretch(1)
         details_layout.addLayout(details_actions_layout)
 
         links_title_layout = QHBoxLayout()
         links_title_layout.setSpacing(8)
-        links_title = QLabel("РЎРІСЏР·Р°РЅРЅС‹Рµ СЃСѓС‰РЅРѕСЃС‚Рё")
+        links_title = QLabel("Связанные сущности")
         links_title.setObjectName("CharactersSectionTitle")
         self.add_link_button = QToolButton()
         self.add_link_button.setObjectName("CharactersPrimaryButton")
-        self.add_link_button.setText("Р”РѕР±Р°РІРёС‚СЊ СЃРІСЏР·СЊ")
+        self.add_link_button.setText("Добавить связь")
         self.remove_link_button = QToolButton()
         self.remove_link_button.setObjectName("CharactersDangerButton")
-        self.remove_link_button.setText("РЈРґР°Р»РёС‚СЊ СЃРІСЏР·СЊ")
+        self.remove_link_button.setText("Удалить связь")
         links_title_layout.addWidget(links_title)
         links_title_layout.addStretch(1)
         links_title_layout.addWidget(self.add_link_button)
@@ -206,6 +206,9 @@ class CharactersWorkspace(QWidget):
             QLabel#CharactersHint {
                 color: #8f95a1;
                 font-size: 11px;
+            }
+            QFrame#CharactersDetailsContainer QLabel {
+                color: #cfd5df;
             }
             QLineEdit#CharactersSearch,
             QFrame#CharactersDetailsContainer QLineEdit,
@@ -287,9 +290,9 @@ class CharactersWorkspace(QWidget):
         self._entity_filter_id = entity_id
         if entity_kind and entity_id is not None:
             target = self._db.describe_character_link_target(entity_kind, int(entity_id))
-            self.filter_label.setText(f"Р¤РёР»СЊС‚СЂ: {target}")
+            self.filter_label.setText(f"Фильтр: {target}")
         else:
-            self.filter_label.setText("Р¤РёР»СЊС‚СЂ: РІСЃРµ СЃСѓС‰РЅРѕСЃС‚Рё")
+            self.filter_label.setText("Фильтр: все сущности")
         self.refresh_characters()
 
     def refresh_characters(self) -> None:
@@ -306,7 +309,7 @@ class CharactersWorkspace(QWidget):
         for character in characters:
             label = character.name
             if character.role:
-                label = f"{label} В· {character.role}"
+                label = f"{label} · {character.role}"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, character.id)
             if character.description:
@@ -387,9 +390,9 @@ class CharactersWorkspace(QWidget):
 
     def _add_character(self) -> None:
         try:
-            character = self._db.create_character(name="РќРѕРІС‹Р№ РїРµСЂСЃРѕРЅР°Р¶")
+            character = self._db.create_character(name="Новый персонаж")
         except ValueError as exc:
-            QMessageBox.warning(self, "РџРµСЂСЃРѕРЅР°Р¶Рё", str(exc))
+            QMessageBox.warning(self, "Персонажи", str(exc))
             return
         self.refresh_characters()
         self.focus_character(character.id, refresh=False)
@@ -399,8 +402,8 @@ class CharactersWorkspace(QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "РЈРґР°Р»РµРЅРёРµ",
-            "РЈРґР°Р»РёС‚СЊ РїРµСЂСЃРѕРЅР°Р¶Р° Рё РІСЃРµ РµРіРѕ СЃРІСЏР·Рё?",
+            "Удаление",
+            "Удалить персонажа и все его связи?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm != QMessageBox.StandardButton.Yes:
@@ -420,7 +423,7 @@ class CharactersWorkspace(QWidget):
                 tags=self._parse_tags(self.tags_edit.text()),
             )
         except ValueError as exc:
-            QMessageBox.warning(self, "РџРµСЂСЃРѕРЅР°Р¶Рё", str(exc))
+            QMessageBox.warning(self, "Персонажи", str(exc))
             return
         self._characters_by_id[updated.id] = updated
         self.refresh_characters()
@@ -436,7 +439,7 @@ class CharactersWorkspace(QWidget):
         if self._current_character_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("Р”РѕР±Р°РІРёС‚СЊ СЃРІСЏР·СЊ")
+        dialog.setWindowTitle("Добавить связь")
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(12, 12, 12, 12)
         form = QFormLayout()
@@ -446,7 +449,7 @@ class CharactersWorkspace(QWidget):
             kind_combo.addItem(label, kind)
 
         search_edit = QLineEdit(dialog)
-        search_edit.setPlaceholderText("Р¤РёР»СЊС‚СЂ РїРѕ РЅР°Р·РІР°РЅРёСЋ СЃСѓС‰РЅРѕСЃС‚Рё")
+        search_edit.setPlaceholderText("Фильтр по названию сущности")
 
         entity_combo = QComboBox(dialog)
 
@@ -455,7 +458,7 @@ class CharactersWorkspace(QWidget):
             selected_kind = str(kind_combo.currentData() or "")
             options = self._db.fetch_character_link_options(selected_kind, search_edit.text())
             if not options:
-                entity_combo.addItem("вЂ” РЅРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… вЂ”", None)
+                entity_combo.addItem("— нет доступных —", None)
                 return
             for entity_id, label in options:
                 entity_combo.addItem(label, entity_id)
@@ -464,9 +467,9 @@ class CharactersWorkspace(QWidget):
         search_edit.textChanged.connect(lambda _text: fill_entities())
         fill_entities()
 
-        form.addRow("РўРёРї СЃСѓС‰РЅРѕСЃС‚Рё", kind_combo)
-        form.addRow("РџРѕРёСЃРє", search_edit)
-        form.addRow("РЎСѓС‰РЅРѕСЃС‚СЊ", entity_combo)
+        form.addRow("Тип сущности", kind_combo)
+        form.addRow("Поиск", search_edit)
+        form.addRow("Сущность", entity_combo)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(dialog)
@@ -480,7 +483,7 @@ class CharactersWorkspace(QWidget):
             return
         entity_id = entity_combo.currentData()
         if entity_id is None:
-            QMessageBox.warning(self, "РџРµСЂСЃРѕРЅР°Р¶Рё", "РќРµС‚ РґРѕСЃС‚СѓРїРЅРѕР№ СЃСѓС‰РЅРѕСЃС‚Рё РґР»СЏ РїСЂРёРІСЏР·РєРё.")
+            QMessageBox.warning(self, "Персонажи", "Нет доступной сущности для привязки.")
             return
         try:
             self._db.add_character_link(
@@ -489,7 +492,7 @@ class CharactersWorkspace(QWidget):
                 int(entity_id),
             )
         except ValueError as exc:
-            QMessageBox.warning(self, "РџРµСЂСЃРѕРЅР°Р¶Рё", str(exc))
+            QMessageBox.warning(self, "Персонажи", str(exc))
             return
         self._load_links(self._current_character_id)
         self.refresh_characters()
@@ -514,7 +517,7 @@ class CharactersWorkspace(QWidget):
         target_label = self._db.describe_character_link_target(entity_kind, entity_id)
         QMessageBox.information(
             self,
-            "РЎРІСЏР·СЊ РїРµСЂСЃРѕРЅР°Р¶Р°",
+            "Связь персонажа",
             f"{kind_label}\n{target_label}",
         )
 

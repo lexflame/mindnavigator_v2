@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferOptions, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferOptions, CsvTransferService
 
 
 def _new_temp_path(prefix: str) -> Path:

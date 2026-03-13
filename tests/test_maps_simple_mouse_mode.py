@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator.workspaces.maps_workspace import MapTool, marker_drag_allowed
+from mindnavigator.workspaces.maps import MapTool, marker_drag_allowed
 
 
 def test_marker_drag_is_blocked_in_simple_mouse_mode() -> None:

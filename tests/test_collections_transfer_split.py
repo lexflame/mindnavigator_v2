@@ -2,12 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mindnavigator.collections_importer import FolderCollectionImporter as LegacyFolderCollectionImporter
-from mindnavigator.collections_importer import list_files as legacy_list_files
-from mindnavigator.collections_importer import scan_files as legacy_scan_files
-from mindnavigator.csv_transfer import CsvTransferError as LegacyCsvTransferError
-from mindnavigator.csv_transfer import CsvTransferOptions as LegacyCsvTransferOptions
-from mindnavigator.csv_transfer import CsvTransferService as LegacyCsvTransferService
 from mindnavigator.transfer.collections import (
     CsvTransferError,
     CsvTransferOptions,
@@ -18,13 +12,13 @@ from mindnavigator.transfer.collections import (
 )
 
 
-def test_collections_transfer_split_keeps_legacy_import_paths() -> None:
-    assert LegacyFolderCollectionImporter is FolderCollectionImporter
-    assert legacy_list_files is list_files
-    assert legacy_scan_files is scan_files
-    assert LegacyCsvTransferError is CsvTransferError
-    assert LegacyCsvTransferOptions is CsvTransferOptions
-    assert LegacyCsvTransferService is CsvTransferService
+def test_collections_transfer_package_exports_expected_symbols() -> None:
+    assert FolderCollectionImporter is not None
+    assert list_files is not None
+    assert scan_files is not None
+    assert CsvTransferError is not None
+    assert CsvTransferOptions is not None
+    assert CsvTransferService is not None
 
 
 def test_collection_import_helpers_keep_file_scan_behavior(unique_temp_path) -> None:

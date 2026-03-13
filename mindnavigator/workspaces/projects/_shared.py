@@ -36,7 +36,7 @@ from mindnavigator.storage import (
 )
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     PROJECTS_CSV_FIELDS,
     export_projects_rows,
     import_projects_rows,
@@ -46,8 +46,10 @@ import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.projects.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.projects", "mindnavigator.workspaces.projects.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

@@ -74,22 +74,12 @@ if sys.platform == "win32":
 
 
 def get_database():
-    """Resolves database getter with legacy monkeypatch compatibility."""
-    legacy_module = sys.modules.get("mindnavigator.main_window")
-    if legacy_module is not None:
-        override = getattr(legacy_module, "get_database", None)
-        if callable(override) and override is not get_database:
-            return override()
+    """Returns the shared database accessor for the main window."""
     return _storage_get_database()
 
 
 def _qtimer_cls():
-    """Returns QTimer class, honoring legacy module monkeypatches in tests."""
-    legacy_module = sys.modules.get("mindnavigator.main_window")
-    if legacy_module is not None:
-        override = getattr(legacy_module, "QTimer", None)
-        if override is not None and override is not QTimer:
-            return override
+    """Returns the QTimer class used by delayed UI actions."""
     return QTimer
 
 

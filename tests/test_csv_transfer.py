@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mindnavigator.csv_transfer import CsvTransferError, CsvTransferOptions, CsvTransferService
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferOptions, CsvTransferService
 
 def test_csv_round_trip_with_multiline_and_special_symbols() -> None:
     service = CsvTransferService()

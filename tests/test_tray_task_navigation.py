@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import mindnavigator.main_window as main_window
-from mindnavigator.main_window import MainWindow
+import mindnavigator.window.collections.main_window as main_window
+from mindnavigator.window.collections.main_window import MainWindow
 
 
 class _DummyTasksPage:

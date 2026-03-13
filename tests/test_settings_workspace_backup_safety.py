@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from mindnavigator.workspaces import settings_workspace
-from mindnavigator.workspaces.settings_workspace import SettingsWorkspace
+from mindnavigator.workspaces import settings as settings_workspace
+from mindnavigator.workspaces.settings import SettingsWorkspace
 
 
 class _DummyCheckBox:

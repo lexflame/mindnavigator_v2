@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import CloudFileData, Database
-from mindnavigator.workspaces import files_workspace
+from mindnavigator.workspaces import files as files_workspace
 
 
 def _upsert_cloud_file(database: Database, rel_path: str, *, description_text: str = "") -> None:

@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from mindnavigator.entity_api import (
+from mindnavigator.spaceenity.entity_api import (
     API_NAME,
     API_PROTOCOL_VERSION,
     API_SCHEMA_VERSION,

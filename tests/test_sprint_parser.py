@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator.sprint_parser import normalize_keyword, parse_sprint_header
+from mindnavigator.transfer.sprint.sprint_parser import normalize_keyword, parse_sprint_header
 
 
 def test_normalize_keyword_supports_canonical_and_alias_tokens() -> None:

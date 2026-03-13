@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator import i18n
+import mindnavigator.spaceenity.i18n as i18n
 
 
 def test_normalize_language_code_falls_back_to_default() -> None:

@@ -8,13 +8,13 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import QTimer, QObject
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
-from .spaceenity.constants import APP_NAME
-from .spaceenity.resources import resource_path
-from .ui.splash import show_splash
-from .window.collections import MainWindow
-from .storage import get_database
-from .ui.dialogs.frameless_patch import enable_frameless_qdialogs
-from .ui.styles import APP_STYLESHEET
+from mindnavigator.spaceenity.constants import APP_NAME
+from mindnavigator.spaceenity.resources import resource_path
+from mindnavigator.storage import get_database
+from mindnavigator.ui.dialogs.frameless_patch import enable_frameless_qdialogs
+from mindnavigator.ui.splash import show_splash
+from mindnavigator.ui.styles import APP_STYLESHEET
+from mindnavigator.window.collections import MainWindow
 
 
 class _SingleInstanceBridge(QObject):

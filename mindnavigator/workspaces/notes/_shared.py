@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
 from mindnavigator.storage import get_database
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     NOTES_CSV_FIELDS,
     export_notes_rows,
     import_notes_rows,
@@ -53,8 +53,10 @@ import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.notes.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.notes", "mindnavigator.workspaces.notes.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from mindnavigator.storage import Database
-from mindnavigator.workspaces.notes_workspace import normalize_note_body
+from mindnavigator.workspaces.notes import normalize_note_body
 
 
 def _new_temp_db_path(prefix: str) -> Path:

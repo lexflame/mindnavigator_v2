@@ -98,8 +98,10 @@ def _format_marker_properties_text(raw: str) -> str:
 
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.maps.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.maps", "mindnavigator.workspaces.maps.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

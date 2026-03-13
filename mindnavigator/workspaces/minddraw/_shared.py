@@ -42,8 +42,10 @@ import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.minddraw.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.minddraw", "mindnavigator.workspaces.minddraw.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

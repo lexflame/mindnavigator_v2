@@ -47,7 +47,7 @@ from mindnavigator.transfer.collections import CsvTransferError, CsvTransferServ
 from mindnavigator.storage import get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     IDEAS_CSV_FIELDS,
     export_ideas_rows,
     import_ideas_rows,
@@ -57,8 +57,10 @@ import sys
 _storage_get_database = get_database
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.ideas.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.ideas", "mindnavigator.workspaces.ideas.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

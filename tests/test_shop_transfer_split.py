@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mindnavigator.shop_parsers import build_default_parsers as legacy_build_default_parsers
-from mindnavigator.shop_parsing import ParsedShopProperty as LegacyParsedShopProperty
-from mindnavigator.shop_parsing import ParsedShopResult as LegacyParsedShopResult
-from mindnavigator.shop_parsing import ShopParseService as LegacyShopParseService
 from mindnavigator.transfer.shop import ParsedShopProperty, ParsedShopResult, ShopParseService, build_default_parsers
 
 
@@ -73,11 +69,11 @@ class _FakeParser:
         )
 
 
-def test_shop_transfer_split_keeps_legacy_import_paths() -> None:
-    assert LegacyParsedShopProperty is ParsedShopProperty
-    assert LegacyParsedShopResult is ParsedShopResult
-    assert LegacyShopParseService is ShopParseService
-    assert legacy_build_default_parsers is build_default_parsers
+def test_shop_transfer_package_exports_expected_symbols() -> None:
+    assert ParsedShopProperty is not None
+    assert ParsedShopResult is not None
+    assert ShopParseService is not None
+    assert build_default_parsers is not None
 
 
 def test_shop_parse_service_keeps_basic_parse_and_store_flow() -> None:

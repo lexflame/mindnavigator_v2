@@ -4,9 +4,9 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QDialog
 
-from mindnavigator.collections_importer import list_files
+from mindnavigator.transfer.collections import list_files
 from mindnavigator.storage import Database
-from mindnavigator.workspaces import collections_workspace
+from mindnavigator.workspaces import collections as collections_workspace
 
 
 def test_list_files_skips_thumbs_db(unique_temp_path) -> None:

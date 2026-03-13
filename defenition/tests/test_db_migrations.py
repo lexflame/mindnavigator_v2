@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from mindnavigator.db_migrations import MigrationStep, apply_migrations, get_user_version
+from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
 

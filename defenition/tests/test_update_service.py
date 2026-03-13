@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from mindnavigator.http_client import HttpClientError
-from mindnavigator.update_service import UpdateService, UpdateServiceError, is_newer_version, normalize_version
+from mindnavigator.spaceenity.http_client import HttpClientError
+from mindnavigator.spaceenity.update_service import (
+    UpdateService,
+    UpdateServiceError,
+    is_newer_version,
+    normalize_version,
+)
 
 
 class _FakeResponse:

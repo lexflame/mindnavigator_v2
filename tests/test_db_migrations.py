@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from mindnavigator.db_migrations import MigrationStep, apply_migrations, get_user_version
+from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:

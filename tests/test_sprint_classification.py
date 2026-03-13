@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from mindnavigator.sprint_classification import classify_keyword, classify_mindnavigator_title
+from mindnavigator.transfer.sprint.sprint_classification import (
+    classify_keyword,
+    classify_mindnavigator_title,
+)
 
 
 def test_classify_keyword_maps_partition_c_tokens() -> None:

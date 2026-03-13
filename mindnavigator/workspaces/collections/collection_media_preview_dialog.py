@@ -99,7 +99,7 @@ class CollectionMediaPreviewDialog(QDialog):
             self._set_content_text("Документ недоступен.")
             return
         try:
-            from mindnavigator.workspaces.objects_workspace import extract_text_from_document
+            from mindnavigator.workspaces.objects import extract_text_from_document
         except ImportError:
             self._set_content_text("Предпросмотр документа недоступен.")
             return

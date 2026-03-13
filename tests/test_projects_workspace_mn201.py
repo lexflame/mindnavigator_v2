@@ -5,8 +5,8 @@ from datetime import date
 from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
-from mindnavigator.workspaces import projects_workspace
-from mindnavigator.workspaces.projects_workspace import ProjectRoles
+from mindnavigator.workspaces import projects as projects_workspace
+from mindnavigator.workspaces.projects import ProjectRoles
 
 
 def _find_project_row(model: projects_workspace.ProjectsModel, project_id: int) -> int:

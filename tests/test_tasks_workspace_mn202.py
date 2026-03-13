@@ -14,8 +14,8 @@ from mindnavigator.storage import (
 )
 from mindnavigator.workspaces.tasks import task_edit_dialog
 from mindnavigator.workspaces.tasks.task_row import TaskRow
-from mindnavigator.workspaces import tasks_workspace
-from mindnavigator.workspaces.tasks_workspace import TaskRoles
+from mindnavigator.workspaces import tasks as tasks_workspace
+from mindnavigator.workspaces.tasks import TaskRoles
 
 
 def _find_task_row(model: tasks_workspace.TasksModel, task_id: int) -> int:

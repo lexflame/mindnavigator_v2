@@ -49,7 +49,7 @@ from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialo
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
-from mindnavigator.workspaces.csv_workspace_transfer import (
+from mindnavigator.workspaces.csv_transfer import (
     TASKS_CSV_FIELDS,
     export_tasks_rows,
     import_tasks_rows,
@@ -232,8 +232,10 @@ def _tokenize_text_for_match(text: str) -> list[str]:
     return [token for token in tokens if len(token) >= 2]
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.tasks.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.tasks", "mindnavigator.workspaces.tasks.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()

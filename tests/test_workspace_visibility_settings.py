@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-import mindnavigator.main_window as main_window
-from mindnavigator.main_window import MainWindow, normalize_enabled_workspace_ids, normalize_nav_collapsed_setting
+import mindnavigator.window.collections.main_window as main_window
+from mindnavigator.window.collections.main_window import (
+    MainWindow,
+    normalize_enabled_workspace_ids,
+    normalize_nav_collapsed_setting,
+)
 
 
 def test_normalize_enabled_workspace_ids_uses_defaults_on_empty_or_invalid() -> None:

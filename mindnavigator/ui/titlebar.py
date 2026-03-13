@@ -23,7 +23,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QPoint, QTimer
 
 from ..constants import APP_NAME
-from ..resources import resource_path
+from mindnavigator.spaceenity.resources import resource_path
 from .styles import TITLEBAR_BACKGROUND
 
 

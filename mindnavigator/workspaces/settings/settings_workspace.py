@@ -55,8 +55,10 @@ _storage_is_network_database_path = is_network_database_path
 
 
 def get_database():
-    module = sys.modules.get("mindnavigator.workspaces.settings.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.settings", "mindnavigator.workspaces.settings.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "get_database", None)
         if override is not None and override is not get_database:
             return override()
@@ -64,8 +66,10 @@ def get_database():
 
 
 def is_network_database_path(path):
-    module = sys.modules.get("mindnavigator.workspaces.settings.module_impl")
-    if module is not None:
+    for module_name in ("mindnavigator.workspaces.settings", "mindnavigator.workspaces.settings.module_impl"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
         override = getattr(module, "is_network_database_path", None)
         if override is not None and override is not is_network_database_path:
             return override(path)

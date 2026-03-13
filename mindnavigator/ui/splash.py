@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 
-from ..resources import resource_path
+from mindnavigator.spaceenity.resources import resource_path
 
 
 class SplashWidget(QWidget):

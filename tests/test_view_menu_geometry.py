@@ -5,8 +5,8 @@ from pathlib import Path
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QApplication
 
-from mindnavigator.workspaces import projects_workspace
-from mindnavigator.workspaces import tasks_workspace
+from mindnavigator.workspaces import projects as projects_workspace
+from mindnavigator.workspaces import tasks as tasks_workspace
 
 
 def test_tasks_delegate_menu_and_checkbox_use_half_size_visual_box_with_full_height_hit_area() -> None:

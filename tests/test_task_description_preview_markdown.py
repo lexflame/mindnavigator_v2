@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator.workspaces.tasks_workspace import (
+from mindnavigator.workspaces.tasks._shared import (
     _extract_markdown_code_blocks,
     _linkify_description_text,
 )

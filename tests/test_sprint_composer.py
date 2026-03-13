@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mindnavigator.sprint_composer import (
+from mindnavigator.transfer.sprint.sprint_composer import (
     SprintSourceNode,
     compose_sprint,
     extract_semantic_token,
