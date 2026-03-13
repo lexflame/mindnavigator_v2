@@ -71,6 +71,13 @@ DOSSIER_STATUS_OPTIONS = [
 
 DOSSIER_RATING_OPTIONS = [("Любой рейтинг", None)] + [(f"{rating}/10", rating) for rating in range(10, 0, -1)]
 
+DOSSIER_GROUP_OPTIONS = [
+    ("Без групп", "none"),
+    ("По виду", "kind"),
+    ("По статусу", "status"),
+    ("По рейтингу", "rating"),
+]
+
 DOSSIER_KIND_LABELS = {
     "book": "Книга",
     "film": "Фильм",
@@ -210,6 +217,7 @@ __all__ = [
     "DOSSIER_KIND_COLORS",
     "DOSSIER_KIND_LABELS",
     "DOSSIER_KIND_OPTIONS",
+    "DOSSIER_GROUP_OPTIONS",
     "DOSSIER_LINK_KIND_LABELS",
     "DOSSIER_LINK_KIND_OPTIONS",
     "DOSSIER_METADATA_LABELS",

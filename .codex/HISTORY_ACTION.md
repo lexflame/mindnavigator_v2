@@ -1270,3 +1270,14 @@
 [2026-03-13 17:58] OUT: 8 passed.
 [2026-03-13 17:58] ACTION: Updated TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 status -> Completed.
 [2026-03-13 17:58] ACTION: Completed TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54.
+[2026-03-13 18:11] CMD: git switch -c sprint/10_dossier_mode-p5
+[2026-03-13 18:11] OUT: Switched to a new branch 'sprint/10_dossier_mode-p5'
+[2026-03-13 18:11] ACTION: Updated TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 status -> In Progress.
+[2026-03-13 18:11] ACTION: Started TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 (dossier search, grouping, and summaries).
+[2026-03-13 18:21] ACTION: Added Dossier tag filter, grouping rows, aggregate summary strip, and focused grouping/search workspace coverage.
+[2026-03-13 18:21] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 18:21] OUT: OK.
+[2026-03-13 18:21] CMD: $env:PYTHONPATH='.'; pytest tests/test_dossier_workspace.py tests/test_dossier_storage.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p5
+[2026-03-13 18:21] OUT: 9 passed.
+[2026-03-13 18:21] ACTION: Updated TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 status -> Completed.
+[2026-03-13 18:21] ACTION: Completed TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65.

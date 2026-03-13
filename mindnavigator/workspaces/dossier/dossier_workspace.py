@@ -98,13 +98,42 @@ class DossierWorkspace(BaseWorkspace):
             self.rating_filter.addItem(label, value)
         self.rating_filter.currentIndexChanged.connect(self._on_rating_filter_changed)
 
+        self.tag_filter_input = QLineEdit()
+        self.tag_filter_input.setPlaceholderText("Тег")
+        self.tag_filter_input.textChanged.connect(self._on_tag_filter_changed)
+
+        self.group_filter = QComboBox()
+        for label, value in DOSSIER_GROUP_OPTIONS:
+            self.group_filter.addItem(label, value)
+        self.group_filter.currentIndexChanged.connect(self._on_group_filter_changed)
+
         self.filter_layout.addWidget(QLabel("Вид"))
         self.filter_layout.addWidget(self.kind_filter)
         self.filter_layout.addWidget(QLabel("Статус"))
         self.filter_layout.addWidget(self.status_filter)
         self.filter_layout.addWidget(QLabel("Рейтинг"))
         self.filter_layout.addWidget(self.rating_filter)
+        self.filter_layout.addWidget(QLabel("Тег"))
+        self.filter_layout.addWidget(self.tag_filter_input)
+        self.filter_layout.addWidget(QLabel("Группы"))
+        self.filter_layout.addWidget(self.group_filter)
         self.filter_layout.addStretch(1)
+
+        content_host = QWidget()
+        content_layout = QVBoxLayout(content_host)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
+
+        summary_card = QFrame()
+        summary_card.setObjectName("DossierSummaryCard")
+        summary_layout = QVBoxLayout(summary_card)
+        summary_layout.setContentsMargins(14, 12, 14, 12)
+        summary_layout.setSpacing(4)
+        self.summary_label = QLabel("Итоги по досье появятся после первой загрузки.")
+        self.summary_label.setObjectName("DossierSummaryLabel")
+        self.summary_label.setWordWrap(True)
+        summary_layout.addWidget(self.summary_label)
+        content_layout.addWidget(summary_card)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName("DossierSplitter")
@@ -222,7 +251,8 @@ class DossierWorkspace(BaseWorkspace):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
 
-        self.set_content(splitter)
+        content_layout.addWidget(splitter, 1)
+        self.set_content(content_host)
 
         self.setStyleSheet(
             """
@@ -234,7 +264,8 @@ class DossierWorkspace(BaseWorkspace):
             }
             QWidget#DossierWorkspace QWidget#WorkspaceToolbar,
             QWidget#DossierWorkspace QWidget#WorkspaceSearch,
-            QWidget#DossierWorkspace QWidget#WorkspaceFilters {
+            QWidget#DossierWorkspace QWidget#WorkspaceFilters,
+            QWidget#DossierWorkspace QFrame#DossierSummaryCard {
                 background: #1b1c21;
                 border: 1px solid #2a2c33;
                 border-radius: 10px;
@@ -268,6 +299,9 @@ class DossierWorkspace(BaseWorkspace):
                 color: #aeb6c2;
             }
             QLabel#DossierPreviewSummary {
+                color: #dfe4eb;
+            }
+            QLabel#DossierSummaryLabel {
                 color: #dfe4eb;
             }
             QFrame#DossierLinksCard {
@@ -319,6 +353,8 @@ class DossierWorkspace(BaseWorkspace):
         self._set_combo_value(self.kind_filter, self.get_filters().get("kind"))
         self._set_combo_value(self.status_filter, self.get_filters().get("status"))
         self._set_combo_value(self.rating_filter, self.get_filters().get("rating"))
+        self._set_combo_value(self.group_filter, self.get_filters().get("group_by") or "none")
+        self._set_line_edit_value(self.tag_filter_input, self.get_filters().get("tag"))
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: object) -> None:
@@ -328,6 +364,13 @@ class DossierWorkspace(BaseWorkspace):
                 combo.setCurrentIndex(index)
                 combo.blockSignals(False)
                 return
+
+    @staticmethod
+    def _set_line_edit_value(line_edit: QLineEdit, value: object) -> None:
+        text = str(value or "")
+        line_edit.blockSignals(True)
+        line_edit.setText(text)
+        line_edit.blockSignals(False)
 
     def _update_link_action_states(self) -> None:
         if not hasattr(self, "add_link_button") or not hasattr(self, "preview_links"):
@@ -346,6 +389,12 @@ class DossierWorkspace(BaseWorkspace):
 
     def _on_rating_filter_changed(self) -> None:
         self.set_filter("rating", self.rating_filter.currentData())
+
+    def _on_tag_filter_changed(self) -> None:
+        self.set_filter("tag", self.tag_filter_input.text().strip())
+
+    def _on_group_filter_changed(self) -> None:
+        self.set_filter("group_by", self.group_filter.currentData())
 
     def _open_create_dialog(self, checked: bool = False) -> None:
         _ = checked
@@ -489,19 +538,59 @@ class DossierWorkspace(BaseWorkspace):
     def apply_filters(self, filters: dict[str, object]) -> None:
         self.refresh()
 
+    def _update_summary(self, items: list[DossierData]) -> None:
+        if not hasattr(self, "summary_label"):
+            return
+        total = len(items)
+        if total == 0:
+            self.summary_label.setText("Итого: 0. Под текущие фильтры ничего не найдено.")
+            return
+
+        kind_counts: dict[str, int] = {}
+        status_counts: dict[str, int] = {}
+        rating_counts: dict[str, int] = {}
+        tag_counts: dict[str, int] = {}
+        for item in items:
+            kind_label = dossier_kind_label(item.kind)
+            status_label = dossier_status_label(item.status)
+            rating_label = dossier_rating_label(item.rating)
+            kind_counts[kind_label] = kind_counts.get(kind_label, 0) + 1
+            status_counts[status_label] = status_counts.get(status_label, 0) + 1
+            rating_counts[rating_label] = rating_counts.get(rating_label, 0) + 1
+            for tag in item.tags:
+                normalized_tag = str(tag or "").strip()
+                if normalized_tag:
+                    tag_counts[normalized_tag] = tag_counts.get(normalized_tag, 0) + 1
+
+        parts = [f"Итого: {total}"]
+        parts.append(f"Виды: {self._render_count_summary(kind_counts, limit=4)}")
+        parts.append(f"Статусы: {self._render_count_summary(status_counts, limit=4)}")
+        parts.append(f"Рейтинги: {self._render_count_summary(rating_counts, limit=4)}")
+        parts.append(f"Теги: {self._render_count_summary(tag_counts, limit=4)}")
+        self.summary_label.setText(" • ".join(parts))
+
+    @staticmethod
+    def _render_count_summary(counts: dict[str, int], *, limit: int) -> str:
+        if not counts:
+            return "—"
+        ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0].lower()))
+        return ", ".join(f"{label} ×{count}" for label, count in ordered[:limit])
+
     def refresh(self) -> None:
         filters = self.get_filters()
         items = self._db.fetch_dossiers(
             kind=filters.get("kind") if isinstance(filters.get("kind"), str) else None,
             status=filters.get("status") if isinstance(filters.get("status"), str) else None,
             search_text=self._query,
+            tag=filters.get("tag") if isinstance(filters.get("tag"), str) and filters.get("tag") else None,
         )
         rating_filter = filters.get("rating")
         if isinstance(rating_filter, int):
             items = [item for item in items if item.rating == rating_filter]
         model = self.list_view.model()
         if isinstance(model, DossierListModel):
-            model.set_items(items)
+            model.set_items(items, group_by=str(filters.get("group_by") or "none"))
+        self._update_summary(items)
         self.status_row.setText(f"Найдено досье: {len(items)}")
         self._sync_selection()
 
@@ -510,8 +599,9 @@ class DossierWorkspace(BaseWorkspace):
         if not isinstance(model, DossierListModel):
             return
         if self._current_dossier_id is None:
-            if model.rowCount() > 0:
-                self.list_view.setCurrentIndex(model.index(0, 0))
+            first_index = model.first_item_index()
+            if first_index.isValid():
+                self.list_view.setCurrentIndex(first_index)
             else:
                 self._clear_preview()
                 self.update_action_states()
@@ -521,8 +611,9 @@ class DossierWorkspace(BaseWorkspace):
             self.list_view.setCurrentIndex(index)
             return
         self._current_dossier_id = None
-        if model.rowCount() > 0:
-            self.list_view.setCurrentIndex(model.index(0, 0))
+        first_index = model.first_item_index()
+        if first_index.isValid():
+            self.list_view.setCurrentIndex(first_index)
             return
         self._clear_preview()
         self.update_action_states()
