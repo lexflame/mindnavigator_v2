@@ -9,6 +9,64 @@ from .dossier_item_delegate import DossierItemDelegate
 from .dossier_list_model import DossierListModel
 from .dossier_roles import DossierRoles
 
+LINK_ID_ROLE = int(Qt.ItemDataRole.UserRole)
+LINK_ENTITY_KIND_ROLE = LINK_ID_ROLE + 1
+LINK_ENTITY_ID_ROLE = LINK_ID_ROLE + 2
+
+
+class DossierLinkDialog(QDialog):
+    def __init__(self, database, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._db = database
+        self.setWindowTitle("Добавить связь")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        form = QFormLayout()
+
+        self.kind_combo = QComboBox(self)
+        for label, kind in DOSSIER_LINK_KIND_OPTIONS:
+            self.kind_combo.addItem(label, kind)
+
+        self.search_edit = QLineEdit(self)
+        self.search_edit.setPlaceholderText("Фильтр по названию сущности")
+
+        self.entity_combo = QComboBox(self)
+
+        form.addRow("Тип сущности", self.kind_combo)
+        form.addRow("Поиск", self.search_edit)
+        form.addRow("Сущность", self.entity_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(self)
+        self._ok_button = buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.kind_combo.currentIndexChanged.connect(self._fill_entities)
+        self.search_edit.textChanged.connect(self._fill_entities)
+        self._fill_entities()
+
+    def _fill_entities(self) -> None:
+        self.entity_combo.clear()
+        options = self._db.fetch_dossier_link_options(str(self.kind_combo.currentData() or ""), self.search_edit.text())
+        if not options:
+            self.entity_combo.addItem("— нет доступных —", None)
+            self._ok_button.setEnabled(False)
+            return
+        for entity_id, label in options:
+            self.entity_combo.addItem(label, entity_id)
+        self._ok_button.setEnabled(True)
+
+    def values(self) -> dict[str, object]:
+        return {
+            "entity_kind": str(self.kind_combo.currentData() or ""),
+            "entity_id": self.entity_combo.currentData(),
+        }
+
 
 class DossierWorkspace(BaseWorkspace):
     workspace_id = "dossier"
@@ -136,8 +194,23 @@ class DossierWorkspace(BaseWorkspace):
         links_layout = QVBoxLayout(links_host)
         links_layout.setContentsMargins(14, 12, 14, 12)
         links_layout.setSpacing(8)
-        links_layout.addWidget(QLabel("Связанные сущности"))
+        links_header = QWidget()
+        links_header_layout = QHBoxLayout(links_header)
+        links_header_layout.setContentsMargins(0, 0, 0, 0)
+        links_header_layout.setSpacing(6)
+        links_header_layout.addWidget(QLabel("Связанные сущности"))
+        links_header_layout.addStretch(1)
+        self.add_link_button = QToolButton()
+        self.add_link_button.setText("Привязать")
+        self.add_link_button.clicked.connect(self._open_add_link_dialog)
+        self.remove_link_button = QToolButton()
+        self.remove_link_button.setText("Убрать")
+        self.remove_link_button.clicked.connect(self._remove_selected_link)
+        links_header_layout.addWidget(self.add_link_button)
+        links_header_layout.addWidget(self.remove_link_button)
+        links_layout.addWidget(links_header)
         self.preview_links = QListWidget()
+        self.preview_links.itemSelectionChanged.connect(self._update_link_action_states)
         links_layout.addWidget(self.preview_links, 1)
 
         preview_splitter.addWidget(preview_host)
@@ -229,6 +302,7 @@ class DossierWorkspace(BaseWorkspace):
         details_action = self.actions.get("details")
         if details_action is not None:
             details_action.setEnabled(self.get_selection() is not None and not self._busy)
+        self._update_link_action_states()
 
     def restore_state(self) -> None:
         super().restore_state()
@@ -254,6 +328,15 @@ class DossierWorkspace(BaseWorkspace):
                 combo.setCurrentIndex(index)
                 combo.blockSignals(False)
                 return
+
+    def _update_link_action_states(self) -> None:
+        if not hasattr(self, "add_link_button") or not hasattr(self, "preview_links"):
+            return
+        dossier_selected = self.get_selection() is not None and not self._busy
+        self.add_link_button.setEnabled(dossier_selected)
+        current_item = self.preview_links.currentItem()
+        link_id = current_item.data(LINK_ID_ROLE) if current_item is not None else None
+        self.remove_link_button.setEnabled(dossier_selected and link_id is not None)
 
     def _on_kind_filter_changed(self) -> None:
         self.set_filter("kind", self.kind_filter.currentData())
@@ -316,6 +399,42 @@ class DossierWorkspace(BaseWorkspace):
             return
         dialog = DossierDetailsDialog(dossier, parent=self)
         show_dialog_standard(dialog, self)
+
+    def _open_add_link_dialog(self, checked: bool = False) -> None:
+        _ = checked
+        dossier_id = self.get_selection()
+        if dossier_id is None:
+            return
+        dialog = DossierLinkDialog(self._db, parent=self)
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        values = dialog.values()
+        entity_id = values.get("entity_id")
+        if entity_id is None:
+            QMessageBox.warning(self, "Досье", "Нет доступной сущности для привязки.")
+            return
+        try:
+            self._db.add_dossier_link(dossier_id, str(values.get("entity_kind") or ""), int(entity_id))
+        except ValueError as exc:
+            QMessageBox.warning(self, "Досье", str(exc))
+            return
+        self._load_preview(dossier_id)
+        self.set_status("Связь добавлена.")
+
+    def _remove_selected_link(self, checked: bool = False) -> None:
+        _ = checked
+        dossier_id = self.get_selection()
+        if dossier_id is None:
+            return
+        item = self.preview_links.currentItem()
+        if item is None:
+            return
+        link_id = item.data(LINK_ID_ROLE)
+        if link_id is None:
+            return
+        self._db.delete_dossier_link(int(link_id))
+        self._load_preview(dossier_id)
+        self.set_status("Связь удалена.")
 
     def _delete_selected(self, checked: bool = False, *, require_confirmation: bool = True) -> None:
         _ = checked
@@ -427,6 +546,7 @@ class DossierWorkspace(BaseWorkspace):
         self.preview_source_label.clear()
         self.preview_metadata_label.clear()
         self.preview_links.clear()
+        self._update_link_action_states()
 
     def _load_preview(self, dossier_id: int) -> None:
         dossier = self._db.get_dossier(dossier_id)
@@ -443,11 +563,16 @@ class DossierWorkspace(BaseWorkspace):
         self.preview_links.clear()
         for link in self._db.fetch_dossier_links(dossier_id):
             label = self._db.describe_dossier_link_target(link.entity_kind, link.entity_id)
-            self.preview_links.addItem(QListWidgetItem(label))
+            item = QListWidgetItem(label)
+            item.setData(LINK_ID_ROLE, link.id)
+            item.setData(LINK_ENTITY_KIND_ROLE, link.entity_kind)
+            item.setData(LINK_ENTITY_ID_ROLE, link.entity_id)
+            self.preview_links.addItem(item)
         if self.preview_links.count() == 0:
             placeholder = QListWidgetItem("Связей пока нет")
             placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
             self.preview_links.addItem(placeholder)
+        self._update_link_action_states()
 
 
-__all__ = ["DossierWorkspace"]
+__all__ = ["DossierLinkDialog", "DossierWorkspace"]

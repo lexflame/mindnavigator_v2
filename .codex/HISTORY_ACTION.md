@@ -1259,3 +1259,14 @@
 [2026-03-13 17:26] OUT: 5 passed.
 [2026-03-13 17:26] ACTION: Updated TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43 status -> Completed.
 [2026-03-13 17:26] ACTION: Completed TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43.
+[2026-03-13 17:47] CMD: git switch -c sprint/10_dossier_mode-p4
+[2026-03-13 17:47] OUT: Switched to a new branch 'sprint/10_dossier_mode-p4'
+[2026-03-13 17:47] ACTION: Updated TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 status -> In Progress.
+[2026-03-13 17:47] ACTION: Started TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 (cross-entity dossier attachments).
+[2026-03-13 17:58] ACTION: Added Dossier attachment option query, workspace attach/detach controls, Wave 4 plan doc, and focused storage/workspace regression coverage.
+[2026-03-13 17:58] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 17:58] OUT: OK.
+[2026-03-13 17:58] CMD: $env:PYTHONPATH='.'; pytest tests/test_dossier_storage.py tests/test_dossier_workspace.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p4
+[2026-03-13 17:58] OUT: 8 passed.
+[2026-03-13 17:58] ACTION: Updated TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 status -> Completed.
+[2026-03-13 17:58] ACTION: Completed TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54.

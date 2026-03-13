@@ -65,6 +65,10 @@ def test_dossier_storage_crud_and_link_filters(unique_temp_path) -> None:
             tags=["book"],
             project="",
         )
+        character = database.create_character(
+            name="Paul Atreides",
+            role="Heir of House Atreides",
+        )
 
         created = database.create_dossier(
             kind="book",
@@ -90,6 +94,8 @@ def test_dossier_storage_crud_and_link_filters(unique_temp_path) -> None:
         filtered_by_kind = database.fetch_dossiers(kind="book")
         filtered_by_link = database.fetch_dossiers(linked_entity_kind="task", linked_entity_id=task.id)
         links = database.fetch_dossier_links(created.id)
+        task_link_options = database.fetch_dossier_link_options("task", "dune")
+        character_link_options = database.fetch_dossier_link_options("character", "paul")
 
         assert fetched is not None
         assert fetched.metadata["publication_year"] == 1965
@@ -99,6 +105,8 @@ def test_dossier_storage_crud_and_link_filters(unique_temp_path) -> None:
             ("task", task.id),
             ("note", note.id),
         }
+        assert task_link_options == [(task.id, "Read Dune")]
+        assert character_link_options == [(character.id, "Paul Atreides · Heir of House Atreides")]
         assert DossierLinkData.from_dict(link_task.to_dict()) == link_task
         assert "Task: Read Dune" in database.describe_dossier_link_target(link_task.entity_kind, link_task.entity_id)
 

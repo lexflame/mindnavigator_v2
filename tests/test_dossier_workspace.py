@@ -145,3 +145,83 @@ def test_dossier_workspace_create_and_delete_round_trip(monkeypatch, unique_temp
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_add_and_remove_link(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_links", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        dossier = database.create_dossier(
+            kind="book",
+            title="Hyperion",
+            summary="Pilgrims and the Shrike.",
+            description="A frame narrative on the edge of war.",
+            status="active",
+            metadata={"author_display": "Dan Simmons"},
+        )
+        task = database.create_task(
+            title="Draft Hyperion notes",
+            description="",
+            day=date(2026, 3, 13),
+            time_text="11:00",
+            priority="Medium",
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+        model = workspace.list_view.model()
+        assert model is not None
+        workspace.list_view.setCurrentIndex(model.index(0, 0))
+        QApplication.processEvents()
+
+        class _AcceptedLinkDialog:
+            def __init__(self, *args, **kwargs) -> None:
+                self._values = {
+                    "entity_kind": "task",
+                    "entity_id": task.id,
+                }
+
+            def values(self) -> dict[str, object]:
+                return dict(self._values)
+
+        monkeypatch.setattr(dossier_workspace_module, "DossierLinkDialog", _AcceptedLinkDialog)
+        monkeypatch.setattr(
+            dossier_workspace_module,
+            "show_dialog_standard",
+            lambda dialog, parent=None: QDialog.DialogCode.Accepted,
+        )
+
+        assert workspace.get_selection() == dossier.id
+        assert workspace.add_link_button.isEnabled()
+        assert not workspace.remove_link_button.isEnabled()
+
+        workspace._open_add_link_dialog()
+        QApplication.processEvents()
+
+        links = database.fetch_dossier_links(dossier.id)
+        assert len(links) == 1
+        assert workspace.preview_links.count() == 1
+        assert "Draft Hyperion notes" in workspace.preview_links.item(0).text()
+
+        workspace.preview_links.setCurrentRow(0)
+        QApplication.processEvents()
+        assert workspace.remove_link_button.isEnabled()
+
+        workspace._remove_selected_link()
+        QApplication.processEvents()
+
+        assert database.fetch_dossier_links(dossier.id) == []
+        assert workspace.preview_links.count() == 1
+        assert "Связей пока нет" in workspace.preview_links.item(0).text()
+        assert not workspace.remove_link_button.isEnabled()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
