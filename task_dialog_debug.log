@@ -1,0 +1,5 @@
+[2026-03-13 13:58:44] task_edit_dialog init task_id=316 parent=QListView
+[2026-03-13 13:58:44] attach_overlay dialog=TaskEditDialog task_id=316 overlay_parent=MainWindow overlay=yes
+[2026-03-13 13:58:44] task_edit_dialog show task_id=316 geometry=(440, 180, 1040, 760)
+[2026-03-13 13:58:45] main_window app_click visible_dialogs=1 global_pos=(683,449)
+[2026-03-13 13:58:45] main_window app_click visible_dialogs=1 global_pos=(683,449)

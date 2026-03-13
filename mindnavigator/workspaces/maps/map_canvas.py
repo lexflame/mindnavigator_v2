@@ -61,6 +61,8 @@ class MapCanvas(QWidget):
         self._resize_start_marker_size = 0.0
         self._preview_pos: Optional[QPointF] = None
         self._dragging_marker_id: Optional[int] = None
+        self._dragging_marker_offset = QPointF()
+        self._move_marker_id: Optional[int] = None
         self._tasks = []
         self._projects = []
         self._notes = []
@@ -105,7 +107,7 @@ class MapCanvas(QWidget):
         # Полностью заменяем список маркеров и сбрасываем выделение.
         self._markers = list(markers)
         self._selected = None
-        self._resize_marker_id = None
+        self._clear_marker_transform_state()
         self._next_id = max((m.id for m in self._markers), default=0) + 1
         self.markerSelected.emit(None)
         self.update()
@@ -311,6 +313,8 @@ class MapCanvas(QWidget):
 
     def set_tool(self, tool: MapTool) -> None:
         # Переключаем активный инструмент на канве.
+        if tool != self._tool:
+            self._finish_marker_transform()
         self._tool = tool
         self._preview_pos = None
         if tool not in (MapTool.ADD_REGION, MapTool.MEASURE):
@@ -325,6 +329,7 @@ class MapCanvas(QWidget):
         self._simple_mouse_mode = bool(enabled)
         if self._simple_mouse_mode:
             self._dragging_marker_id = None
+            self._dragging_marker_offset = QPointF()
             self._resize_dragging = False
 
     def _is_marker_drag_allowed(self) -> bool:
@@ -505,6 +510,8 @@ class MapCanvas(QWidget):
             # При активном режиме изменения размера рисуем ручки.
             if self._resize_marker_id == marker.id:
                 self._draw_resize_handles(painter, marker)
+            elif self._move_marker_id == marker.id:
+                self._draw_move_transform(painter, marker)
 
     def _draw_overlays(self, painter: QPainter) -> None:
         # Отрисовываем полигоны областей и пути сообщения.
@@ -720,6 +727,112 @@ class MapCanvas(QWidget):
         self.markerUpdated.emit(updated)
         self.update()
 
+    def _clear_marker_transform_state(self) -> None:
+        self._move_marker_id = None
+        self._resize_marker_id = None
+        self._dragging_marker_id = None
+        self._dragging_marker_offset = QPointF()
+        self._active_resize_handle = None
+        self._resize_dragging = False
+        self._resize_drag_offset = QPointF()
+        self.unsetCursor()
+
+    def _finish_marker_transform(self) -> None:
+        if self._move_marker_id is None and self._resize_marker_id is None and self._dragging_marker_id is None:
+            return
+        self._clear_marker_transform_state()
+        self.update()
+
+    def _set_marker_position(self, marker: Marker, world_pos: QPointF, drag_offset: QPointF | None = None) -> None:
+        offset = drag_offset if drag_offset is not None else QPointF()
+        new_center = world_pos - offset
+        self._set_marker(
+            Marker(
+                marker.id,
+                marker.name,
+                new_center.x(),
+                new_center.y(),
+                marker.color,
+                marker.type,
+                marker.size,
+                marker.description,
+                marker.properties,
+                marker.task_ids,
+                marker.project_ids,
+                marker.note_ids,
+                marker.object_ids,
+                marker.file_ids,
+                marker.map_ids,
+                marker.marker_ids,
+                marker.parent_path,
+                marker.image_path,
+            )
+        )
+
+    @staticmethod
+    def _arrow_polygon(direction: str, center: QPointF, length: float, half_width: float) -> QPolygonF:
+        if direction == "n":
+            return QPolygonF(
+                [
+                    QPointF(center.x(), center.y() - length),
+                    QPointF(center.x() - half_width, center.y()),
+                    QPointF(center.x() + half_width, center.y()),
+                ]
+            )
+        if direction == "s":
+            return QPolygonF(
+                [
+                    QPointF(center.x(), center.y() + length),
+                    QPointF(center.x() - half_width, center.y()),
+                    QPointF(center.x() + half_width, center.y()),
+                ]
+            )
+        if direction == "e":
+            return QPolygonF(
+                [
+                    QPointF(center.x() + length, center.y()),
+                    QPointF(center.x(), center.y() - half_width),
+                    QPointF(center.x(), center.y() + half_width),
+                ]
+            )
+        return QPolygonF(
+            [
+                QPointF(center.x() - length, center.y()),
+                QPointF(center.x(), center.y() - half_width),
+                QPointF(center.x(), center.y() + half_width),
+            ]
+        )
+
+    def _draw_selection_frame(self, painter: QPainter, selection_rect: QRectF, color: QColor) -> None:
+        painter.save()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(color, max(1.0, 2.0 / self._scale)))
+        painter.drawRect(selection_rect)
+        painter.restore()
+
+    def _draw_move_transform(self, painter: QPainter, marker: Marker) -> None:
+        selection_rect = self._selection_rect(marker)
+        self._draw_selection_frame(painter, selection_rect, QColor("#67c7ff"))
+
+        arrow_distance = max(12.0 / self._scale, 16.0 / self._scale)
+        arrow_length = max(8.0 / self._scale, 10.0 / self._scale)
+        arrow_half_width = max(4.0 / self._scale, 5.0 / self._scale)
+        cx = selection_rect.center().x()
+        cy = selection_rect.center().y()
+        positions = {
+            "n": QPointF(cx, selection_rect.top() - arrow_distance),
+            "s": QPointF(cx, selection_rect.bottom() + arrow_distance),
+            "e": QPointF(selection_rect.right() + arrow_distance, cy),
+            "w": QPointF(selection_rect.left() - arrow_distance, cy),
+        }
+
+        painter.save()
+        painter.setBrush(QColor("#67c7ff"))
+        painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.0 / self._scale)))
+        for direction, center in positions.items():
+            painter.drawPolygon(self._arrow_polygon(direction, center, arrow_length, arrow_half_width))
+        painter.restore()
+
     def _draw_resize_handles(self, painter: QPainter, marker: Marker) -> None:
         # Рисуем рамку выделения и ручки изменения размера.
         selection_rect = self._selection_rect(marker)
@@ -727,12 +840,8 @@ class MapCanvas(QWidget):
         half = handle_size / 2
         self._resize_handle_regions = {}
 
-        pen = QPen(QColor("#67c7ff"), max(1.0, 2.0 / self._scale))
+        self._draw_selection_frame(painter, selection_rect, QColor("#67c7ff"))
         painter.save()
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(pen)
-        painter.drawRect(selection_rect)
-
         painter.setBrush(QColor("#2b2f36"))
         painter.setPen(QPen(QColor("#dfe7f0"), max(1.0, 1.2 / self._scale)))
 
@@ -836,10 +945,31 @@ class MapCanvas(QWidget):
         if not marker:
             return
         self._selected = marker
+        self._selected_overlay_id = None
         self.markerSelected.emit(marker)
+        self._move_marker_id = None
         self._resize_marker_id = marker_id
         self._active_resize_handle = None
         self._resize_dragging = False
+        self._dragging_marker_id = None
+        self._dragging_marker_offset = QPointF()
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.update()
+
+    def _enable_move_mode(self, marker_id: int) -> None:
+        marker = self._marker_by_id(marker_id)
+        if not marker:
+            return
+        self._selected = marker
+        self._selected_overlay_id = None
+        self.markerSelected.emit(marker)
+        self._move_marker_id = marker_id
+        self._resize_marker_id = None
+        self._dragging_marker_id = None
+        self._dragging_marker_offset = QPointF()
+        self._active_resize_handle = None
+        self._resize_dragging = False
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
         self.update()
 
     def _zoom_to_marker(self, marker: Marker) -> None:
@@ -889,6 +1019,14 @@ class MapCanvas(QWidget):
             )
         )
 
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            if self._move_marker_id is not None or self._resize_marker_id is not None:
+                self._finish_marker_transform()
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         # Обработка кликов мыши на канве.
         if event.button() == Qt.MouseButton.RightButton:
@@ -917,6 +1055,23 @@ class MapCanvas(QWidget):
                 return
             # ЛКМ — выбор, перемещение, добавление маркеров или панорамирование.
             world_pos = self._map_to_world(event.position())
+            move_marker = self._marker_by_id(self._move_marker_id) if self._move_marker_id is not None else None
+            if move_marker is not None:
+                if self._selection_rect(move_marker).contains(world_pos):
+                    self._selected = move_marker
+                    self._selected_overlay_id = None
+                    self.markerSelected.emit(move_marker)
+                    self._dragging_marker_id = move_marker.id
+                    self._dragging_marker_offset = world_pos - QPointF(move_marker.x, move_marker.y)
+                    self.update()
+                    return
+                self._selected = move_marker
+                self._selected_overlay_id = None
+                self.markerSelected.emit(move_marker)
+                self._panning = True
+                self._last_pos = event.position()
+                self.update()
+                return
             if self._resize_marker_id is not None:
                 handle = self._resize_handle_at(world_pos)
                 if handle:
@@ -947,7 +1102,12 @@ class MapCanvas(QWidget):
                 self._selected = marker
                 self._selected_overlay_id = None
                 self.markerSelected.emit(marker)
-                self._dragging_marker_id = marker.id if self._is_marker_drag_allowed() else None
+                if self._is_marker_drag_allowed():
+                    self._dragging_marker_id = marker.id
+                    self._dragging_marker_offset = world_pos - QPointF(marker.x, marker.y)
+                else:
+                    self._dragging_marker_id = None
+                    self._dragging_marker_offset = QPointF()
                 self.update()
                 return
             overlay = self._overlay_at(world_pos)
@@ -962,6 +1122,7 @@ class MapCanvas(QWidget):
             self._selected_overlay_id = None
             self.markerSelected.emit(None)
             self._dragging_marker_id = None
+            self._dragging_marker_offset = QPointF()
             self._panning = True
             self._last_pos = event.position()
             self.update()
@@ -1003,28 +1164,7 @@ class MapCanvas(QWidget):
                     return
             if marker and self._resize_dragging:
                 # Перемещаем маркер в режиме изменения размера.
-                new_center = world_pos - self._resize_drag_offset
-                updated = Marker(
-                    marker.id,
-                    marker.name,
-                    new_center.x(),
-                    new_center.y(),
-                    marker.color,
-                    marker.type,
-                    marker.size,
-                    marker.description,
-                    marker.properties,
-                    marker.task_ids,
-                    marker.project_ids,
-                    marker.note_ids,
-                    marker.object_ids,
-                    marker.file_ids,
-                    marker.map_ids,
-                    marker.marker_ids,
-                    marker.parent_path,
-                    marker.image_path,
-                )
-                self._set_marker(updated)
+                self._set_marker_position(marker, world_pos, self._resize_drag_offset)
                 return
             if marker:
                 # Обновляем курсор при наведении на ручки.
@@ -1039,32 +1179,23 @@ class MapCanvas(QWidget):
                         self.unsetCursor()
                     return
             self.unsetCursor()
-        if self._dragging_marker_id is not None and self._is_marker_drag_allowed():
+        if self._move_marker_id is not None and self._dragging_marker_id is None:
+            move_marker = self._marker_by_id(self._move_marker_id)
+            if move_marker:
+                world_pos = self._map_to_world(event.position())
+                if self._selection_rect(move_marker).contains(world_pos):
+                    self.setCursor(Qt.CursorShape.SizeAllCursor)
+                    return
+            self.unsetCursor()
+        if self._dragging_marker_id is not None:
             # Перетаскиваем выбранный маркер.
             world_pos = self._map_to_world(event.position())
             marker = self._marker_by_id(self._dragging_marker_id)
-            if marker:
-                updated = Marker(
-                    marker.id,
-                    marker.name,
-                    world_pos.x(),
-                    world_pos.y(),
-                    marker.color,
-                    marker.type,
-                    marker.size,
-                    marker.description,
-                    marker.properties,
-                    marker.task_ids,
-                    marker.project_ids,
-                    marker.note_ids,
-                    marker.object_ids,
-                    marker.file_ids,
-                    marker.map_ids,
-                    marker.marker_ids,
-                    marker.parent_path,
-                    marker.image_path,
-                )
-                self._set_marker(updated)
+            drag_allowed = marker is not None and (
+                marker.id == self._move_marker_id or self._is_marker_drag_allowed()
+            )
+            if marker and drag_allowed:
+                self._set_marker_position(marker, world_pos, self._dragging_marker_offset)
                 return
         if self._panning:
             # Панорамируем карту.
@@ -1083,6 +1214,7 @@ class MapCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._panning = False
             self._dragging_marker_id = None
+            self._dragging_marker_offset = QPointF()
             self._active_resize_handle = None
             self._resize_dragging = False
 
@@ -1194,6 +1326,8 @@ class MapCanvas(QWidget):
     def _remove_marker(self, marker: Marker) -> None:
         # Удаляем маркер и сбрасываем выделение при необходимости.
         self._markers = [m for m in self._markers if m.id != marker.id]
+        if self._move_marker_id == marker.id or self._resize_marker_id == marker.id:
+            self._clear_marker_transform_state()
         self.markerRemoved.emit(marker.id)
         if self._selected and self._selected.id == marker.id:
             self._selected = None
@@ -1778,6 +1912,7 @@ class MapCanvas(QWidget):
             type_actions[action] = option
         act_bigger = menu.addAction("Увеличить маркер")
         act_smaller = menu.addAction("Уменьшить маркер")
+        act_move = menu.addAction("Переместить маркер")
         act_resize = menu.addAction("Изменить размер")
         act_edit = menu.addAction("Редактировать маркер")
         act_delete = menu.addAction("Удалить маркер")
@@ -1789,6 +1924,7 @@ class MapCanvas(QWidget):
         type_menu.setEnabled(marker is not None)
         act_bigger.setEnabled(marker is not None)
         act_smaller.setEnabled(marker is not None)
+        act_move.setEnabled(marker is not None)
         act_resize.setEnabled(marker is not None)
         act_edit.setEnabled(marker is not None)
         act_delete.setEnabled(marker is not None)
@@ -1827,6 +1963,8 @@ class MapCanvas(QWidget):
             self._adjust_marker_size(marker, 1.5)
         elif chosen == act_smaller and marker:
             self._adjust_marker_size(marker, -1.5)
+        elif chosen == act_move and marker:
+            self._enable_move_mode(marker.id)
         elif chosen == act_resize and marker:
             self._enable_resize_mode(marker.id)
         elif chosen == act_edit and marker:
