@@ -6,6 +6,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QDialog
 
 from mindnavigator.storage import Database
+from mindnavigator.ui.workspaces import base_workspace as base_workspace_module
 from mindnavigator.workspaces import dossier as dossier_workspace
 from mindnavigator.workspaces.dossier import dossier_workspace as dossier_workspace_module
 from mindnavigator.workspaces.dossier.dossier_roles import DossierRoles
@@ -293,5 +294,90 @@ def test_dossier_workspace_tag_filter_grouping_and_summary(monkeypatch, unique_t
     finally:
         if workspace is not None:
             workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_restores_tag_and_group_filters(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+
+    db_path = unique_temp_path("dossier_workspace_restore_state", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    restored_workspace = None
+    try:
+        store: dict[str, object] = {}
+
+        class _FakeSettings:
+            def value(self, key: str, default=None, type=None):
+                _ = type
+                return store.get(key, default)
+
+            def setValue(self, key: str, value) -> None:
+                store[key] = value
+
+            def remove(self, key: str) -> None:
+                store.pop(key, None)
+
+        monkeypatch.setattr(base_workspace_module, "QSettings", _FakeSettings)
+
+        database.create_dossier(
+            kind="book",
+            title="The Tombs of Atuan",
+            summary="Tenar and Ged.",
+            description="",
+            status="active",
+            rating=9,
+            tags=["classic"],
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+        database.create_dossier(
+            kind="book",
+            title="The Farthest Shore",
+            summary="Journey west.",
+            description="",
+            status="completed",
+            rating=8,
+            tags=["classic"],
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+        database.create_dossier(
+            kind="film",
+            title="Mirror",
+            summary="Memory fragments.",
+            description="",
+            status="active",
+            rating=8,
+            tags=["arthouse"],
+            metadata={"director": "Andrei Tarkovsky", "release_year": 1975},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+        workspace.on_enter()
+        QApplication.processEvents()
+
+        _set_combo_to_data(workspace.kind_filter, "book")
+        workspace.tag_filter_input.setText("classic")
+        _set_combo_to_data(workspace.group_filter, "status")
+        QApplication.processEvents()
+        workspace.save_state()
+
+        restored_workspace = dossier_workspace.DossierWorkspace()
+        restored_workspace.on_enter()
+        QApplication.processEvents()
+
+        model = restored_workspace.list_view.model()
+        assert model is not None
+        assert restored_workspace.kind_filter.currentData() == "book"
+        assert restored_workspace.tag_filter_input.text() == "classic"
+        assert restored_workspace.group_filter.currentData() == "status"
+        assert "Итого: 2" in restored_workspace.summary_label.text()
+        assert model.rowCount() == 4
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        if restored_workspace is not None:
+            restored_workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
