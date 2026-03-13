@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import dossier as dossier_workspace
+from mindnavigator.workspaces.dossier import dossier_workspace as dossier_workspace_module
 
 
 def _set_combo_to_data(combo, value) -> None:
@@ -97,15 +98,39 @@ def test_dossier_workspace_create_and_delete_round_trip(monkeypatch, unique_temp
         monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
         workspace = dossier_workspace.DossierWorkspace()
 
-        workspace.quick_title_input.setText("Arkady dossier")
-        _set_combo_to_data(workspace.quick_kind, "writer")
-        workspace._create_dossier_from_quick_form()
+        class _AcceptedCreateDialog:
+            def __init__(self, *args, **kwargs) -> None:
+                self._values = {
+                    "kind": "writer",
+                    "title": "Arkady dossier",
+                    "summary": "",
+                    "description": "",
+                    "tags": [],
+                    "status": "planned",
+                    "rating": None,
+                    "source": "",
+                    "cover_image": "",
+                    "metadata": {"country": "USSR"},
+                }
+
+            def values(self) -> dict[str, object]:
+                return dict(self._values)
+
+        monkeypatch.setattr(dossier_workspace_module, "DossierCreateDialog", _AcceptedCreateDialog)
+        monkeypatch.setattr(
+            dossier_workspace_module,
+            "show_dialog_standard",
+            lambda dialog, parent=None: QDialog.DialogCode.Accepted,
+        )
+
+        workspace._open_create_dialog()
         QApplication.processEvents()
 
         created = database.fetch_dossiers()
         assert len(created) == 1
         assert created[0].title == "Arkady dossier"
         assert created[0].kind == "writer"
+        assert created[0].metadata["country"] == "USSR"
         assert workspace.get_selection() == created[0].id
 
         workspace._delete_selected(require_confirmation=False)

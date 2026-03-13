@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from .dossier_details_dialog import DossierDetailsDialog
+from .dossier_editor_dialog import DossierCreateDialog, DossierEditDialog
 from .dossier_item_delegate import DossierItemDelegate
 from .dossier_list_model import DossierListModel
 from .dossier_roles import DossierRoles
@@ -82,6 +84,7 @@ class DossierWorkspace(BaseWorkspace):
         self.list_view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        self.list_view.doubleClicked.connect(self._open_details_dialog)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.customContextMenuRequested.connect(self._show_context_menu)
         list_layout.addWidget(self.list_view, 1)
@@ -204,16 +207,28 @@ class DossierWorkspace(BaseWorkspace):
 
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Досье", self)
-        action_new.triggered.connect(self._create_dossier_from_toolbar)
+        action_new.triggered.connect(self._open_create_dialog)
+        action_edit = QAction("Изменить", self)
+        action_edit.triggered.connect(self._open_edit_dialog)
+        action_details = QAction("Карточка", self)
+        action_details.triggered.connect(self._open_details_dialog)
         action_refresh = QAction("Обновить", self)
         action_refresh.triggered.connect(self.refresh)
         action_delete = QAction("Удалить", self)
         action_delete.triggered.connect(self._delete_selected)
         return {
             "new": action_new,
+            "edit": action_edit,
+            "details": action_details,
             "refresh": action_refresh,
             "delete": action_delete,
         }
+
+    def update_action_states(self) -> None:
+        super().update_action_states()
+        details_action = self.actions.get("details")
+        if details_action is not None:
+            details_action.setEnabled(self.get_selection() is not None and not self._busy)
 
     def restore_state(self) -> None:
         super().restore_state()
@@ -249,30 +264,58 @@ class DossierWorkspace(BaseWorkspace):
     def _on_rating_filter_changed(self) -> None:
         self.set_filter("rating", self.rating_filter.currentData())
 
-    def _create_dossier_from_toolbar(self) -> None:
-        self._create_dossier(
-            title=(self.quick_title_input.text() or "").strip() or "Новое досье",
-            kind=self.quick_kind.currentData() or self.kind_filter.currentData() or "book",
+    def _open_create_dialog(self, checked: bool = False) -> None:
+        _ = checked
+        dialog = DossierCreateDialog(
+            parent=self,
+            seed_kind=str(self.quick_kind.currentData() or self.kind_filter.currentData() or "book"),
+            seed_title=(self.quick_title_input.text() or "").strip(),
         )
-
-    def _create_dossier_from_quick_form(self) -> None:
-        self._create_dossier(
-            title=(self.quick_title_input.text() or "").strip() or "Новое досье",
-            kind=self.quick_kind.currentData() or "book",
-        )
-        self.quick_title_input.clear()
-
-    def _create_dossier(self, *, title: str, kind: object) -> None:
-        kind_value = str(kind or "book")
-        status_value = self.status_filter.currentData()
-        dossier = self._db.create_dossier(
-            kind=kind_value,
-            title=title,
-            status=str(status_value) if isinstance(status_value, str) and status_value else "planned",
-        )
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        try:
+            dossier = self._db.create_dossier(**dialog.values())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Досье", str(exc))
+            return
         self._current_dossier_id = dossier.id
+        self.quick_title_input.clear()
         self.refresh()
         self.set_status("Досье создано.")
+
+    def _create_dossier_from_quick_form(self) -> None:
+        self._open_create_dialog()
+
+    def _open_edit_dialog(self, checked: bool = False) -> None:
+        _ = checked
+        dossier_id = self.get_selection()
+        if dossier_id is None:
+            return
+        dossier = self._db.get_dossier(dossier_id)
+        if dossier is None:
+            return
+        dialog = DossierEditDialog(dossier, parent=self)
+        if show_dialog_standard(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        try:
+            updated = self._db.update_dossier(dossier_id=dossier_id, **dialog.values())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Досье", str(exc))
+            return
+        self._current_dossier_id = updated.id
+        self.refresh()
+        self.set_status("Досье обновлено.")
+
+    def _open_details_dialog(self, checked: bool = False) -> None:
+        _ = checked
+        dossier_id = self.get_selection()
+        if dossier_id is None:
+            return
+        dossier = self._db.get_dossier(dossier_id)
+        if dossier is None:
+            return
+        dialog = DossierDetailsDialog(dossier, parent=self)
+        show_dialog_standard(dialog, self)
 
     def _delete_selected(self, checked: bool = False, *, require_confirmation: bool = True) -> None:
         _ = checked
@@ -298,15 +341,25 @@ class DossierWorkspace(BaseWorkspace):
         index = self.list_view.indexAt(pos)
         menu = QMenu(self)
         action_new = menu.addAction("Создать")
+        action_edit = None
+        action_details = None
         action_refresh = menu.addAction("Обновить")
         action_delete = None
         if index.isValid():
+            action_edit = menu.addAction("Изменить")
+            action_details = menu.addAction("Карточка")
             action_delete = menu.addAction("Удалить")
         chosen = menu.exec(self.list_view.mapToGlobal(pos))
         if chosen == action_new:
-            self._create_dossier_from_toolbar()
+            self._open_create_dialog()
         elif chosen == action_refresh:
             self.refresh()
+        elif action_edit is not None and chosen == action_edit:
+            self.list_view.setCurrentIndex(index)
+            self._open_edit_dialog()
+        elif action_details is not None and chosen == action_details:
+            self.list_view.setCurrentIndex(index)
+            self._open_details_dialog()
         elif action_delete is not None and chosen == action_delete:
             self.list_view.setCurrentIndex(index)
             self._delete_selected()

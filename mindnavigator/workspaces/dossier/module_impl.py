@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from .dossier_details_dialog import DossierDetailsDialog
+from .dossier_editor_dialog import DossierCreateDialog, DossierEditDialog
 from .dossier_item_delegate import DossierItemDelegate
 from .dossier_list_model import DossierListModel
 from .dossier_roles import DossierRoles

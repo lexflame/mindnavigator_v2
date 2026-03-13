@@ -1246,3 +1246,16 @@
 [2026-03-13 16:31] OUT: 11 passed.
 [2026-03-13 16:31] ACTION: Updated TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632 status -> Completed.
 [2026-03-13 16:31] ACTION: Completed TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632.
+[2026-03-13 17:15] SESSION_START: Continued Sprint 10 Wave 3 implementation on partition branch.
+[2026-03-13 17:15] CMD: git branch --show-current
+[2026-03-13 17:15] OUT: sprint/10_dossier_mode-p3
+[2026-03-13 17:15] ACTION: Started TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43 (Build type-specific Dossier editor and details surfaces for books, films, games, and writers).
+[2026-03-13 17:15] ACTION: Updated TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43 status -> In Progress.
+[2026-03-13 17:15] ACTION: Created docs/sprints/TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43_PLAN.md.
+[2026-03-13 17:26] ACTION: Added typed Dossier create/edit/details dialogs, workspace dialog hooks, and focused dialog/workspace regression tests.
+[2026-03-13 17:26] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 17:26] OUT: OK.
+[2026-03-13 17:26] CMD: $env:PYTHONPATH='.'; pytest tests/test_dossier_workspace.py tests/test_dossier_dialogs.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p3
+[2026-03-13 17:26] OUT: 5 passed.
+[2026-03-13 17:26] ACTION: Updated TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43 status -> Completed.
+[2026-03-13 17:26] ACTION: Completed TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43.
