@@ -97,9 +97,16 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "parent_id" in task_columns
         assert "marker_theme" in task_columns
         assert "completion_delay_minutes" in task_columns
+        dossier_tables = {
+            row["name"]
+            for row in database._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('dossiers', 'dossier_links');"
+            ).fetchall()
+        }
+        assert dossier_tables == {"dossiers", "dossier_links"}
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 4
+        assert user_version == 5
 
         board_rows = database._conn.execute(
             "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
@@ -128,8 +135,31 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 4
-        assert database.apply_schema_updates() == 4
+        assert database.apply_schema_updates() == 5
+        assert database.apply_schema_updates() == 5
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_current(unique_temp_path) -> None:
+    db_path = unique_temp_path("apply_schema_updates_dossier_backfill", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        with database._conn:
+            database._conn.execute("DROP TABLE dossier_links;")
+            database._conn.execute("DROP TABLE dossiers;")
+            database._conn.execute("PRAGMA user_version = 5;")
+
+        assert database.apply_schema_updates() == 5
+
+        dossier_tables = {
+            row["name"]
+            for row in database._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('dossiers', 'dossier_links');"
+            ).fetchall()
+        }
+        assert dossier_tables == {"dossiers", "dossier_links"}
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -334,7 +364,7 @@ def test_database_backfills_project_columns_when_user_version_is_current(unique_
         )
         # Simulate DB that already reports current user_version but still misses
         # extended projects columns.
-        legacy_conn.execute("PRAGMA user_version = 4;")
+        legacy_conn.execute("PRAGMA user_version = 5;")
     legacy_conn.close()
 
     database = Database(path=db_path)
@@ -383,7 +413,7 @@ def test_database_backfills_task_board_column_when_missing(unique_temp_path) -> 
             "INSERT INTO tasks(title, description, day, time_text, priority, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
             ("Queued legacy", "", "2026-02-25", "11:00", "Medium", 0, now, now),
         )
-        legacy_conn.execute("PRAGMA user_version = 4;")
+        legacy_conn.execute("PRAGMA user_version = 5;")
     legacy_conn.close()
 
     database = Database(path=db_path)
