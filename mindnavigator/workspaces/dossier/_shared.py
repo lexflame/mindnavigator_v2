@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFrame,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QListView,
@@ -19,8 +21,11 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
+    QScrollArea,
     QSplitter,
+    QSpinBox,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -30,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import DossierData, get_database
-from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
 _storage_get_database = get_database
@@ -167,6 +172,21 @@ def elided_text(metrics: QFontMetrics, text: str, width: int) -> str:
     return metrics.elidedText(text or "", Qt.TextElideMode.ElideRight, max(0, width))
 
 
+def parse_tag_list(raw_value: str) -> list[str]:
+    normalized: list[str] = []
+    for raw_part in (raw_value or "").split(","):
+        value = raw_part.strip()
+        if value and value not in normalized:
+            normalized.append(value)
+    return normalized
+
+
+def render_list_value(value: object) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value or "")
+
+
 __all__ = [
     "Any",
     "BaseWorkspace",
@@ -186,9 +206,11 @@ __all__ = [
     "QColor",
     "QComboBox",
     "QDialog",
+    "QDialogButtonBox",
     "QFont",
     "QFontMetrics",
     "QFrame",
+    "QFormLayout",
     "QHBoxLayout",
     "QLabel",
     "QLineEdit",
@@ -197,10 +219,13 @@ __all__ = [
     "QListWidgetItem",
     "QMenu",
     "QModelIndex",
+    "QMessageBox",
     "QPainter",
     "QPlainTextEdit",
     "QRect",
+    "QScrollArea",
     "QSize",
+    "QSpinBox",
     "QSplitter",
     "QStyle",
     "QStyledItemDelegate",
@@ -218,4 +243,7 @@ __all__ = [
     "elided_text",
     "exec_with_overlay",
     "get_database",
+    "parse_tag_list",
+    "render_list_value",
+    "show_dialog_standard",
 ]
