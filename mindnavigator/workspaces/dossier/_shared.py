@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mindnavigator.storage import DossierData, get_database
+from mindnavigator.storage import DossierData, DossierLinkData, get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
@@ -122,6 +122,20 @@ DOSSIER_KIND_COLORS = {
     "writer": "#b78cff",
 }
 
+DOSSIER_LINK_KIND_LABELS = {
+    "task": "Задача",
+    "map": "Карта",
+    "marker": "Маркер",
+    "note": "Заметка",
+    "idea": "Идея",
+    "object": "Объект",
+    "character": "Персонаж",
+}
+
+DOSSIER_LINK_KIND_OPTIONS = [
+    (DOSSIER_LINK_KIND_LABELS.get(kind, kind.title()), kind) for kind in DossierLinkData.SUPPORTED_ENTITY_KINDS
+]
+
 
 def dossier_kind_label(kind: str) -> str:
     return DOSSIER_KIND_LABELS.get((kind or "").strip().lower(), "Досье")
@@ -192,9 +206,12 @@ __all__ = [
     "BaseWorkspace",
     "ConfirmDialog",
     "DossierData",
+    "DossierLinkData",
     "DOSSIER_KIND_COLORS",
     "DOSSIER_KIND_LABELS",
     "DOSSIER_KIND_OPTIONS",
+    "DOSSIER_LINK_KIND_LABELS",
+    "DOSSIER_LINK_KIND_OPTIONS",
     "DOSSIER_METADATA_LABELS",
     "DOSSIER_RATING_OPTIONS",
     "DOSSIER_STATUS_LABELS",

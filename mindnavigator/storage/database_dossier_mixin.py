@@ -343,6 +343,57 @@ class DatabaseDossierMixin:
         with self._conn:
             self._conn.execute("DELETE FROM dossier_links WHERE id = ?;", (int(link_id),))
 
+    def fetch_dossier_link_options(self, entity_kind: str, search_text: str = "") -> List[Tuple[int, str]]:
+        """Return link target options for a dossier attachment picker."""
+        normalized_kind = DossierLinkData.normalize_entity_kind(entity_kind)
+        needle = (search_text or "").strip().lower()
+
+        def _matches(*chunks: str) -> bool:
+            if not needle:
+                return True
+            haystack = " ".join(chunk for chunk in chunks if chunk).lower()
+            return needle in haystack
+
+        options: List[Tuple[int, str]] = []
+        if normalized_kind == "task":
+            for task in self.fetch_tasks():
+                label = f"{task.title} · {task.project_title}" if task.project_title else task.title
+                if _matches(task.title, task.project_title, task.description):
+                    options.append((task.id, label))
+        elif normalized_kind == "map":
+            for map_item in self.fetch_maps():
+                label = f"{map_item.title} · {map_item.project}" if map_item.project else map_item.title
+                if _matches(map_item.title, map_item.project, map_item.description):
+                    options.append((map_item.id, label))
+        elif normalized_kind == "marker":
+            map_titles = {item.id: item.title for item in self.fetch_maps()}
+            for marker in self.fetch_map_markers():
+                map_title = map_titles.get(marker.map_id, "")
+                label = f"{marker.name} · {map_title}" if map_title else marker.name
+                if _matches(marker.name, map_title, marker.description, marker.properties):
+                    options.append((marker.id, label))
+        elif normalized_kind == "note":
+            for note in self.fetch_notes():
+                label = f"{note.title} · {note.project}" if note.project else note.title
+                if _matches(note.title, note.project, note.preview):
+                    options.append((note.id, label))
+        elif normalized_kind == "idea":
+            for idea in self.fetch_ideas(archived=True):
+                label = f"{idea.title} · {idea.project_title}" if idea.project_title else idea.title
+                if _matches(idea.title, idea.project_title, idea.summary, idea.body_md):
+                    options.append((idea.id, label))
+        elif normalized_kind == "object":
+            for obj in self.fetch_objects():
+                label = f"{obj.title} · {obj.catalog}" if obj.catalog else obj.title
+                if _matches(obj.title, obj.catalog, obj.description):
+                    options.append((obj.id, label))
+        elif normalized_kind == "character":
+            for character in self.fetch_characters(search_text=needle):
+                label = f"{character.name} · {character.role}" if character.role else character.name
+                options.append((character.id, label))
+        options.sort(key=lambda pair: (pair[1].lower(), pair[0]))
+        return options
+
     def describe_dossier_link_target(self, entity_kind: str, entity_id: int) -> str:
         """Return a human-readable label for a dossier link target."""
         normalized_id = int(entity_id)

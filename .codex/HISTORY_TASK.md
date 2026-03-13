@@ -220,6 +220,6 @@ Status: In Progress
 | TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221 | 10 | Design storage schema and domain model for Dossier entities and typed metadata | feat | Completed |
 | TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632 | 10 | Implement Dossier workspace shell with tasks-like list UX and no project dimension | feat | Completed |
 | TASK_B8E7A3F2-6E1A-46CB-9F72-3D7A2E9B4C43 | 10 | Build type-specific Dossier editor and details surfaces for books, films, games, and writers | feat | Completed |
-| TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 | 10 | Add cross-entity attachments from Dossier items to tasks, maps, markers, notes, ideas, objects, and characters | feat | Planned |
+| TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 | 10 | Add cross-entity attachments from Dossier items to tasks, maps, markers, notes, ideas, objects, and characters | feat | Completed |
 | TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 | 10 | Implement Dossier search, filters, grouping, and aggregate summary behavior | feat | Planned |
 | TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 | 10 | Validate Sprint 10 delivery, add regression coverage, and prepare release closure | feat | Planned |
