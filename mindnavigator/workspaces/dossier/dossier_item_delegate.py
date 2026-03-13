@@ -8,6 +8,10 @@ from .dossier_roles import DossierRoles
 
 class DossierItemDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        if index.data(DossierRoles.RowType) == "group":
+            self._paint_group_row(painter, option, index)
+            return
+
         painter.save()
 
         rect = option.rect.adjusted(10, 4, -10, -4)
@@ -100,7 +104,27 @@ class DossierItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
+        if index.data(DossierRoles.RowType) == "group":
+            return QSize(option.rect.width(), 32)
         return QSize(option.rect.width(), 108)
+
+    @staticmethod
+    def _paint_group_row(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        painter.save()
+        rect = option.rect.adjusted(12, 6, -12, -2)
+        label = str(index.data(DossierRoles.GroupLabel) or "Группа")
+        count = int(index.data(DossierRoles.GroupCount) or 0)
+
+        title_font = QFont(option.font)
+        title_font.setBold(True)
+        painter.setFont(title_font)
+        painter.setPen(QColor("#8f98a8"))
+        painter.drawText(
+            rect,
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            f"{label} ({count})",
+        )
+        painter.restore()
 
 
 __all__ = ["DossierItemDelegate"]

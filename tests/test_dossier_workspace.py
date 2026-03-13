@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import dossier as dossier_workspace
 from mindnavigator.workspaces.dossier import dossier_workspace as dossier_workspace_module
+from mindnavigator.workspaces.dossier.dossier_roles import DossierRoles
 
 
 def _set_combo_to_data(combo, value) -> None:
@@ -220,6 +221,75 @@ def test_dossier_workspace_add_and_remove_link(monkeypatch, unique_temp_path) ->
         assert workspace.preview_links.count() == 1
         assert "Связей пока нет" in workspace.preview_links.item(0).text()
         assert not workspace.remove_link_button.isEnabled()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_tag_filter_grouping_and_summary(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_grouping", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_dossier(
+            kind="book",
+            title="A Wizard of Earthsea",
+            summary="Ged begins.",
+            description="",
+            status="active",
+            rating=9,
+            tags=["classic", "fantasy"],
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+        database.create_dossier(
+            kind="book",
+            title="Tehanu",
+            summary="Later Earthsea.",
+            description="",
+            status="completed",
+            rating=8,
+            tags=["classic"],
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+        database.create_dossier(
+            kind="film",
+            title="Solaris",
+            summary="Station over the ocean.",
+            description="",
+            status="active",
+            rating=8,
+            tags=["arthouse"],
+            metadata={"director": "Andrei Tarkovsky", "release_year": 1972},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+        model = workspace.list_view.model()
+        assert model is not None
+        assert "Итого: 3" in workspace.summary_label.text()
+
+        workspace.tag_filter_input.setText("classic")
+        QApplication.processEvents()
+
+        assert "Итого: 2" in workspace.summary_label.text()
+        assert "classic" in workspace.summary_label.text()
+        assert model.rowCount() == 2
+
+        _set_combo_to_data(workspace.group_filter, "status")
+        QApplication.processEvents()
+
+        assert model.rowCount() == 4
+        assert model.data(model.index(0, 0), DossierRoles.RowType) == "group"
+        assert model.data(model.index(1, 0), DossierRoles.RowType) == "dossier"
+        assert workspace.get_selection() is not None
+        assert workspace.preview_title_label.text() == "Tehanu"
     finally:
         if workspace is not None:
             workspace.deleteLater()
