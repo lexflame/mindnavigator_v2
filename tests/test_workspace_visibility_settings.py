@@ -38,6 +38,7 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
         MODE_TASKS = MainWindow.MODE_TASKS
         MODE_PURCHASES = MainWindow.MODE_PURCHASES
         MODE_IDEAS = MainWindow.MODE_IDEAS
+        MODE_DOSSIER = MainWindow.MODE_DOSSIER
         MODE_COLLECTIONS = MainWindow.MODE_COLLECTIONS
         MODE_MAPS = MainWindow.MODE_MAPS
         MODE_NOTES = MainWindow.MODE_NOTES
@@ -48,6 +49,7 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
 
     mapping = MainWindow._workspace_mode_map(_DummyWindow())
 
+    assert mapping["dossier"] == MainWindow.MODE_DOSSIER
     assert mapping["characters"] == MainWindow.MODE_CHARACTERS
     assert mapping["minddraw"] == MainWindow.MODE_MINDDRAW
 

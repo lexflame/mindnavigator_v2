@@ -101,6 +101,7 @@ class SettingsWorkspace(QWidget):
         ("tasks", "Задачи"),
         ("purchases", "Покупки"),
         ("ideas", "Идеи"),
+        ("dossier", "Досье"),
         ("collections", "Коллекции"),
         ("maps", "Карты"),
         ("notes", "Заметки"),

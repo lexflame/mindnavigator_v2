@@ -16,6 +16,7 @@ MODE_PROJECTS = "\u041f\u0440\u043e\u0435\u043a\u0442\u044b"
 MODE_TASKS = "\u0417\u0430\u0434\u0430\u0447\u0438"
 MODE_PURCHASES = "\u041f\u043e\u043a\u0443\u043f\u043a\u0438"
 MODE_IDEAS = "\u0418\u0434\u0435\u0438"
+MODE_DOSSIER = "\u0414\u043e\u0441\u044c\u0435"
 MODE_COLLECTIONS = "\u041a\u043e\u043b\u043b\u0435\u043a\u0446\u0438\u0438"
 MODE_MAPS = "\u041a\u0430\u0440\u0442\u044b"
 MODE_NOTES = "\u0417\u0430\u043c\u0435\u0442\u043a\u0438"
@@ -31,6 +32,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_TASKS: MODE_TASKS,
         MODE_PURCHASES: MODE_PURCHASES,
         MODE_IDEAS: MODE_IDEAS,
+        MODE_DOSSIER: MODE_DOSSIER,
         MODE_COLLECTIONS: MODE_COLLECTIONS,
         MODE_MAPS: MODE_MAPS,
         MODE_NOTES: MODE_NOTES,
@@ -45,6 +47,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_TASKS: "Tasks",
         MODE_PURCHASES: "Purchases",
         MODE_IDEAS: "Ideas",
+        MODE_DOSSIER: "Dossier",
         MODE_COLLECTIONS: "Collections",
         MODE_MAPS: "Maps",
         MODE_NOTES: "Notes",
@@ -59,6 +62,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_TASKS: "Aufgaben",
         MODE_PURCHASES: "Einkäufe",
         MODE_IDEAS: "Ideen",
+        MODE_DOSSIER: "Dossier",
         MODE_COLLECTIONS: "Sammlungen",
         MODE_MAPS: "Karten",
         MODE_NOTES: "Notizen",
@@ -73,6 +77,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_TASKS: "Tâches",
         MODE_PURCHASES: "Achats",
         MODE_IDEAS: "Idées",
+        MODE_DOSSIER: "Dossier",
         MODE_COLLECTIONS: "Collections",
         MODE_MAPS: "Cartes",
         MODE_NOTES: "Notes",
@@ -87,6 +92,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
         MODE_TASKS: "\u4efb\u52a1",
         MODE_PURCHASES: "\u8d2d\u7269",
         MODE_IDEAS: "\u60f3\u6cd5",
+        MODE_DOSSIER: "\u6848\u5377",
         MODE_COLLECTIONS: "\u6536\u85cf",
         MODE_MAPS: "\u5730\u56fe",
         MODE_NOTES: "\u7b14\u8bb0",

@@ -1233,3 +1233,16 @@
 [2026-03-13 16:00] OUT: OK.
 [2026-03-13 16:00] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_dossier_storage.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p1
 [2026-03-13 16:00] OUT: 13 passed.
+[2026-03-13 16:16] SESSION_START: Continued Sprint 10 Wave 2 implementation on partition branch.
+[2026-03-13 16:16] CMD: git branch --show-current
+[2026-03-13 16:16] OUT: sprint/10_dossier_mode-p2
+[2026-03-13 16:16] ACTION: Started TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632 (Implement Dossier workspace shell with tasks-like list UX and no project dimension).
+[2026-03-13 16:16] ACTION: Updated TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632 status -> In Progress.
+[2026-03-13 16:16] ACTION: Created docs/sprints/TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632_PLAN.md.
+[2026-03-13 16:31] ACTION: Added Dossier workspace package, main-window mode registration, left-rail/settings/i18n wiring, and focused workspace tests.
+[2026-03-13 16:31] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 16:31] OUT: OK.
+[2026-03-13 16:31] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_dossier_workspace.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p2
+[2026-03-13 16:31] OUT: 11 passed.
+[2026-03-13 16:31] ACTION: Updated TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632 status -> Completed.
+[2026-03-13 16:31] ACTION: Completed TASK_2F0C63E8-21E8-4E43-8E62-7B7D12E7B632.

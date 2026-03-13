@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from datetime import date
+
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication
+
+from mindnavigator.storage import Database
+from mindnavigator.workspaces import dossier as dossier_workspace
+
+
+def _set_combo_to_data(combo, value) -> None:
+    for index in range(combo.count()):
+        if combo.itemData(index) == value:
+            combo.setCurrentIndex(index)
+            return
+    raise AssertionError(f"Value {value!r} not found in combo box.")
+
+
+def test_dossier_workspace_filters_preview_and_links(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_filters", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        book = database.create_dossier(
+            kind="book",
+            title="The Left Hand of Darkness",
+            summary="Cold planet politics.",
+            description="Envoys, ice, and divided loyalties.",
+            status="active",
+            rating=9,
+            source="Le Guin shelf",
+            tags=["sci-fi", "classic"],
+            metadata={"author_display": "Ursula K. Le Guin", "publication_year": 1969},
+        )
+        database.create_dossier(
+            kind="film",
+            title="Stalker",
+            summary="A slow walk into the Zone.",
+            description="Guide, writer, professor.",
+            status="completed",
+            rating=8,
+            source="Blu-ray",
+            metadata={"director": "Andrei Tarkovsky", "release_year": 1979},
+        )
+        task = database.create_task(
+            title="Outline winter reading notes",
+            description="",
+            day=date(2026, 3, 13),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.add_dossier_link(book.id, "task", task.id)
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        assert model.rowCount() == 2
+
+        _set_combo_to_data(workspace.kind_filter, "book")
+        QApplication.processEvents()
+        assert model.rowCount() == 1
+
+        workspace.list_view.setCurrentIndex(model.index(0, 0))
+        QApplication.processEvents()
+
+        assert workspace.preview_title_label.text() == "The Left Hand of Darkness"
+        assert "Книга" in workspace.preview_meta_label.text()
+        assert "Le Guin shelf" in workspace.preview_meta_label.text()
+        assert "Ursula K. Le Guin" in workspace.preview_metadata_label.text()
+        assert workspace.preview_links.count() == 1
+        assert "Outline winter reading notes" in workspace.preview_links.item(0).text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_create_and_delete_round_trip(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_create_delete", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+
+        workspace.quick_title_input.setText("Arkady dossier")
+        _set_combo_to_data(workspace.quick_kind, "writer")
+        workspace._create_dossier_from_quick_form()
+        QApplication.processEvents()
+
+        created = database.fetch_dossiers()
+        assert len(created) == 1
+        assert created[0].title == "Arkady dossier"
+        assert created[0].kind == "writer"
+        assert workspace.get_selection() == created[0].id
+
+        workspace._delete_selected(require_confirmation=False)
+        QApplication.processEvents()
+
+        assert database.fetch_dossiers() == []
+        model = workspace.list_view.model()
+        assert model is not None
+        assert model.rowCount() == 0
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
