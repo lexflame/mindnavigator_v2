@@ -58,6 +58,7 @@ class LeftRail(QWidget):
             "Задачи": "fa5s.tasks",
             "Покупки": "fa5s.shopping-cart",
             "Идеи": "fa5s.lightbulb",
+            "Досье": "fa5s.id-badge",
             "Коллекции": "fa5s.project-diagram",
             "Карты": "fa5s.map",
             "Заметки": "fa5s.sticky-note",
@@ -86,6 +87,7 @@ class LeftRail(QWidget):
         self.btn_tasks = btn(self._icons["Задачи"], "Задачи")
         self.btn_purchases = btn(self._icons["Покупки"], "Покупки")
         self.btn_ideas = btn(self._icons["Идеи"], "Идеи")
+        self.btn_dossier = btn(self._icons["Досье"], "Досье")
         self.btn_collections = btn(self._icons["Коллекции"], "Коллекции")
         self.btn_maps = btn(self._icons["Карты"], "Карты")
         self.btn_notes = btn(self._icons["Заметки"], "Заметки")
@@ -112,6 +114,7 @@ class LeftRail(QWidget):
             "Задачи": self.btn_tasks,
             "Покупки": self.btn_purchases,
             "Идеи": self.btn_ideas,
+            "Досье": self.btn_dossier,
             "Коллекции": self.btn_collections,
             "Карты": self.btn_maps,
             "Заметки": self.btn_notes,

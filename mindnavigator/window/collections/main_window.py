@@ -48,6 +48,7 @@ from mindnavigator.ui.titlebar import TitleBar
 from mindnavigator.window.collections.windowing import ResizeEdge
 from mindnavigator.workspaces.characters import CharactersWorkspace
 from mindnavigator.workspaces.collections import CollectionsWorkspace
+from mindnavigator.workspaces.dossier import DossierWorkspace
 from mindnavigator.workspaces.files import FileWorkspace
 from mindnavigator.workspaces.ideas import IdeasWorkspace
 from mindnavigator.workspaces.maps import MapsListWorkspace
@@ -117,6 +118,7 @@ class MainWindow(QMainWindow):
     MODE_TASKS = "Задачи"
     MODE_PURCHASES = "Покупки"
     MODE_IDEAS = "Идеи"
+    MODE_DOSSIER = "Досье"
     MODE_COLLECTIONS = "Коллекции"
     MODE_MAPS = "Карты"
     MODE_NOTES = "Заметки"
@@ -241,6 +243,7 @@ class MainWindow(QMainWindow):
             "tasks": self.MODE_TASKS,
             "purchases": self.MODE_PURCHASES,
             "ideas": self.MODE_IDEAS,
+            "dossier": self.MODE_DOSSIER,
             "collections": self.MODE_COLLECTIONS,
             "maps": self.MODE_MAPS,
             "notes": self.MODE_NOTES,
@@ -284,6 +287,7 @@ class MainWindow(QMainWindow):
             self.MODE_PROJECTS,
             self.MODE_PURCHASES,
             self.MODE_IDEAS,
+            self.MODE_DOSSIER,
             self.MODE_COLLECTIONS,
             self.MODE_MAPS,
             self.MODE_NOTES,
@@ -702,6 +706,7 @@ class MainWindow(QMainWindow):
             self.MODE_PROJECTS: "Projects",
             self.MODE_PURCHASES: "Purchases",
             self.MODE_IDEAS: "Ideas",
+            self.MODE_DOSSIER: "Dossier",
             self.MODE_COLLECTIONS: "Collections",
             self.MODE_MAPS: "Maps",
             self.MODE_NOTES: "Notes",
@@ -843,6 +848,7 @@ class MainWindow(QMainWindow):
         self.page_projects = ProjectsWorkspace()
         self.page_purchases = PurchasesWorkspace()
         self.page_ideas = IdeasWorkspace()
+        self.page_dossier = DossierWorkspace()
         self.page_collections = CollectionsWorkspace()
         self.page_maps = MapsListWorkspace()
         self.page_notes = NoteWorkspace()
@@ -859,6 +865,7 @@ class MainWindow(QMainWindow):
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
             self.MODE_PURCHASES: self.workspace_stack.addWidget(self.page_purchases),
             self.MODE_IDEAS: self.workspace_stack.addWidget(self.page_ideas),
+            self.MODE_DOSSIER: self.workspace_stack.addWidget(self.page_dossier),
             self.MODE_COLLECTIONS: self.workspace_stack.addWidget(self.page_collections),
             self.MODE_MAPS: self.workspace_stack.addWidget(self.page_maps),
             self.MODE_NOTES: self.workspace_stack.addWidget(self.page_notes),
@@ -1051,6 +1058,7 @@ class MainWindow(QMainWindow):
             self.left_rail.btn_tasks: self.MODE_TASKS,
             self.left_rail.btn_purchases: self.MODE_PURCHASES,
             self.left_rail.btn_ideas: self.MODE_IDEAS,
+            self.left_rail.btn_dossier: self.MODE_DOSSIER,
             self.left_rail.btn_collections: self.MODE_COLLECTIONS,
             self.left_rail.btn_maps: self.MODE_MAPS,
             self.left_rail.btn_notes: self.MODE_NOTES,
@@ -1091,6 +1099,8 @@ class MainWindow(QMainWindow):
                 self.page_purchases.refresh()
         elif mode_name == self.MODE_IDEAS:
             self.page_ideas.refresh()
+        elif mode_name == self.MODE_DOSSIER:
+            self.page_dossier.refresh()
         elif mode_name == self.MODE_COLLECTIONS:
             self.page_collections.refresh_collections()
         elif mode_name == self.MODE_PROJECTS:
