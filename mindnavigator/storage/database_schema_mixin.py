@@ -235,6 +235,39 @@ class DatabaseSchemaMixin:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS dossiers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL CHECK (kind IN ('book', 'film', 'game', 'writer')),
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'planned'
+                        CHECK (status IN ('planned', 'active', 'completed', 'on_hold', 'archived')),
+                    rating INTEGER CHECK (rating IS NULL OR (rating BETWEEN 1 AND 10)),
+                    source TEXT NOT NULL DEFAULT '',
+                    cover_image TEXT NOT NULL DEFAULT '',
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dossier_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dossier_id INTEGER NOT NULL REFERENCES dossiers(id) ON DELETE CASCADE,
+                    entity_kind TEXT NOT NULL
+                        CHECK (entity_kind IN ('task', 'map', 'marker', 'note', 'idea', 'object', 'character')),
+                    entity_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(dossier_id, entity_kind, entity_id)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
@@ -491,6 +524,13 @@ class DatabaseSchemaMixin:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_character_links_target ON character_links(entity_kind, entity_id);"
             )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_kind ON dossiers(kind);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_status ON dossiers(status);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_updated_at ON dossiers(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossier_links_dossier ON dossier_links(dossier_id);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_dossier_links_target ON dossier_links(entity_kind, entity_id);"
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_topic ON collection_items(topic);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_entity_type ON collection_items(entity_type);")
             columns = self._conn.execute("PRAGMA table_info(collection_items);").fetchall()
@@ -519,6 +559,7 @@ class DatabaseSchemaMixin:
         # unconditionally to keep startup queries backward compatible.
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
+        self._ensure_dossier_schema()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
@@ -528,6 +569,7 @@ class DatabaseSchemaMixin:
             MigrationStep(2, "map_marker_and_attachment_schema", self._migration_v2_map_marker_and_attachment_schema),
             MigrationStep(3, "collection_schema", self._migration_v3_collection_schema),
             MigrationStep(4, "task_board_schema", self._migration_v4_task_board_schema),
+            MigrationStep(5, "dossier_schema", self._migration_v5_dossier_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -535,6 +577,9 @@ class DatabaseSchemaMixin:
     def apply_schema_updates(self) -> int:
         """РџСЂРёРјРµРЅСЏРµС‚ РІСЃРµ РґРѕСЃС‚СѓРїРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ user_version."""
         self._run_schema_migrations()
+        self._ensure_project_extended_columns()
+        self._ensure_project_marker_columns()
+        self._ensure_dossier_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
 
@@ -570,6 +615,54 @@ class DatabaseSchemaMixin:
     def _migration_v4_task_board_schema(self, _connection: sqlite3.Connection) -> None:
         """Добавляет колонку board_column для канбан-режима задач."""
         self._ensure_task_board_column()
+
+    def _migration_v5_dossier_schema(self, _connection: sqlite3.Connection) -> None:
+        """Добавляет схему хранения досье и кросс-сущностных ссылок."""
+        self._ensure_dossier_schema()
+
+    def _ensure_dossier_schema(self) -> None:
+        """Гарантирует наличие таблиц и индексов режима досье."""
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dossiers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL CHECK (kind IN ('book', 'film', 'game', 'writer')),
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'planned'
+                        CHECK (status IN ('planned', 'active', 'completed', 'on_hold', 'archived')),
+                    rating INTEGER CHECK (rating IS NULL OR (rating BETWEEN 1 AND 10)),
+                    source TEXT NOT NULL DEFAULT '',
+                    cover_image TEXT NOT NULL DEFAULT '',
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dossier_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dossier_id INTEGER NOT NULL REFERENCES dossiers(id) ON DELETE CASCADE,
+                    entity_kind TEXT NOT NULL
+                        CHECK (entity_kind IN ('task', 'map', 'marker', 'note', 'idea', 'object', 'character')),
+                    entity_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(dossier_id, entity_kind, entity_id)
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_kind ON dossiers(kind);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_status ON dossiers(status);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossiers_updated_at ON dossiers(updated_at);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_dossier_links_dossier ON dossier_links(dossier_id);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_dossier_links_target ON dossier_links(entity_kind, entity_id);"
+            )
 
     def _ensure_task_project_column(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ project_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""

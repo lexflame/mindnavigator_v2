@@ -16,6 +16,8 @@ from .map_data import MapData
 from .map_marker_data import MapMarkerData
 from .map_overlay_data import MapOverlayData
 from .task_attachment_data import TaskAttachmentData
+from .dossier_data import DossierData
+from .dossier_link_data import DossierLinkData
 from .cloud_file_data import CloudFileData
 from .note_data import NoteData
 from .idea_data import IdeaData

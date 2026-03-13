@@ -1215,3 +1215,21 @@
 [2026-03-13 14:57] ACTION: Updated TASK_C6D5B8A4-7F43-4E36-A7E3-8A1B6D934D10 status -> Completed.
 [2026-03-13 14:57] ACTION: Created docs/sprints/10_SPRINT.md.
 [2026-03-13 14:57] ACTION: Completed TASK_C6D5B8A4-7F43-4E36-A7E3-8A1B6D934D10.
+[2026-03-13 15:45] SESSION_START: Continued Sprint 10 implementation on partition branch.
+[2026-03-13 15:45] CMD: git branch --show-current
+[2026-03-13 15:45] OUT: sprint/10_dossier_mode-p1
+[2026-03-13 15:45] ACTION: Started TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221 (Design storage schema and domain model for Dossier entities and typed metadata).
+[2026-03-13 15:45] ACTION: Updated TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221 status -> In Progress.
+[2026-03-13 15:45] ACTION: Created docs/sprints/TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221_PLAN.md.
+[2026-03-13 15:57] ACTION: Added Dossier storage models, dedicated database mixin, schema migration v5, and focused regression tests.
+[2026-03-13 15:57] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 15:57] OUT: OK.
+[2026-03-13 15:57] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_dossier_storage.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p1
+[2026-03-13 15:57] OUT: 11 passed.
+[2026-03-13 15:57] ACTION: Updated TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221 status -> Completed.
+[2026-03-13 15:57] ACTION: Completed TASK_5D9274B1-5C3A-4D42-A8B2-1F0D64A1E221.
+[2026-03-13 16:00] ANALYSIS: Addressed review findings for current-version dossier schema backfill and tolerant metadata reads.
+[2026-03-13 16:00] CMD: python -m compileall mindnavigator main.py
+[2026-03-13 16:00] OUT: OK.
+[2026-03-13 16:00] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_dossier_storage.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dossier_p1
+[2026-03-13 16:00] OUT: 13 passed.
