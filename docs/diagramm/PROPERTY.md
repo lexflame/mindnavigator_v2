@@ -196,6 +196,8 @@ Purpose: entity property map and UI role map.
 - Role payloads: `TaskRoles.MarkerColor`, `TaskRoles.MarkerTheme` are emitted in targeted `dataChanged` for marker-only edits.
 - Marker-only predicate: `is_marker_only_task_update(previous, updated)` gates fast UI refresh path in `TasksModel`.
 - Selected row paint: `blend_task_row_background(base, marker_color, selected)` keeps marker tint visible for selected task rows.
+- Marker-theme asset lookup in `TasksItemDelegate` resolves from the project root `assets/badge/` catalog, not from the workspace package tree.
+- Marker-theme row paint uses a full-row overlay rect so the themed image stays a low-opacity background layer behind the task content instead of a narrow right-edge badge.
 - Storage projection safety: `TaskData` return mapping in `Database.create_task`/`Database.update_task` is keyword-based to preserve `gantt_forecasted`, `marker_color`, and `marker_theme` positions.
 
 ## Shadowing Names Properties

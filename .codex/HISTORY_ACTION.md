@@ -1294,3 +1294,14 @@
 [2026-03-13 18:37] OUT: 243 passed.
 [2026-03-13 18:37] ACTION: Updated TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 status -> Completed.
 [2026-03-13 18:37] ACTION: Completed TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76.
+[2026-03-16 19:06] SESSION_START: Started adhoc delivery for task-list marker theme full-width background fix.
+[2026-03-16 19:06] ACTION: Started TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE (Fix task-list marker theme backgrounds to span the full row width without covering row controls).
+[2026-03-16 19:06] ACTION: Updated TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE status -> In Progress.
+[2026-03-16 19:06] ACTION: Created docs/sprints/TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE_PLAN.md.
+[2026-03-16 19:06] ACTION: Updated task-row marker theme painting, focused tests, and docs for full-width background overlay behavior.
+[2026-03-16 19:06] CMD: python -m compileall mindnavigator main.py
+[2026-03-16 19:06] OUT: OK.
+[2026-03-16 19:06] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_marker_theme_fullwidth
+[2026-03-16 19:06] OUT: 32 passed.
+[2026-03-16 19:08] CMD: git switch -c sprint/tasks-marker-theme-fullwidth-bg
+[2026-03-16 19:08] OUT: Switched to a new branch `sprint/tasks-marker-theme-fullwidth-bg`.

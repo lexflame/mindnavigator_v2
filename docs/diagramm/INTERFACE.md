@@ -80,5 +80,6 @@ Purpose: UI composition map and extension points for sprint tasks.
 - Tasks marker immediate-refresh anchor:
   - `TasksModel.update_task_by_row` applies marker-only updates through `dataChanged` without full list reset.
   - marker list tint remains visible for selected rows through `blend_task_row_background`.
+  - `TasksItemDelegate._draw_marker_theme_overlay` paints marker-theme art as a full-row background layer with low opacity, leaving row controls and text visually dominant.
   - storage side uses keyword-based `TaskData` mapping in `Database.create_task`/`Database.update_task` to keep `marker_color` and `marker_theme` aligned.
 - Repo ops anchors: `scripts/fix_pytest_permissions.bat`, `scripts/fix_pytest_user_temp_permissions.bat`, and `defenition/*` junction catalog.
