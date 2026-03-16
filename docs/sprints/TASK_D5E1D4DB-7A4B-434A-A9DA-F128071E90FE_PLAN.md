@@ -20,3 +20,16 @@ Fix task-list marker theme backgrounds to span the full row width without coveri
 ## Rollback Notes
 1. Revert the delegate paint changes and restore the prior narrow right-side overlay behavior.
 2. Remove the focused regression tests that validate the full-width overlay path if the UI change is rolled back.
+
+## Delivery Record
+- Branch: `sprint/tasks-marker-theme-fullwidth-bg`
+- Commit: `56fdbd4`
+- PR: `https://github.com/lexflame/mindnavigator_v2/pull/226`
+- Validation:
+  - `python -m compileall mindnavigator main.py`
+  - `PYTHONPATH=. pytest tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_marker_theme_fullwidth`
+- Pipeline:
+  - `build (3.11)`: `success`
+  - `build (3.12)`: `success`
+  - `build (3.13)`: `success`
+  - `build`: `success`

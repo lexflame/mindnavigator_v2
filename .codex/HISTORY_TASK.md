@@ -87,13 +87,13 @@ Status: Completed
 
 ## Ad Hoc Tasks
 Created: 2026-03-02
-Status: In Progress
+Status: Completed
 
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_B6F2D8A1-7C4E-4F91-9A2D-11C8E4B5A321 | adhoc | Show task number beside task title in tasks list (`MN-<id>: <title>`) | feat | Completed |
 | TASK_6E03EE24-75C0-48D4-B88B-D7E4590E4E74 | adhoc | Split `mindnavigator/workspaces/tasks/module_impl.py` into real class files and include pending tasks UI text fix | chore | Completed |
-| TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE | adhoc | Fix task-list marker theme backgrounds to span the full row width without covering row controls | fix | In Progress |
+| TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE | adhoc | Fix task-list marker theme backgrounds to span the full row width without covering row controls | fix | Completed |
 
 ## Post-Release Follow-ups - UI And Workflow Polish
 Created: 2026-03-11
