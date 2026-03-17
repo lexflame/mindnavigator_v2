@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import QItemSelectionModel, QModelIndex
+from PySide6.QtCore import QItemSelectionModel, QModelIndex, QRect
 from PySide6.QtGui import QImage, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -1290,6 +1290,8 @@ def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(mon
             assert root_dialog.plan_task_edit.isEnabled() is True
             assert root_dialog.plan_task_edit.isChecked() is True
             assert child_dialog.plan_task_edit.isEnabled() is False
+            assert child_dialog.project_edit.isEnabled() is False
+            assert child_dialog.project_create_btn.isEnabled() is False
             assert child_dialog.priority_edit.isEnabled() is False
             assert child_dialog.values()["is_plan_task"] is False
         finally:
@@ -1298,3 +1300,93 @@ def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(mon
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_plan_items_inherit_parent_project_and_can_change_board_stage(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_project_inherit_board", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project_a = database.create_project(title="Project A", area="Area", updated=date(2026, 3, 6), priority="Medium")
+        project_b = database.create_project(title="Project B", area="Area", updated=date(2026, 3, 6), priority="Medium")
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            project_id=project_a.id,
+            is_plan_task=True,
+        )
+        child = database.create_task(
+            title="Plan child",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        model.update_task_by_row(
+            root_row,
+            title=root.title,
+            description=root.description,
+            day=root.day,
+            time_text=root.time_text,
+            priority=root.priority,
+            done=root.done,
+            project_id=project_b.id,
+            recurrence_kind=root.recurrence_kind,
+            recurrence_interval=root.recurrence_interval,
+            is_plan_task=True,
+            marker_color=root.marker_color,
+            marker_theme=root.marker_theme,
+        )
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        child_row = _find_task_row(model, child.id)
+        assert child_row >= 0
+        assert model.index(child_row, 0).data(TaskRoles.ProjectTitle) == "Project B"
+
+        child_task = next(task for task in database.fetch_tasks() if task.id == child.id)
+        model.update_task_by_row(
+            child_row,
+            title=child_task.title,
+            description=child_task.description,
+            day=child_task.day,
+            time_text=child_task.time_text,
+            priority=child_task.priority,
+            done=child_task.done,
+            project_id=project_a.id,
+            recurrence_kind=child_task.recurrence_kind,
+            recurrence_interval=child_task.recurrence_interval,
+            marker_color=child_task.marker_color,
+            marker_theme=child_task.marker_theme,
+        )
+        child_task = next(task for task in database.fetch_tasks() if task.id == child.id)
+        assert child_task.project_id == project_b.id
+
+        model.step_board_column_by_row(child_row, +1)
+        child_task = next(task for task in database.fetch_tasks() if task.id == child.id)
+        assert child_task.board_column == BOARD_COLUMN_IN_PROGRESS
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_plan_item_stage_only_controls_center_stage_text() -> None:
+    chip_rect = QRect(0, 0, 220, 30)
+    controls = tasks_workspace.TasksItemDelegate._priority_control_rects(chip_rect, stage_only=True)
+    assert controls["icon"].isNull()
+    assert controls["priority_arrows"].isNull()
+    assert controls["priority_up"].isNull()
+    assert controls["priority_down"].isNull()
+    assert abs(controls["value"].center().x() - chip_rect.center().x()) <= 12

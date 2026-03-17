@@ -407,6 +407,9 @@ class TasksModel(QAbstractListModel):
         if r is None:
             debug_task_dialog(f"tasks_model update_task_by_row skipped_invalid_row row={row_idx}")
             return
+        resolved_project_id = project_id
+        if self._task_is_plan_item.get(r.id, False):
+            resolved_project_id = self._inherited_project_id_for_plan_item(r)
         debug_task_dialog(
             f"tasks_model update_task_by_row start row={row_idx} task_id={r.id} "
             f"from_day={r.day.isoformat()} to_day={day.isoformat()} "
@@ -420,7 +423,7 @@ class TasksModel(QAbstractListModel):
             time_text=time_text,
             priority=priority,
             done=done,
-            project_id=project_id,
+            project_id=resolved_project_id,
             parent_id=r.parent_id,
             recurrence_kind=recurrence_kind,
             recurrence_interval=recurrence_interval,
@@ -452,6 +455,12 @@ class TasksModel(QAbstractListModel):
             for it in self._all_rows
         ]
         self._recompute_plan_meta()
+        if updated.is_plan_task and (updated.project_id != r.project_id or not r.is_plan_task):
+            if self._sync_plan_descendant_projects(updated.id, updated.project_id):
+                debug_task_dialog(
+                    f"tasks_model update_task_by_row sync_plan_projects task_id={updated.id} project_id={updated.project_id}"
+                )
+                return
 
         if is_marker_only_task_update(r, updated_row):
             changed_row_idx = -1
@@ -652,7 +661,7 @@ class TasksModel(QAbstractListModel):
     def set_project_by_ids(self, task_ids: List[int], project_id: Optional[int]) -> int:
         return self._apply_task_updates_by_ids(
             task_ids,
-            lambda task: None if task.project_id == project_id else {"project_id": project_id},
+            lambda task: None if self._task_is_plan_item.get(task.id, False) or task.project_id == project_id else {"project_id": project_id},
         )
 
     def set_marker_color_by_ids(self, task_ids: List[int], marker_color: str) -> int:
@@ -772,6 +781,41 @@ class TasksModel(QAbstractListModel):
     def task_by_id(self, task_id: int) -> Optional[TaskRow]:
         """Возвращает задачу по идентификатору или None."""
         return next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
+
+    def _inherited_project_id_for_plan_item(self, task: TaskRow) -> Optional[int]:
+        if not self._task_is_plan_item.get(task.id, False):
+            return task.project_id
+        if task.parent_id is None:
+            return task.project_id
+        parent_task = self.task_by_id(task.parent_id)
+        if parent_task is None:
+            return task.project_id
+        return self._resolve_top_parent_project_id(parent_task)
+
+    def _plan_descendant_ids(self, parent_task_id: int) -> List[int]:
+        by_parent: dict[Optional[int], List[TaskRow]] = {}
+        for row in self._all_rows:
+            if not isinstance(row, TaskRow):
+                continue
+            by_parent.setdefault(row.parent_id, []).append(row)
+        descendant_ids: List[int] = []
+        stack = list(by_parent.get(parent_task_id, []))
+        while stack:
+            child = stack.pop()
+            stack.extend(by_parent.get(child.id, []))
+            if self._task_is_plan_item.get(child.id, False):
+                descendant_ids.append(child.id)
+        return descendant_ids
+
+    def _sync_plan_descendant_projects(self, parent_task_id: int, project_id: Optional[int]) -> bool:
+        descendant_ids = self._plan_descendant_ids(parent_task_id)
+        if not descendant_ids:
+            return False
+        changed = self._apply_task_updates_by_ids(
+            descendant_ids,
+            lambda task: None if task.project_id == project_id else {"project_id": project_id},
+        )
+        return changed > 0
 
     def is_plan_item(self, task_id: int) -> bool:
         return self._task_is_plan_item.get(task_id, False)
