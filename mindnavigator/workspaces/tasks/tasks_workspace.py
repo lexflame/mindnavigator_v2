@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from .cast_board import TasksBoardCast
+from .cast_dash import TasksDashCast
+from .cast_gantt import TasksGanttCast
+from .style import TasksWorkspaceStyle
 from .task_create_dialog import TaskCreateDialog
 from .tasks_item_delegate import TasksItemDelegate
 from .tasks_model import TasksModel
-from mindnavigator.ui.styles import get_theme_palette
 
 class TasksWorkspace(BaseWorkspace):
     """Рабочая область задач: панель управления и список с группировкой."""
@@ -253,6 +256,7 @@ class TasksWorkspace(BaseWorkspace):
         self._csv_service = CsvTransferService()
         self._theme_mode = "dark"
         self._focus_day = date.today()
+        self._board_day_filter_enabled = True
         self._applying_filters = False
         self._gantt_mode = False
         self._board_mode = False
@@ -275,6 +279,7 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_gantt = None
         self.btn_board = None
         self.btn_dash = None
+        self.board_day_filter_checkbox = None
         self._project_quick_links_host = None
         self._project_quick_links_layout = None
         self._project_filter_clear_button = None
@@ -286,6 +291,10 @@ class TasksWorkspace(BaseWorkspace):
         self.dash_pie_chart = None
         self.dash_pulse_chart = None
         self.dash_projects_list = None
+        self._style_helper = TasksWorkspaceStyle(self)
+        self._board_cast = TasksBoardCast(self)
+        self._gantt_cast = TasksGanttCast(self, self._style_helper)
+        self._dash_cast = TasksDashCast(self, self._style_helper)
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
@@ -299,212 +308,13 @@ class TasksWorkspace(BaseWorkspace):
         self.set_theme_mode("dark")
 
     def _build_workspace_stylesheet(self, theme_mode: str) -> str:
-        palette = get_theme_palette(theme_mode)
-        return f"""
-            QWidget#TasksWorkspace {{ background: {palette.window_bg}; }}
-
-            QFrame#TasksCreateBar {{
-                background: {palette.panel_bg};
-                border: 1px solid {palette.border};
-            }}
-
-            QFrame#TasksCreateBar QLineEdit {{
-                background: {palette.input_alt_bg};
-                border: 1px solid {palette.border};
-                padding: 6px 8px;
-                color: {palette.text};
-            }}
-
-            QFrame#TasksCreateBar QComboBox {{
-                background: {palette.input_alt_bg};
-                border: 1px solid {palette.border};
-                padding: 4px 6px;
-                color: {palette.text};
-            }}
-
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {{
-                background: {palette.input_alt_bg};
-                border: 1px solid {palette.border};
-                border-radius: 8px;
-            }}
-
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QDateEdit,
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {{
-                background: transparent;
-                border: none;
-                padding: 4px 6px;
-                color: {palette.text};
-            }}
-
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {{
-                color: {palette.text};
-                padding: 0 6px;
-            }}
-
-            QFrame#TasksCreateBar QToolButton {{
-                background: {palette.elevated_bg};
-                border: 1px solid {palette.border_strong};
-                padding: 6px 10px;
-                border-radius: 6px;
-                color: {palette.text};
-            }}
-            QFrame#TasksCreateBar QToolButton:hover {{
-                background: {palette.selection_bg};
-                color: {palette.selection_text};
-            }}
-
-            QToolButton {{
-                color: {palette.text};
-                border: none;
-                padding: 6px 8px;
-            }}
-            QToolButton:checked {{
-                background: {palette.selection_bg};
-                color: {palette.selection_text};
-            }}
-
-            QLabel#TasksDayLabel {{
-                color: {palette.text};
-                padding: 0px 6px;
-            }}
-
-            QComboBox, QLineEdit {{
-                background: {palette.input_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                padding: 6px 8px;
-            }}
-
-            QListView#TasksList {{
-                background: {palette.window_bg};
-                border: 1px solid {palette.border};
-            }}
-            QLabel#TasksStickyHeader {{
-                background: {palette.window_bg};
-                color: {palette.dim_text};
-                border-bottom: 1px solid {palette.border_strong};
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 0 10px;
-            }}
-
-            QTableWidget#TasksGanttTable {{
-                background: {palette.window_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                gridline-color: {palette.border};
-                alternate-background-color: {palette.panel_alt_bg};
-                selection-background-color: {palette.selection_bg};
-                selection-color: {palette.selection_text};
-            }}
-
-            QTableWidget#TasksGanttTable::item {{
-                padding: 4px 6px;
-            }}
-
-            QTableWidget#TasksGanttTable QHeaderView::section {{
-                background: {palette.input_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                padding: 4px 6px;
-            }}
-
-            QTableWidget#TasksGanttTable QTableCornerButton::section {{
-                background: {palette.input_bg};
-                border: 1px solid {palette.border};
-            }}
-
-            QTableWidget#TasksGanttTable QSpinBox {{
-                background: {palette.input_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                padding: 2px 6px;
-            }}
-
-            QTableWidget#TasksGanttTable QSpinBox::up-button,
-            QTableWidget#TasksGanttTable QSpinBox::down-button {{
-                background: {palette.elevated_bg};
-                border-left: 1px solid {palette.border_strong};
-                width: 14px;
-            }}
-
-            QTableWidget#TasksGanttTable QSpinBox::up-button:hover,
-            QTableWidget#TasksGanttTable QSpinBox::down-button:hover {{
-                background: {palette.selection_bg};
-            }}
-
-            QLabel#TasksGanttHint {{
-                color: {palette.dim_text};
-                padding: 2px 4px;
-            }}
-
-            QLabel#TasksBoardHint,
-            QLabel#TasksDashSummary,
-            QLabel#TasksDashProjectsTitle,
-            QLabel#TasksDashChartTitle {{
-                color: {palette.dim_text};
-                padding: 2px 4px;
-            }}
-
-            QFrame#TasksDashCard {{
-                background: {palette.panel_alt_bg};
-                border: 1px solid {palette.border};
-                border-radius: 10px;
-            }}
-
-            QFrame#TasksBoardColumn {{
-                background: {palette.panel_alt_bg};
-                border: 1px solid {palette.border};
-                border-radius: 8px;
-            }}
-
-            QLabel#TasksBoardColumnTitle {{
-                color: {palette.text};
-                font-weight: 600;
-                padding: 2px 4px;
-            }}
-
-            QListWidget#TasksBoardList,
-            QListWidget#TasksDashProjectsList {{
-                background: {palette.window_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                border-radius: 6px;
-            }}
-
-            QListWidget#TasksBoardList::item,
-            QListWidget#TasksDashProjectsList::item {{
-                padding: 4px 6px;
-                border-bottom: 1px solid {palette.border};
-            }}
-        """
+        return self._style_helper.build_workspace_stylesheet(theme_mode)
 
     def _apply_gantt_palette(self) -> None:
-        gantt_table = getattr(self, "gantt_table", None)
-        if not isinstance(gantt_table, QTableWidget):
-            return
-        palette = get_theme_palette(self._theme_mode)
-        table_palette = gantt_table.palette()
-        table_palette.setColor(QPalette.ColorRole.Base, QColor(palette.window_bg))
-        table_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(palette.panel_alt_bg))
-        table_palette.setColor(QPalette.ColorRole.Text, QColor(palette.text))
-        table_palette.setColor(QPalette.ColorRole.Mid, QColor(palette.border_strong))
-        table_palette.setColor(QPalette.ColorRole.Highlight, QColor(palette.accent))
-        table_palette.setColor(QPalette.ColorRole.HighlightedText, QColor(palette.selection_text))
-        gantt_table.setPalette(table_palette)
+        self._style_helper.apply_gantt_palette(getattr(self, "gantt_table", None), self._theme_mode)
 
     def set_theme_mode(self, theme_mode: str) -> None:
-        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
-        self.setStyleSheet(self._build_workspace_stylesheet(self._theme_mode))
-        self._apply_gantt_palette()
-        if isinstance(self.delegate, TasksItemDelegate):
-            self.delegate.set_theme_mode(self._theme_mode)
-            if self.list is not None and self.list.viewport() is not None:
-                self.list.viewport().update()
-        for chart_widget in (self.dash_bar_chart, self.dash_pie_chart, self.dash_pulse_chart):
-            set_theme_mode = getattr(chart_widget, "set_theme_mode", None)
-            if callable(set_theme_mode):
-                set_theme_mode(self._theme_mode)
+        self._style_helper.apply_theme(theme_mode)
 
     def create_actions(self) -> dict[str, QAction]:
         action_export = QAction("Экспорт", self)
@@ -654,6 +464,10 @@ class TasksWorkspace(BaseWorkspace):
         self.set_content(content)
 
     def _build_gantt_page(self) -> QWidget:
+        page = self._gantt_cast.build_page()
+        self.gantt_hint = self._gantt_cast.hint_label
+        self.gantt_table = self._gantt_cast.table
+        return page
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -684,6 +498,10 @@ class TasksWorkspace(BaseWorkspace):
         return page
 
     def _build_board_page(self) -> QWidget:
+        page = self._board_cast.build_page()
+        self.board_day_filter_checkbox = self._board_cast.day_filter_checkbox
+        self.board_columns = self._board_cast.columns
+        return page
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -693,6 +511,18 @@ class TasksWorkspace(BaseWorkspace):
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)
         layout.addWidget(board_hint)
+
+        board_options_row = QWidget(page)
+        board_options_layout = QHBoxLayout(board_options_row)
+        board_options_layout.setContentsMargins(0, 0, 0, 0)
+        board_options_layout.setSpacing(8)
+        self.board_day_filter_checkbox = QCheckBox("Фильтрация по дню", board_options_row)
+        self.board_day_filter_checkbox.setObjectName("TasksBoardDayFilter")
+        self.board_day_filter_checkbox.setChecked(self._board_day_filter_enabled)
+        self.board_day_filter_checkbox.toggled.connect(self._on_board_day_filter_toggled)
+        board_options_layout.addWidget(self.board_day_filter_checkbox)
+        board_options_layout.addStretch(1)
+        layout.addWidget(board_options_row)
 
         columns_host = QWidget(page)
         columns_layout = QHBoxLayout(columns_host)
@@ -720,6 +550,13 @@ class TasksWorkspace(BaseWorkspace):
         return page
 
     def _build_dash_page(self) -> QWidget:
+        page = self._dash_cast.build_page()
+        self.dash_summary_label = self._dash_cast.summary_label
+        self.dash_bar_chart = self._dash_cast.bar_chart
+        self.dash_pie_chart = self._dash_cast.pie_chart
+        self.dash_pulse_chart = self._dash_cast.pulse_chart
+        self.dash_projects_list = self._dash_cast.projects_list
+        return page
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -787,8 +624,10 @@ class TasksWorkspace(BaseWorkspace):
         return page
 
     def _fetch_tasks_for_focus_day(self) -> List:
-        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
-        priority_filter = None if priority_value == "Любой" else priority_value
+        return self._dash_cast.fetch_tasks_for_focus_day()
+        priority_filter = None
+        if hasattr(self, "cmb_priority") and self.cmb_priority.currentIndex() > 0:
+            priority_filter = self.cmb_priority.currentText()
         tasks = [
             task
             for task in self._db.fetch_tasks()
@@ -799,10 +638,71 @@ class TasksWorkspace(BaseWorkspace):
         tasks.sort(key=lambda task: (self._parse_task_datetime(task.day, task.time_text), task.id))
         return tasks
 
+    def _is_board_day_filter_enabled(self) -> bool:
+        return self._board_cast.is_day_filter_enabled()
+        checkbox = getattr(self, "board_day_filter_checkbox", None)
+        if isinstance(checkbox, QCheckBox):
+            self._board_day_filter_enabled = checkbox.isChecked()
+        return bool(self._board_day_filter_enabled)
+
+    def _set_board_day_filter_checked(self, enabled: bool) -> None:
+        self._board_cast.set_day_filter_checked(enabled)
+        self._sync_day_navigation_controls()
+        self._update_day_label()
+        return
+        self._board_day_filter_enabled = bool(enabled)
+        checkbox = getattr(self, "board_day_filter_checkbox", None)
+        if isinstance(checkbox, QCheckBox):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(self._board_day_filter_enabled)
+            checkbox.blockSignals(False)
+        self._sync_day_navigation_controls()
+        self._update_day_label()
+
+    def _fetch_board_tasks(self) -> List:
+        return self._board_cast.collect_tasks()
+        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Р›СЋР±РѕР№"
+        priority_filter = None if priority_value == "Р›СЋР±РѕР№" else priority_value
+        filter_by_day = self._is_board_day_filter_enabled()
+        tasks = [
+            task
+            for task in self._db.fetch_tasks()
+            if not task.done and (not filter_by_day or task.day == self._focus_day)
+        ]
+        if priority_filter is not None:
+            tasks = [task for task in tasks if task.priority == priority_filter]
+        tasks.sort(key=lambda task: (task.day, self._parse_task_datetime(task.day, task.time_text), task.id))
+        return tasks
+
+    def _format_board_task_text(self, task) -> str:
+        return self._board_cast.format_task_text(task)
+        time_text = task.time_text or "вЂ”"
+        if self._is_board_day_filter_enabled():
+            return f"{time_text} В· {task.title}"
+        return f"{task.day.isoformat()} В· {time_text} В· {task.title}"
+
+    def _collect_board_tasks(self) -> List:
+        return self._board_cast.collect_tasks()
+        priority_filter = None
+        if hasattr(self, "cmb_priority") and self.cmb_priority.currentIndex() > 0:
+            priority_filter = self.cmb_priority.currentText()
+        filter_by_day = self._is_board_day_filter_enabled()
+        tasks = [
+            task
+            for task in self._db.fetch_tasks()
+            if not task.done and (not filter_by_day or task.day == self._focus_day)
+        ]
+        if priority_filter is not None:
+            tasks = [task for task in tasks if task.priority == priority_filter]
+        tasks.sort(key=lambda task: (task.day, self._parse_task_datetime(task.day, task.time_text), task.id))
+        return tasks
+
     def _refresh_board_day(self) -> None:
+        self._board_cast.refresh()
+        return
         if not self.board_columns:
             return
-        tasks = self._fetch_tasks_for_focus_day()
+        tasks = self._collect_board_tasks()
         grouped: Dict[str, List] = {column: [] for column, _ in self.BOARD_COLUMN_ORDER}
         for task in tasks:
             board_column = normalize_board_column(getattr(task, "board_column", ""), task.priority)
@@ -810,14 +710,15 @@ class TasksWorkspace(BaseWorkspace):
         for board_column, list_widget in self.board_columns.items():
             list_widget.clear()
             for task in grouped.get(board_column, []):
-                time_text = task.time_text or "—"
-                item = QListWidgetItem(f"{time_text} · {task.title}")
+                item = QListWidgetItem(self._format_board_task_text(task))
                 item.setData(Qt.ItemDataRole.UserRole, task.id)
                 if task.project_title:
                     item.setToolTip(task.project_title)
                 list_widget.addItem(item)
 
     def _move_task_to_board_column(self, task_id: int, board_column: str) -> None:
+        self._board_cast.move_task_to_column(task_id, board_column)
+        return
         self._db.set_task_board_column(task_id, board_column)
         self.refresh()
 
@@ -870,6 +771,7 @@ class TasksWorkspace(BaseWorkspace):
         self.list.viewport().update(self.list.visualRect(index))
 
     def _calculate_dash_resultativity(self, all_tasks: List) -> Tuple[int, float]:
+        return self._dash_cast.calculate_resultativity(all_tasks)
         """Return recent completed-task impulse and the normalized baseline for previous periods."""
         recent_start = self._focus_day - timedelta(days=1)
         recent_impulse = sum(
@@ -890,6 +792,7 @@ class TasksWorkspace(BaseWorkspace):
         return recent_impulse, baseline_impulse
 
     def _build_dash_pulse_items(self, all_tasks: List) -> List[Tuple[str, int, QColor]]:
+        return self._dash_cast.build_pulse_items(all_tasks)
         """Build a short completion pulse histogram ending on the focused day."""
         window_start = self._focus_day - timedelta(days=self.DASH_PULSE_DAYS - 1)
         recent_start = self._focus_day - timedelta(days=1)
@@ -912,6 +815,7 @@ class TasksWorkspace(BaseWorkspace):
         return items
 
     def _format_dash_resultativity(self, all_tasks: List) -> str:
+        return self._dash_cast.format_resultativity(all_tasks)
         """Build a readable DASH summary for recent completion impulse against prior periods."""
         recent_impulse, baseline_impulse = self._calculate_dash_resultativity(all_tasks)
         if recent_impulse == 0 and baseline_impulse == 0:
@@ -930,6 +834,8 @@ class TasksWorkspace(BaseWorkspace):
         )
 
     def _refresh_dash_day(self) -> None:
+        self._dash_cast.refresh()
+        return
         if (
             self.dash_summary_label is None
             or self.dash_projects_list is None
@@ -1314,6 +1220,7 @@ class TasksWorkspace(BaseWorkspace):
             focus_day = filters.get("focus_day")
             project_id = filters.get("project_id")
             priority = filters.get("priority")
+            board_day_filter = filters.get("board_day_filter")
             if isinstance(focus_day, str):
                 try:
                     focus_day = date.fromisoformat(focus_day)
@@ -1321,6 +1228,10 @@ class TasksWorkspace(BaseWorkspace):
                     focus_day = None
             if isinstance(focus_day, date):
                 self._focus_day = focus_day
+            if isinstance(board_day_filter, bool):
+                self._set_board_day_filter_checked(board_day_filter)
+            else:
+                self._set_board_day_filter_checked(True)
             self._apply_tab(tab, focus_day=focus_day)
             self.model.set_project_filter(project_id)
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
@@ -1443,6 +1354,7 @@ class TasksWorkspace(BaseWorkspace):
     def _shift_day(self, delta: int):
         """Сдвигает фокусную дату на указанное число дней."""
         self._focus_day = self._focus_day + timedelta(days=delta)
+        self._sync_day_navigation_controls()
         self._update_day_label()
         self._update_sticky_day_header()
         if self._gantt_mode or self._board_mode or self._dash_mode:
@@ -1457,8 +1369,32 @@ class TasksWorkspace(BaseWorkspace):
 
     def _update_day_label(self):
         """Обновляет подпись текущего дня."""
+        if self._board_mode and not self._is_board_day_filter_enabled():
+            self.lbl_day.setText("Все дни")
+            return
         wd = WEEKDAY_RU[self._focus_day.weekday()]
         self.lbl_day.setText(f"{self._focus_day.isoformat()} ({wd})")
+
+    def _sync_day_navigation_controls(self) -> None:
+        buttons_enabled = not (self._board_mode and not self._is_board_day_filter_enabled())
+        for button in (self.btn_prev_day, self.btn_next_day):
+            if isinstance(button, QToolButton):
+                button.setEnabled(buttons_enabled)
+
+    def _secondary_view_includes_day(self, task_day: date) -> bool:
+        if self._gantt_mode or self._dash_mode:
+            return task_day == self._focus_day
+        if self._board_mode:
+            return (not self._is_board_day_filter_enabled()) or task_day == self._focus_day
+        return False
+
+    def _on_board_day_filter_toggled(self, checked: bool) -> None:
+        self._set_board_day_filter_checked(bool(checked))
+        if self._applying_filters:
+            return
+        self._remember_filter("board_day_filter", self._board_day_filter_enabled)
+        if self._board_mode:
+            self._refresh_board_day()
 
     def _on_create_task(self):
         """Создает задачу из формы и очищает ввод."""
@@ -1480,7 +1416,7 @@ class TasksWorkspace(BaseWorkspace):
             QMessageBox.warning(self, "Проверка", str(exc))
             return
 
-        if (self._gantt_mode or self._board_mode or self._dash_mode) and d == self._focus_day:
+        if self._secondary_view_includes_day(d):
             self._refresh_secondary_view()
         self._refresh_project_quick_links()
 
@@ -1509,7 +1445,7 @@ class TasksWorkspace(BaseWorkspace):
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
-        if (self._gantt_mode or self._board_mode or self._dash_mode) and values["day"] == self._focus_day:
+        if self._secondary_view_includes_day(values["day"]):
             self._refresh_secondary_view()
         self._refresh_project_quick_links()
 
@@ -1703,6 +1639,8 @@ class TasksWorkspace(BaseWorkspace):
                 self._set_drag_drop_state(True)
             self.content_stack.setCurrentWidget(self.list)
 
+        self._sync_day_navigation_controls()
+        self._update_day_label()
         self._refresh_secondary_view()
         self._update_sticky_day_header()
 
@@ -1800,6 +1738,7 @@ class TasksWorkspace(BaseWorkspace):
 
     @staticmethod
     def _estimate_task_minutes(task) -> int:
+        return TasksGanttCast.estimate_task_minutes(task)
         text = f"{task.title} {task.description or ''}".lower()
         words = len((task.description or "").split())
         base = 50
@@ -1828,9 +1767,12 @@ class TasksWorkspace(BaseWorkspace):
         return datetime.combine(task_day, datetime.min.time())
 
     def _refresh_gantt_day(self) -> None:
+        self._gantt_cast.refresh()
+        return
         db = get_database()
-        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
-        priority_filter = None if priority_value == "Любой" else priority_value
+        priority_filter = None
+        if hasattr(self, "cmb_priority") and self.cmb_priority.currentIndex() > 0:
+            priority_filter = self.cmb_priority.currentText()
         tasks = [
             task
             for task in db.fetch_tasks()
@@ -1908,6 +1850,8 @@ class TasksWorkspace(BaseWorkspace):
         )
 
     def _on_gantt_minutes_changed(self, task_id: int, minutes: int) -> None:
+        self._gantt_cast.on_minutes_changed(task_id, minutes)
+        return
         get_database().set_task_gantt_estimate(task_id, minutes, forecasted=True)
         self._refresh_gantt_day()
 

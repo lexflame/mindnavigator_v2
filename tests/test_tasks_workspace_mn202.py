@@ -14,6 +14,10 @@ from mindnavigator.storage import (
     Database,
 )
 from mindnavigator.workspaces.tasks import task_edit_dialog
+from mindnavigator.workspaces.tasks.cast_board import TasksBoardCast
+from mindnavigator.workspaces.tasks.cast_dash import TasksDashCast
+from mindnavigator.workspaces.tasks.cast_gantt import TasksGanttCast
+from mindnavigator.workspaces.tasks.style import TasksWorkspaceStyle
 from mindnavigator.workspaces.tasks.task_row import TaskRow
 from mindnavigator.workspaces import tasks as tasks_workspace
 from mindnavigator.workspaces.tasks import TaskRoles
@@ -106,6 +110,29 @@ def test_tasks_workspace_switches_to_light_theme(monkeypatch, unique_temp_path) 
         assert workspace.delegate._theme_mode == "light"
         assert "#f5f7fb" in workspace.styleSheet()
         assert base_color == "#f5f7fb"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_uses_extracted_mode_helpers(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_mode_helpers", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+
+        assert isinstance(workspace._style_helper, TasksWorkspaceStyle)
+        assert isinstance(workspace._board_cast, TasksBoardCast)
+        assert isinstance(workspace._gantt_cast, TasksGanttCast)
+        assert isinstance(workspace._dash_cast, TasksDashCast)
+        assert workspace.gantt_page is workspace._gantt_cast.page
+        assert workspace.board_page is workspace._board_cast.page
+        assert workspace.dash_page is workspace._dash_cast.page
+        assert workspace.board_day_filter_checkbox is workspace._board_cast.day_filter_checkbox
+        assert workspace.board_columns is workspace._board_cast.columns
+        assert workspace.dash_bar_chart is workspace._dash_cast.bar_chart
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -683,6 +710,58 @@ def test_tasks_board_refresh_groups_tasks_by_board_column(monkeypatch, unique_te
         assert workspace.board_columns[BOARD_COLUMN_DEFERRED].count() == 1
         assert workspace.board_columns[BOARD_COLUMN_QUEUE].item(0).data(tasks_workspace.Qt.ItemDataRole.UserRole) == queue_task.id
         assert workspace.board_columns[BOARD_COLUMN_DEFERRED].item(0).data(tasks_workspace.Qt.ItemDataRole.UserRole) == deferred_task.id
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_board_has_separate_day_filter_toggle(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_board_day_filter_toggle", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = None
+    try:
+        today_task = database.create_task(
+            title="Today board task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        other_day_task = database.create_task(
+            title="Next day board task",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="10:00",
+            priority="High",
+        )
+
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace._focus_day = date(2026, 3, 6)
+        workspace.btn_board.setChecked(True)
+
+        assert workspace.board_day_filter_checkbox.text() == "Фильтрация по дню"
+        assert workspace.board_day_filter_checkbox.isChecked() is True
+
+        workspace._refresh_board_day()
+        assert workspace.board_columns[BOARD_COLUMN_QUEUE].count() == 1
+        assert workspace.board_columns[BOARD_COLUMN_QUEUE].item(0).data(tasks_workspace.Qt.ItemDataRole.UserRole) == today_task.id
+
+        workspace.board_day_filter_checkbox.setChecked(False)
+
+        assert workspace.lbl_day.text() == "Все дни"
+        assert workspace.btn_prev_day.isEnabled() is False
+        assert workspace.btn_next_day.isEnabled() is False
+        assert workspace.board_columns[BOARD_COLUMN_QUEUE].count() >= 2
+        queue_titles = [
+            workspace.board_columns[BOARD_COLUMN_QUEUE].item(index).text()
+            for index in range(workspace.board_columns[BOARD_COLUMN_QUEUE].count())
+        ]
+        assert any("2026-03-06" in text and "Today board task" in text for text in queue_titles)
+        assert any("2026-03-07" in text and "Next day board task" in text for text in queue_titles)
     finally:
         if workspace is not None:
             workspace.deleteLater()

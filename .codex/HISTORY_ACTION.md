@@ -1388,3 +1388,29 @@
 [2026-03-17 18:52] OUT: OK.
 [2026-03-17 18:52] CMD: $env:PYTHONPATH='.'; pytest tests/test_theme_switch_runtime.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_theme_switch_objects
 [2026-03-17 18:52] OUT: 14 passed.
+[2026-03-17 17:50] SESSION_START: Started BOARD day-filter refactor for tasks mode.
+[2026-03-17 17:50] CMD: git switch -c sprint/tasks-board-day-filter
+[2026-03-17 17:50] OUT: Switched to a new branch `sprint/tasks-board-day-filter`.
+[2026-03-17 17:50] ACTION: Started TASK_B73E670F-CE52-4E85-936D-05EFE51C283F (refactor BOARD mode day filtering into a separate option).
+[2026-03-17 17:50] ACTION: Updated TASK_B73E670F-CE52-4E85-936D-05EFE51C283F status -> In Progress.
+[2026-03-17 17:50] ACTION: Created docs/sprints/TASK_B73E670F-CE52-4E85-936D-05EFE51C283F_PLAN.md.
+[2026-03-17 18:06] ACTION: Refactored Tasks BOARD mode to use a dedicated day-filter checkbox, added all-days board fetch logic, and kept GANTT/DASH focus-day behavior unchanged.
+[2026-03-17 18:06] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 18:06] OUT: OK.
+[2026-03-17 18:06] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_board_day_filter
+[2026-03-17 18:06] OUT: 23 passed.
+[2026-03-17 18:06] ACTION: Updated TASK_B73E670F-CE52-4E85-936D-05EFE51C283F status -> Completed.
+[2026-03-17 18:06] ACTION: Completed TASK_B73E670F-CE52-4E85-936D-05EFE51C283F.
+[2026-03-17 18:20] SESSION_START: Started Tasks mode cast extraction and style split refactor.
+[2026-03-17 18:20] CMD: git switch -c sprint/tasks-casts-refactor
+[2026-03-17 18:20] OUT: Switched to a new branch 'sprint/tasks-casts-refactor'.
+[2026-03-17 18:21] ACTION: Started TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 (extract Tasks BOARD/GANTT/DASH and style helpers).
+[2026-03-17 18:21] ACTION: Updated TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 status -> In Progress.
+[2026-03-17 18:21] ACTION: Created docs/sprints/TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11_PLAN.md.
+[2026-03-17 18:33] ACTION: Extracted Tasks BOARD, GANTT, and DASH mode logic into dedicated helper packages and centralized Tasks styling and custom paint logic in a separate style helper.
+[2026-03-17 18:33] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 18:33] OUT: OK.
+[2026-03-17 18:33] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_workspace_mn202.py tests/test_theme_switch_runtime.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_casts_refactor
+[2026-03-17 18:33] OUT: 29 passed.
+[2026-03-17 18:33] ACTION: Updated TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 status -> Completed.
+[2026-03-17 18:33] ACTION: Completed TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11.
