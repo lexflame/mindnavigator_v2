@@ -282,6 +282,46 @@ def test_tasks_model_expand_subtasks_tree_by_row_expands_nested_branch(monkeypat
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_model_today_mode_shows_subtasks_expanded(monkeypatch, unique_temp_path) -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = unique_temp_path("tasks_today_subtasks_expanded", ".sqlite3")
+    database = Database(path=db_path)
+    today = date.today()
+    try:
+        root = database.create_task(
+            title="Today root",
+            description="",
+            day=today,
+            time_text="09:00",
+            priority="Medium",
+        )
+        child = database.create_task(
+            title="Today child",
+            description="",
+            day=today,
+            time_text="09:30",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        model.set_filter_mode("Сегодня")
+        model.set_focus_day(today)
+
+        visible_task_ids = [
+            model.index(row, 0).data(TaskRoles.TaskId)
+            for row in range(model.rowCount())
+            if model.index(row, 0).data(TaskRoles.RowType) == "task"
+        ]
+
+        assert root.id in visible_task_ids
+        assert child.id in visible_task_ids
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_quick_create_defaults_to_enabled_time_plus_one_hour(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_quick_create_defaults", ".sqlite3")
