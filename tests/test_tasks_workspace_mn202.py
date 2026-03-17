@@ -28,6 +28,32 @@ def _find_task_row(model: tasks_workspace.TasksModel, task_id: int) -> int:
     return -1
 
 
+def _create_completed_task(database: Database, title: str, completion_day: date, priority: str = "Medium") -> int:
+    created = database.create_task(
+        title=title,
+        description="",
+        day=completion_day,
+        time_text="",
+        priority=priority,
+    )
+    database.update_task(
+        created.id,
+        title=created.title,
+        description=created.description,
+        day=completion_day,
+        time_text=created.time_text,
+        priority=priority,
+        done=True,
+        project_id=created.project_id,
+        parent_id=created.parent_id,
+        recurrence_kind=created.recurrence_kind,
+        recurrence_interval=created.recurrence_interval,
+        marker_color=created.marker_color,
+        marker_theme=created.marker_theme,
+    )
+    return created.id
+
+
 def test_tasks_model_cycles_priority_including_deferred(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_priority_cycle", ".sqlite3")
@@ -783,8 +809,10 @@ def test_tasks_dash_shows_classic_entity_statistics(monkeypatch, unique_temp_pat
         summary = workspace.dash_summary_label.text()
         assert f"DASH на 2026-03-06: диаграммы пересчитаны и заполнены заново." in summary
         assert "На 2026-03-06: активных задач 1, High 1, Medium 0, Low 0, Отложенных 0." in summary
+        assert "Результативность: нет завершенных задач для сравнения." in summary
         assert workspace.dash_bar_chart is not None
         assert workspace.dash_pie_chart is not None
+        assert workspace.dash_pulse_chart is not None
         assert [(label, value) for label, value, _ in workspace.dash_bar_chart._items] == [
             ("Задачи", expected_totals[0]),
             ("Проекты", expected_totals[1]),
@@ -800,6 +828,54 @@ def test_tasks_dash_shows_classic_entity_statistics(monkeypatch, unique_temp_pat
             ("Метки", expected_totals[3]),
             ("Объекты", expected_totals[4]),
             ("Заметки", expected_totals[5]),
+        ]
+        assert [(label, value) for label, value, _ in workspace.dash_pulse_chart._items] == [
+            ("01.03", 0),
+            ("02.03", 0),
+            ("03.03", 0),
+            ("04.03", 0),
+            ("05.03", 0),
+            ("06.03", 0),
+        ]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_dash_shows_resultativity_against_previous_periods(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_dash_resultativity", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        _create_completed_task(database, "Prev 1", date(2026, 3, 1))
+        _create_completed_task(database, "Prev 2", date(2026, 3, 2))
+        _create_completed_task(database, "Prev 3", date(2026, 3, 4))
+        _create_completed_task(database, "Recent 1", date(2026, 3, 5))
+        _create_completed_task(database, "Recent 2", date(2026, 3, 6))
+        _create_completed_task(database, "Recent 3", date(2026, 3, 6), priority="High")
+
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace._focus_day = date(2026, 3, 6)
+        workspace._refresh_dash_day()
+        QApplication.processEvents()
+
+        summary = workspace.dash_summary_label.text()
+        assert (
+            "Результативность: 2.00x к прошлому темпу "
+            "(импульс за последние 2 дня 3; база прошлых периодов 1.50 на 2 дня)."
+        ) in summary
+        assert workspace.dash_pulse_chart is not None
+        assert [(label, value) for label, value, _ in workspace.dash_pulse_chart._items] == [
+            ("01.03", 1),
+            ("02.03", 1),
+            ("03.03", 0),
+            ("04.03", 1),
+            ("05.03", 1),
+            ("06.03", 2),
         ]
     finally:
         if workspace is not None:

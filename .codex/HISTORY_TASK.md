@@ -232,3 +232,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_63A40D9E-6AE1-4D90-A5E6-0A35C45A6F8C | maintenance | Fix backup settings layout overlap, publish delivery branch/PR, sync main, and document the change | fix | Completed |
+
+## DASH Metrics - Tasks Workspace
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_4EFAAFCE-185B-482B-9E9A-5D09A46A5B2B | dash-metrics | Tasks DASH: add global resultativity metric for previous period vs last 2 days | feat | Completed |
