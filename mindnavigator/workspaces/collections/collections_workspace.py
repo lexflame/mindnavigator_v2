@@ -8,12 +8,15 @@ from ._entry_thumb_worker import _EntryThumbWorker
 from .collection_media_preview_dialog import CollectionMediaPreviewDialog
 from .collection_item_edit_dialog import CollectionItemEditDialog
 from .collection_relation_dialog import CollectionRelationDialog
+from mindnavigator.ui.styles import get_theme_palette
 
 class CollectionsWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("CollectionsWorkspace")
         self._db = get_database()
         self._csv_service = CsvTransferService()
+        self._theme_mode = "dark"
         self._smooth_scroll_controllers: list[object] = []
         self._items: List[CollectionItemData] = []
         self._items_by_id: Dict[int, CollectionItemData] = {}
@@ -25,6 +28,7 @@ class CollectionsWorkspace(QWidget):
         self._current_item_id: Optional[int] = None
         self._thumb_size = QSize(56, 56)
         self._entry_thumb_size = QSize(72, 72)
+        self._missing_entry_color = QColor("#8b8b8b")
         self._thumb_cache: Dict[str, QIcon] = {}
         self._thumb_pending_urls: set[str] = set()
         self._thumb_loader = QNetworkAccessManager(self)
@@ -92,7 +96,6 @@ class CollectionsWorkspace(QWidget):
         self.quick_category_btn.setText("Категория")
         self.quick_category_label = QLabel("Все категории")
         self.quick_category_label.setObjectName("CollectionsQuickCategory")
-        self.quick_category_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
         self.quick_type_combo = QComboBox()
         for label, value in ENTITY_CHOICES:
             self.quick_type_combo.addItem(label, value)
@@ -242,79 +245,96 @@ class CollectionsWorkspace(QWidget):
         self._set_quick_category(None)
 
         self._set_action_state(False)
-        self._apply_styles()
+        self.set_theme_mode("dark")
 
-    def _apply_styles(self) -> None:
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self._missing_entry_color = QColor(palette.muted_text)
         self.setStyleSheet(
-            """
-            QLabel#CollectionsTitle {
-                color: #e6e6e6;
+            f"""
+            QWidget#CollectionsWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QWidget {{
+                color: {palette.text};
+            }}
+            QLabel#CollectionsTitle {{
+                color: {palette.text};
                 font-size: 20px;
                 font-weight: 600;
-            }
-            QLabel#CollectionsCategoriesTitle {
-                color: #d8d8d8;
+            }}
+            QLabel#CollectionsCategoriesTitle {{
+                color: {palette.text};
                 font-size: 13px;
                 font-weight: 600;
-            }
-            QTreeWidget {
-                background: #14171c;
-                border: 1px solid #2f333b;
+            }}
+            QLabel#CollectionsQuickCategory {{
+                color: {palette.chart_muted};
+                font-size: 11px;
+            }}
+            QTreeWidget {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-                color: #e6e6e6;
-            }
-            QTreeWidget::item {
+                color: {palette.text};
+            }}
+            QTreeWidget::item {{
                 padding: 6px 10px;
-            }
-            QTreeWidget::item:selected {
-                background: #2d3440;
-            }
-            QListWidget {
-                background: #14171c;
-                border: 1px solid #2f333b;
+            }}
+            QTreeWidget::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QListWidget {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-                color: #e6e6e6;
-            }
-            QListWidget::item {
+                color: {palette.text};
+            }}
+            QListWidget::item {{
                 padding: 8px 10px;
-                border-bottom: 1px solid #21242b;
-            }
-            QListWidget::item:selected {
-                background: #2d3440;
-            }
-            QLineEdit, QComboBox {
-                background: #1f232a;
-                border: 1px solid #2f333b;
+                border-bottom: 1px solid {palette.border};
+            }}
+            QListWidget::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QLineEdit, QComboBox {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 10px;
-                color: #e6e6e6;
+                color: {palette.text};
                 min-height: 26px;
-            }
-            QCheckBox {
-                color: #d8d8d8;
-            }
-            QToolButton {
-                background: #232831;
-                border: 1px solid #2f333b;
+            }}
+            QCheckBox {{
+                color: {palette.text};
+            }}
+            QToolButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 12px;
-                color: #e6e6e6;
-            }
-            QLabel#CollectionsDetailsTitle {
-                color: #ffffff;
+                color: {palette.text};
+            }}
+            QLabel#CollectionsDetailsTitle {{
+                color: {palette.text};
                 font-size: 17px;
                 font-weight: 600;
-            }
-            QLabel#CollectionsDescription {
-                color: #ffffff;
-            }
-            QLabel#CollectionsRelationsTitle {
-                color: #d8d8d8;
+            }}
+            QLabel#CollectionsDescription {{
+                color: {palette.text};
+            }}
+            QLabel#CollectionsRelationsTitle {{
+                color: {palette.text};
                 font-size: 13px;
                 font-weight: 600;
-            }
+            }}
             """
         )
+        if self._current_item_id is not None:
+            self._refresh_entries()
 
     def _set_action_state(self, has_selection: bool) -> None:
         self.edit_button.setEnabled(has_selection)
@@ -397,7 +417,7 @@ class CollectionsWorkspace(QWidget):
         icon = self._entry_icon_for(entry, kind)
         item.setIcon(icon)
         if entry.is_missing:
-            item.setForeground(QColor("#8b8b8b"))
+            item.setForeground(self._missing_entry_color)
         self.entries_list.addItem(item)
 
     def _entry_icon_for(self, entry: CollectionEntryData, kind: str) -> QIcon:

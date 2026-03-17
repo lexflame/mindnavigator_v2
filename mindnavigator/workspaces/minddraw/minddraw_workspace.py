@@ -5,6 +5,7 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 from .minddraw_entity_picker_dialog import MindDrawEntityPickerDialog
 from .minddraw_node_item import MindDrawNodeItem
+from mindnavigator.ui.styles import get_theme_palette
 
 
 class MindDrawWorkspace(BaseWorkspace):
@@ -23,7 +24,7 @@ class MindDrawWorkspace(BaseWorkspace):
         super().__init__(parent)
         self.setObjectName("MindDrawWorkspace")
         self.search_input.setPlaceholderText("Поиск по узлам MindDraw…")
-        self._apply_workspace_style()
+        self.set_theme_mode(self._theme_mode)
         self._load_canvas_state()
 
     def _build_ui(self) -> None:
@@ -59,89 +60,113 @@ class MindDrawWorkspace(BaseWorkspace):
         self.set_content(canvas_wrap)
 
     def _apply_workspace_style(self) -> None:
-        self.setStyleSheet(
+        palette = get_theme_palette(self._theme_mode)
+        canvas_gradient = (
             """
-            QWidget#MindDrawWorkspace {
-                background: #16171a;
-            }
-            QWidget#MindDrawWorkspace QLabel {
-                color: #cfd4dd;
-            }
-            QWidget#MindDrawWorkspace QWidget#WorkspaceToolbar,
-            QWidget#MindDrawWorkspace QWidget#WorkspaceSearch,
-            QWidget#MindDrawWorkspace QWidget#WorkspaceFilters {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-                border-radius: 10px;
-                padding: 6px;
-            }
-            QWidget#MindDrawWorkspace QWidget#WorkspaceStatus {
-                color: #aeb6c2;
-            }
-            QWidget#MindDrawWorkspace QToolButton {
-                color: #e4e8ef;
-                background: #252932;
-                border: 1px solid #353b46;
-                border-radius: 7px;
-                padding: 7px 12px;
-                min-height: 28px;
-            }
-            QWidget#MindDrawWorkspace QToolButton:hover {
-                background: #313743;
-            }
-            QWidget#MindDrawWorkspace QToolButton:disabled {
-                color: #6c7481;
-                background: #1c2028;
-                border-color: #2b313c;
-            }
-            QWidget#MindDrawWorkspace QLineEdit {
-                background: #1d2129;
-                color: #e5eaf2;
-                border: 1px solid #2f3642;
-                border-radius: 8px;
-                padding: 8px 10px;
-            }
-            QWidget#MindDrawWorkspace QLineEdit:focus {
-                border-color: #5b8ccf;
-            }
-            QWidget#MindDrawCanvasWrap {
-                background: transparent;
-            }
-            QLabel#MindDrawHint {
-                background: #1b1f27;
-                color: #d7deea;
-                border: 1px solid #2b3240;
-                border-radius: 12px;
-                padding: 12px 14px;
-            }
-            QGraphicsView#MindDrawCanvas {
-                background: qlineargradient(
+                qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #f7fbff,
+                    stop: 0.55 #eef3fb,
+                    stop: 1 #e6edf8
+                )
+            """
+            if self._theme_mode == "light"
+            else """
+                qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
                     stop: 0 #141821,
                     stop: 0.55 #171b24,
                     stop: 1 #10141b
-                );
-                border: 1px solid #2b3240;
-                border-radius: 16px;
-            }
-            QWidget#MindDrawCanvasViewport {
+                )
+            """
+        )
+        self.setStyleSheet(
+            f"""
+            QWidget#MindDrawWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QWidget#MindDrawWorkspace QLabel {{
+                color: {palette.text};
+            }}
+            QWidget#MindDrawWorkspace QWidget#WorkspaceToolbar,
+            QWidget#MindDrawWorkspace QWidget#WorkspaceSearch,
+            QWidget#MindDrawWorkspace QWidget#WorkspaceFilters {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+                padding: 6px;
+            }}
+            QWidget#MindDrawWorkspace QWidget#WorkspaceStatus {{
+                color: {palette.dim_text};
+            }}
+            QWidget#MindDrawWorkspace QToolButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                border-radius: 7px;
+                padding: 7px 12px;
+                min-height: 28px;
+            }}
+            QWidget#MindDrawWorkspace QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QWidget#MindDrawWorkspace QToolButton:disabled {{
+                color: {palette.muted_text};
+                background: {palette.panel_alt_bg};
+                border-color: {palette.border};
+            }}
+            QWidget#MindDrawWorkspace QLineEdit {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 8px 10px;
+            }}
+            QWidget#MindDrawWorkspace QLineEdit:focus {{
+                border-color: {palette.accent};
+            }}
+            QWidget#MindDrawCanvasWrap {{
                 background: transparent;
-            }
+            }}
+            QLabel#MindDrawHint {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 12px;
+                padding: 12px 14px;
+            }}
+            QGraphicsView#MindDrawCanvas {{
+                background: {canvas_gradient};
+                border: 1px solid {palette.border};
+                border-radius: 16px;
+            }}
+            QWidget#MindDrawCanvasViewport {{
+                background: transparent;
+            }}
             QGraphicsView#MindDrawCanvas QScrollBar:vertical,
-            QGraphicsView#MindDrawCanvas QScrollBar:horizontal {
-                background: #151920;
+            QGraphicsView#MindDrawCanvas QScrollBar:horizontal {{
+                background: {palette.panel_bg};
                 border: none;
                 margin: 8px;
-            }
+            }}
             QGraphicsView#MindDrawCanvas QScrollBar::handle:vertical,
-            QGraphicsView#MindDrawCanvas QScrollBar::handle:horizontal {
-                background: #303845;
+            QGraphicsView#MindDrawCanvas QScrollBar::handle:horizontal {{
+                background: {palette.border_strong};
                 border-radius: 6px;
                 min-height: 28px;
                 min-width: 28px;
-            }
+            }}
             """
         )
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        self._apply_workspace_style()
+        if hasattr(self, "view"):
+            palette = get_theme_palette(self._theme_mode)
+            self.view.setBackgroundBrush(QColor(palette.chart_bg))
+        self._refresh_link_styles()
 
     def create_actions(self) -> dict[str, QAction]:
         action_add = QAction("Добавить узел", self)
@@ -433,8 +458,17 @@ class MindDrawWorkspace(BaseWorkspace):
         path.lineTo(arrow_b)
 
         item = QGraphicsPathItem(path)
-        item.setPen(QPen(QColor("#6f84ac"), 2.0))
+        palette = get_theme_palette(self._theme_mode)
+        item.setPen(QPen(QColor(palette.accent), 2.0))
         return item
+
+    def _refresh_link_styles(self) -> None:
+        if not self._link_items:
+            return
+        palette = get_theme_palette(self._theme_mode)
+        pen = QPen(QColor(palette.accent), 2.0)
+        for item in self._link_items.values():
+            item.setPen(pen)
 
     def _save_canvas_state(self) -> None:
         settings = QSettings()

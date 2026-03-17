@@ -240,3 +240,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_4EFAAFCE-185B-482B-9E9A-5D09A46A5B2B | dash-metrics | Tasks DASH: add global resultativity metric for previous period vs last 2 days | feat | Completed |
+
+## theme-switch - Light Theme Revision
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA | theme-switch | Audit and refactor runtime theme switching so dark-to-light updates shell and key UI surfaces consistently | fix | Completed (follow-up light-mode gaps fixed) |

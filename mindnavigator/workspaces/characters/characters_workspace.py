@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import CHARACTER_ENTITY_KINDS, CharacterData, get_database
 from mindnavigator.ui.smooth_scroll import attach_smooth_scroll
+from mindnavigator.ui.styles import get_theme_palette
 
 
 CHARACTER_LINK_KIND_LABELS = {
@@ -54,11 +55,13 @@ class CharactersWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._theme_mode = "dark"
         self._characters_by_id: dict[int, CharacterData] = {}
         self._current_character_id: Optional[int] = None
         self._entity_filter_kind: Optional[str] = None
         self._entity_filter_id: Optional[int] = None
         self._loading_details = False
+        self.setObjectName("CharactersWorkspace")
         self._build_ui()
         self.refresh_characters()
 
@@ -188,79 +191,90 @@ class CharactersWorkspace(QWidget):
         self.links_list.itemDoubleClicked.connect(self._show_selected_link_info)
 
         self._set_details_enabled(False)
-        self._apply_styles()
+        self.set_theme_mode("dark")
 
     def _apply_styles(self) -> None:
+        palette = get_theme_palette(self._theme_mode)
         self.setStyleSheet(
-            """
-            QLabel#CharactersTitle {
-                color: #e6e6e6;
+            f"""
+            QWidget#CharactersWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QLabel#CharactersTitle {{
+                color: {palette.text};
                 font-size: 20px;
                 font-weight: 600;
-            }
-            QLabel#CharactersSectionTitle {
-                color: #d8dbe3;
+            }}
+            QLabel#CharactersSectionTitle {{
+                color: {palette.text};
                 font-size: 13px;
                 font-weight: 600;
-            }
-            QLabel#CharactersHint {
-                color: #8f95a1;
+            }}
+            QLabel#CharactersHint {{
+                color: {palette.dim_text};
                 font-size: 11px;
-            }
-            QFrame#CharactersDetailsContainer QLabel {
-                color: #cfd5df;
-            }
+            }}
+            QFrame#CharactersDetailsContainer QLabel {{
+                color: {palette.text};
+            }}
             QLineEdit#CharactersSearch,
             QFrame#CharactersDetailsContainer QLineEdit,
-            QFrame#CharactersDetailsContainer QPlainTextEdit {
-                background: #1f232a;
-                border: 1px solid #2f333b;
+            QFrame#CharactersDetailsContainer QPlainTextEdit {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
-                color: #e6e6e6;
+                color: {palette.text};
                 padding: 6px 8px;
-            }
+            }}
             QFrame#CharactersListContainer,
-            QFrame#CharactersDetailsContainer {
-                background: #171a20;
-                border: 1px solid #2f333b;
+            QFrame#CharactersDetailsContainer {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-            }
+            }}
             QListWidget#CharactersList,
-            QListWidget#CharactersLinksList {
-                background: #111318;
-                border: 1px solid #2b3038;
+            QListWidget#CharactersLinksList {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
-                color: #e6e6e6;
-            }
+                color: {palette.text};
+            }}
             QListWidget#CharactersList::item,
-            QListWidget#CharactersLinksList::item {
+            QListWidget#CharactersLinksList::item {{
                 padding: 7px 8px;
-            }
+            }}
             QListWidget#CharactersList::item:selected,
-            QListWidget#CharactersLinksList::item:selected {
-                background: #2d3440;
+            QListWidget#CharactersLinksList::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
                 border-radius: 6px;
-            }
+            }}
             QToolButton#CharactersPrimaryButton,
-            QToolButton#CharactersDangerButton {
-                background: #2a2f37;
-                border: 1px solid #3a404a;
+            QToolButton#CharactersDangerButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
                 border-radius: 6px;
-                color: #e6e6e6;
+                color: {palette.text};
                 padding: 6px 12px;
-            }
-            QToolButton#CharactersPrimaryButton:hover {
-                background: #333a45;
-            }
-            QToolButton#CharactersDangerButton {
-                background: #3a2525;
-                border-color: #4d2f2f;
-            }
-            QToolButton#CharactersDangerButton:hover {
-                background: #4a2f2f;
-            }
+            }}
+            QToolButton#CharactersPrimaryButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QToolButton#CharactersDangerButton {{
+                background: {palette.danger};
+                border-color: {palette.border_strong};
+            }}
+            QToolButton#CharactersDangerButton:hover {{
+                background: {palette.danger};
+                color: {palette.selection_text};
+            }}
             """
         )
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        self._apply_styles()
 
     def _set_details_enabled(self, enabled: bool) -> None:
         self.delete_button.setEnabled(enabled)

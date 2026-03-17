@@ -5,6 +5,7 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 from .cloud_scan_worker import CloudScanWorker
 from .image_preview_dialog import ImagePreviewDialog
+from mindnavigator.ui.styles import get_theme_palette
 
 class FileWorkspace(QWidget):
     """Рабочая область для синхронизации файлов облака."""
@@ -15,6 +16,7 @@ class FileWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._theme_mode = "dark"
         self._smooth_scroll_controllers: list[object] = []
         self._scan_thread: Optional[QThread] = None
         self._scan_worker: Optional[CloudScanWorker] = None
@@ -31,10 +33,12 @@ class FileWorkspace(QWidget):
         self._sketch_mode_active = False
         self._splitter_sizes_before_search: List[int] = []
         self._search_hint_buttons: List[QPushButton] = []
+        self.setObjectName("FilesWorkspace")
         self._icon_folder = qta.icon("fa5s.folder", color="#d0a93e")
         self._icon_file_generic = qta.icon("fa5s.file", color="#cfcfcf")
         self._icon_file_image = qta.icon("fa5s.file-image", color="#6ab7ff")
         self._build_ui()
+        self.set_theme_mode("dark")
         self._update_sync_status()
         self._load_cloud_files()
 
@@ -193,125 +197,144 @@ class FileWorkspace(QWidget):
             attach_smooth_scroll(self.file_grid),
         ]
 
-        self.setStyleSheet(
-            """
-            QLabel#FilesSyncStatus {
-                color: #b7b7b7;
-                font-size: 12px;
-            }
-            QPushButton#FilesSyncButton {
-                background: #2a2d33;
-                border: 1px solid #3a3d44;
-                border-radius: 6px;
-                padding: 6px 16px;
-                color: #e0e0e0;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QPushButton#FilesSyncButton:hover {
-                background: #343841;
-            }
-            QPushButton#FilesSyncButton:disabled {
-                background: #202225;
-                color: #6f7278;
-                border-color: #2b2d33;
-            }
-            QPushButton#FilesReindexButton {
-                background: #24272e;
-                border: 1px solid #353941;
-                border-radius: 6px;
-                padding: 6px 12px;
-                color: #d0d0d0;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QPushButton#FilesReindexButton:hover {
-                background: #2f333b;
-            }
-            QPushButton#FilesReindexButton:disabled {
-                background: #1f2024;
-                color: #6f7278;
-                border-color: #2b2d33;
-            }
-            QPlainTextEdit#FilesSyncLog {
-                background: #1b1d22;
-                border: 1px solid #2f3136;
-                border-radius: 8px;
-                color: #d6d6d6;
-                padding: 10px;
-                font-size: 11px;
-            }
-            QLineEdit#FilesSmartSearch {
-                background: #1b1d22;
-                border: 1px solid #2f3136;
-                border-radius: 8px;
-                color: #dfe3e8;
-                padding: 7px 10px;
-                font-size: 12px;
-            }
-            QLabel#FilesSearchHintsLabel {
-                color: #9da5af;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QPushButton#FilesSearchHintButton {
-                background: #242830;
-                border: 1px solid #353b46;
-                border-radius: 10px;
-                padding: 3px 10px;
-                color: #ccd2da;
-                font-size: 10px;
-                font-weight: 600;
-            }
-            QPushButton#FilesSearchHintButton:hover {
-                background: #2f3642;
-            }
-            QPushButton#FilesModeButton {
-                background: #1f2126;
-                border: 1px solid #30343b;
-                border-radius: 6px;
-                padding: 4px 12px;
-                color: #cdd0d5;
-                font-size: 11px;
-            }
-            QPushButton#FilesModeButton:checked {
-                background: #2d3139;
-                border-color: #3a3f48;
-                color: #ffffff;
-            }
-            QLabel#FilesNavPath {
-                color: #e0e0e0;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QLabel#FilesNavCount {
-                color: #9aa0a6;
-                font-size: 11px;
-            }
-            QLabel#FilesNavEmpty {
-                color: #9aa0a6;
-                font-size: 12px;
-            }
-            QTreeWidget#FilesNavTree, QListWidget#FilesNavGrid {
-                background: #1b1d22;
-                border: 1px solid #2f3136;
-                border-radius: 8px;
-                color: #d6d6d6;
-                font-size: 11px;
-            }
-            QTreeWidget#FilesNavTree::item:selected,
-            QListWidget#FilesNavGrid::item:selected {
-                background: #2c313a;
-                color: #ffffff;
-            }
-            QListWidget#FilesNavGrid::item {
-                padding: 6px;
-            }
-            """
-        )
-
     def _switch_mode(self, index: int) -> None:
         self.mode_stack.setCurrentIndex(index)
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#FilesWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QLabel#FilesSyncStatus {{
+                color: {palette.dim_text};
+                font-size: 12px;
+            }}
+            QPushButton#FilesSyncButton {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 6px 16px;
+                color: {palette.text};
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton#FilesSyncButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QPushButton#FilesSyncButton:disabled {{
+                background: {palette.panel_alt_bg};
+                color: {palette.muted_text};
+                border-color: {palette.border};
+            }}
+            QPushButton#FilesReindexButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 6px 12px;
+                color: {palette.text};
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton#FilesReindexButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QPushButton#FilesReindexButton:disabled {{
+                background: {palette.panel_alt_bg};
+                color: {palette.muted_text};
+                border-color: {palette.border};
+            }}
+            QPlainTextEdit#FilesSyncLog {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                color: {palette.text};
+                padding: 10px;
+                font-size: 11px;
+            }}
+            QLineEdit#FilesSmartSearch {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                color: {palette.text};
+                padding: 7px 10px;
+                font-size: 12px;
+            }}
+            QLabel#FilesSearchHintsLabel {{
+                color: {palette.dim_text};
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton#FilesSearchHintButton {{
+                background: {palette.chip_bg};
+                border: 1px solid {palette.chip_border};
+                border-radius: 10px;
+                padding: 3px 10px;
+                color: {palette.text};
+                font-size: 10px;
+                font-weight: 600;
+            }}
+            QPushButton#FilesSearchHintButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QPushButton#FilesModeButton {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 4px 12px;
+                color: {palette.text};
+                font-size: 11px;
+            }}
+            QPushButton#FilesModeButton:checked {{
+                background: {palette.selection_bg};
+                border-color: {palette.border_strong};
+                color: {palette.selection_text};
+            }}
+            QLabel#FilesNavPath {{
+                color: {palette.text};
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QLabel#FilesNavCount,
+            QLabel#FilesNavEmpty {{
+                color: {palette.dim_text};
+                font-size: 11px;
+            }}
+            QTreeWidget#FilesNavTree, QListWidget#FilesNavGrid {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                color: {palette.text};
+                font-size: 11px;
+            }}
+            QTreeWidget#FilesNavTree::item:selected,
+            QListWidget#FilesNavGrid::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QListWidget#FilesNavGrid::item {{
+                padding: 6px;
+            }}
+            QLabel#FilesFolderName {{
+                color: {palette.text};
+            }}
+            QToolButton#FilesCollectionDot {{
+                background: {palette.success};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 0px;
+            }}
+            QToolButton#FilesCollectionDot:hover {{
+                background: {palette.accent_hover};
+            }}
+            """
+        )
+        self._refresh_icons()
 
     def _load_cloud_files(self) -> None:
         self._all_cloud_files = self._db.fetch_cloud_files()
@@ -1017,28 +1040,16 @@ class FileWorkspace(QWidget):
 
         if collection_id:
             dot = QToolButton()
+            dot.setObjectName("FilesCollectionDot")
             dot.setFixedSize(12, 12)
             dot.setToolTip("Открыть коллекцию")
-            dot.setStyleSheet(
-                """
-                QToolButton {
-                    background: #37c76b;
-                    border: 1px solid #1f7f46;
-                    border-radius: 6px;
-                    padding: 0px;
-                }
-                QToolButton:hover {
-                    background: #48d97b;
-                }
-                """
-            )
             dot.clicked.connect(lambda _=None, cid=collection_id: self._open_collection(cid))
             grid.addWidget(dot, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         name_label = QLabel(name)
+        name_label.setObjectName("FilesFolderName")
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setWordWrap(True)
-        name_label.setStyleSheet("color: #d6d6d6;")
 
         layout.addWidget(icon_container)
         layout.addWidget(name_label)
@@ -1186,5 +1197,23 @@ class FileWorkspace(QWidget):
 
     def _update_sync_status(self) -> None:
         self.status_label.setText(self._build_sync_status_text())
+
+    def _refresh_icons(self) -> None:
+        palette = get_theme_palette(self._theme_mode)
+        self._icon_cache.clear()
+        self._icon_folder = qta.icon("fa5s.folder", color=palette.warning)
+        self._icon_file_generic = qta.icon("fa5s.file", color=palette.dim_text)
+        self._icon_file_image = qta.icon("fa5s.file-image", color=palette.accent)
+        if not self._cloud_files:
+            return
+        current_folder = self._current_folder
+        search_query = (self.smart_search_edit.text() or "").strip()
+        self._rebuild_navigation()
+        if search_query:
+            self._apply_smart_search(search_query)
+            return
+        tree_item = self._tree_items.get(current_folder) or self._tree_items.get("")
+        if tree_item is not None:
+            self.folder_tree.setCurrentItem(tree_item)
 
 __all__ = ["FileWorkspace"]

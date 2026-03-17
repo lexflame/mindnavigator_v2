@@ -1363,3 +1363,28 @@
 [2026-03-17 14:17] OUT: OK.
 [2026-03-17 14:17] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dash_pulse
 [2026-03-17 14:17] OUT: 20 passed.
+[2026-03-17 17:45] SESSION_START: Started light-theme runtime revision and refactor audit.
+[2026-03-17 17:45] ACTION: Started TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA (runtime light-theme switching audit and refactor).
+[2026-03-17 17:45] ACTION: Updated TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA status -> In Progress.
+[2026-03-17 17:45] ACTION: Created docs/sprints/TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA_PLAN.md.
+[2026-03-17 18:14] ACTION: Refactored runtime theme switching to centralize app QSS generation and propagate light-mode updates through shell navigation and key workspaces.
+[2026-03-17 18:14] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 18:14] OUT: OK.
+[2026-03-17 18:14] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_theme_switch_runtime.py tests/test_projects_workspace_mn201.py tests/test_settings_workspace_backup_safety.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_theme_switch
+[2026-03-17 18:14] OUT: 40 passed.
+[2026-03-17 18:14] ACTION: Updated TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA status -> Completed.
+[2026-03-17 18:14] ACTION: Completed TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA.
+[2026-03-17 18:42] ACTION: Updated TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA status -> In Progress.
+[2026-03-17 18:42] ACTION: Continued light-theme audit to cover remaining workspace modes, base workspace theme propagation, and palette-QSS regressions.
+[2026-03-17 18:47] ACTION: Fixed remaining light-theme gaps in base workspace theme propagation and secondary workspace palette styles, and added runtime smoke coverage for Collections and MindDraw.
+[2026-03-17 18:47] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 18:47] OUT: OK.
+[2026-03-17 18:47] CMD: $env:PYTHONPATH='.'; pytest tests/test_workspace_visibility_settings.py tests/test_theme_switch_runtime.py tests/test_projects_workspace_mn201.py tests/test_settings_workspace_backup_safety.py tests/test_tasks_workspace_mn202.py tests/test_files_workspace_mn206.py tests/test_collections_workspace_mn207.py tests/test_characters_workspace_encoding.py tests/test_characters_workspace_mn204.py tests/test_dossier_workspace.py tests/test_dossier_dialogs.py tests/test_minddraw_workspace_state.py tests/test_ideas_relations_style.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_theme_switch_extended
+[2026-03-17 18:47] OUT: 65 passed.
+[2026-03-17 18:47] ACTION: Updated TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA status -> Completed.
+[2026-03-17 18:47] ACTION: Completed TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA.
+[2026-03-17 18:52] ACTION: Fixed a startup regression in ObjectWorkspace light-theme QSS by escaping palette stylesheet braces and added runtime smoke coverage for object mode theme switching.
+[2026-03-17 18:52] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 18:52] OUT: OK.
+[2026-03-17 18:52] CMD: $env:PYTHONPATH='.'; pytest tests/test_theme_switch_runtime.py tests/test_workspace_visibility_settings.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_theme_switch_objects
+[2026-03-17 18:52] OUT: 14 passed.

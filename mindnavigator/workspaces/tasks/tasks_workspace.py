@@ -6,6 +6,7 @@ from ._shared import *  # noqa: F401,F403
 from .task_create_dialog import TaskCreateDialog
 from .tasks_item_delegate import TasksItemDelegate
 from .tasks_model import TasksModel
+from mindnavigator.ui.styles import get_theme_palette
 
 class TasksWorkspace(BaseWorkspace):
     """Рабочая область задач: панель управления и список с группировкой."""
@@ -62,12 +63,20 @@ class TasksWorkspace(BaseWorkspace):
             super().__init__(parent)
             self._items: List[Tuple[str, int, QColor]] = []
             self._progress = 1.0
+            self._theme_mode = "dark"
             self._animation = QVariantAnimation(self)
             self._animation.setDuration(900)
             self._animation.setStartValue(0.0)
             self._animation.setEndValue(1.0)
             self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
             self._animation.valueChanged.connect(self._on_animation_value_changed)
+
+        def set_theme_mode(self, theme_mode: str) -> None:
+            self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+            self.update()
+
+        def _theme_palette(self):
+            return get_theme_palette(self._theme_mode)
 
         def set_items(self, items: List[Tuple[str, int, QColor]], animate: bool = True) -> None:
             self._items = list(items)
@@ -91,14 +100,15 @@ class TasksWorkspace(BaseWorkspace):
 
         def paintEvent(self, event) -> None:
             super().paintEvent(event)
+            palette = self._theme_palette()
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.fillRect(self.rect(), QColor("#17191f"))
+            painter.fillRect(self.rect(), QColor(palette.chart_bg))
             chart_rect = self.rect().adjusted(18, 18, -18, -18)
             if chart_rect.width() <= 0 or chart_rect.height() <= 0:
                 return
             if not self._items:
-                painter.setPen(QColor("#8f95a3"))
+                painter.setPen(QColor(palette.chart_muted))
                 painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
                 return
 
@@ -109,7 +119,7 @@ class TasksWorkspace(BaseWorkspace):
                 max(10, chart_rect.height() - 62),
             )
             baseline_y = plot_rect.bottom()
-            painter.setPen(QColor("#323641"))
+            painter.setPen(QColor(palette.chart_grid))
             painter.drawLine(plot_rect.left(), baseline_y, plot_rect.right(), baseline_y)
 
             max_value = max((value for _, value, _ in self._items), default=0)
@@ -138,12 +148,12 @@ class TasksWorkspace(BaseWorkspace):
                 painter.setBrush(color)
                 painter.drawRoundedRect(bar_rect, 8, 8)
 
-                painter.setPen(QColor("#e6e8ed"))
+                painter.setPen(QColor(palette.chart_text))
                 painter.setFont(value_font)
                 value_rect = QRect(center_x - 32, max(chart_rect.top(), bar_rect.top() - 24), 64, 18)
                 painter.drawText(value_rect, Qt.AlignmentFlag.AlignCenter, str(int(round(current_value))))
 
-                painter.setPen(QColor("#9ea4b1"))
+                painter.setPen(QColor(palette.chart_muted))
                 painter.setFont(label_font)
                 label_rect = QRect(center_x - int(slot_width / 2), baseline_y + 10, int(slot_width), 32)
                 painter.drawText(
@@ -160,20 +170,21 @@ class TasksWorkspace(BaseWorkspace):
 
         def paintEvent(self, event) -> None:
             super().paintEvent(event)
+            palette = self._theme_palette()
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.fillRect(self.rect(), QColor("#17191f"))
+            painter.fillRect(self.rect(), QColor(palette.chart_bg))
             chart_rect = self.rect().adjusted(18, 18, -18, -18)
             if chart_rect.width() <= 0 or chart_rect.height() <= 0:
                 return
             if not self._items:
-                painter.setPen(QColor("#8f95a3"))
+                painter.setPen(QColor(palette.chart_muted))
                 painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
                 return
 
             total = sum(value for _, value, _ in self._items)
             if total <= 0:
-                painter.setPen(QColor("#8f95a3"))
+                painter.setPen(QColor(palette.chart_muted))
                 painter.drawText(chart_rect, Qt.AlignmentFlag.AlignCenter, "Нет данных")
                 return
 
@@ -186,8 +197,8 @@ class TasksWorkspace(BaseWorkspace):
             else:
                 pie_rect.moveLeft(chart_rect.left() + max(0, (chart_rect.width() - pie_side) // 2))
 
-            painter.setPen(QColor("#2b303b"))
-            painter.setBrush(QColor("#1f232c"))
+            painter.setPen(QColor(palette.chart_grid))
+            painter.setBrush(QColor(palette.panel_alt_bg))
             painter.drawEllipse(pie_rect)
 
             total_angle = int(round(360.0 * 16 * self._progress))
@@ -197,7 +208,7 @@ class TasksWorkspace(BaseWorkspace):
                 span_angle = int(round((value / total) * 360.0 * 16))
                 draw_angle = min(span_angle, remaining_angle)
                 if draw_angle > 0:
-                    painter.setPen(QColor("#17191f"))
+                    painter.setPen(QColor(palette.chart_bg))
                     painter.setBrush(color)
                     painter.drawPie(pie_rect, start_angle, -draw_angle)
                     start_angle -= draw_angle
@@ -205,16 +216,16 @@ class TasksWorkspace(BaseWorkspace):
 
             inner_rect = pie_rect.adjusted(pie_rect.width() // 4, pie_rect.height() // 4, -pie_rect.width() // 4, -pie_rect.height() // 4)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#17191f"))
+            painter.setBrush(QColor(palette.chart_bg))
             painter.drawEllipse(inner_rect)
 
-            painter.setPen(QColor("#eef1f7"))
+            painter.setPen(QColor(palette.chart_text))
             total_font = painter.font()
             total_font.setPointSize(max(10, total_font.pointSize() + 1))
             total_font.setBold(True)
             painter.setFont(total_font)
             painter.drawText(inner_rect.adjusted(0, -8, 0, 0), Qt.AlignmentFlag.AlignCenter, str(int(round(total * self._progress))))
-            painter.setPen(QColor("#8f95a3"))
+            painter.setPen(QColor(palette.chart_muted))
             small_font = painter.font()
             small_font.setPointSize(max(8, small_font.pointSize() - 1))
             small_font.setBold(False)
@@ -231,15 +242,16 @@ class TasksWorkspace(BaseWorkspace):
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(color)
                 painter.drawEllipse(QRect(legend_left, row_y + 5, 12, 12))
-                painter.setPen(QColor("#d7dbe3"))
+                painter.setPen(QColor(palette.chart_text))
                 painter.drawText(QRect(legend_left + 20, row_y, 96, row_height), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
-                painter.setPen(QColor("#8f95a3"))
+                painter.setPen(QColor(palette.chart_muted))
                 painter.drawText(QRect(legend_left + 106, row_y, 42, row_height), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, str(value))
 
     def __init__(self, parent=None):
         """Создает интерфейс рабочей области задач."""
         self._db = get_database()
         self._csv_service = CsvTransferService()
+        self._theme_mode = "dark"
         self._focus_day = date.today()
         self._applying_filters = False
         self._gantt_mode = False
@@ -284,181 +296,215 @@ class TasksWorkspace(BaseWorkspace):
         self._update_day_label()
         self._apply_tab("plan")
         self.update_action_states()
+        self.set_theme_mode("dark")
 
-        self.setStyleSheet("""
-            QWidget#TasksWorkspace { background: #16171a; }
+    def _build_workspace_stylesheet(self, theme_mode: str) -> str:
+        palette = get_theme_palette(theme_mode)
+        return f"""
+            QWidget#TasksWorkspace {{ background: {palette.window_bg}; }}
 
+            QFrame#TasksCreateBar {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+            }}
 
-            QFrame#TasksCreateBar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
-
-            QFrame#TasksCreateBar QLineEdit {
-                background: #131417;
-                border: 1px solid #2a2b2f;
+            QFrame#TasksCreateBar QLineEdit {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 padding: 6px 8px;
-                color: #e6e6e6;
-            }
+                color: {palette.text};
+            }}
 
-            QFrame#TasksCreateBar QComboBox {
-                background: #131417;
-                border: 1px solid #2a2b2f;
+            QFrame#TasksCreateBar QComboBox {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 padding: 4px 6px;
-                color: #e6e6e6;
-            }
+                color: {palette.text};
+            }}
 
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {
-                background: #131417;
-                border: 1px solid #2a2b2f;
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
-            }
+            }}
 
             QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QDateEdit,
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QTimeEdit {{
                 background: transparent;
                 border: none;
                 padding: 4px 6px;
-                color: #e6e6e6;
-            }
+                color: {palette.text};
+            }}
 
-            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {
-                color: #cfcfcf;
+            QFrame#TasksCreateBar QFrame#TasksDateTimeBlock QCheckBox {{
+                color: {palette.text};
                 padding: 0 6px;
-            }
+            }}
 
-            QFrame#TasksCreateBar QToolButton {
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
+            QFrame#TasksCreateBar QToolButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
                 padding: 6px 10px;
                 border-radius: 6px;
-            }
-            QFrame#TasksCreateBar QToolButton:hover { background: #34363b; }
+                color: {palette.text};
+            }}
+            QFrame#TasksCreateBar QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
 
-            QToolButton {
-                color: #cfcfcf;
+            QToolButton {{
+                color: {palette.text};
                 border: none;
                 padding: 6px 8px;
-            }
-            QToolButton:checked {
-                background: #2a2b2f;
-            }
+            }}
+            QToolButton:checked {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
 
-            QLabel#TasksDayLabel {
-                color: #cfcfcf;
+            QLabel#TasksDayLabel {{
+                color: {palette.text};
                 padding: 0px 6px;
-            }
+            }}
 
-            QComboBox, QLineEdit {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QComboBox, QLineEdit {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 6px 8px;
-            }
+            }}
 
-            QListView#TasksList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
-            }
-            QLabel#TasksStickyHeader {
-                background: #16171a;
-                color: #8a8a8a;
-                border-bottom: 1px solid #3a3b40;
+            QListView#TasksList {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
+            }}
+            QLabel#TasksStickyHeader {{
+                background: {palette.window_bg};
+                color: {palette.dim_text};
+                border-bottom: 1px solid {palette.border_strong};
                 font-size: 9pt;
                 font-weight: 600;
                 padding: 0 10px;
-            }
+            }}
 
-            QTableWidget#TasksGanttTable {
-                background: #16171a;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
-                gridline-color: #2a2b2f;
-                alternate-background-color: #1b1c20;
-                selection-background-color: #2f3238;
-                selection-color: #f2f2f2;
-            }
+            QTableWidget#TasksGanttTable {{
+                background: {palette.window_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                gridline-color: {palette.border};
+                alternate-background-color: {palette.panel_alt_bg};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+            }}
 
-            QTableWidget#TasksGanttTable::item {
+            QTableWidget#TasksGanttTable::item {{
                 padding: 4px 6px;
-            }
+            }}
 
-            QTableWidget#TasksGanttTable QHeaderView::section {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QTableWidget#TasksGanttTable QHeaderView::section {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 4px 6px;
-            }
+            }}
 
-            QTableWidget#TasksGanttTable QTableCornerButton::section {
-                background: #202127;
-                border: 1px solid #2a2b2f;
-            }
+            QTableWidget#TasksGanttTable QTableCornerButton::section {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+            }}
 
-            QTableWidget#TasksGanttTable QSpinBox {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QTableWidget#TasksGanttTable QSpinBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 2px 6px;
-            }
+            }}
 
             QTableWidget#TasksGanttTable QSpinBox::up-button,
-            QTableWidget#TasksGanttTable QSpinBox::down-button {
-                background: #2a2b2f;
-                border-left: 1px solid #3a3b40;
+            QTableWidget#TasksGanttTable QSpinBox::down-button {{
+                background: {palette.elevated_bg};
+                border-left: 1px solid {palette.border_strong};
                 width: 14px;
-            }
+            }}
 
             QTableWidget#TasksGanttTable QSpinBox::up-button:hover,
-            QTableWidget#TasksGanttTable QSpinBox::down-button:hover {
-                background: #34363b;
-            }
+            QTableWidget#TasksGanttTable QSpinBox::down-button:hover {{
+                background: {palette.selection_bg};
+            }}
 
-            QLabel#TasksGanttHint {
-                color: #aeb3bf;
+            QLabel#TasksGanttHint {{
+                color: {palette.dim_text};
                 padding: 2px 4px;
-            }
+            }}
 
             QLabel#TasksBoardHint,
             QLabel#TasksDashSummary,
             QLabel#TasksDashProjectsTitle,
-            QLabel#TasksDashChartTitle {
-                color: #aeb3bf;
+            QLabel#TasksDashChartTitle {{
+                color: {palette.dim_text};
                 padding: 2px 4px;
-            }
+            }}
 
-            QFrame#TasksDashCard {
-                background: #1b1c20;
-                border: 1px solid #2a2b2f;
+            QFrame#TasksDashCard {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-            }
+            }}
 
-            QFrame#TasksBoardColumn {
-                background: #1b1c20;
-                border: 1px solid #2a2b2f;
+            QFrame#TasksBoardColumn {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
-            }
+            }}
 
-            QLabel#TasksBoardColumnTitle {
-                color: #d7dbe3;
+            QLabel#TasksBoardColumnTitle {{
+                color: {palette.text};
                 font-weight: 600;
                 padding: 2px 4px;
-            }
+            }}
 
             QListWidget#TasksBoardList,
-            QListWidget#TasksDashProjectsList {
-                background: #16171a;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QListWidget#TasksDashProjectsList {{
+                background: {palette.window_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
-            }
+            }}
 
             QListWidget#TasksBoardList::item,
-            QListWidget#TasksDashProjectsList::item {
+            QListWidget#TasksDashProjectsList::item {{
                 padding: 4px 6px;
-                border-bottom: 1px solid #202127;
-            }
-        """)
+                border-bottom: 1px solid {palette.border};
+            }}
+        """
+
+    def _apply_gantt_palette(self) -> None:
+        gantt_table = getattr(self, "gantt_table", None)
+        if not isinstance(gantt_table, QTableWidget):
+            return
+        palette = get_theme_palette(self._theme_mode)
+        table_palette = gantt_table.palette()
+        table_palette.setColor(QPalette.ColorRole.Base, QColor(palette.window_bg))
+        table_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(palette.panel_alt_bg))
+        table_palette.setColor(QPalette.ColorRole.Text, QColor(palette.text))
+        table_palette.setColor(QPalette.ColorRole.Mid, QColor(palette.border_strong))
+        table_palette.setColor(QPalette.ColorRole.Highlight, QColor(palette.accent))
+        table_palette.setColor(QPalette.ColorRole.HighlightedText, QColor(palette.selection_text))
+        gantt_table.setPalette(table_palette)
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        self.setStyleSheet(self._build_workspace_stylesheet(self._theme_mode))
+        self._apply_gantt_palette()
+        if isinstance(self.delegate, TasksItemDelegate):
+            self.delegate.set_theme_mode(self._theme_mode)
+            if self.list is not None and self.list.viewport() is not None:
+                self.list.viewport().update()
+        for chart_widget in (self.dash_bar_chart, self.dash_pie_chart, self.dash_pulse_chart):
+            set_theme_mode = getattr(chart_widget, "set_theme_mode", None)
+            if callable(set_theme_mode):
+                set_theme_mode(self._theme_mode)
 
     def create_actions(self) -> dict[str, QAction]:
         action_export = QAction("Экспорт", self)
@@ -627,13 +673,7 @@ class TasksWorkspace(BaseWorkspace):
         self.gantt_table.setAlternatingRowColors(True)
         self.gantt_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.gantt_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table_palette = self.gantt_table.palette()
-        table_palette.setColor(QPalette.ColorRole.Base, QColor("#16171a"))
-        table_palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1b1c20"))
-        table_palette.setColor(QPalette.ColorRole.Text, QColor("#cfcfcf"))
-        table_palette.setColor(QPalette.ColorRole.Mid, QColor("#3a3b40"))
-        table_palette.setColor(QPalette.ColorRole.Highlight, QColor("#4f7ecf"))
-        self.gantt_table.setPalette(table_palette)
+        self._apply_gantt_palette()
         self.gantt_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.gantt_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.gantt_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)

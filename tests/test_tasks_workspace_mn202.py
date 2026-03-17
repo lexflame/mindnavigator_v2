@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from PySide6.QtGui import QImage, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import (
@@ -89,6 +90,39 @@ def test_tasks_model_cycles_priority_including_deferred(monkeypatch, unique_temp
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_switches_to_light_theme(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_theme_switch", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+
+        workspace.set_theme_mode("light")
+
+        base_color = workspace.gantt_table.palette().color(QPalette.ColorRole.Base).name().lower()
+        assert workspace.delegate._theme_mode == "light"
+        assert "#f5f7fb" in workspace.styleSheet()
+        assert base_color == "#f5f7fb"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_delegate_dark_checkbox_is_not_transparent() -> None:
+    delegate = tasks_workspace.TasksItemDelegate()
+    delegate.set_theme_mode("dark")
+    image = QImage(24, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+
+    painter = QPainter(image)
+    delegate._draw_done_checkbox(painter, tasks_workspace.QRect(6, 6, 12, 12), False, delegate.C_BORDER)
+    painter.end()
+
+    center = image.pixelColor(12, 12)
+    assert center.alpha() >= 200
 
 
 def test_tasks_model_steps_priority_up_and_down_without_wrap(monkeypatch, unique_temp_path) -> None:

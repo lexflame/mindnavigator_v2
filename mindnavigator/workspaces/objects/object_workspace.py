@@ -7,12 +7,15 @@ from .objects_model import ObjectsModel
 from .object_card_delegate import ObjectCardDelegate
 from .object_edit_dialog import ObjectEditDialog
 from .cloud_image_picker_dialog import CloudImagePickerDialog
+from mindnavigator.ui.styles import get_theme_palette
 
 class ObjectWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("ObjectsWorkspace")
         self._db = get_database()
         self._csv_service = CsvTransferService()
+        self._theme_mode = "dark"
         self._smooth_scroll_controllers: list[object] = []
         self._images: List[ObjectImageData] = []
         self._current_image_index = 0
@@ -67,7 +70,6 @@ class ObjectWorkspace(QWidget):
         self.quick_catalog_btn.setObjectName("ObjectsQuickCatalogBtn")
         self.quick_catalog_label = QLabel("Все категории")
         self.quick_catalog_label.setObjectName("ObjectsQuickCatalog")
-        self.quick_catalog_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
         self.quick_title_input = QLineEdit()
         self.quick_title_input.setObjectName("ObjectsQuickTitle")
         self.quick_title_input.setPlaceholderText("Быстрое создание объекта...")
@@ -223,110 +225,124 @@ class ObjectWorkspace(QWidget):
         self.quick_title_input.returnPressed.connect(self._create_object_from_quick_form)
         self._set_quick_catalog(None)
 
-        self._apply_styles()
+        self.set_theme_mode("dark")
         self._update_action_state(False)
 
-    def _apply_styles(self) -> None:
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
         self.setStyleSheet(
-            """
-            QLabel#ObjectsTitle {
-                color: #e6e6e6;
+            f"""
+            QWidget#ObjectsWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QWidget {{
+                color: {palette.text};
+            }}
+            QLabel#ObjectsTitle {{
+                color: {palette.text};
                 font-size: 20px;
                 font-weight: 600;
-            }
+            }}
+            QLabel#ObjectsQuickCatalog {{
+                color: {palette.chart_muted};
+                font-size: 11px;
+            }}
             QLineEdit#ObjectsSearch,
-            QLineEdit#ObjectsQuickTitle {
-                background: #1f232a;
-                border: 1px solid #2f333b;
+            QLineEdit#ObjectsQuickTitle {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 10px;
-                color: #e6e6e6;
-            }
-            QLineEdit#ObjectsSearch { min-width: 240px; }
+                color: {palette.text};
+            }}
+            QLineEdit#ObjectsSearch {{ min-width: 240px; }}
             QToolButton#ObjectsAddButton,
             QToolButton#ObjectsExportButton,
             QToolButton#ObjectsImportButton,
             QToolButton#ObjectsEditButton,
             QToolButton#ObjectsDeleteButton,
             QToolButton#ObjectsAttachButton,
-            QToolButton#ObjectsImageCommentButton {
-                background: #232831;
-                border: 1px solid #2f333b;
+            QToolButton#ObjectsImageCommentButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 12px;
-                color: #e6e6e6;
-            }
-            QToolButton#ObjectsDeleteButton {
-                background: #3a2323;
-                border-color: #4b2b2b;
-            }
-            QTreeWidget#ObjectsCatalogs {
-                background: #171a20;
-                border: 1px solid #2f333b;
+                color: {palette.text};
+            }}
+            QToolButton#ObjectsDeleteButton {{
+                background: {palette.danger};
+                border-color: {palette.danger};
+                color: {palette.selection_text};
+            }}
+            QTreeWidget#ObjectsCatalogs {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-                color: #e6e6e6;
+                color: {palette.text};
                 padding: 6px;
-            }
-            QTreeWidget#ObjectsCatalogs::item {
+            }}
+            QTreeWidget#ObjectsCatalogs::item {{
                 padding: 8px 6px;
                 border-radius: 6px;
-            }
-            QTreeWidget#ObjectsCatalogs::item:selected {
-                background: #2d3440;
-            }
-            QListView#ObjectsCards {
-                background: #14171c;
-                border: 1px solid #2f333b;
+            }}
+            QTreeWidget#ObjectsCatalogs::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QListView#ObjectsCards {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 12px;
-            }
-            QWidget#ObjectsDetails {
-                background: #171a20;
-                border: 1px solid #2f333b;
+            }}
+            QWidget#ObjectsDetails {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 12px;
-            }
-            QLabel#ObjectsDetailsTitle {
-                color: #ffffff;
+            }}
+            QLabel#ObjectsDetailsTitle {{
+                color: {palette.text};
                 font-size: 16px;
                 font-weight: 600;
-            }
-            QLabel#ObjectsDetailsMeta {
-                color: #9aa0a6;
+            }}
+            QLabel#ObjectsDetailsMeta {{
+                color: {palette.chart_muted};
                 font-size: 11px;
-            }
-            QLabel#ObjectsDetailsDescription {
-                color: #d0d4da;
+            }}
+            QLabel#ObjectsDetailsDescription {{
+                color: {palette.text};
                 font-size: 12px;
-            }
-            QFrame#ObjectsImageFrame {
-                background: #1c2027;
-                border: 1px solid #2f333b;
+            }}
+            QFrame#ObjectsImageFrame {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-            }
-            QLabel#ObjectsImage {
-                background: #111318;
-                border: 1px dashed #2f333b;
+            }}
+            QLabel#ObjectsImage {{
+                background: {palette.input_alt_bg};
+                border: 1px dashed {palette.border};
                 border-radius: 8px;
-                color: #7d8590;
-            }
-            QListWidget#ObjectsImageThumbnails {
-                background: #111318;
-                border: 1px solid #2f333b;
+                color: {palette.muted_text};
+            }}
+            QListWidget#ObjectsImageThumbnails {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
-            }
-            QListWidget#ObjectsImageThumbnails::item {
+            }}
+            QListWidget#ObjectsImageThumbnails::item {{
                 padding: 4px;
-            }
-            QListWidget#ObjectsImageThumbnails::item:selected {
-                background: #2d3440;
+            }}
+            QListWidget#ObjectsImageThumbnails::item:selected {{
+                background: {palette.selection_bg};
                 border-radius: 6px;
-            }
-            QPlainTextEdit#ObjectsImageComment {
-                background: #1f232a;
-                border: 1px solid #2f333b;
+            }}
+            QPlainTextEdit#ObjectsImageComment {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 6px;
-                color: #e6e6e6;
-            }
+                color: {palette.text};
+            }}
             """
         )
 

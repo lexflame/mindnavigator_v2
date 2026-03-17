@@ -1,4 +1,4 @@
-"""Shared UI style tokens and QSS builders."""
+"""Shared UI style tokens and runtime QSS builders."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -31,72 +31,109 @@ TITLEBAR_BACKGROUND = f"""
     background-repeat: repeat;
 """
 
-BASE_APP_STYLESHEET = """
-    QMessageBox {
-        background: #16171a;
-    }
-    QMessageBox QLabel {
-        color: #cfcfcf;
-    }
-    QMessageBox QPushButton {
-        background: #2a2b2f;
-        color: #e6e6e6;
-        border: 1px solid #3a3b40;
-        padding: 6px 12px;
-        border-radius: 6px;
-        min-width: 90px;
-    }
-    QMessageBox QPushButton:hover {
-        background: #34363b;
-    }
-    QComboBox::drop-down {
-        border: none;
-        width: 18px;
-    }
-    QComboBox QAbstractItemView {
-        background: #1c1d22;
-        color: #e6e6e6;
-        border: 1px solid #2a2b2f;
-        selection-background-color: #2f3238;
-        selection-color: #f2f2f2;
-        outline: none;
-    }
-    QComboBox QAbstractItemView::item {
-        padding: 6px 10px;
-    }
-    QComboBox QAbstractItemView::item:selected {
-        background: #2f3238;
-        color: #f2f2f2;
-    }
-    QMenu {
-        background: #1f2227;
-        color: #e6e6e6;
-        border: 1px solid #2a2b2f;
-        padding: 4px;
-    }
-    QMenu::item {
-        padding: 6px 14px;
-        border-radius: 4px;
-    }
-    QMenu::item:selected {
-        background: #2b2f36;
-    }
-    QMenu::separator {
-        height: 1px;
-        background: #2a2b2f;
-        margin: 4px 8px;
-    }
-"""
+
+@dataclass(frozen=True)
+class ThemePalette:
+    mode: str
+    window_bg: str
+    panel_bg: str
+    panel_alt_bg: str
+    elevated_bg: str
+    input_bg: str
+    input_alt_bg: str
+    border: str
+    border_strong: str
+    text: str
+    dim_text: str
+    muted_text: str
+    accent: str
+    accent_hover: str
+    selection_bg: str
+    selection_text: str
+    warning: str
+    danger: str
+    success: str
+    chip_bg: str
+    chip_border: str
+    chart_bg: str
+    chart_grid: str
+    chart_text: str
+    chart_muted: str
+
+
+DARK_THEME = ThemePalette(
+    mode="dark",
+    window_bg="#16171a",
+    panel_bg="#1b1c1f",
+    panel_alt_bg="#1b1c20",
+    elevated_bg="#1f2227",
+    input_bg="#202127",
+    input_alt_bg="#131417",
+    border="#2a2b2f",
+    border_strong="#3a3b40",
+    text="#cfcfcf",
+    dim_text="#8a8a8a",
+    muted_text="#6e7178",
+    accent="#4f7ecf",
+    accent_hover="#5a8ce0",
+    selection_bg="#2f3238",
+    selection_text="#f2f2f2",
+    warning="#f2a23a",
+    danger="#c84b4b",
+    success="#4caf50",
+    chip_bg="#1f2227",
+    chip_border="#3a3b40",
+    chart_bg="#17191f",
+    chart_grid="#323641",
+    chart_text="#e6e8ed",
+    chart_muted="#9ea4b1",
+)
+
+LIGHT_THEME = ThemePalette(
+    mode="light",
+    window_bg="#f5f7fb",
+    panel_bg="#eef2f8",
+    panel_alt_bg="#f7f9fd",
+    elevated_bg="#ffffff",
+    input_bg="#ffffff",
+    input_alt_bg="#f7f9fd",
+    border="#cfd6e2",
+    border_strong="#bbc6d6",
+    text="#1f2430",
+    dim_text="#566173",
+    muted_text="#748094",
+    accent="#3f6fd1",
+    accent_hover="#315fb8",
+    selection_bg="#dfe9ff",
+    selection_text="#18305f",
+    warning="#c67a14",
+    danger="#b24a4a",
+    success="#2f8f4a",
+    chip_bg="#eef3fb",
+    chip_border="#c8d3e3",
+    chart_bg="#ffffff",
+    chart_grid="#d2dae7",
+    chart_text="#1f2430",
+    chart_muted="#677487",
+)
+
+
+def normalize_theme_mode(theme_mode: str) -> str:
+    return "light" if str(theme_mode).strip().lower() == "light" else "dark"
+
+
+def get_theme_palette(theme_mode: str) -> ThemePalette:
+    return LIGHT_THEME if normalize_theme_mode(theme_mode) == "light" else DARK_THEME
 
 
 @dataclass(frozen=True)
 class ScrollbarStyleTokens:
-    track: str = "#17191f"
-    handle: str = "#4a5161"
-    handle_hover: str = "#5c6477"
-    handle_pressed: str = "#74809a"
-    handle_disabled: str = "#303644"
-    border: str = "#2a2d36"
+    track: str
+    handle: str
+    handle_hover: str
+    handle_pressed: str
+    handle_disabled: str
+    border: str
     corner: str = "transparent"
     width_px: int = 12
     min_handle_px: int = 28
@@ -104,10 +141,30 @@ class ScrollbarStyleTokens:
     margin_px: int = 2
 
 
-DEFAULT_SCROLLBAR_TOKENS = ScrollbarStyleTokens()
+DEFAULT_SCROLLBAR_TOKENS = ScrollbarStyleTokens(
+    track="#17191f",
+    handle="#4a5161",
+    handle_hover="#5c6477",
+    handle_pressed="#74809a",
+    handle_disabled="#303644",
+    border="#2a2d36",
+)
+
+LIGHT_SCROLLBAR_TOKENS = ScrollbarStyleTokens(
+    track="#e7ecf5",
+    handle="#9ba8bd",
+    handle_hover="#8795ad",
+    handle_pressed="#74839d",
+    handle_disabled="#c4ccd8",
+    border="#c9d2df",
+)
 
 
-def build_scrollbar_stylesheet(tokens: ScrollbarStyleTokens = DEFAULT_SCROLLBAR_TOKENS, scope: str = "") -> str:
+def get_scrollbar_tokens(theme_mode: str) -> ScrollbarStyleTokens:
+    return LIGHT_SCROLLBAR_TOKENS if normalize_theme_mode(theme_mode) == "light" else DEFAULT_SCROLLBAR_TOKENS
+
+
+def build_scrollbar_stylesheet(tokens: ScrollbarStyleTokens, scope: str = "") -> str:
     prefix = f"{scope} " if scope else ""
     return f"""
 {prefix}QScrollBar:vertical {{
@@ -174,20 +231,96 @@ def build_scrollbar_stylesheet(tokens: ScrollbarStyleTokens = DEFAULT_SCROLLBAR_
 """
 
 
-def compose_app_stylesheet(extra_qss: str = "") -> str:
-    return f"{BASE_APP_STYLESHEET}\n{extra_qss}".strip()
+def build_popup_menu_stylesheet(theme_mode: str) -> str:
+    palette = get_theme_palette(theme_mode)
+    return f"""
+QMenu {{
+    background: {palette.elevated_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 6px 14px;
+    border-radius: 4px;
+}}
+QMenu::item:selected {{
+    background: {palette.selection_bg};
+    color: {palette.selection_text};
+}}
+QMenu::separator {{
+    height: 1px;
+    background: {palette.border};
+    margin: 4px 8px;
+}}
+""".strip()
+
+
+def build_base_app_stylesheet(theme_mode: str) -> str:
+    palette = get_theme_palette(theme_mode)
+    return f"""
+QMessageBox {{
+    background: {palette.window_bg};
+}}
+QMessageBox QLabel {{
+    color: {palette.text};
+}}
+QMessageBox QPushButton {{
+    background: {palette.panel_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+    padding: 6px 12px;
+    border-radius: 6px;
+    min-width: 90px;
+}}
+QMessageBox QPushButton:hover {{
+    background: {palette.selection_bg};
+    color: {palette.selection_text};
+}}
+QComboBox::drop-down {{
+    border: none;
+    width: 18px;
+}}
+QComboBox QAbstractItemView {{
+    background: {palette.elevated_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+    selection-background-color: {palette.selection_bg};
+    selection-color: {palette.selection_text};
+    outline: none;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 6px 10px;
+}}
+QComboBox QAbstractItemView::item:selected {{
+    background: {palette.selection_bg};
+    color: {palette.selection_text};
+}}
+{build_popup_menu_stylesheet(theme_mode)}
+""".strip()
+
+
+def compose_app_stylesheet(theme_mode: str, extra_qss: str = "") -> str:
+    base = build_base_app_stylesheet(theme_mode)
+    return f"{base}\n{extra_qss}".strip()
+
+
+def build_app_stylesheet(theme_mode: str) -> str:
+    scrollbar_qss = build_scrollbar_stylesheet(get_scrollbar_tokens(theme_mode))
+    return compose_app_stylesheet(theme_mode, scrollbar_qss)
 
 
 def apply_scrollbar_stylesheet(
     widget: Any,
-    tokens: ScrollbarStyleTokens = DEFAULT_SCROLLBAR_TOKENS,
+    tokens: ScrollbarStyleTokens | None = None,
     scope: str = "",
     append: bool = True,
 ) -> None:
-    qss = build_scrollbar_stylesheet(tokens=tokens, scope=scope)
+    resolved_tokens = tokens or DEFAULT_SCROLLBAR_TOKENS
+    qss = build_scrollbar_stylesheet(tokens=resolved_tokens, scope=scope)
     current = widget.styleSheet() if append and hasattr(widget, "styleSheet") else ""
     widget.setStyleSheet(f"{current}\n{qss}".strip())
 
 
-APP_SCROLLBAR_STYLESHEET = build_scrollbar_stylesheet()
-APP_STYLESHEET = compose_app_stylesheet(APP_SCROLLBAR_STYLESHEET)
+APP_SCROLLBAR_STYLESHEET = build_scrollbar_stylesheet(DEFAULT_SCROLLBAR_TOKENS)
+APP_STYLESHEET = build_app_stylesheet("dark")

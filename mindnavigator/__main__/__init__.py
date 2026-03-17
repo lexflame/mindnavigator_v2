@@ -13,7 +13,7 @@ from mindnavigator.spaceenity.resources import resource_path
 from mindnavigator.storage import get_database
 from mindnavigator.ui.dialogs.frameless_patch import enable_frameless_qdialogs
 from mindnavigator.ui.splash import show_splash
-from mindnavigator.ui.styles import APP_STYLESHEET
+from mindnavigator.ui.styles import build_app_stylesheet
 from mindnavigator.window.collections import MainWindow
 
 
@@ -75,7 +75,7 @@ def main() -> None:
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
     app.setQuitOnLastWindowClosed(False)
-    app.setStyleSheet(APP_STYLESHEET)
+    app.setStyleSheet(build_app_stylesheet("dark"))
     _connect_shutdown_handlers(app)
     db = get_database()
     single_instance_enabled = db.get_setting("app.single_instance", "1") == "1"

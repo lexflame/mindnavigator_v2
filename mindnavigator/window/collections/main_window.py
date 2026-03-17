@@ -43,7 +43,7 @@ from mindnavigator.ui.search_nav import SearchNav
 from mindnavigator.ui.animations import DialogMinimizeAnimator
 from mindnavigator.ui.dialogs.frameless_patch import restore_minimizable_task_dialog
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
-from mindnavigator.ui.styles import TITLEBAR_BACKGROUND
+from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, build_app_stylesheet
 from mindnavigator.ui.titlebar import TitleBar
 from mindnavigator.window.collections.windowing import ResizeEdge
 from mindnavigator.workspaces.characters import CharactersWorkspace
@@ -312,10 +312,40 @@ class MainWindow(QMainWindow):
     def _on_theme_toggled_from_rail(self, theme_mode: str) -> None:
         self._apply_theme_mode(theme_mode, persist=True)
 
+    def _iter_theme_targets(self):
+        target_names = (
+            "search_nav",
+            "projects_nav",
+            "page_tasks",
+            "page_projects",
+            "page_purchases",
+            "page_ideas",
+            "page_dossier",
+            "page_collections",
+            "page_maps",
+            "page_notes",
+            "page_files",
+            "page_objects",
+            "page_characters",
+            "page_minddraw",
+            "page_settings",
+        )
+        for target_name in target_names:
+            target = getattr(self, target_name, None)
+            if target is not None:
+                yield target
+
     def _apply_theme_mode(self, theme_mode: str, *, persist: bool) -> None:
         normalized = self._normalize_theme_mode(theme_mode)
         self._theme_mode = normalized
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(build_app_stylesheet(normalized))
         self.left_rail.set_theme_mode(normalized)
+        for target in self._iter_theme_targets():
+            set_theme_mode = getattr(target, "set_theme_mode", None)
+            if callable(set_theme_mode):
+                set_theme_mode(normalized)
         self._apply_titlebar_style()
         self._apply_root_style()
         if persist:

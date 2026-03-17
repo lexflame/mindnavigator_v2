@@ -7,6 +7,7 @@ import math
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtGui import QPen
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
+from mindnavigator.ui.styles import build_popup_menu_stylesheet, get_theme_palette
 from .task_details_dialog import TaskDetailsDialog
 from .task_edit_dialog import TaskEditDialog
 from .tasks_model import TasksModel
@@ -44,24 +45,8 @@ class TasksItemDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         """Инициализирует делегат отрисовки строк задач."""
         super().__init__(parent)
+        self._theme_mode = "dark"
         self._active_edit_dialogs: set[QDialog] = set()
-        self._icon_doc = qta.icon("fa5s.file-alt", color="#cfcfcf")
-        self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
-        self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
-        self._icon_fire = qta.icon("fa5s.fire", color="#d0a93e")
-        self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color="#cfcfcf")
-        self._icon_subtask_open = qta.icon("fa5s.chevron-down", color="#8a8a8a")
-        self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color="#8a8a8a")
-        self._icon_quick_add = qta.icon("fa5s.plus", color="#8a8a8a")
-        self._marker_theme_icons = {
-            "movies": qta.icon("fa5s.film", color="#4f7ecf"),
-            "games": qta.icon("fa5s.gamepad", color="#4caf50"),
-            "books": qta.icon("fa5s.book", color="#d0a93e"),
-            "music": qta.icon("fa5s.music", color="#b17cff"),
-            "work": qta.icon("fa5s.briefcase", color="#5fb7d9"),
-            "personal": qta.icon("fa5s.user", color="#d98f5f"),
-            "dev": qta.icon("fa5s.code", color="#8f9cff"),
-        }
         self._marker_theme_asset_names = {
             "movies": "movie.png",
             "games": "game.png",
@@ -83,6 +68,54 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header.setPointSize(9)
         self._font_header.setBold(True)
         self._task_flash_progress: Dict[int, float] = {}
+        self.set_theme_mode("dark")
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.C_BG = QColor(palette.window_bg)
+        self.C_ROW = QColor("#ffffff" if self._theme_mode == "light" else "#2a2d33")
+        self.C_ROW_ALT = QColor(palette.panel_alt_bg if self._theme_mode == "light" else "#2c2f36")
+        self.C_ROW_SELECTED = QColor(palette.selection_bg)
+        self.C_BORDER = QColor(palette.border_strong)
+        self.C_TEXT = QColor(palette.text)
+        self.C_DIM = QColor(palette.dim_text)
+        self.C_TODAY = QColor(palette.warning)
+        self.C_OVERDUE = QColor(palette.danger)
+        self.C_HIGH = QColor("#cf4d4d")
+        self.C_MED = QColor("#c4901d" if self._theme_mode == "light" else "#d0a93e")
+        self.C_LOW = QColor(palette.success)
+        self.C_DEFER = QColor("#7b8698" if self._theme_mode == "light" else "#6f7a87")
+        self.C_TAG_BORDER = QColor(palette.chip_border)
+        self.C_TAG_BG = QColor(palette.chip_bg)
+        self.C_CHECK_BG = QColor(palette.window_bg)
+        self.C_CHECK_MARK = QColor(palette.text)
+        self.C_HOVER_SURFACE = QColor(palette.elevated_bg)
+        self.C_PANEL_BG = QColor(palette.panel_bg)
+        self.C_PARENT_MOVE_BG = QColor("#f2c14e")
+        self.C_PARENT_MOVE_BORDER = QColor("#8a6a15")
+        self.C_PARENT_MOVE_TEXT = QColor("#2d250f")
+        self.C_PRIORITY_BG = QColor("#eef3fb" if self._theme_mode == "light" else "#1a1d23")
+        self.C_PRIORITY_BG_HOVER = QColor("#e1e8f5" if self._theme_mode == "light" else "#21252d")
+        self.C_PRIORITY_DIVIDER = QColor("#c7d1e0" if self._theme_mode == "light" else "#30343d")
+        self.C_PRIORITY_ARROW = QColor("#546172" if self._theme_mode == "light" else "#b6bcc8")
+        self._icon_doc = qta.icon("fa5s.file-alt", color=palette.text)
+        self._icon_grip = qta.icon("fa5s.grip-lines", color=palette.dim_text)
+        self._icon_menu = qta.icon("fa5s.ellipsis-v", color=palette.text)
+        self._icon_fire = qta.icon("fa5s.fire", color=self.C_MED.name())
+        self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color=palette.text)
+        self._icon_subtask_open = qta.icon("fa5s.chevron-down", color=palette.dim_text)
+        self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color=palette.dim_text)
+        self._icon_quick_add = qta.icon("fa5s.plus", color=palette.dim_text)
+        self._marker_theme_icons = {
+            "movies": qta.icon("fa5s.film", color="#4f7ecf"),
+            "games": qta.icon("fa5s.gamepad", color="#4caf50"),
+            "books": qta.icon("fa5s.book", color="#d0a93e"),
+            "music": qta.icon("fa5s.music", color="#b17cff"),
+            "work": qta.icon("fa5s.briefcase", color="#5fb7d9"),
+            "personal": qta.icon("fa5s.user", color="#d98f5f"),
+            "dev": qta.icon("fa5s.code", color="#8f9cff"),
+        }
 
     @staticmethod
     def _tasks_model(model: QAbstractItemModel | None) -> Optional[TasksModel]:
@@ -157,8 +190,8 @@ class TasksItemDelegate(QStyledItemDelegate):
                 x = start.x()
                 y += self.TAG_H + self.TAG_LINE_GAP
             rect = QRect(x, y, tag_width, self.TAG_H)
-            painter.setPen(QColor("#3a3b40"))
-            painter.setBrush(QColor("#1f2227"))
+            painter.setPen(self.C_TAG_BORDER)
+            painter.setBrush(self.C_TAG_BG)
             painter.drawRoundedRect(rect, 8, 8)
             painter.setPen(self.C_DIM)
             painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
@@ -255,11 +288,12 @@ class TasksItemDelegate(QStyledItemDelegate):
         theme_icon.paint(painter, icon_rect)
         painter.restore()
 
-    @staticmethod
-    def _draw_done_checkbox(painter: QPainter, checkbox_rect: QRect, done: bool, border_color: QColor) -> None:
+    def _draw_done_checkbox(self, painter: QPainter, checkbox_rect: QRect, done: bool, border_color: QColor) -> None:
+        painter.save()
         painter.setPen(border_color)
-        painter.setBrush(QColor("#16171a"))
+        painter.setBrush(self.C_CHECK_BG)
         painter.drawRect(checkbox_rect)
+        painter.restore()
 
         if not done:
             return
@@ -271,7 +305,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        check_pen = QPen(QColor("#cfcfcf"))
+        check_pen = QPen(self.C_CHECK_MARK)
         check_pen.setWidth(max(2, checkbox_rect.width() // 5))
         check_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         check_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -317,7 +351,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setPen(self.C_BORDER)
             painter.drawLine(r.left() + 10, r.bottom(), r.right() - 10, r.bottom())
             if option_state & QStyle.StateFlag.State_MouseOver:
-                painter.fillRect(quick_rect, QColor("#1f2227"))
+                painter.fillRect(quick_rect, self.C_HOVER_SURFACE)
                 painter.setPen(self.C_BORDER)
                 painter.drawLine(quick_rect.left(), quick_rect.top(), quick_rect.left(), quick_rect.bottom())
                 painter.drawLine(quick_rect.right(), quick_rect.top(), quick_rect.right(), quick_rect.bottom())
@@ -372,7 +406,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         bg = self.C_ROW if (index.row() % 2 == 0) else self.C_ROW_ALT
         selected = bool(option_state & QStyle.StateFlag.State_Selected)
         if selected:
-            bg = QColor("#343844")
+            bg = QColor(self.C_ROW_SELECTED)
         bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
@@ -407,7 +441,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         tomorrow_rect = layout["tomorrow"]
         painter.setPen(self.C_BORDER)
-        painter.setBrush(QColor("#1f2227"))
+        painter.setBrush(self.C_HOVER_SURFACE)
         painter.drawRect(tomorrow_rect)
         self._icon_tomorrow.paint(painter, QRect(tomorrow_rect.left() + 3, tomorrow_rect.top() + 3, 14, 14))
 
@@ -524,11 +558,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(title_content_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         if not parent_move_rect.isNull() and parent_move_target is not None:
-            painter.setPen(QColor("#8a6a15"))
-            painter.setBrush(QColor("#f2c14e"))
+            painter.setPen(self.C_PARENT_MOVE_BORDER)
+            painter.setBrush(self.C_PARENT_MOVE_BG)
             painter.drawRoundedRect(parent_move_rect, 6, 6)
             painter.setFont(self._font_small)
-            painter.setPen(QColor("#2d250f"))
+            painter.setPen(self.C_PARENT_MOVE_TEXT)
             text_rect = parent_move_rect.adjusted(
                 self.PARENT_MOVE_BUTTON_PAD_X,
                 0,
@@ -544,8 +578,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         fire_color = self._prio_color(priority)
         priority_hovered = bool(option_state & QStyle.StateFlag.State_MouseOver)
         priority_chip_rect = pr_rect.adjusted(2, 6, -2, -6)
-        painter.setPen(QColor("#3a3b40"))
-        painter.setBrush(QColor("#21252d") if priority_hovered else QColor("#1a1d23"))
+        painter.setPen(self.C_BORDER)
+        painter.setBrush(self.C_PRIORITY_BG_HOVER if priority_hovered else self.C_PRIORITY_BG)
         painter.drawRoundedRect(priority_chip_rect, 6, 6)
 
         controls = self._priority_control_rects(priority_chip_rect)
@@ -558,7 +592,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         stage_up_rect = controls["stage_up"]
         stage_down_rect = controls["stage_down"]
 
-        painter.setPen(QColor("#30343d"))
+        painter.setPen(self.C_PRIORITY_DIVIDER)
         painter.drawLine(priority_arrows_rect.left(), priority_arrows_rect.top() + 3, priority_arrows_rect.left(), priority_arrows_rect.bottom() - 3)
         painter.drawLine(priority_arrows_rect.left() + 2, priority_up_rect.bottom(), priority_arrows_rect.right() - 2, priority_up_rect.bottom())
         painter.drawLine(stage_arrows_rect.left(), stage_arrows_rect.top() + 3, stage_arrows_rect.left(), stage_arrows_rect.bottom() - 3)
@@ -571,18 +605,18 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.drawText(value_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, value_text)
         qta.icon("fa5s.fire", color=fire_color.name()).paint(painter, fire_rect)
 
-        painter.setPen(QColor("#b6bcc8"))
+        painter.setPen(self.C_PRIORITY_ARROW)
         painter.drawText(priority_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
         painter.drawText(priority_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
         painter.drawText(stage_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
         painter.drawText(stage_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
 
         painter.setPen(self.C_BORDER)
-        painter.setBrush(QColor("#1f2227"))
+        painter.setBrush(self.C_HOVER_SURFACE)
         painter.drawRect(menu_rect)
         self._icon_menu.paint(painter, QRect(menu_rect.center().x() - 5, menu_rect.center().y() - 7, 14, 14))
         if option_state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(quick_rect, QColor("#1f2227"))
+            painter.fillRect(quick_rect, self.C_HOVER_SURFACE)
             painter.setPen(self.C_BORDER)
             painter.drawLine(quick_rect.left(), quick_rect.top(), quick_rect.left(), quick_rect.bottom())
             painter.drawLine(quick_rect.right(), quick_rect.top(), quick_rect.right(), quick_rect.bottom())
@@ -752,26 +786,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     def _show_row_menu(self, index: QModelIndex):
         """Отображает контекстное меню строки."""
         menu = QMenu()
-        menu.setStyleSheet("""
-            QMenu {
-                background: #1f2227;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 6px 14px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected {
-                background: #2b2f36;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #2a2b2f;
-                margin: 4px 8px;
-            }
-        """)
+        menu.setStyleSheet(build_popup_menu_stylesheet(self._theme_mode))
         act_open = menu.addAction("Открыть")
         menu.addSeparator()
         act_edit = menu.addAction("Редактировать")

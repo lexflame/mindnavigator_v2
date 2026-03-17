@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 from mindnavigator.storage import get_database, normalize_priority, ProjectData
+from mindnavigator.ui.styles import get_theme_palette
 
 
 class _ProjectsListWidget(QListWidget):
@@ -234,6 +235,7 @@ class ProjectsNav(QWidget):
         """Создает и настраивает блок навигации проектов."""
         super().__init__(parent)
         self.setObjectName("ProjectsNav")
+        self._theme_mode = "dark"
         self._ratio = 0.12
         self._min_w = 220
         self._max_w = 420
@@ -278,32 +280,40 @@ class ProjectsNav(QWidget):
 
         self.setFixedHeight(self._fixed_h)
 
-        self.setStyleSheet("""
-            QWidget#ProjectsNav {
-                background: #191a1d;
-                border-right: 1px solid #2a2b2f;
-            }
-            QLabel#ProjectsHeader {
-                color: #cfcfcf;
+        self.set_theme_mode("dark")
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#ProjectsNav {{
+                background: {palette.panel_bg};
+                border-right: 1px solid {palette.border};
+            }}
+            QLabel#ProjectsHeader {{
+                color: {palette.text};
                 font-size: 13px;
                 font-weight: 600;
-            }
-            QLabel#ProjectsHint {
-                color: #7a7a7a;
+            }}
+            QLabel#ProjectsHint {{
+                color: {palette.dim_text};
                 font-size: 12px;
-            }
-            QListWidget#ProjectsFilterList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
-                color: #cfcfcf;
-            }
-            QListWidget#ProjectsFilterList::item {
+            }}
+            QListWidget#ProjectsFilterList {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
+                color: {palette.text};
+            }}
+            QListWidget#ProjectsFilterList::item {{
                 padding: 6px 8px;
-            }
-            QListWidget#ProjectsFilterList::item:selected {
-                background: #2a2b2f;
-            }
-        """)
+            }}
+            QListWidget#ProjectsFilterList::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+        """
+        )
 
     def _populate_for_mode(self, mode_name: str):
         """Заполняет список навигации для активного режима."""
