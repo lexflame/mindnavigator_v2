@@ -394,8 +394,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         priority: str = index.data(TaskRoles.Priority) or "Medium"
         board_column: str = index.data(TaskRoles.BoardColumn) or BOARD_COLUMN_QUEUE
         done: bool = bool(index.data(TaskRoles.Done))
+        is_plan_item: bool = bool(index.data(TaskRoles.IsPlanItem))
+        plan_number: str = (index.data(TaskRoles.PlanNumber) or "").strip()
         completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
-        overdue = self._is_overdue(day, done)
+        overdue = self._is_overdue(day, done, is_plan_item=is_plan_item)
         show_completion_delay = done and completion_delay_minutes > 4 * 60
         completion_delay_text = self._format_completion_delay(completion_delay_minutes) if show_completion_delay else ""
         expanded = bool(index.data(TaskRoles.Expanded))
@@ -482,10 +484,13 @@ class TasksItemDelegate(QStyledItemDelegate):
         pr_rect = layout["priority"]
         title_rect = layout["title"]
         parent_move_rect, parent_move_target, parent_move_text = self._parent_schedule_action(index, r)
+        if is_plan_item:
+            title_rect = title_rect
         title_content_rect = title_rect
         if not parent_move_rect.isNull():
             title_content_rect = title_rect.adjusted(0, 0, -(parent_move_rect.width() + self.PARENT_MOVE_BUTTON_GAP), 0)
         quick_rect = self._task_quick_rect(layout, r)
+        display_title = f"{plan_number} {title}".strip() if is_plan_item and plan_number else title
         if expanded:
             title_box = QRect(
                 title_content_rect.left(),
@@ -493,11 +498,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 title_content_rect.width(),
                 r.height() - self.TEXT_V_PAD * 2,
             )
-            painter.drawText(title_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, title)
+            painter.drawText(title_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, display_title)
 
             title_metrics = QFontMetrics(self._font)
             title_height = title_metrics.boundingRect(
-                0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, title
+                0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, display_title
             ).height()
             current_y = r.top() + self.TEXT_V_PAD + title_height
 
@@ -540,7 +545,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 delay_text = f" {completion_delay_text}"
                 delay_width = title_metrics.horizontalAdvance(delay_text)
                 title_width = max(40, title_content_rect.width() - delay_width)
-                title_part = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, title_width)
+                title_part = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
                 title_part_rect = QRect(title_content_rect.left(), title_content_rect.top(), title_width, title_content_rect.height())
                 delay_part_rect = QRect(
                     title_part_rect.right(),
@@ -554,7 +559,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(delay_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, delay_text)
                 painter.setPen(title_color)
             else:
-                elided = title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, title_content_rect.width())
+                elided = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_content_rect.width())
                 painter.drawText(title_content_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         if not parent_move_rect.isNull() and parent_move_target is not None:
@@ -610,6 +615,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.drawText(priority_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
         painter.drawText(stage_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
         painter.drawText(stage_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
+        if is_plan_item:
+            painter.fillRect(pr_rect, bg)
+            painter.setPen(self.C_BORDER)
+            painter.drawRect(pr_rect.adjusted(0, 0, -1, -1))
 
         painter.setPen(self.C_BORDER)
         painter.setBrush(self.C_HOVER_SURFACE)
@@ -693,6 +702,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
             has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
+            is_plan_item = bool(index.data(TaskRoles.IsPlanItem))
             layout = self._row_layout(r, depth, has_subtasks)
             cb_rect = layout.get("checkbox_hit", layout["checkbox"])
             tomorrow_rect = layout["tomorrow"]
@@ -751,16 +761,26 @@ class TasksItemDelegate(QStyledItemDelegate):
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
                 return True
+            if is_plan_item and priority_rect.contains(pos):
+                return True
             if priority_controls["priority_up"].contains(pos):
+                if is_plan_item:
+                    return True
                 tasks_model.step_priority_by_row(index.row(), +1)
                 return True
             if priority_controls["priority_down"].contains(pos):
+                if is_plan_item:
+                    return True
                 tasks_model.step_priority_by_row(index.row(), -1)
                 return True
             if priority_controls["stage_up"].contains(pos):
+                if is_plan_item:
+                    return True
                 tasks_model.step_board_column_by_row(index.row(), +1)
                 return True
             if priority_controls["stage_down"].contains(pos):
+                if is_plan_item:
+                    return True
                 tasks_model.step_board_column_by_row(index.row(), -1)
                 return True
             if priority_rect.contains(pos):
@@ -979,6 +999,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
 
         values = dialog.values()
+        current_task = tasks_model.task_at_row(current_row)
         debug_task_dialog(
             f"tasks_delegate edit_apply row={current_row} task_id={task_id} "
             f"title={values['title']!r} day={values['day'].isoformat()} time={values['time_text']!r} "
@@ -996,8 +1017,12 @@ class TasksItemDelegate(QStyledItemDelegate):
                 project_id=values["project_id"],
                 recurrence_kind=values["recurrence_kind"],
                 recurrence_interval=values["recurrence_interval"],
-                marker_color=values["marker_color"],
-                marker_theme=values["marker_theme"],
+                is_plan_task=values.get(
+                    "is_plan_task",
+                    bool(current_task.is_plan_task) if current_task is not None else False,
+                ),
+                marker_color=values.get("marker_color", ""),
+                marker_theme=values.get("marker_theme", ""),
             )
             dialog.setProperty("_task_edit_result_applied", True)
             debug_task_dialog(
@@ -1059,8 +1084,10 @@ class TasksItemDelegate(QStyledItemDelegate):
         return QColor("#d7dbe3")
 
     @staticmethod
-    def _is_overdue(d: date, done: bool) -> bool:
+    def _is_overdue(d: date, done: bool, is_plan_item: bool = False) -> bool:
         """Проверяет, просрочена ли задача."""
+        if is_plan_item:
+            return False
         return (d < date.today()) and (not done)
 
     @staticmethod
@@ -1082,6 +1109,8 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     def _parent_schedule_action(self, index: QModelIndex, row_rect: QRect) -> Tuple[QRect, Optional[TaskRow], str]:
         """Возвращает геометрию и данные кнопки переноса на срок родителя."""
+        if bool(index.data(TaskRoles.IsPlanItem)):
+            return QRect(), None, ""
         parent_id = index.data(TaskRoles.ParentTaskId)
         if parent_id is None:
             return QRect(), None, ""

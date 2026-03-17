@@ -22,6 +22,8 @@ class DatabaseTasksMixin:
                 t.gantt_estimate_minutes,
                 t.gantt_forecasted,
                 t.project_id,
+                t.is_plan_task,
+                t.plan_order,
                 t.marker_color,
                 t.marker_theme,
                 CASE
@@ -58,6 +60,8 @@ class DatabaseTasksMixin:
                     parent_id=row["parent_id"],
                     recurrence_kind=row["recurrence_kind"] or "",
                     recurrence_interval=max(1, int(row["recurrence_interval"] or 1)),
+                    is_plan_task=bool(row["is_plan_task"]),
+                    plan_order=max(0, int(row["plan_order"] or 0)),
                     marker_color=(row["marker_color"] or "").strip(),
                     marker_theme=(row["marker_theme"] or "").strip(),
                 )
@@ -75,6 +79,8 @@ class DatabaseTasksMixin:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        is_plan_task: bool = False,
+        plan_order: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
@@ -85,10 +91,14 @@ class DatabaseTasksMixin:
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        is_plan_task = bool(is_plan_task)
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
             raise ValueError("Р”Р°С‚Р° Р·Р°РґР°С‡Рё РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
+        if plan_order is None:
+            plan_order = self._next_task_plan_order(parent_id)
+        plan_order = max(0, int(plan_order))
 
         project_title = ""
         project_area = ""
@@ -130,9 +140,9 @@ class DatabaseTasksMixin:
                 """
                 INSERT INTO tasks (
                     title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                    recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
+                    recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -145,6 +155,8 @@ class DatabaseTasksMixin:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    int(is_plan_task),
+                    plan_order,
                     marker_color,
                     marker_theme,
                     now,
@@ -171,6 +183,8 @@ class DatabaseTasksMixin:
             completion_delay_minutes=0,
             gantt_estimate_minutes=0,
             gantt_forecasted=False,
+            is_plan_task=is_plan_task,
+            plan_order=plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
@@ -188,22 +202,36 @@ class DatabaseTasksMixin:
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        is_plan_task: Optional[bool] = None,
+        plan_order: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
         """РћР±РЅРѕРІР»СЏРµС‚ Р·Р°РґР°С‡Сѓ."""
         prev_row = self._conn.execute(
-            "SELECT priority, board_column FROM tasks WHERE id = ?;",
+            "SELECT priority, board_column, parent_id, is_plan_task, plan_order FROM tasks WHERE id = ?;",
             (task_id,),
         ).fetchone()
         prev_priority = prev_row["priority"] if prev_row else priority
         prev_board_column = prev_row["board_column"] if prev_row else BOARD_COLUMN_QUEUE
+        prev_parent_id = prev_row["parent_id"] if prev_row else parent_id
+        prev_is_plan_task = bool(prev_row["is_plan_task"]) if prev_row else False
+        prev_plan_order = max(0, int(prev_row["plan_order"] or 0)) if prev_row else 0
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
+        if is_plan_task is None:
+            is_plan_task = prev_is_plan_task
+        is_plan_task = bool(is_plan_task)
+        if plan_order is None:
+            if parent_id != prev_parent_id:
+                plan_order = self._next_task_plan_order(parent_id, exclude_task_id=task_id)
+            else:
+                plan_order = prev_plan_order
+        plan_order = max(0, int(plan_order))
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
@@ -259,7 +287,7 @@ class DatabaseTasksMixin:
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
-                    recurrence_kind = ?, recurrence_interval = ?, marker_color = ?, marker_theme = ?, updated_at = ?
+                    recurrence_kind = ?, recurrence_interval = ?, is_plan_task = ?, plan_order = ?, marker_color = ?, marker_theme = ?, updated_at = ?
                 WHERE id = ?;
                 """,
                 (
@@ -274,6 +302,8 @@ class DatabaseTasksMixin:
                     parent_id,
                     recurrence_kind,
                     recurrence_interval,
+                    int(is_plan_task),
+                    plan_order,
                     marker_color,
                     marker_theme,
                     now,
@@ -320,6 +350,8 @@ class DatabaseTasksMixin:
             completion_delay_minutes=0,
             gantt_estimate_minutes=0,
             gantt_forecasted=False,
+            is_plan_task=is_plan_task,
+            plan_order=plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
@@ -330,7 +362,7 @@ class DatabaseTasksMixin:
             """
             SELECT
                 id, title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                recurrence_kind, recurrence_interval, marker_color, marker_theme
+                recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme
             FROM tasks
             WHERE id = ?;
             """,
@@ -360,23 +392,38 @@ class DatabaseTasksMixin:
             delta_minutes = int((completed_local - planned_dt).total_seconds() // 60)
             if delta_minutes > 0:
                 completion_delay_minutes = delta_minutes
+        is_plan_item = self._task_is_plan_item(task_id)
         with self._conn:
             if done:
-                self._conn.execute(
-                    """
-                    UPDATE tasks
-                    SET done = ?, day = ?, time_text = ?, completion_delay_minutes = ?, updated_at = ?
-                    WHERE id = ?;
-                    """,
-                    (
-                        int(done),
-                        completed_local.date().isoformat(),
-                        completed_local.strftime("%H:%M"),
-                        completion_delay_minutes,
-                        now_utc,
-                        task_id,
-                    ),
-                )
+                if is_plan_item:
+                    self._conn.execute(
+                        """
+                        UPDATE tasks
+                        SET done = ?, completion_delay_minutes = 0, updated_at = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            int(done),
+                            now_utc,
+                            task_id,
+                        ),
+                    )
+                else:
+                    self._conn.execute(
+                        """
+                        UPDATE tasks
+                        SET done = ?, day = ?, time_text = ?, completion_delay_minutes = ?, updated_at = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            int(done),
+                            completed_local.date().isoformat(),
+                            completed_local.strftime("%H:%M"),
+                            completion_delay_minutes,
+                            now_utc,
+                            task_id,
+                        ),
+                    )
             else:
                 self._conn.execute(
                     """
@@ -393,9 +440,9 @@ class DatabaseTasksMixin:
                     """
                     INSERT INTO tasks (
                         title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                        recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
+                        recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         row["title"],
@@ -408,12 +455,75 @@ class DatabaseTasksMixin:
                         row["parent_id"],
                         recurrence_kind,
                         recurrence_interval,
+                        int(bool(row["is_plan_task"])),
+                        self._next_task_plan_order(row["parent_id"]),
                         row["marker_color"] or "",
                         row["marker_theme"] or "",
                         now_utc,
                         now_utc,
                     ),
                 )
+
+    def _next_task_plan_order(
+        self,
+        parent_id: Optional[int],
+        exclude_task_id: Optional[int] = None,
+    ) -> int:
+        if exclude_task_id is None:
+            row = self._conn.execute(
+                """
+                SELECT COALESCE(MAX(plan_order), -1) AS max_order
+                FROM tasks
+                WHERE parent_id IS ?;
+                """,
+                (parent_id,),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                """
+                SELECT COALESCE(MAX(plan_order), -1) AS max_order
+                FROM tasks
+                WHERE parent_id IS ?
+                  AND id != ?;
+                """,
+                (parent_id, exclude_task_id),
+            ).fetchone()
+        return int(row["max_order"]) + 1 if row is not None else 0
+
+    def reorder_task_siblings(self, parent_id: Optional[int], ordered_task_ids: List[int]) -> None:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            for plan_order, task_id in enumerate(int(task_id) for task_id in ordered_task_ids):
+                self._conn.execute(
+                    """
+                    UPDATE tasks
+                    SET plan_order = ?, updated_at = ?
+                    WHERE id = ? AND parent_id IS ?;
+                    """,
+                    (plan_order, now, task_id, parent_id),
+                )
+
+    def _task_is_plan_item(self, task_id: int) -> bool:
+        row = self._conn.execute(
+            """
+            WITH RECURSIVE ancestors(id, parent_id, is_plan_task, depth) AS (
+                SELECT id, parent_id, is_plan_task, 0
+                FROM tasks
+                WHERE id = ?
+                UNION ALL
+                SELECT t.id, t.parent_id, t.is_plan_task, ancestors.depth + 1
+                FROM tasks t
+                JOIN ancestors ON t.id = ancestors.parent_id
+            )
+            SELECT 1
+            FROM ancestors
+            WHERE depth > 0
+              AND is_plan_task = 1
+            LIMIT 1;
+            """,
+            (task_id,),
+        ).fetchone()
+        return row is not None
 
     def set_task_board_column(self, task_id: int, board_column: str) -> None:
         """Обновляет канбан-колонку задачи без изменения done-статуса."""

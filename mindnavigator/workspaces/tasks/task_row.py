@@ -25,5 +25,7 @@ class TaskRow:
     completion_delay_minutes: int = 0
     marker_color: str = ""
     marker_theme: str = ""
+    is_plan_task: bool = False
+    plan_order: int = 0
 
 __all__ = ["TaskRow"]

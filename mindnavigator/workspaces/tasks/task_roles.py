@@ -29,5 +29,9 @@ class TaskRoles:
     MarkerColor = Qt.ItemDataRole.UserRole + 22
     MarkerTheme = Qt.ItemDataRole.UserRole + 23
     BoardColumn = Qt.ItemDataRole.UserRole + 24
+    IsPlanTask = Qt.ItemDataRole.UserRole + 25
+    IsPlanItem = Qt.ItemDataRole.UserRole + 26
+    PlanNumber = Qt.ItemDataRole.UserRole + 27
+    PlanOrder = Qt.ItemDataRole.UserRole + 28
 
 __all__ = ["TaskRoles"]

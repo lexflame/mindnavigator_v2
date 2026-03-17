@@ -15,6 +15,9 @@ class TasksModel(QAbstractListModel):
         self._rows: List[Row] = []
         self._task_depths: dict[int, int] = {}
         self._task_children: dict[int, List[TaskRow]] = {}
+        self._task_is_plan_item: dict[int, bool] = {}
+        self._task_plan_branch: dict[int, bool] = {}
+        self._task_plan_numbers: dict[int, str] = {}
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено | Отложенные
         self._search = ""
         self._focus_day: Optional[date] = None
@@ -31,30 +34,72 @@ class TasksModel(QAbstractListModel):
     def _reload_from_db(self):
         """Обновляет список задач из базы данных."""
         tasks = self._db.fetch_tasks()
-        self._all_rows = [
-            TaskRow(
-                t.id,
-                t.day,
-                t.time_text,
-                t.title,
-                t.description,
-                t.priority,
-                t.done,
-                t.board_column,
-                t.project_id,
-                t.project_title,
-                t.project_area,
-                t.parent_id,
-                t.recurrence_kind,
-                t.recurrence_interval,
-                t.completion_delay_minutes,
-                t.marker_color,
-                t.marker_theme,
-            )
-            for t in tasks
-        ]
+        self._all_rows = [self._row_from_task_data(task) for task in tasks]
+        self._recompute_plan_meta()
         self._prune_state()
         self._rebuild()
+
+    @staticmethod
+    def _row_from_task_data(task: TaskData) -> TaskRow:
+        return TaskRow(
+            task.id,
+            task.day,
+            task.time_text,
+            task.title,
+            task.description,
+            task.priority,
+            task.done,
+            task.board_column,
+            task.project_id,
+            task.project_title,
+            task.project_area,
+            task.parent_id,
+            task.recurrence_kind,
+            task.recurrence_interval,
+            task.completion_delay_minutes,
+            task.marker_color,
+            task.marker_theme,
+            task.is_plan_task,
+            task.plan_order,
+        )
+
+    def _recompute_plan_meta(self) -> None:
+        by_parent: dict[Optional[int], list[TaskRow]] = {}
+        for row in self._all_rows:
+            if not isinstance(row, TaskRow):
+                continue
+            by_parent.setdefault(row.parent_id, []).append(row)
+
+        self._task_is_plan_item = {}
+        self._task_plan_branch = {}
+        self._task_plan_numbers = {}
+
+        def visit(task: TaskRow, parent_plan_active: bool, number_path: list[int]) -> None:
+            is_plan_item = parent_plan_active
+            current_branch_active = bool(task.is_plan_task) or is_plan_item
+            self._task_is_plan_item[task.id] = is_plan_item
+            self._task_plan_branch[task.id] = current_branch_active
+            self._task_plan_numbers[task.id] = (
+                ".".join(str(part) for part in number_path) + "."
+                if is_plan_item and number_path
+                else ""
+            )
+
+            child_rows = by_parent.get(task.id, [])
+            if current_branch_active:
+                child_rows = sorted(child_rows, key=lambda item: (item.plan_order, item.id))
+            else:
+                child_rows = sorted(child_rows, key=lambda item: (item.day, item.time_text or "", item.id))
+            for child_index, child in enumerate(child_rows, start=1):
+                child_number_path = number_path + [child_index] if current_branch_active else []
+                visit(child, current_branch_active, child_number_path)
+
+        root_rows = sorted(
+            by_parent.get(None, []),
+            key=lambda item: (item.day, item.time_text or "", item.id),
+        )
+        for root in root_rows:
+            visit(root, False, [])
 
     def refresh(self) -> None:
         """Перезагружает данные задач из базы."""
@@ -140,6 +185,14 @@ class TasksModel(QAbstractListModel):
             return r.completion_delay_minutes
         if role == TaskRoles.ParentTaskId:
             return r.parent_id
+        if role == TaskRoles.IsPlanTask:
+            return r.is_plan_task
+        if role == TaskRoles.IsPlanItem:
+            return self._task_is_plan_item.get(r.id, False)
+        if role == TaskRoles.PlanNumber:
+            return self._task_plan_numbers.get(r.id, "")
+        if role == TaskRoles.PlanOrder:
+            return r.plan_order
         if role == TaskRoles.MarkerColor:
             return r.marker_color
         if role == TaskRoles.MarkerTheme:
@@ -208,6 +261,7 @@ class TasksModel(QAbstractListModel):
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
         recurrence_interval: int = 1,
+        is_plan_task: bool = False,
         marker_color: str = "",
         marker_theme: str = "",
     ):
@@ -222,30 +276,12 @@ class TasksModel(QAbstractListModel):
             parent_id=parent_id,
             recurrence_kind=recurrence_kind,
             recurrence_interval=recurrence_interval,
+            is_plan_task=is_plan_task,
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
-        self._all_rows.append(
-            TaskRow(
-                task.id,
-                task.day,
-                task.time_text,
-                task.title,
-                task.description,
-                task.priority,
-                task.done,
-                task.board_column,
-                task.project_id,
-                task.project_title,
-                task.project_area,
-                task.parent_id,
-                task.recurrence_kind,
-                task.recurrence_interval,
-                task.completion_delay_minutes,
-                task.marker_color,
-                task.marker_theme,
-            )
-        )
+        self._all_rows.append(self._row_from_task_data(task))
+        self._recompute_plan_meta()
         self._rebuild()
 
     def quick_add_subtask(self, parent_task_id: int) -> None:
@@ -260,7 +296,7 @@ class TasksModel(QAbstractListModel):
             description="",
             day=parent_task.day,
             time_text=parent_task.time_text,
-            priority=parent_task.priority or "Medium",
+            priority="Medium" if self._task_plan_branch.get(parent_task.id, False) else (parent_task.priority or "Medium"),
             project_id=parent_task.project_id,
             parent_id=parent_task.id,
             recurrence_kind="",
@@ -327,6 +363,8 @@ class TasksModel(QAbstractListModel):
             "parent_id": task.parent_id,
             "recurrence_kind": task.recurrence_kind,
             "recurrence_interval": task.recurrence_interval,
+            "is_plan_task": task.is_plan_task,
+            "plan_order": task.plan_order,
             "marker_color": task.marker_color,
             "marker_theme": task.marker_theme,
         }
@@ -360,6 +398,7 @@ class TasksModel(QAbstractListModel):
         project_id: Optional[int],
         recurrence_kind: str,
         recurrence_interval: int,
+        is_plan_task: Optional[bool] = None,
         marker_color: str = "",
         marker_theme: str = "",
     ):
@@ -385,6 +424,8 @@ class TasksModel(QAbstractListModel):
             parent_id=r.parent_id,
             recurrence_kind=recurrence_kind,
             recurrence_interval=recurrence_interval,
+            is_plan_task=r.is_plan_task if is_plan_task is None else bool(is_plan_task),
+            plan_order=r.plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
@@ -405,29 +446,12 @@ class TasksModel(QAbstractListModel):
             self._reload_from_db()
             return
 
-        updated_row = TaskRow(
-            updated.id,
-            updated.day,
-            updated.time_text,
-            updated.title,
-            updated.description,
-            updated.priority,
-            updated.done,
-            updated.board_column,
-            updated.project_id,
-            updated.project_title,
-            updated.project_area,
-            updated.parent_id,
-            updated.recurrence_kind,
-            updated.recurrence_interval,
-            updated.completion_delay_minutes,
-            updated.marker_color,
-            updated.marker_theme,
-        )
+        updated_row = self._row_from_task_data(updated)
         self._all_rows = [
             updated_row if isinstance(it, TaskRow) and it.id == r.id else it
             for it in self._all_rows
         ]
+        self._recompute_plan_meta()
 
         if is_marker_only_task_update(r, updated_row):
             changed_row_idx = -1
@@ -477,6 +501,8 @@ class TasksModel(QAbstractListModel):
         if task is None:
             return
         cycle = ["Low", "Medium", "High", "Отложенная"]
+        if self._task_is_plan_item.get(task.id, False):
+            return
         try:
             current_index = cycle.index(task.priority)
         except ValueError:
@@ -503,6 +529,8 @@ class TasksModel(QAbstractListModel):
         if task is None:
             return
         ordered_priorities = ["Отложенная", "Low", "Medium", "High"]
+        if self._task_is_plan_item.get(task.id, False):
+            return
         try:
             current_index = ordered_priorities.index(task.priority)
         except ValueError:
@@ -600,6 +628,8 @@ class TasksModel(QAbstractListModel):
         ordered_priorities = [DEFERRED_PRIORITY, "Low", "Medium", "High"]
 
         def update_builder(task: TaskRow) -> Optional[dict[str, Any]]:
+            if self._task_is_plan_item.get(task.id, False):
+                return None
             try:
                 current_index = ordered_priorities.index(task.priority)
             except ValueError:
@@ -616,7 +646,7 @@ class TasksModel(QAbstractListModel):
         normalized_priority = normalize_priority(priority)
         return self._apply_task_updates_by_ids(
             task_ids,
-            lambda task: None if task.priority == normalized_priority else {"priority": normalized_priority},
+            lambda task: None if self._task_is_plan_item.get(task.id, False) or task.priority == normalized_priority else {"priority": normalized_priority},
         )
 
     def set_project_by_ids(self, task_ids: List[int], project_id: Optional[int]) -> int:
@@ -644,6 +674,8 @@ class TasksModel(QAbstractListModel):
         task = next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
         if task is None:
             return False
+        if self._task_is_plan_item.get(task.id, False):
+            return False
         if task.day == new_day and parent_id is _PARENT_UNSET:
             return False
 
@@ -660,33 +692,18 @@ class TasksModel(QAbstractListModel):
             parent_id=current_parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            is_plan_task=task.is_plan_task,
+            plan_order=task.plan_order,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == task.id:
-                it = TaskRow(
-                    updated.id,
-                    updated.day,
-                    updated.time_text,
-                    updated.title,
-                    updated.description,
-                    updated.priority,
-                    updated.done,
-                    updated.board_column,
-                    updated.project_id,
-                    updated.project_title,
-                    updated.project_area,
-                    updated.parent_id,
-                    updated.recurrence_kind,
-                    updated.recurrence_interval,
-                    updated.completion_delay_minutes,
-                    updated.marker_color,
-                    updated.marker_theme,
-                )
+                it = self._row_from_task_data(updated)
             new_all.append(it)
         self._all_rows = new_all
+        self._recompute_plan_meta()
         self._rebuild()
         self.task_moved.emit(task.id)
         return True
@@ -709,6 +726,8 @@ class TasksModel(QAbstractListModel):
         if task is None:
             return False
         if parent_id == task.id:
+            return False
+        if self._task_is_plan_item.get(task.id, False) and parent_id != task.parent_id:
             return False
 
         target_project_id = task.project_id
@@ -735,33 +754,17 @@ class TasksModel(QAbstractListModel):
             parent_id=parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            is_plan_task=task.is_plan_task,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == task.id:
-                it = TaskRow(
-                    updated.id,
-                    updated.day,
-                    updated.time_text,
-                    updated.title,
-                    updated.description,
-                    updated.priority,
-                    updated.done,
-                    updated.board_column,
-                    updated.project_id,
-                    updated.project_title,
-                    updated.project_area,
-                    updated.parent_id,
-                    updated.recurrence_kind,
-                    updated.recurrence_interval,
-                    updated.completion_delay_minutes,
-                    updated.marker_color,
-                    updated.marker_theme,
-                )
+                it = self._row_from_task_data(updated)
             new_all.append(it)
         self._all_rows = new_all
+        self._recompute_plan_meta()
         self._rebuild()
         self.task_moved.emit(task.id)
         return True
@@ -769,6 +772,12 @@ class TasksModel(QAbstractListModel):
     def task_by_id(self, task_id: int) -> Optional[TaskRow]:
         """Возвращает задачу по идентификатору или None."""
         return next((it for it in self._all_rows if isinstance(it, TaskRow) and it.id == task_id), None)
+
+    def is_plan_item(self, task_id: int) -> bool:
+        return self._task_is_plan_item.get(task_id, False)
+
+    def plan_number(self, task_id: int) -> str:
+        return self._task_plan_numbers.get(task_id, "")
 
     def _resolve_top_parent_project_id(self, parent_task: TaskRow) -> Optional[int]:
         """Возвращает project_id верхнего родителя в цепочке parent_id."""
@@ -803,33 +812,18 @@ class TasksModel(QAbstractListModel):
             parent_id=task.parent_id,
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
+            is_plan_task=task.is_plan_task,
+            plan_order=task.plan_order,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
             if isinstance(it, TaskRow) and it.id == task.id:
-                it = TaskRow(
-                    updated.id,
-                    updated.day,
-                    updated.time_text,
-                    updated.title,
-                    updated.description,
-                    updated.priority,
-                    updated.done,
-                    updated.board_column,
-                    updated.project_id,
-                    updated.project_title,
-                    updated.project_area,
-                    updated.parent_id,
-                    updated.recurrence_kind,
-                    updated.recurrence_interval,
-                    updated.completion_delay_minutes,
-                    updated.marker_color,
-                    updated.marker_theme,
-                )
+                it = self._row_from_task_data(updated)
             new_all.append(it)
         self._all_rows = new_all
+        self._recompute_plan_meta()
         self._rebuild()
         self.task_moved.emit(task.id)
         return True
@@ -867,6 +861,30 @@ class TasksModel(QAbstractListModel):
             return d == today
 
         search = self._search
+        all_tasks_by_id = {
+            it.id: it for it in self._all_rows if isinstance(it, TaskRow)
+        }
+
+        def keep_done_plan_item(task_item: TaskRow) -> bool:
+            if not task_item.done:
+                return False
+            if not self._task_is_plan_item.get(task_item.id, False):
+                return False
+            parent_task = all_tasks_by_id.get(task_item.parent_id)
+            return parent_task is not None and not parent_task.done
+
+        def has_done_plan_ancestor(task_item: TaskRow) -> bool:
+            current_parent_id = task_item.parent_id
+            seen: set[int] = set()
+            while current_parent_id is not None and current_parent_id not in seen:
+                seen.add(current_parent_id)
+                parent_task = all_tasks_by_id.get(current_parent_id)
+                if parent_task is None:
+                    return False
+                if parent_task.done:
+                    return True
+                current_parent_id = parent_task.parent_id
+            return False
 
         base_tasks: List[TaskRow] = []
         search_hits: set[int] = set()
@@ -880,18 +898,20 @@ class TasksModel(QAbstractListModel):
             if self._project_filter_id is not None and it.project_id != self._project_filter_id:
                 continue
 
-            if self._priority_filter is not None and it.priority != self._priority_filter:
+            if self._priority_filter is not None and (
+                self._task_is_plan_item.get(it.id, False) or it.priority != self._priority_filter
+            ):
                 continue
 
             if self._filter_mode == "Сегодня":
                 if not is_today(it.day):
                     continue
-                if it.done:
+                if it.done and not keep_done_plan_item(it):
                     continue
                 if it.priority == "Отложенная":
                     continue
             elif self._filter_mode == "Все":
-                if it.done:
+                if it.done and not keep_done_plan_item(it):
                     continue
                 if it.priority == "Отложенная":
                     continue
@@ -901,7 +921,7 @@ class TasksModel(QAbstractListModel):
                 if it.priority == "Отложенная":
                     continue
             elif self._filter_mode == "План":
-                if it.done:
+                if it.done and not keep_done_plan_item(it):
                     continue
                 if it.priority == "Отложенная":
                     continue
@@ -975,6 +995,8 @@ class TasksModel(QAbstractListModel):
         def sorted_children(task_item: TaskRow) -> List[TaskRow]:
             children = [child for child in children_map.get(task_item.id, []) if should_include(child)]
             children.sort(key=sort_key, reverse=(self._filter_mode == "Все" and not self._sort_asc))
+            if self._task_plan_branch.get(task_item.id, False):
+                children.sort(key=lambda child: (child.plan_order, child.id))
             return children
 
         new_rows: List[Row] = []
@@ -1094,6 +1116,37 @@ class TasksModel(QAbstractListModel):
             self._rebuild()
 
 
+    def _plan_sibling_rows(self, parent_id: Optional[int]) -> List[TaskRow]:
+        siblings = [
+            it for it in self._all_rows
+            if isinstance(it, TaskRow) and it.parent_id == parent_id
+        ]
+        siblings.sort(key=lambda item: (item.plan_order, item.id))
+        return siblings
+
+    def reorder_plan_task_before(self, task_id: int, target_task_id: int) -> bool:
+        task = self.task_by_id(task_id)
+        target_task = self.task_by_id(target_task_id)
+        if task is None or target_task is None:
+            return False
+        if task.id == target_task.id:
+            return False
+        if task.parent_id != target_task.parent_id:
+            return False
+        sibling_ids = [
+            sibling.id for sibling in self._plan_sibling_rows(task.parent_id)
+            if sibling.id != task.id
+        ]
+        try:
+            insert_index = sibling_ids.index(target_task.id)
+        except ValueError:
+            return False
+        sibling_ids.insert(insert_index, task.id)
+        self._db.reorder_task_siblings(task.parent_id, sibling_ids)
+        self._reload_from_db()
+        self.task_moved.emit(task.id)
+        return True
+
     def mimeTypes(self) -> List[str]:
         """Возвращает поддерживаемые типы данных для drag and drop."""
         return ["application/x-mindnavigator-task-id"]
@@ -1139,7 +1192,16 @@ class TasksModel(QAbstractListModel):
         if target_row < 0 or target_row >= len(self._rows):
             return False
 
+        dragged_task = self.task_by_id(task_id)
+        if dragged_task is None:
+            return False
         target_item = self._rows[target_row]
+        if self._task_is_plan_item.get(task_id, False):
+            if not isinstance(target_item, TaskRow):
+                return False
+            if target_item.parent_id != dragged_task.parent_id:
+                return False
+            return self.reorder_plan_task_before(task_id, target_item.id)
         if isinstance(target_item, TaskRow):
             return self.move_task_to_parent(task_id, target_item.id)
         if isinstance(target_item, HeaderRow):

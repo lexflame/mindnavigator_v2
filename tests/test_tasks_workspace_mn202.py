@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import QItemSelectionModel
+from PySide6.QtCore import QItemSelectionModel, QModelIndex
 from PySide6.QtGui import QImage, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -1129,6 +1129,172 @@ def test_tasks_delegate_attachment_display_name_for_note(monkeypatch, unique_tem
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         delegate = tasks_workspace.TasksItemDelegate()
         assert delegate._attachment_display_name(attachment) == "Attached note"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_model_keeps_done_plan_items_visible_and_numbered_until_parent_done(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_items_visible", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        child = database.create_task(
+            title="Plan child",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Low",
+            parent_id=root.id,
+        )
+        grandchild = database.create_task(
+            title="Plan grandchild",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=child.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        child_row = _find_task_row(model, child.id)
+        grandchild_row = _find_task_row(model, grandchild.id)
+        assert child_row >= 0
+        assert grandchild_row >= 0
+        assert model.index(child_row, 0).data(TaskRoles.IsPlanItem) is True
+        assert model.index(child_row, 0).data(TaskRoles.PlanNumber) == "1."
+        assert model.index(grandchild_row, 0).data(TaskRoles.PlanNumber) == "1.1."
+
+        model.toggle_done_by_row(child_row)
+        child_row = _find_task_row(model, child.id)
+        assert child_row >= 0
+        assert model.index(child_row, 0).data(TaskRoles.Done) is True
+
+        priority_before = next(task.priority for task in database.fetch_tasks() if task.id == child.id)
+        model.step_priority_by_row(child_row, +1)
+        priority_after = next(task.priority for task in database.fetch_tasks() if task.id == child.id)
+        assert priority_after == priority_before
+        assert tasks_workspace.TasksItemDelegate._is_overdue(date(2026, 3, 5), False, is_plan_item=True) is False
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_model_plan_item_drag_drop_reorders_only_within_parent(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_drag_drop", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        first = database.create_task(
+            title="First step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title="Second step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        other_root = database.create_task(
+            title="Other root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="10:00",
+            priority="Medium",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        second_row = _find_task_row(model, second.id)
+        first_row = _find_task_row(model, first.id)
+        other_row = _find_task_row(model, other_root.id)
+        assert second_row >= 0 and first_row >= 0 and other_row >= 0
+
+        mime_data = model.mimeData([model.index(second_row, 0)])
+        reordered = model.dropMimeData(mime_data, tasks_workspace.Qt.DropAction.MoveAction, first_row, 0, QModelIndex())
+        assert reordered is True
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        assert model.index(_find_task_row(model, second.id), 0).data(TaskRoles.PlanNumber) == "1."
+        assert model.index(_find_task_row(model, first.id), 0).data(TaskRoles.PlanNumber) == "2."
+
+        blocked = model.dropMimeData(mime_data, tasks_workspace.Qt.DropAction.MoveAction, other_row, 0, QModelIndex())
+        assert blocked is False
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_plan_checkbox", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        child = database.create_task(
+            title="Plan child",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Low",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        root_dialog = task_edit_dialog.TaskEditDialog(model.task_by_id(root.id))
+        child_dialog = task_edit_dialog.TaskEditDialog(model.task_by_id(child.id))
+        try:
+            assert root_dialog.plan_task_edit.isEnabled() is True
+            assert root_dialog.plan_task_edit.isChecked() is True
+            assert child_dialog.plan_task_edit.isEnabled() is False
+            assert child_dialog.priority_edit.isEnabled() is False
+            assert child_dialog.values()["is_plan_task"] is False
+        finally:
+            root_dialog.deleteLater()
+            child_dialog.deleteLater()
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

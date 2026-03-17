@@ -272,3 +272,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_B8182C38-918D-412A-B318-55253C9A26CB | tasks-bulk-actions | Add Ctrl multi-select and a fixed bottom batch-actions bar for the Tasks list with bulk move, priority, marker, project, completion, and delete operations | feat | Completed |
+
+## tasks-plan - Plan Task Hierarchy
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_87B88003-41A0-4A20-B263-94F4313E67AA | tasks-plan | Add the `Задача план` property with inherited plan-item numbering, priority suppression, restricted drag-drop, and list visibility rules | feat | Completed |

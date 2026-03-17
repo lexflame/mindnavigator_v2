@@ -95,6 +95,8 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "board_column" in task_columns
         assert "description" in task_columns
         assert "parent_id" in task_columns
+        assert "is_plan_task" in task_columns
+        assert "plan_order" in task_columns
         assert "marker_theme" in task_columns
         assert "completion_delay_minutes" in task_columns
         dossier_tables = {
@@ -106,7 +108,7 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert dossier_tables == {"dossiers", "dossier_links"}
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 5
+        assert user_version == 6
 
         board_rows = database._conn.execute(
             "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
@@ -135,8 +137,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 5
-        assert database.apply_schema_updates() == 5
+        assert database.apply_schema_updates() == 6
+        assert database.apply_schema_updates() == 6
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -151,7 +153,7 @@ def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_curr
             database._conn.execute("DROP TABLE dossiers;")
             database._conn.execute("PRAGMA user_version = 5;")
 
-        assert database.apply_schema_updates() == 5
+        assert database.apply_schema_updates() == 6
 
         dossier_tables = {
             row["name"]
