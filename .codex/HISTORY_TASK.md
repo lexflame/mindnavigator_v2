@@ -264,3 +264,11 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 | tasks-casts | Extract BOARD, GANTT, DASH, and Tasks style logic into dedicated helper classes and packages | chore | Completed |
+
+## tasks-bulk-actions - Tasks List Batch Actions
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_B8182C38-918D-412A-B318-55253C9A26CB | tasks-bulk-actions | Add Ctrl multi-select and a fixed bottom batch-actions bar for the Tasks list with bulk move, priority, marker, project, completion, and delete operations | feat | Completed |

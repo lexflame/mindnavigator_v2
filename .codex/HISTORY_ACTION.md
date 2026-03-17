@@ -1414,3 +1414,18 @@
 [2026-03-17 18:33] OUT: 29 passed.
 [2026-03-17 18:33] ACTION: Updated TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 status -> Completed.
 [2026-03-17 18:33] ACTION: Completed TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11.
+[2026-03-17 19:07] SESSION_START: Started Tasks list batch-actions feature delivery.
+[2026-03-17 19:07] CMD: git switch -c sprint/tasks-bulk-actions
+[2026-03-17 19:07] OUT: Switched to a new branch 'sprint/tasks-bulk-actions'.
+[2026-03-17 19:08] ACTION: Started TASK_B8182C38-918D-412A-B318-55253C9A26CB (Tasks list batch actions).
+[2026-03-17 19:08] ACTION: Updated TASK_B8182C38-918D-412A-B318-55253C9A26CB status -> In Progress.
+[2026-03-17 19:08] ACTION: Created docs/sprints/TASK_B8182C38-918D-412A-B318-55253C9A26CB_PLAN.md.
+[2026-03-17 19:18] ACTION: Added Ctrl multi-select batch actions for the Tasks list, including a fixed bottom panel and bulk model operations for complete, delete, move, priority, project, and marker updates.
+[2026-03-17 19:18] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 19:18] OUT: OK.
+[2026-03-17 19:18] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_bulk_actions
+[2026-03-17 19:18] OUT: 26 passed.
+[2026-03-17 19:19] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_bulk_adjacent
+[2026-03-17 19:19] OUT: 15 passed.
+[2026-03-17 19:19] ACTION: Updated TASK_B8182C38-918D-412A-B318-55253C9A26CB status -> Completed.
+[2026-03-17 19:19] ACTION: Completed TASK_B8182C38-918D-412A-B318-55253C9A26CB.

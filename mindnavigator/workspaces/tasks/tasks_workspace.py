@@ -25,6 +25,37 @@ class TasksWorkspace(BaseWorkspace):
         (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
         (BOARD_COLUMN_COMPLETED, "Выполнена"),
     ]
+    BATCH_ACTION_OPTIONS = [
+        ("", "Групповое действие"),
+        ("complete", "Выполнить"),
+        ("delete", "Удалить"),
+        ("tomorrow", "Перенести на завтра"),
+        ("priority_up", "Повысить приоритет"),
+        ("priority_down", "Понизить приоритет"),
+        ("move_to_day", "Перенести на"),
+        ("move_to_project", "Перенести в проект"),
+        ("marker_color", "Выбрать маркер цвета"),
+        ("marker_theme", "Выбрать тематический маркер"),
+        ("defer", "Перенести в отложенные"),
+    ]
+    BATCH_MARKER_COLORS = [
+        ("Нет", ""),
+        ("Синий", "#2f6edb"),
+        ("Зеленый", "#2f9f63"),
+        ("Оранжевый", "#d68a2f"),
+        ("Красный", "#b74a4a"),
+        ("Фиолетовый", "#6b5ad4"),
+    ]
+    BATCH_MARKER_THEMES = [
+        ("Нет", ""),
+        ("Фильмы", "movies"),
+        ("Игры", "games"),
+        ("Книги", "books"),
+        ("Музыка", "music"),
+        ("Работа", "work"),
+        ("Личное", "personal"),
+        ("Разработка", "dev"),
+    ]
 
     class _BoardColumnListWidget(QListWidget):
         _drag_task_id: int | None = None
@@ -291,6 +322,16 @@ class TasksWorkspace(BaseWorkspace):
         self.dash_pie_chart = None
         self.dash_pulse_chart = None
         self.dash_projects_list = None
+        self.batch_bar = None
+        self.batch_selection_label = None
+        self.batch_hint_label = None
+        self.batch_action_combo = None
+        self.batch_date_edit = None
+        self.batch_project_combo = None
+        self.batch_marker_color_combo = None
+        self.batch_marker_theme_combo = None
+        self.batch_apply_button = None
+        self.batch_clear_button = None
         self._style_helper = TasksWorkspaceStyle(self)
         self._board_cast = TasksBoardCast(self)
         self._gantt_cast = TasksGanttCast(self, self._style_helper)
@@ -408,7 +449,7 @@ class TasksWorkspace(BaseWorkspace):
         self.list.setUniformItemSizes(False)
         self.list.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list.setSelectionMode(QListView.SelectionMode.SingleSelection)
+        self.list.setSelectionMode(QListView.SelectionMode.ExtendedSelection)
         self.list.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.list.setMouseTracking(True)
         self.list.viewport().setMouseTracking(True)
@@ -425,16 +466,18 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._sticky_header.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._sticky_header.hide()
+        self._build_batch_bar()
 
         self.btn_add.clicked.connect(self._on_create_task)
         self.new_title.returnPressed.connect(self._on_create_task)
+        self.list.installEventFilter(self)
         self.list.viewport().installEventFilter(self)
 
         selection_model = self.list.selectionModel()
-        selection_model.selectionChanged.connect(lambda *_: self.update_action_states())
-        selection_model.currentChanged.connect(lambda *_: self.update_action_states())
-        self.model.modelReset.connect(self.update_action_states)
-        self.model.layoutChanged.connect(self.update_action_states)
+        selection_model.selectionChanged.connect(self._on_task_selection_changed)
+        selection_model.currentChanged.connect(self._on_task_selection_changed)
+        self.model.modelReset.connect(self._on_task_selection_changed)
+        self.model.layoutChanged.connect(self._on_task_selection_changed)
         self.model.modelReset.connect(self._update_sticky_day_header)
         self.model.layoutChanged.connect(self._update_sticky_day_header)
         self.model.rowsInserted.connect(lambda *_: self._update_sticky_day_header())
@@ -460,8 +503,90 @@ class TasksWorkspace(BaseWorkspace):
         if isinstance(self.dash_projects_list, QListWidget):
             self._smooth_scroll_controllers.append(attach_smooth_scroll(self.dash_projects_list))
         self._update_sticky_day_header()
+        self._refresh_batch_bar_visibility()
 
         self.set_content(content)
+
+    def _build_batch_bar(self) -> None:
+        if not isinstance(self.list, QListView):
+            return
+        self.batch_bar = QFrame(self.list)
+        self.batch_bar.setObjectName("TasksBatchBar")
+        self.batch_bar.hide()
+
+        layout = QHBoxLayout(self.batch_bar)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+
+        labels_column = QVBoxLayout()
+        labels_column.setContentsMargins(0, 0, 0, 0)
+        labels_column.setSpacing(2)
+
+        self.batch_selection_label = QLabel("Выбрано задач: 0", self.batch_bar)
+        self.batch_selection_label.setObjectName("TasksBatchSelectionLabel")
+        labels_column.addWidget(self.batch_selection_label)
+
+        self.batch_hint_label = QLabel("Ctrl добавляет задачи в пакетное выделение.", self.batch_bar)
+        self.batch_hint_label.setObjectName("TasksBatchHintLabel")
+        labels_column.addWidget(self.batch_hint_label)
+
+        layout.addLayout(labels_column)
+
+        self.batch_action_combo = QComboBox(self.batch_bar)
+        self.batch_action_combo.setObjectName("TasksBatchAction")
+        self.batch_action_combo.setMinimumWidth(220)
+        for action_key, label in self.BATCH_ACTION_OPTIONS:
+            self.batch_action_combo.addItem(label, action_key)
+        self.batch_action_combo.currentIndexChanged.connect(self._update_batch_action_inputs)
+        layout.addWidget(self.batch_action_combo)
+
+        self.batch_date_edit = QDateEdit(self.batch_bar)
+        self.batch_date_edit.setObjectName("TasksBatchDateEdit")
+        self.batch_date_edit.setCalendarPopup(True)
+        self.batch_date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.batch_date_edit.setKeyboardTracking(False)
+        self.batch_date_edit.setDate(QDate.currentDate())
+        self.batch_date_edit.hide()
+        layout.addWidget(self.batch_date_edit)
+
+        self.batch_project_combo = QComboBox(self.batch_bar)
+        self.batch_project_combo.setObjectName("TasksBatchProject")
+        self.batch_project_combo.setMinimumWidth(220)
+        self.batch_project_combo.hide()
+        layout.addWidget(self.batch_project_combo)
+
+        self.batch_marker_color_combo = QComboBox(self.batch_bar)
+        self.batch_marker_color_combo.setObjectName("TasksBatchMarkerColor")
+        self.batch_marker_color_combo.setMinimumWidth(180)
+        for label, value in self.BATCH_MARKER_COLORS:
+            self.batch_marker_color_combo.addItem(label, value)
+        self.batch_marker_color_combo.hide()
+        layout.addWidget(self.batch_marker_color_combo)
+
+        self.batch_marker_theme_combo = QComboBox(self.batch_bar)
+        self.batch_marker_theme_combo.setObjectName("TasksBatchMarkerTheme")
+        self.batch_marker_theme_combo.setMinimumWidth(200)
+        for label, value in self.BATCH_MARKER_THEMES:
+            self.batch_marker_theme_combo.addItem(label, value)
+        self.batch_marker_theme_combo.hide()
+        layout.addWidget(self.batch_marker_theme_combo)
+
+        layout.addStretch(1)
+
+        self.batch_clear_button = QToolButton(self.batch_bar)
+        self.batch_clear_button.setObjectName("TasksBatchClearButton")
+        self.batch_clear_button.setText("Снять")
+        self.batch_clear_button.clicked.connect(self._clear_task_selection)
+        layout.addWidget(self.batch_clear_button)
+
+        self.batch_apply_button = QToolButton(self.batch_bar)
+        self.batch_apply_button.setObjectName("TasksBatchApplyButton")
+        self.batch_apply_button.setText("Применить")
+        self.batch_apply_button.clicked.connect(self._apply_batch_action)
+        layout.addWidget(self.batch_apply_button)
+
+        self._populate_batch_project_options()
+        self._update_batch_action_inputs()
 
     def _build_gantt_page(self) -> QWidget:
         page = self._gantt_cast.build_page()
@@ -1249,24 +1374,145 @@ class TasksWorkspace(BaseWorkspace):
         model = getattr(self, "model", None)
         if model is None:
             return []
-        index = self._selected_task_index()
-        if index is None:
+        selected_tasks: List[TaskRow] = []
+        for index in self._selected_task_indexes():
+            if hasattr(model, "task_at_row"):
+                task = model.task_at_row(index.row())
+                if task is not None:
+                    selected_tasks.append(task)
+        return selected_tasks
+
+    def _selected_task_indexes(self) -> List[QModelIndex]:
+        list_widget = getattr(self, "list", None)
+        if not isinstance(list_widget, QListView):
             return []
-        if hasattr(model, "task_at_row"):
-            task = model.task_at_row(index.row())
-            return [task] if task else []
-        return []
+        selection_model = list_widget.selectionModel()
+        if selection_model is None:
+            return []
+        indexes = [
+            index
+            for index in selection_model.selectedRows()
+            if index.isValid() and index.data(TaskRoles.RowType) == "task"
+        ]
+        indexes.sort(key=lambda index: index.row())
+        return indexes
+
+    def _selected_task_ids(self) -> List[int]:
+        task_ids: List[int] = []
+        for index in self._selected_task_indexes():
+            task_id = index.data(TaskRoles.TaskId)
+            if isinstance(task_id, int):
+                task_ids.append(task_id)
+        return task_ids
 
     def _selected_task_index(self) -> Optional[QModelIndex]:
+        indexes = self._selected_task_indexes()
+        if len(indexes) == 1:
+            return indexes[0]
         list_widget = getattr(self, "list", None)
         if not isinstance(list_widget, QListView):
             return None
-        index = list_widget.currentIndex()
-        if not index.isValid():
+        current_index = list_widget.currentIndex()
+        if not current_index.isValid() or current_index.data(TaskRoles.RowType) != "task":
             return None
-        if index.data(TaskRoles.RowType) != "task":
-            return None
-        return index
+        return current_index
+
+    def _on_task_selection_changed(self, *_args) -> None:
+        self.update_action_states()
+        self._refresh_batch_bar_visibility()
+
+    def _populate_batch_project_options(self) -> None:
+        combo = getattr(self, "batch_project_combo", None)
+        if not isinstance(combo, QComboBox):
+            return
+        current_project_id = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Без проекта", None)
+        for project in self._db.fetch_projects():
+            if project.archived:
+                continue
+            combo.addItem(f"{project.area} · {project.title}", project.id)
+        restore_index = combo.findData(current_project_id)
+        combo.setCurrentIndex(restore_index if restore_index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _clear_task_selection(self) -> None:
+        list_widget = getattr(self, "list", None)
+        if not isinstance(list_widget, QListView):
+            return
+        selection_model = list_widget.selectionModel()
+        if selection_model is None:
+            return
+        selection_model.clearSelection()
+        selection_model.setCurrentIndex(QModelIndex(), QItemSelectionModel.SelectionFlag.NoUpdate)
+        self.update_action_states()
+        self._refresh_batch_bar_visibility()
+
+    def _selected_batch_action(self) -> str:
+        combo = getattr(self, "batch_action_combo", None)
+        if not isinstance(combo, QComboBox):
+            return ""
+        action_key = combo.currentData()
+        return action_key if isinstance(action_key, str) else ""
+
+    def _update_batch_action_inputs(self) -> None:
+        action_key = self._selected_batch_action()
+        if isinstance(self.batch_date_edit, QDateEdit):
+            self.batch_date_edit.setVisible(action_key == "move_to_day")
+        if isinstance(self.batch_project_combo, QComboBox):
+            if action_key == "move_to_project":
+                self._populate_batch_project_options()
+                self.batch_project_combo.show()
+            else:
+                self.batch_project_combo.hide()
+        if isinstance(self.batch_marker_color_combo, QComboBox):
+            self.batch_marker_color_combo.setVisible(action_key == "marker_color")
+        if isinstance(self.batch_marker_theme_combo, QComboBox):
+            self.batch_marker_theme_combo.setVisible(action_key == "marker_theme")
+        if isinstance(self.batch_apply_button, QToolButton):
+            self.batch_apply_button.setEnabled(bool(action_key) and len(self._selected_task_ids()) >= 2)
+        self._update_batch_bar_geometry()
+
+    def _batch_bar_should_be_visible(self) -> bool:
+        return (
+            isinstance(self.batch_bar, QFrame)
+            and self.content_stack is not None
+            and self.content_stack.currentWidget() is self.list
+            and len(self._selected_task_ids()) >= 2
+        )
+
+    def _refresh_batch_bar_visibility(self) -> None:
+        if not isinstance(self.list, QListView) or not isinstance(self.batch_bar, QFrame):
+            return
+        is_visible = self._batch_bar_should_be_visible()
+        if isinstance(self.batch_selection_label, QLabel):
+            self.batch_selection_label.setText(f"Выбрано задач: {len(self._selected_task_ids())}")
+        if is_visible:
+            if isinstance(self.batch_date_edit, QDateEdit):
+                focus_day = self._focus_day
+                self.batch_date_edit.setDate(QDate(focus_day.year, focus_day.month, focus_day.day))
+            self._update_batch_action_inputs()
+            self.batch_bar.show()
+            self._update_batch_bar_geometry()
+            self.batch_bar.raise_()
+        else:
+            self.batch_bar.hide()
+            self.list.setViewportMargins(0, 0, 0, 0)
+
+    def _update_batch_bar_geometry(self) -> None:
+        if not isinstance(self.list, QListView) or not isinstance(self.batch_bar, QFrame):
+            return
+        if not self.batch_bar.isVisible():
+            self.list.setViewportMargins(0, 0, 0, 0)
+            return
+        bar_height = max(64, self.batch_bar.sizeHint().height())
+        contents_rect = self.list.contentsRect()
+        x = contents_rect.left() + 8
+        width = max(120, contents_rect.width() - 16)
+        y = contents_rect.bottom() - bar_height - 8
+        self.batch_bar.setGeometry(x, y, width, bar_height)
+        self.list.setViewportMargins(0, 0, 0, bar_height + 16)
 
     def _index_for_task_id(self, task_id: int) -> Optional[QModelIndex]:
         if not hasattr(self, "model"):
@@ -1334,6 +1580,13 @@ class TasksWorkspace(BaseWorkspace):
         self.delegate.edit_task(index)
 
     def _delete_selected_task(self) -> None:
+        selected_ids = self._selected_task_ids()
+        if not selected_ids:
+            return
+        if len(selected_ids) >= 2:
+            self.batch_action_combo.setCurrentIndex(self.batch_action_combo.findData("delete"))
+            self._apply_batch_action()
+            return
         index = self._selected_task_index()
         if index is None:
             return
@@ -1350,6 +1603,69 @@ class TasksWorkspace(BaseWorkspace):
         model = index.model()
         if hasattr(model, "delete_task_by_row"):
             model.delete_task_by_row(index.row())
+
+    def _apply_batch_action(self) -> None:
+        selected_ids = self._selected_task_ids()
+        if len(selected_ids) < 2:
+            return
+        action_key = self._selected_batch_action()
+        if not action_key:
+            return
+
+        changed_count = 0
+        if action_key == "complete":
+            changed_count = self.model.set_done_by_ids(selected_ids, True)
+            status_text = f"Отмечено выполненными: {changed_count}."
+        elif action_key == "delete":
+            dialog = ConfirmDialog(
+                "Удалить задачи",
+                f"Удалить выбранные задачи: {len(selected_ids)} шт.?",
+                parent=self,
+                confirm_text="Удалить",
+                cancel_text="Отмена",
+            )
+            if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+                return
+            changed_count = self.model.delete_tasks_by_ids(selected_ids)
+            status_text = f"Удалено задач: {changed_count}."
+        elif action_key == "tomorrow":
+            changed_count = self.model.move_tasks_to_tomorrow_by_ids(selected_ids)
+            status_text = f"Перенесено на завтра: {changed_count}."
+        elif action_key == "priority_up":
+            changed_count = self.model.step_priority_by_ids(selected_ids, +1)
+            status_text = f"Повышен приоритет у задач: {changed_count}."
+        elif action_key == "priority_down":
+            changed_count = self.model.step_priority_by_ids(selected_ids, -1)
+            status_text = f"Понижен приоритет у задач: {changed_count}."
+        elif action_key == "move_to_day":
+            target_date = self.batch_date_edit.date().toPython()
+            changed_count = self.model.move_tasks_to_day_by_ids(selected_ids, target_date)
+            status_text = f"Перенесено на {target_date.isoformat()}: {changed_count}."
+        elif action_key == "move_to_project":
+            changed_count = self.model.set_project_by_ids(selected_ids, self.batch_project_combo.currentData())
+            status_text = f"Обновлен проект у задач: {changed_count}."
+        elif action_key == "marker_color":
+            marker_color = self.batch_marker_color_combo.currentData()
+            changed_count = self.model.set_marker_color_by_ids(selected_ids, marker_color if isinstance(marker_color, str) else "")
+            status_text = f"Обновлен цвет маркера у задач: {changed_count}."
+        elif action_key == "marker_theme":
+            marker_theme = self.batch_marker_theme_combo.currentData()
+            changed_count = self.model.set_marker_theme_by_ids(selected_ids, marker_theme if isinstance(marker_theme, str) else "")
+            status_text = f"Обновлена тема маркера у задач: {changed_count}."
+        elif action_key == "defer":
+            changed_count = self.model.set_priority_by_ids(selected_ids, DEFERRED_PRIORITY)
+            status_text = f"Перенесено в отложенные: {changed_count}."
+        else:
+            return
+
+        if changed_count <= 0:
+            self.set_status("Групповое действие не изменило задачи")
+            return
+        self._refresh_project_quick_links()
+        self._clear_task_selection()
+        if isinstance(self.batch_action_combo, QComboBox):
+            self.batch_action_combo.setCurrentIndex(0)
+        self.set_status(status_text)
 
     def _shift_day(self, delta: int):
         """Сдвигает фокусную дату на указанное число дней."""
@@ -1450,8 +1766,11 @@ class TasksWorkspace(BaseWorkspace):
         self._refresh_project_quick_links()
 
     def eventFilter(self, obj, event) -> bool:
+        if obj is self.list and event.type() == QEvent.Type.Resize:
+            self._update_batch_bar_geometry()
         if obj is self.list.viewport() and event.type() == QEvent.Type.Resize:
             self._update_sticky_day_header()
+            self._update_batch_bar_geometry()
         if obj is self.list.viewport() and event.type() == QEvent.Type.MouseButtonDblClick:
             if isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
                 pos = event.position().toPoint()
@@ -1583,6 +1902,7 @@ class TasksWorkspace(BaseWorkspace):
             self.tab_all.setChecked(True)
         self._update_day_label()
         self._update_sticky_day_header()
+        self._refresh_batch_bar_visibility()
 
     def _remember_filter(self, key: str, value: Optional[object]) -> None:
         if value is None:
@@ -1657,16 +1977,20 @@ class TasksWorkspace(BaseWorkspace):
         if self._gantt_mode:
             self.content_stack.setCurrentWidget(self.gantt_page)
             self._refresh_gantt_day()
+            self._refresh_batch_bar_visibility()
             return
         if self._board_mode:
             self.content_stack.setCurrentWidget(self.board_page)
             self._refresh_board_day()
+            self._refresh_batch_bar_visibility()
             return
         if self._dash_mode:
             self.content_stack.setCurrentWidget(self.dash_page)
             self._refresh_dash_day()
+            self._refresh_batch_bar_visibility()
             return
         self.content_stack.setCurrentWidget(self.list)
+        self._refresh_batch_bar_visibility()
 
     def _is_sticky_header_enabled(self) -> bool:
         return (
