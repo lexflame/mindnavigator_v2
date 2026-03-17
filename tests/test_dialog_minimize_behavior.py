@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QPointF, Qt, QEvent
+from PySide6.QtCore import QPoint, QPointF, Qt, QEvent, QTimer
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QVBoxLayout, QWidget
 
@@ -431,6 +431,41 @@ def test_restore_minimizable_task_dialog_raises_dialog_after_overlay(monkeypatch
         assert calls == ["show", "overlay:303", "raise", "activate"]
     finally:
         dialog.deleteLater()
+
+
+def test_show_minimizable_task_dialog_keeps_waiting_after_minimize_and_restore(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+
+    class _RestoreWindow(_MinimizeWindow):
+        def minimize_task_dialog(self, dialog: QWidget, task_id: int, is_edit_dialog: bool) -> None:
+            self.calls.append((dialog, task_id, is_edit_dialog))
+            dialog.hide()
+            QTimer.singleShot(0, lambda current_dialog=dialog: frameless_patch.restore_minimizable_task_dialog(current_dialog))
+            QTimer.singleShot(0, dialog.accept)
+
+    window = _RestoreWindow()
+    window.show()
+    monkeypatch.setattr(task_edit_dialog, "get_database", lambda: _TaskDialogDb())
+    dialog = task_edit_dialog.TaskEditDialog(
+        TaskRow(
+            id=411,
+            day=__import__("datetime").date(2026, 3, 6),
+            time_text="09:00",
+            title="Edit task",
+            description="",
+            priority="Medium",
+            done=False,
+        ),
+        parent=window,
+    )
+    try:
+        QTimer.singleShot(0, lambda: window.minimize_task_dialog(dialog, 411, True))
+        result = frameless_patch._run_minimizable_task_dialog(dialog)
+        assert result == int(QDialog.DialogCode.Accepted)
+        assert window.calls == [(dialog, 411, True)]
+    finally:
+        dialog.deleteLater()
+        window.deleteLater()
 
 
 def test_main_window_app_click_fallback_minimizes_visible_task_dialog(monkeypatch) -> None:

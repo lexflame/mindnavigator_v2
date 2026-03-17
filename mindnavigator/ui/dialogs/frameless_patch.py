@@ -339,20 +339,42 @@ def _run_minimizable_task_dialog(dialog: QDialog) -> int:
         f"active={dialog.isActiveWindow()} visible={dialog.isVisible()}"
     )
 
-    result_holder = {"value": int(dialog.result())}
-    loop = QEventLoop(dialog)
+    result_holder = {"value": int(dialog.result()), "finished": False}
+    active_loop: dict[str, QEventLoop | None] = {"value": None}
 
     def _finish(result_code: int) -> None:
         result_holder["value"] = int(result_code)
-        if loop.isRunning():
-            loop.quit()
+        result_holder["finished"] = True
+        current_loop = active_loop["value"]
+        if current_loop is not None and current_loop.isRunning():
+            current_loop.quit()
+
+    def _destroyed(*_args) -> None:
+        result_holder["finished"] = True
+        current_loop = active_loop["value"]
+        if current_loop is not None and current_loop.isRunning():
+            current_loop.quit()
 
     dialog.finished.connect(_finish)
+    dialog.destroyed.connect(_destroyed)
     try:
-        loop.exec()
+        while not result_holder["finished"]:
+            loop = QEventLoop()
+            active_loop["value"] = loop
+            loop.exec()
+            active_loop["value"] = None
+            if not result_holder["finished"]:
+                debug_task_dialog(
+                    f"run_minimizable_dialog wait_continue dialog={type(dialog).__name__} "
+                    f"task_id={dialog.property('task_dialog_id')} visible={dialog.isVisible()}"
+                )
     finally:
         try:
             dialog.finished.disconnect(_finish)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            dialog.destroyed.disconnect(_destroyed)
         except (RuntimeError, TypeError):
             pass
     return result_holder["value"]
