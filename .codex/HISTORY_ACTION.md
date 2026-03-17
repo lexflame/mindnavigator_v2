@@ -1294,6 +1294,29 @@
 [2026-03-13 18:37] OUT: 243 passed.
 [2026-03-13 18:37] ACTION: Updated TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 status -> Completed.
 [2026-03-13 18:37] ACTION: Completed TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76.
+[2026-03-16 19:06] SESSION_START: Started adhoc delivery for task-list marker theme full-width background fix.
+[2026-03-16 19:06] ACTION: Started TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE (Fix task-list marker theme backgrounds to span the full row width without covering row controls).
+[2026-03-16 19:06] ACTION: Updated TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE status -> In Progress.
+[2026-03-16 19:06] ACTION: Created docs/sprints/TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE_PLAN.md.
+[2026-03-16 19:06] ACTION: Updated task-row marker theme painting, focused tests, and docs for full-width background overlay behavior.
+[2026-03-16 19:06] CMD: python -m compileall mindnavigator main.py
+[2026-03-16 19:06] OUT: OK.
+[2026-03-16 19:06] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_marker_theme_fullwidth
+[2026-03-16 19:06] OUT: 32 passed.
+[2026-03-16 19:08] CMD: git switch -c sprint/tasks-marker-theme-fullwidth-bg
+[2026-03-16 19:08] OUT: Switched to a new branch `sprint/tasks-marker-theme-fullwidth-bg`.
+[2026-03-16 19:10] CMD: git commit -m "fix: task-list marker theme full-width background"
+[2026-03-16 19:10] OUT: Created commit `56fdbd4` on `sprint/tasks-marker-theme-fullwidth-bg`.
+[2026-03-16 19:10] CMD: $env:GIT_ASKPASS=(Resolve-Path '.codex/git_key/git_askpass.bat'); $env:GIT_TERMINAL_PROMPT='0'; git push -u origin sprint/tasks-marker-theme-fullwidth-bg
+[2026-03-16 19:10] OUT: Branch published to `origin/sprint/tasks-marker-theme-fullwidth-bg`.
+[2026-03-16 19:10] CMD: Create PR for `sprint/tasks-marker-theme-fullwidth-bg` via GitHub API.
+[2026-03-16 19:10] OUT: PR created: `https://github.com/lexflame/mindnavigator_v2/pull/226`.
+[2026-03-16 19:11] CMD: Query PR #226 check-runs via GitHub API.
+[2026-03-16 19:11] OUT: Checks pending (`build`, `build (3.11)`, `build (3.12)`); `build (3.13)` already passed.
+[2026-03-16 19:15] CMD: Re-check PR #226 pipelines after wait.
+[2026-03-16 19:15] OUT: All checks passed (`build`, `build (3.11)`, `build (3.12)`, `build (3.13)`).
+[2026-03-16 19:15] ACTION: Updated TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE status -> Completed.
+[2026-03-16 19:15] ACTION: Completed TASK_D5E1D4DB-7A4B-434A-A9DA-F128071E90FE.
 [2026-03-17 13:24] SESSION_START: Started delivery flow for the settings backup layout fix.
 [2026-03-17 13:24] CMD: git branch --show-current
 [2026-03-17 13:24] OUT: sprint/settings-backup-layout-fix

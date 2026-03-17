@@ -205,44 +205,45 @@ class TasksItemDelegate(QStyledItemDelegate):
             pixmap = QPixmap()
             self._marker_theme_pixmap_cache[theme_key] = pixmap
             return pixmap
-        asset_path = Path(__file__).resolve().parents[2] / "assets" / "badge" / asset_name
+        asset_path = Path(__file__).resolve().parents[3] / "assets" / "badge" / asset_name
         pixmap = QPixmap(str(asset_path))
         self._marker_theme_pixmap_cache[theme_key] = pixmap
         return pixmap
+
+    @staticmethod
+    def _marker_theme_overlay_rect(row_rect: QRect) -> QRect:
+        return row_rect.adjusted(1, 1, -1, -1)
 
     def _draw_marker_theme_overlay(self, painter: QPainter, row_rect: QRect, marker_theme: str) -> None:
         theme_key = (marker_theme or "").strip().lower()
         if not theme_key:
             return
-        overlay_rect = QRect(
-            row_rect.right() - 118,
-            row_rect.top() + 2,
-            112,
-            max(18, row_rect.height() - 4),
-        )
+        overlay_rect = self._marker_theme_overlay_rect(row_rect)
+        if overlay_rect.width() <= 0 or overlay_rect.height() <= 0:
+            return
         asset_pixmap = self._marker_theme_asset_pixmap(theme_key)
         if not asset_pixmap.isNull():
             themed_pixmap = asset_pixmap.scaled(
                 overlay_rect.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            target_rect = QRect(
-                overlay_rect.right() - themed_pixmap.width(),
-                overlay_rect.center().y() - themed_pixmap.height() // 2,
-                themed_pixmap.width(),
-                themed_pixmap.height(),
+            source_rect = QRect(
+                max(0, (themed_pixmap.width() - overlay_rect.width()) // 2),
+                max(0, (themed_pixmap.height() - overlay_rect.height()) // 2),
+                min(overlay_rect.width(), themed_pixmap.width()),
+                min(overlay_rect.height(), themed_pixmap.height()),
             )
             painter.save()
-            painter.setOpacity(0.14)
-            painter.drawPixmap(target_rect, themed_pixmap)
+            painter.setOpacity(0.08)
+            painter.drawPixmap(overlay_rect, themed_pixmap, source_rect)
             painter.restore()
             return
         theme_icon = self._marker_theme_icons.get(theme_key)
         if theme_icon is None:
             return
         icon_rect = QRect(
-            overlay_rect.center().x() - 10,
+            overlay_rect.right() - 30,
             overlay_rect.center().y() - 10,
             20,
             20,
@@ -373,6 +374,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
+        self._draw_marker_theme_overlay(painter, r, marker_theme)
         task_id_value = index.data(TaskRoles.TaskId)
         try:
             flash_progress = self._task_flash_progress.get(int(task_id_value))
@@ -384,7 +386,6 @@ class TasksItemDelegate(QStyledItemDelegate):
             flash_color = QColor("#f3d36b")
             flash_color.setAlpha(max(0, min(170, int(170 * envelope * (0.35 + pulse * 0.65)))))
             painter.fillRect(r, flash_color)
-        self._draw_marker_theme_overlay(painter, r, marker_theme)
         painter.setPen(self.C_BORDER)
         painter.drawRect(r.adjusted(0, 0, -1, -1))
 

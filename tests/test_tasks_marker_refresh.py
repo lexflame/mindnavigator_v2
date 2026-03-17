@@ -209,6 +209,27 @@ def test_task_quick_buttons_use_full_row_height_and_icon() -> None:
     assert hasattr(delegate, "_icon_quick_add")
 
 
+def test_marker_theme_asset_pixmap_loads_from_project_assets() -> None:
+    _app = QApplication.instance() or QApplication([])
+    delegate = tasks_workspace.TasksItemDelegate()
+
+    pixmap = delegate._marker_theme_asset_pixmap("movies")
+
+    assert pixmap.isNull() is False
+
+
+def test_marker_theme_overlay_rect_spans_full_task_row_width() -> None:
+    _app = QApplication.instance() or QApplication([])
+    delegate = tasks_workspace.TasksItemDelegate()
+    task_row = QRect(0, 0, 1000, delegate.ROW_H)
+
+    overlay_rect = delegate._marker_theme_overlay_rect(task_row)
+
+    assert overlay_rect.left() == task_row.left() + 1
+    assert overlay_rect.right() == task_row.right() - 1
+    assert overlay_rect.height() == task_row.height() - 2
+
+
 def test_tasks_model_expand_subtasks_tree_by_row_expands_nested_branch(monkeypatch, unique_temp_path) -> None:
     _app = QCoreApplication.instance() or QCoreApplication([])
     db_path = unique_temp_path("tasks_expand_tree", ".sqlite3")
