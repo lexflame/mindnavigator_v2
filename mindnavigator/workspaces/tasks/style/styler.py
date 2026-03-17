@@ -104,6 +104,42 @@ class TasksWorkspaceStyle:
                 background: {palette.window_bg};
                 border: 1px solid {palette.border};
             }}
+            QFrame#TasksBatchBar {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border_strong};
+                border-radius: 12px;
+            }}
+            QLabel#TasksBatchSelectionLabel {{
+                color: {palette.text};
+                font-weight: 600;
+            }}
+            QLabel#TasksBatchHintLabel {{
+                color: {palette.dim_text};
+            }}
+            QComboBox#TasksBatchAction,
+            QComboBox#TasksBatchProject,
+            QComboBox#TasksBatchMarkerColor,
+            QComboBox#TasksBatchMarkerTheme,
+            QDateEdit#TasksBatchDateEdit {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 5px 8px;
+            }}
+            QToolButton#TasksBatchApplyButton,
+            QToolButton#TasksBatchClearButton {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 8px;
+                padding: 6px 10px;
+            }}
+            QToolButton#TasksBatchApplyButton:hover,
+            QToolButton#TasksBatchClearButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
             QLabel#TasksStickyHeader {{
                 background: {palette.window_bg};
                 color: {palette.dim_text};

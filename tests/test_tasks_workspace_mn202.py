@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from PySide6.QtCore import QItemSelectionModel
 from PySide6.QtGui import QImage, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -57,6 +58,24 @@ def _create_completed_task(database: Database, title: str, completion_day: date,
         marker_theme=created.marker_theme,
     )
     return created.id
+
+
+def _select_task_ids(workspace: tasks_workspace.TasksWorkspace, task_ids: list[int]) -> None:
+    selection_model = workspace.list.selectionModel()
+    assert selection_model is not None
+    selection_model.clearSelection()
+    for index, task_id in enumerate(task_ids):
+        row_idx = _find_task_row(workspace.model, task_id)
+        assert row_idx >= 0
+        model_index = workspace.model.index(row_idx, 0)
+        selection_flags = (
+            QItemSelectionModel.SelectionFlag.ClearAndSelect
+            if index == 0
+            else QItemSelectionModel.SelectionFlag.Select
+        )
+        selection_model.select(model_index, selection_flags)
+        selection_model.setCurrentIndex(model_index, QItemSelectionModel.SelectionFlag.Current)
+    QApplication.processEvents()
 
 
 def test_tasks_model_cycles_priority_including_deferred(monkeypatch, unique_temp_path) -> None:
@@ -134,6 +153,96 @@ def test_tasks_workspace_uses_extracted_mode_helpers(monkeypatch, unique_temp_pa
         assert workspace.board_columns is workspace._board_cast.columns
         assert workspace.dash_bar_chart is workspace._dash_cast.bar_chart
     finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_shows_batch_bar_for_multi_selection(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_batch_bar_visibility", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_task = database.create_task(
+            title="Batch select one",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        second_task = database.create_task(
+            title="Batch select two",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="10:00",
+            priority="High",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        workspace = tasks_workspace.TasksWorkspace()
+
+        assert workspace.list.selectionMode() == tasks_workspace.QListView.SelectionMode.ExtendedSelection
+        assert workspace.batch_bar.isHidden()
+
+        _select_task_ids(workspace, [first_task.id, second_task.id])
+
+        assert not workspace.batch_bar.isHidden()
+        assert workspace.batch_selection_label.text() == "Выбрано задач: 2"
+
+        workspace.batch_action_combo.setCurrentIndex(workspace.batch_action_combo.findData("move_to_day"))
+        QApplication.processEvents()
+        assert not workspace.batch_date_edit.isHidden()
+        assert workspace.batch_project_combo.isHidden()
+
+        workspace.batch_action_combo.setCurrentIndex(workspace.batch_action_combo.findData("move_to_project"))
+        QApplication.processEvents()
+        assert not workspace.batch_project_combo.isHidden()
+        assert workspace.batch_marker_color_combo.isHidden()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_batch_action_defers_selected_tasks(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_batch_action_defer", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_task = database.create_task(
+            title="Batch defer one",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        second_task = database.create_task(
+            title="Batch defer two",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="11:00",
+            priority="High",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        workspace = tasks_workspace.TasksWorkspace()
+        _select_task_ids(workspace, [first_task.id, second_task.id])
+
+        workspace.batch_action_combo.setCurrentIndex(workspace.batch_action_combo.findData("defer"))
+        workspace._apply_batch_action()
+        QApplication.processEvents()
+
+        updated_tasks = {task.id: task for task in database.fetch_tasks()}
+        assert updated_tasks[first_task.id].priority == DEFERRED_PRIORITY
+        assert updated_tasks[second_task.id].priority == DEFERRED_PRIORITY
+        assert workspace.batch_bar.isHidden()
+        assert workspace.batch_action_combo.currentData() == ""
+        assert workspace.status_row.text() == "Перенесено в отложенные: 2."
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
 

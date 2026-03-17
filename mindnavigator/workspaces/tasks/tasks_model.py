@@ -303,6 +303,51 @@ class TasksModel(QAbstractListModel):
                 return idx
         return -1
 
+    @staticmethod
+    def _unique_task_ids(task_ids: List[int]) -> List[int]:
+        unique_ids: List[int] = []
+        seen: set[int] = set()
+        for task_id in task_ids:
+            if task_id in seen:
+                continue
+            seen.add(task_id)
+            unique_ids.append(task_id)
+        return unique_ids
+
+    @staticmethod
+    def _task_update_payload(task: TaskRow) -> dict[str, Any]:
+        return {
+            "title": task.title,
+            "description": task.description,
+            "day": task.day,
+            "time_text": task.time_text,
+            "priority": task.priority,
+            "done": task.done,
+            "project_id": task.project_id,
+            "parent_id": task.parent_id,
+            "recurrence_kind": task.recurrence_kind,
+            "recurrence_interval": task.recurrence_interval,
+            "marker_color": task.marker_color,
+            "marker_theme": task.marker_theme,
+        }
+
+    def _apply_task_updates_by_ids(self, task_ids: List[int], update_builder) -> int:
+        changed = 0
+        for task_id in self._unique_task_ids(task_ids):
+            task = self.task_by_id(task_id)
+            if task is None:
+                continue
+            changes = update_builder(task)
+            if not changes:
+                continue
+            payload = self._task_update_payload(task)
+            payload.update(changes)
+            self._db.update_task(task_id=task.id, **payload)
+            changed += 1
+        if changed:
+            self._reload_from_db()
+        return changed
+
     def update_task_by_row(
         self,
         row_idx: int,
@@ -514,6 +559,85 @@ class TasksModel(QAbstractListModel):
 
         self._db.delete_task(r.id)
         self._reload_from_db()
+
+    def set_done_by_ids(self, task_ids: List[int], done: bool) -> int:
+        changed = 0
+        for task_id in self._unique_task_ids(task_ids):
+            task = self.task_by_id(task_id)
+            if task is None or task.done == done:
+                continue
+            self._db.set_task_done(task.id, done)
+            changed += 1
+        if changed:
+            self._reload_from_db()
+        return changed
+
+    def delete_tasks_by_ids(self, task_ids: List[int]) -> int:
+        changed = 0
+        for task_id in self._unique_task_ids(task_ids):
+            task = self.task_by_id(task_id)
+            if task is None:
+                continue
+            self._db.delete_task(task.id)
+            changed += 1
+        if changed:
+            self._reload_from_db()
+        return changed
+
+    def move_tasks_to_day_by_ids(self, task_ids: List[int], new_day: date) -> int:
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: None if task.day == new_day else {"day": new_day},
+        )
+
+    def move_tasks_to_tomorrow_by_ids(self, task_ids: List[int]) -> int:
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: {"day": self.next_day_for_task(task)},
+        )
+
+    def step_priority_by_ids(self, task_ids: List[int], direction: int) -> int:
+        ordered_priorities = [DEFERRED_PRIORITY, "Low", "Medium", "High"]
+
+        def update_builder(task: TaskRow) -> Optional[dict[str, Any]]:
+            try:
+                current_index = ordered_priorities.index(task.priority)
+            except ValueError:
+                current_index = ordered_priorities.index("Medium")
+            next_index = max(0, min(len(ordered_priorities) - 1, current_index + int(direction)))
+            next_priority = ordered_priorities[next_index]
+            if next_priority == task.priority:
+                return None
+            return {"priority": next_priority}
+
+        return self._apply_task_updates_by_ids(task_ids, update_builder)
+
+    def set_priority_by_ids(self, task_ids: List[int], priority: str) -> int:
+        normalized_priority = normalize_priority(priority)
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: None if task.priority == normalized_priority else {"priority": normalized_priority},
+        )
+
+    def set_project_by_ids(self, task_ids: List[int], project_id: Optional[int]) -> int:
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: None if task.project_id == project_id else {"project_id": project_id},
+        )
+
+    def set_marker_color_by_ids(self, task_ids: List[int], marker_color: str) -> int:
+        normalized_color = (marker_color or "").strip()
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: None if (task.marker_color or "").strip() == normalized_color else {"marker_color": normalized_color},
+        )
+
+    def set_marker_theme_by_ids(self, task_ids: List[int], marker_theme: str) -> int:
+        normalized_theme = (marker_theme or "").strip().lower()
+        return self._apply_task_updates_by_ids(
+            task_ids,
+            lambda task: None if (task.marker_theme or "").strip().lower() == normalized_theme else {"marker_theme": normalized_theme},
+        )
 
     def move_task_to_day(self, task_id: int, new_day: date, parent_id=_PARENT_UNSET) -> bool:
         """Переносит задачу на новую дату."""
