@@ -19,7 +19,7 @@ import tempfile
 import zipfile
 from typing import cast
 
-from PySide6.QtCore import QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QSpinBox,
     QMessageBox,
+    QScrollArea,
 )
 
 from mindnavigator.spaceenity.constants import APP_VERSION, UPDATE_REPOSITORY_NAME, UPDATE_REPOSITORY_OWNER
@@ -120,7 +121,22 @@ class SettingsWorkspace(QWidget):
         self._load_settings()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        settings_scroll = QScrollArea()
+        settings_scroll.setObjectName("SettingsScroll")
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(settings_scroll)
+
+        content = QWidget()
+        content.setObjectName("SettingsContent")
+        settings_scroll.setWidget(content)
+
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(18)
 
@@ -288,9 +304,6 @@ class SettingsWorkspace(QWidget):
         backup_layout.addWidget(backup_title)
         backup_layout.addWidget(backup_hint)
 
-        backup_row = QHBoxLayout()
-        backup_row.setSpacing(12)
-
         backup_text = QVBoxLayout()
         backup_text.setSpacing(6)
 
@@ -301,8 +314,10 @@ class SettingsWorkspace(QWidget):
         backup_desc.setWordWrap(True)
         backup_text.addWidget(backup_label)
         backup_text.addWidget(backup_desc)
+        backup_layout.addLayout(backup_text)
 
-        backup_row.addLayout(backup_text, 1)
+        backup_row = QHBoxLayout()
+        backup_row.setSpacing(12)
 
         self.backup_path_edit = QLineEdit()
         self.backup_path_edit.setObjectName("SettingsPath")
@@ -325,9 +340,6 @@ class SettingsWorkspace(QWidget):
 
         backup_layout.addLayout(backup_row)
 
-        options_row = QHBoxLayout()
-        options_row.setSpacing(12)
-
         self.include_cloud_checkbox = QCheckBox("Включать облачное хранилище")
         self.include_cloud_checkbox.setObjectName("SettingsToggle")
         self.include_cloud_checkbox.toggled.connect(self._on_backup_option_changed)
@@ -349,12 +361,32 @@ class SettingsWorkspace(QWidget):
         self.retention_spin.setSuffix(" копий")
         self.retention_spin.valueChanged.connect(self._on_backup_option_changed)
 
-        options_row.addWidget(self.include_cloud_checkbox)
-        options_row.addWidget(self.auto_backup_checkbox)
-        options_row.addWidget(self.frequency_combo)
-        options_row.addWidget(self.retention_spin)
-        options_row.addStretch(1)
-        backup_layout.addLayout(options_row)
+        options_layout = QVBoxLayout()
+        options_layout.setSpacing(10)
+
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(12)
+        toggle_row.addWidget(self.include_cloud_checkbox)
+        toggle_row.addWidget(self.auto_backup_checkbox)
+        toggle_row.addStretch(1)
+        options_layout.addLayout(toggle_row)
+
+        schedule_row = QHBoxLayout()
+        schedule_row.setSpacing(12)
+
+        frequency_label = QLabel("Периодичность")
+        frequency_label.setObjectName("SettingsLabel")
+        retention_label = QLabel("Хранить")
+        retention_label.setObjectName("SettingsLabel")
+
+        schedule_row.addWidget(frequency_label, 0)
+        schedule_row.addWidget(self.frequency_combo, 0)
+        schedule_row.addWidget(retention_label, 0)
+        schedule_row.addWidget(self.retention_spin, 0)
+        schedule_row.addStretch(1)
+        options_layout.addLayout(schedule_row)
+
+        backup_layout.addLayout(options_layout)
 
         list_row = QHBoxLayout()
         list_row.setSpacing(12)
@@ -457,6 +489,13 @@ class SettingsWorkspace(QWidget):
                 background: #222429;
                 border: 1px solid #32343a;
                 border-radius: 10px;
+            }
+            QScrollArea#SettingsScroll {
+                background: transparent;
+                border: none;
+            }
+            QWidget#SettingsContent, QWidget#qt_scrollarea_viewport {
+                background: transparent;
             }
             QLabel#SettingsLabel {
                 color: #e2e2e2;

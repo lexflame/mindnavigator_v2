@@ -3,6 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from PySide6.QtCore import QPoint
+from PySide6.QtWidgets import QApplication, QLabel, QScrollArea
+
+import mindnavigator.workspaces.settings.settings_workspace as settings_workspace_impl
 from mindnavigator.workspaces import settings as settings_workspace
 from mindnavigator.workspaces.settings import SettingsWorkspace
 
@@ -40,6 +44,17 @@ class _DummyDB:
         self.calls.append((key, value))
         if self._error is not None:
             raise self._error
+
+
+class _DummyUiDB:
+    def __init__(self) -> None:
+        self.path = Path("D:/mindnavigator/mindnavigator.db")
+
+    def get_setting(self, _key: str, default: str = "") -> str:
+        return default
+
+    def set_setting(self, _key: str, _value: str) -> None:
+        return None
 
 
 class _DummySettingsWorkspace:
@@ -136,3 +151,32 @@ def test_workspace_status_uses_russian_label() -> None:
     SettingsWorkspace._update_workspace_status(workspace)  # type: ignore[arg-type]
 
     assert workspace.workspace_status.value == "Видимые разделы: 2"
+
+
+def test_backup_section_uses_scroll_and_stacked_rows(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(settings_workspace, "get_database", lambda: _DummyUiDB())
+    monkeypatch.setattr(settings_workspace_impl, "get_configured_db_path", lambda: Path("D:/mindnavigator/mindnavigator.db"))
+    monkeypatch.setattr(settings_workspace_impl, "default_db_path", lambda: Path("D:/mindnavigator/mindnavigator.db"))
+    monkeypatch.setattr(SettingsWorkspace, "_apply_windows_autostart", lambda self, enabled: None)
+
+    workspace = SettingsWorkspace()
+    workspace.resize(760, 420)
+    workspace.show()
+    _app.processEvents()
+
+    scroll = workspace.findChild(QScrollArea, "SettingsScroll")
+    assert scroll is not None
+
+    backup_desc = next(
+        label for label in workspace.findChildren(QLabel) if label.text() == "Укажите директорию, в которой будут храниться архивы."
+    )
+    include_cloud = workspace.include_cloud_checkbox
+
+    backup_desc_bottom = backup_desc.mapTo(workspace, QPoint(0, backup_desc.height())).y()
+    backup_path_top = workspace.backup_path_edit.mapTo(workspace, QPoint(0, 0)).y()
+    include_cloud_top = include_cloud.mapTo(workspace, QPoint(0, 0)).y()
+    frequency_top = workspace.frequency_combo.mapTo(workspace, QPoint(0, 0)).y()
+
+    assert backup_path_top >= backup_desc_bottom
+    assert frequency_top > include_cloud_top
