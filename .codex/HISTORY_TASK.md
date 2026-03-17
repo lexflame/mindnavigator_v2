@@ -226,8 +226,8 @@ Status: Completed
 
 ## maintenance - Settings Backup Layout Overflow Delivery
 Created: 2026-03-17
-Status: In Progress
+Status: Completed
 
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
-| TASK_63A40D9E-6AE1-4D90-A5E6-0A35C45A6F8C | maintenance | Fix backup settings layout overlap, publish delivery branch/PR, sync main, and document the change | fix | In Progress |
+| TASK_63A40D9E-6AE1-4D90-A5E6-0A35C45A6F8C | maintenance | Fix backup settings layout overlap, publish delivery branch/PR, sync main, and document the change | fix | Completed |
