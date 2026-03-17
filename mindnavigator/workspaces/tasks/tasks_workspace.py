@@ -813,6 +813,44 @@ class TasksWorkspace(BaseWorkspace):
             return
         self.list.viewport().update(self.list.visualRect(index))
 
+    def _calculate_dash_resultativity(self, all_tasks: List) -> Tuple[int, float]:
+        """Return recent completed-task impulse and the normalized baseline for previous periods."""
+        recent_start = self._focus_day - timedelta(days=1)
+        recent_impulse = sum(
+            1
+            for task in all_tasks
+            if task.done and recent_start <= task.day <= self._focus_day
+        )
+        previous_completion_days = [
+            task.day
+            for task in all_tasks
+            if task.done and task.day < recent_start
+        ]
+        if not previous_completion_days:
+            return recent_impulse, 0.0
+
+        baseline_span_days = max(1, (recent_start - min(previous_completion_days)).days)
+        baseline_impulse = len(previous_completion_days) / (baseline_span_days / 2.0)
+        return recent_impulse, baseline_impulse
+
+    def _format_dash_resultativity(self, all_tasks: List) -> str:
+        """Build a readable DASH summary for recent completion impulse against prior periods."""
+        recent_impulse, baseline_impulse = self._calculate_dash_resultativity(all_tasks)
+        if recent_impulse == 0 and baseline_impulse == 0:
+            return "Результативность: нет завершенных задач для сравнения."
+        if baseline_impulse <= 0:
+            return (
+                "Результативность: новый импульс "
+                f"{recent_impulse} за последние 2 дня, прошлые периоды для сравнения еще не накоплены."
+            )
+
+        ratio = recent_impulse / baseline_impulse
+        return (
+            f"Результативность: {ratio:.2f}x к прошлому темпу "
+            f"(импульс за последние 2 дня {recent_impulse}; "
+            f"база прошлых периодов {baseline_impulse:.2f} на 2 дня)."
+        )
+
     def _refresh_dash_day(self) -> None:
         if (
             self.dash_summary_label is None
@@ -848,7 +886,8 @@ class TasksWorkspace(BaseWorkspace):
             (
                 f"DASH на {self._focus_day.isoformat()}: диаграммы пересчитаны и заполнены заново.\n"
                 f"На {self._focus_day.isoformat()}: "
-                f"активных задач {total}, High {high}, Medium {medium}, Low {low}, Отложенных {deferred}."
+                f"активных задач {total}, High {high}, Medium {medium}, Low {low}, Отложенных {deferred}.\n"
+                f"{self._format_dash_resultativity(all_tasks)}"
             )
         )
 
