@@ -711,6 +711,7 @@ class TasksModel(QAbstractListModel):
     def _rebuild(self):
         """Перестраивает список задач с учетом фильтров и поиска."""
         today = date.today()
+        show_all_subtasks = self._filter_mode == "Сегодня"
 
         def is_today(d: date) -> bool:
             """Проверяет, соответствует ли дата сегодняшнему дню."""
@@ -800,7 +801,8 @@ class TasksModel(QAbstractListModel):
             if parent_id is None or not parent_children:
                 continue
             if parent_id not in self._subtask_state_initialized:
-                self._collapsed_subtask_ids.add(parent_id)
+                if not show_all_subtasks:
+                    self._collapsed_subtask_ids.add(parent_id)
                 self._subtask_state_initialized.add(parent_id)
 
         include_cache: dict[int, bool] = {}
@@ -836,7 +838,7 @@ class TasksModel(QAbstractListModel):
             if child_rows:
                 self._task_children[task_item.id] = child_rows
             new_rows.append(task_item)
-            if task_item.id in self._collapsed_subtask_ids:
+            if not show_all_subtasks and task_item.id in self._collapsed_subtask_ids:
                 return
             for child in child_rows:
                 append_task(child, depth + 1)
