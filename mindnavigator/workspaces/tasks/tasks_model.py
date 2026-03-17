@@ -296,6 +296,13 @@ class TasksModel(QAbstractListModel):
             return None
         return r
 
+    def row_for_task_id(self, task_id: int) -> int:
+        """Возвращает индекс текущей видимой строки задачи или -1."""
+        for idx, row in enumerate(self._rows):
+            if isinstance(row, TaskRow) and row.id == task_id:
+                return idx
+        return -1
+
     def update_task_by_row(
         self,
         row_idx: int,

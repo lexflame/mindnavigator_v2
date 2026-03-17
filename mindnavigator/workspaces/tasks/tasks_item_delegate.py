@@ -44,6 +44,7 @@ class TasksItemDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         """Инициализирует делегат отрисовки строк задач."""
         super().__init__(parent)
+        self._active_edit_dialogs: set[QDialog] = set()
         self._icon_doc = qta.icon("fa5s.file-alt", color="#cfcfcf")
         self._icon_grip = qta.icon("fa5s.grip-lines", color="#8a8a8a")
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color="#cfcfcf")
@@ -918,22 +919,59 @@ class TasksItemDelegate(QStyledItemDelegate):
             f"title={task.title!r} day={task.day.isoformat()} done={task.done}"
         )
         dialog = TaskEditDialog(task, parent=parent)
+        self._active_edit_dialogs.add(dialog)
+        dialog.destroyed.connect(
+            lambda *_args, current_dialog=dialog: self._active_edit_dialogs.discard(current_dialog)
+        )
+        dialog.finished.connect(
+            lambda result_code, current_dialog=dialog, current_model=tasks_model, current_task_id=task.id, current_parent=parent: self._apply_edit_dialog_result(
+                current_model,
+                current_task_id,
+                current_dialog,
+                current_parent,
+                int(result_code),
+            )
+        )
         dialog_result = exec_with_overlay(dialog, parent)
         debug_task_dialog(
             f"tasks_delegate edit_result row={index.row()} task_id={task.id} result={int(dialog_result)}"
         )
         if dialog_result != QDialog.DialogCode.Accepted:
             return
+        self._apply_edit_dialog_result(tasks_model, task.id, dialog, parent, int(dialog_result))
+
+    def _apply_edit_dialog_result(
+        self,
+        tasks_model: TasksModel,
+        task_id: int,
+        dialog: QDialog,
+        parent: QWidget | None,
+        result_code: int,
+    ) -> None:
+        if bool(dialog.property("_task_edit_result_applied")):
+            return
+        if int(result_code) != int(QDialog.DialogCode.Accepted):
+            debug_task_dialog(
+                f"tasks_delegate edit_deferred_skip task_id={task_id} result={int(result_code)}"
+            )
+            return
+
+        current_row = tasks_model.row_for_task_id(task_id)
+        if current_row < 0:
+            debug_task_dialog(
+                f"tasks_delegate edit_apply_missing_row task_id={task_id}"
+            )
+            return
 
         values = dialog.values()
         debug_task_dialog(
-            f"tasks_delegate edit_apply row={index.row()} task_id={task.id} "
+            f"tasks_delegate edit_apply row={current_row} task_id={task_id} "
             f"title={values['title']!r} day={values['day'].isoformat()} time={values['time_text']!r} "
             f"priority={values['priority']!r} done={values['done']}"
         )
         try:
             tasks_model.update_task_by_row(
-                index.row(),
+                current_row,
                 title=values["title"],
                 description=values["description"],
                 day=values["day"],
@@ -946,12 +984,13 @@ class TasksItemDelegate(QStyledItemDelegate):
                 marker_color=values["marker_color"],
                 marker_theme=values["marker_theme"],
             )
+            dialog.setProperty("_task_edit_result_applied", True)
             debug_task_dialog(
-                f"tasks_delegate edit_applied row={index.row()} task_id={task.id}"
+                f"tasks_delegate edit_applied row={current_row} task_id={task_id}"
             )
         except ValueError as exc:
             debug_task_dialog(
-                f"tasks_delegate edit_failed row={index.row()} task_id={task.id} error={exc}"
+                f"tasks_delegate edit_failed row={current_row} task_id={task_id} error={exc}"
             )
             QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 

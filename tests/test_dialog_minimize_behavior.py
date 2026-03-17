@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QPointF, Qt, QEvent, QTimer
+from PySide6.QtCore import QPoint, QPointF, Qt, QEvent, QTimer, QAbstractListModel
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QVBoxLayout, QWidget
 
@@ -14,7 +14,9 @@ from mindnavigator.ui.dialogs.frameless_patch import (
 )
 from mindnavigator.ui.titlebar import TitleBar
 from mindnavigator.window.collections.main_window import MainWindow
+from mindnavigator.workspaces.tasks import tasks_item_delegate
 from mindnavigator.workspaces.tasks import task_edit_dialog
+from mindnavigator.workspaces.tasks.tasks_model import TasksModel
 from mindnavigator.workspaces.tasks.task_row import TaskRow
 
 
@@ -466,6 +468,82 @@ def test_show_minimizable_task_dialog_keeps_waiting_after_minimize_and_restore(m
     finally:
         dialog.deleteLater()
         window.deleteLater()
+
+
+def test_tasks_delegate_applies_late_accept_after_exec_returns_rejected(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+
+    class _DeferredModel(TasksModel):
+        def __init__(self) -> None:
+            QAbstractListModel.__init__(self)
+            self.updated: list[tuple[int, dict[str, object]]] = []
+            self._task = TaskRow(
+                id=322,
+                day=__import__("datetime").date(2026, 3, 17),
+                time_text="",
+                title="Original title",
+                description="",
+                priority="High",
+                done=False,
+            )
+
+        def task_at_row(self, row_idx: int):
+            return self._task if row_idx == 2 else None
+
+        def row_for_task_id(self, task_id: int) -> int:
+            return 2 if task_id == self._task.id else -1
+
+        def update_task_by_row(self, row_idx: int, **kwargs) -> None:
+            self.updated.append((row_idx, kwargs))
+
+    class _DeferredDialog(QDialog):
+        def __init__(self, task, parent=None) -> None:
+            super().__init__(parent)
+            self.setProperty("task_dialog_id", int(task.id))
+            self._values = {
+                "title": "Updated title",
+                "description": "",
+                "day": __import__("datetime").date(2026, 3, 17),
+                "time_text": "",
+                "priority": "High",
+                "done": False,
+                "project_id": None,
+                "recurrence_kind": "",
+                "recurrence_interval": 1,
+                "marker_color": "",
+                "marker_theme": "",
+            }
+
+        def values(self):
+            return dict(self._values)
+
+    class _FakeIndex:
+        def row(self) -> int:
+            return 2
+
+        def model(self):
+            return object()
+
+    def _fake_exec_with_overlay(dialog: QDialog, _parent: QWidget | None) -> int:
+        QTimer.singleShot(0, dialog.accept)
+        return int(QDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(tasks_item_delegate, "TaskEditDialog", _DeferredDialog)
+    monkeypatch.setattr(tasks_item_delegate, "exec_with_overlay", _fake_exec_with_overlay)
+    model = _DeferredModel()
+    view = QWidget()
+    delegate = tasks_item_delegate.TasksItemDelegate(view)
+    monkeypatch.setattr(delegate, "_tasks_model", lambda _model: model)
+    try:
+        delegate._edit_task(_FakeIndex())
+        QApplication.processEvents()
+        assert len(model.updated) == 1
+        row_idx, payload = model.updated[0]
+        assert row_idx == 2
+        assert payload["title"] == "Updated title"
+    finally:
+        delegate.deleteLater()
+        view.deleteLater()
 
 
 def test_main_window_app_click_fallback_minimizes_visible_task_dialog(monkeypatch) -> None:
