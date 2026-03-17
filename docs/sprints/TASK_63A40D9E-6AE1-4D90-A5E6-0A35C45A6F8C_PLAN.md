@@ -26,8 +26,8 @@ Fix the Settings backup layout overlap, publish the isolated delivery branch and
 
 ## Delivery Record
 - Branch: `sprint/settings-backup-layout-fix`
-- Commit: `ca673cd`
-- PR: pending creation
+- Commit: `f5b25f1`
+- PR: `https://github.com/lexflame/mindnavigator_v2/pull/227`
 - Main sync: pending PR merge
 
 ## Notes
