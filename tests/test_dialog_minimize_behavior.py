@@ -5,6 +5,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QVBoxLayout, QWidget
 
 from mindnavigator.ui import modals
+from mindnavigator.ui.dialogs import frameless_patch
 from mindnavigator.ui.dialogs.frameless_patch import (
     _TaskDialogOutsideClickMinimizer,
     _fit_minimizable_task_dialog_size,
@@ -398,6 +399,38 @@ def test_task_edit_dialog_exec_routes_through_minimizable_runner(monkeypatch) ->
     finally:
         dialog.deleteLater()
         window.deleteLater()
+
+
+def test_restore_minimizable_task_dialog_raises_dialog_after_overlay(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    calls: list[str] = []
+
+    class _RestoreProbeDialog(QDialog):
+        def show(self) -> None:
+            calls.append("show")
+            super().show()
+
+        def raise_(self) -> None:
+            calls.append("raise")
+            super().raise_()
+
+        def activateWindow(self) -> None:
+            calls.append("activate")
+            super().activateWindow()
+
+    dialog = _RestoreProbeDialog()
+    dialog.setProperty("task_dialog_minimizable", True)
+    dialog.setProperty("task_dialog_id", 303)
+    monkeypatch.setattr(
+        frameless_patch,
+        "ensure_minimizable_task_dialog_overlay",
+        lambda current_dialog: calls.append(f"overlay:{int(current_dialog.property('task_dialog_id') or 0)}"),
+    )
+    try:
+        frameless_patch.restore_minimizable_task_dialog(dialog)
+        assert calls == ["show", "overlay:303", "raise", "activate"]
+    finally:
+        dialog.deleteLater()
 
 
 def test_main_window_app_click_fallback_minimizes_visible_task_dialog(monkeypatch) -> None:

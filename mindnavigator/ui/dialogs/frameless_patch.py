@@ -222,9 +222,9 @@ def restore_minimizable_task_dialog(dialog: QDialog) -> None:
     )
     dialog.setWindowModality(Qt.WindowModality.NonModal)
     dialog.show()
+    ensure_minimizable_task_dialog_overlay(dialog)
     dialog.raise_()
     dialog.activateWindow()
-    ensure_minimizable_task_dialog_overlay(dialog)
 
 
 def _should_skip_dialog(dialog: QDialog) -> bool:
