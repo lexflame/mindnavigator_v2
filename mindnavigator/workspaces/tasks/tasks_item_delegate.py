@@ -587,7 +587,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.setBrush(self.C_PRIORITY_BG_HOVER if priority_hovered else self.C_PRIORITY_BG)
         painter.drawRoundedRect(priority_chip_rect, 6, 6)
 
-        controls = self._priority_control_rects(priority_chip_rect)
+        controls = self._priority_control_rects(priority_chip_rect, stage_only=is_plan_item)
         value_rect = controls["value"]
         fire_rect = controls["icon"]
         priority_arrows_rect = controls["priority_arrows"]
@@ -598,8 +598,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         stage_down_rect = controls["stage_down"]
 
         painter.setPen(self.C_PRIORITY_DIVIDER)
-        painter.drawLine(priority_arrows_rect.left(), priority_arrows_rect.top() + 3, priority_arrows_rect.left(), priority_arrows_rect.bottom() - 3)
-        painter.drawLine(priority_arrows_rect.left() + 2, priority_up_rect.bottom(), priority_arrows_rect.right() - 2, priority_up_rect.bottom())
+        if not priority_arrows_rect.isNull():
+            painter.drawLine(priority_arrows_rect.left(), priority_arrows_rect.top() + 3, priority_arrows_rect.left(), priority_arrows_rect.bottom() - 3)
+            painter.drawLine(priority_arrows_rect.left() + 2, priority_up_rect.bottom(), priority_arrows_rect.right() - 2, priority_up_rect.bottom())
         painter.drawLine(stage_arrows_rect.left(), stage_arrows_rect.top() + 3, stage_arrows_rect.left(), stage_arrows_rect.bottom() - 3)
         painter.drawLine(stage_arrows_rect.left() + 2, stage_up_rect.bottom(), stage_arrows_rect.right() - 2, stage_up_rect.bottom())
 
@@ -607,18 +608,17 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         # value
         painter.setPen(value_color)
-        painter.drawText(value_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, value_text)
-        qta.icon("fa5s.fire", color=fire_color.name()).paint(painter, fire_rect)
+        value_alignment = Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignCenter if is_plan_item else Qt.AlignmentFlag.AlignLeft)
+        painter.drawText(value_rect, value_alignment, value_text)
+        if not is_plan_item and not fire_rect.isNull():
+            qta.icon("fa5s.fire", color=fire_color.name()).paint(painter, fire_rect)
 
         painter.setPen(self.C_PRIORITY_ARROW)
-        painter.drawText(priority_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
-        painter.drawText(priority_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
+        if not is_plan_item:
+            painter.drawText(priority_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
+            painter.drawText(priority_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
         painter.drawText(stage_up_rect, Qt.AlignmentFlag.AlignCenter, "▲")
         painter.drawText(stage_down_rect, Qt.AlignmentFlag.AlignCenter, "▼")
-        if is_plan_item:
-            painter.fillRect(pr_rect, bg)
-            painter.setPen(self.C_BORDER)
-            painter.drawRect(pr_rect.adjusted(0, 0, -1, -1))
 
         painter.setPen(self.C_BORDER)
         painter.setBrush(self.C_HOVER_SURFACE)
@@ -760,8 +760,6 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
-                return True
-            if is_plan_item and priority_rect.contains(pos):
                 return True
             if priority_controls["priority_up"].contains(pos):
                 if is_plan_item:
@@ -1164,7 +1162,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return QRect(x, y, button_width, button_height)
 
     @staticmethod
-    def _priority_control_rects(priority_chip_rect: QRect) -> dict[str, QRect]:
+    def _priority_control_rects(priority_chip_rect: QRect, stage_only: bool = False) -> dict[str, QRect]:
         arrows_w = 18
         icon_w = 16
         stage_arrows_rect = QRect(
@@ -1176,28 +1174,40 @@ class TasksItemDelegate(QStyledItemDelegate):
         half_h = stage_arrows_rect.height() // 2
         stage_up_rect = QRect(stage_arrows_rect.left(), stage_arrows_rect.top(), stage_arrows_rect.width(), half_h)
         stage_down_rect = QRect(stage_arrows_rect.left(), stage_arrows_rect.top() + half_h, stage_arrows_rect.width(), stage_arrows_rect.height() - half_h)
-        priority_arrows_rect = QRect(
-            stage_arrows_rect.left() - arrows_w - 4,
-            priority_chip_rect.top() + 1,
-            arrows_w,
-            max(10, priority_chip_rect.height() - 2),
-        )
-        icon_rect = QRect(
-            priority_chip_rect.left() + 8,
-            priority_chip_rect.center().y() - (icon_w // 2),
-            icon_w,
-            icon_w,
-        )
-        priority_arrows_rect.moveLeft(icon_rect.right() + 6)
-        priority_half_h = priority_arrows_rect.height() // 2
-        priority_up_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top(), priority_arrows_rect.width(), priority_half_h)
-        priority_down_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top() + priority_half_h, priority_arrows_rect.width(), priority_arrows_rect.height() - priority_half_h)
-        value_rect = QRect(
-            priority_arrows_rect.right() + 8,
-            priority_chip_rect.top(),
-            max(16, stage_arrows_rect.left() - priority_arrows_rect.right() - 16),
-            priority_chip_rect.height(),
-        )
+        if stage_only:
+            icon_rect = QRect()
+            priority_arrows_rect = QRect()
+            priority_up_rect = QRect()
+            priority_down_rect = QRect()
+            value_rect = QRect(
+                priority_chip_rect.left() + 8,
+                priority_chip_rect.top(),
+                max(16, stage_arrows_rect.left() - priority_chip_rect.left() - 16),
+                priority_chip_rect.height(),
+            )
+        else:
+            priority_arrows_rect = QRect(
+                stage_arrows_rect.left() - arrows_w - 4,
+                priority_chip_rect.top() + 1,
+                arrows_w,
+                max(10, priority_chip_rect.height() - 2),
+            )
+            icon_rect = QRect(
+                priority_chip_rect.left() + 8,
+                priority_chip_rect.center().y() - (icon_w // 2),
+                icon_w,
+                icon_w,
+            )
+            priority_arrows_rect.moveLeft(icon_rect.right() + 6)
+            priority_half_h = priority_arrows_rect.height() // 2
+            priority_up_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top(), priority_arrows_rect.width(), priority_half_h)
+            priority_down_rect = QRect(priority_arrows_rect.left(), priority_arrows_rect.top() + priority_half_h, priority_arrows_rect.width(), priority_arrows_rect.height() - priority_half_h)
+            value_rect = QRect(
+                priority_arrows_rect.right() + 8,
+                priority_chip_rect.top(),
+                max(16, stage_arrows_rect.left() - priority_arrows_rect.right() - 16),
+                priority_chip_rect.height(),
+            )
         return {
             "value": value_rect,
             "icon": icon_rect,

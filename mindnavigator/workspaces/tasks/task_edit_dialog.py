@@ -88,6 +88,10 @@ class TaskEditDialog(QDialog):
             self.plan_task_edit.setChecked(False)
             self.plan_task_edit.setEnabled(False)
             self.plan_task_edit.setToolTip("Свойство задается только для корневой задачи-плана.")
+            self.project_edit.setEnabled(False)
+            self.project_edit.setToolTip("Проект наследуется от родительской задачи-плана.")
+            self.project_create_btn.setEnabled(False)
+            self.project_create_btn.setToolTip("Для пунктов плана проект наследуется от родителя.")
         project_row_layout.addWidget(self.plan_task_edit)
 
         self.day_edit = QDateEdit()
