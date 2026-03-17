@@ -223,3 +223,11 @@ Status: Completed
 | TASK_7A4D29C6-8B51-4F0A-90D1-2C5E7B8F1D54 | 10 | Add cross-entity attachments from Dossier items to tasks, maps, markers, notes, ideas, objects, and characters | feat | Completed |
 | TASK_9C1E6A42-3D84-46FE-9A25-6E3B7C2D5F65 | 10 | Implement Dossier search, filters, grouping, and aggregate summary behavior | feat | Completed |
 | TASK_E1A7C5D3-2F66-4E3F-8A11-5D8B3C6E7F76 | 10 | Validate Sprint 10 delivery, add regression coverage, and prepare release closure | feat | Completed |
+
+## maintenance - Settings Backup Layout Overflow Delivery
+Created: 2026-03-17
+Status: In Progress
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_63A40D9E-6AE1-4D90-A5E6-0A35C45A6F8C | maintenance | Fix backup settings layout overlap, publish delivery branch/PR, sync main, and document the change | fix | In Progress |
