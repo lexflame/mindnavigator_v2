@@ -28,6 +28,8 @@ class DatabaseSchemaMixin:
                     parent_id INTEGER REFERENCES tasks(id),
                     recurrence_kind TEXT NOT NULL DEFAULT '',
                     recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                    is_plan_task INTEGER NOT NULL DEFAULT 0 CHECK (is_plan_task IN (0, 1)),
+                    plan_order INTEGER NOT NULL DEFAULT 0,
                     marker_color TEXT NOT NULL DEFAULT '',
                     marker_theme TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
@@ -570,6 +572,7 @@ class DatabaseSchemaMixin:
             MigrationStep(3, "collection_schema", self._migration_v3_collection_schema),
             MigrationStep(4, "task_board_schema", self._migration_v4_task_board_schema),
             MigrationStep(5, "dossier_schema", self._migration_v5_dossier_schema),
+            MigrationStep(6, "task_plan_schema", self._migration_v6_task_plan_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -579,6 +582,7 @@ class DatabaseSchemaMixin:
         self._run_schema_migrations()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
+        self._ensure_task_plan_columns()
         self._ensure_dossier_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
@@ -590,6 +594,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_description_column()
         self._ensure_task_parent_column()
         self._ensure_task_recurrence_columns()
+        self._ensure_task_plan_columns()
         self._ensure_task_marker_columns()
         self._ensure_task_completion_delay_column()
         self._ensure_task_gantt_columns()
@@ -619,6 +624,10 @@ class DatabaseSchemaMixin:
     def _migration_v5_dossier_schema(self, _connection: sqlite3.Connection) -> None:
         """Добавляет схему хранения досье и кросс-сущностных ссылок."""
         self._ensure_dossier_schema()
+
+    def _migration_v6_task_plan_schema(self, _connection: sqlite3.Connection) -> None:
+        """Добавляет поля plan-задач и порядка пунктов плана."""
+        self._ensure_task_plan_columns()
 
     def _ensure_dossier_schema(self) -> None:
         """Гарантирует наличие таблиц и индексов режима досье."""
@@ -766,6 +775,21 @@ class DatabaseSchemaMixin:
                     "ALTER TABLE tasks ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1;"
                 )
 
+    def _ensure_task_plan_columns(self) -> None:
+        """Добавляет поля признака plan-задачи и порядка внутри родителя."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "is_plan_task" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN is_plan_task INTEGER NOT NULL DEFAULT 0;"
+                )
+            if "plan_order" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN plan_order INTEGER NOT NULL DEFAULT 0;"
+                )
+            self._normalize_task_plan_order()
+
     def _ensure_task_marker_columns(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° Р·Р°РґР°С‡Рё, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
@@ -817,6 +841,38 @@ class DatabaseSchemaMixin:
                 END;
                 """
             )
+
+    def _normalize_task_plan_order(self) -> None:
+        """Нормализует sibling-порядок задач для каждого parent_id."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "plan_order" not in names:
+            return
+        if "parent_id" in names:
+            rows = self._conn.execute(
+                """
+                SELECT id, parent_id, COALESCE(plan_order, 0) AS plan_order
+                FROM tasks
+                ORDER BY parent_id, plan_order, id;
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT id, NULL AS parent_id, COALESCE(plan_order, 0) AS plan_order
+                FROM tasks
+                ORDER BY plan_order, id;
+                """
+            ).fetchall()
+        grouped: dict[Optional[int], list[int]] = {}
+        for row in rows:
+            grouped.setdefault(row["parent_id"], []).append(int(row["id"]))
+        for sibling_ids in grouped.values():
+            for plan_order, task_id in enumerate(sibling_ids):
+                self._conn.execute(
+                    "UPDATE tasks SET plan_order = ? WHERE id = ?;",
+                    (plan_order, task_id),
+                )
 
     def _ensure_project_marker_columns(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° РїСЂРѕРµРєС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
@@ -1181,6 +1237,8 @@ class DatabaseSchemaMixin:
                 parent_id INTEGER REFERENCES tasks(id),
                 recurrence_kind TEXT NOT NULL DEFAULT '',
                 recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                is_plan_task INTEGER NOT NULL DEFAULT 0 CHECK (is_plan_task IN (0, 1)),
+                plan_order INTEGER NOT NULL DEFAULT 0,
                 marker_color TEXT NOT NULL DEFAULT '',
                 marker_theme TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
@@ -1192,7 +1250,7 @@ class DatabaseSchemaMixin:
             f"""
             INSERT INTO tasks (
                 id, title, description, day, time_text, priority, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
-                gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, marker_color, marker_theme, created_at, updated_at
+                gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
             )
             SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
                    CASE
@@ -1203,12 +1261,14 @@ class DatabaseSchemaMixin:
                    done, COALESCE({_source("completion_delay_minutes", "0")}, 0),
                    COALESCE({_source("gantt_estimate_minutes", "0")}, 0), COALESCE({_source("gantt_forecasted", "0")}, 0), {_source("project_id", "NULL")}, {_source("parent_id", "NULL")},
                    COALESCE({_source("recurrence_kind", "''")}, ''), COALESCE({_source("recurrence_interval", "1")}, 1),
+                   COALESCE({_source("is_plan_task", "0")}, 0), COALESCE({_source("plan_order", "0")}, 0),
                    COALESCE({_source("marker_color", "''")}, ''), COALESCE({_source("marker_theme", "''")}, ''), created_at, updated_at
             FROM tasks_old;
             """
         )
         self._conn.execute("DROP TABLE tasks_old;")
         self._rebuild_task_attachments_table()
+        self._normalize_task_plan_order()
 
     def _rebuild_projects_table(self) -> None:
         self._recover_rebuild_source_table("projects")

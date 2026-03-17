@@ -28,6 +28,7 @@ class TaskEditDialog(QDialog):
         self.setMinimumWidth(460)
         self.setMinimumHeight(420)
         self._db = get_database()
+        self._is_plan_item = self._resolve_plan_item_state(task.id)
         self._auto_minimize_pending = False
         debug_task_dialog(
             f"task_edit_dialog init task_id={self.property('task_dialog_id')} parent={type(parent).__name__ if parent is not None else 'None'}"
@@ -81,6 +82,13 @@ class TaskEditDialog(QDialog):
         project_row_layout.setSpacing(6)
         project_row_layout.addWidget(self.project_create_btn)
         project_row_layout.addWidget(self.project_edit, 1)
+        self.plan_task_edit = QCheckBox("Задача план")
+        self.plan_task_edit.setChecked(bool(task.is_plan_task))
+        if self._is_plan_item:
+            self.plan_task_edit.setChecked(False)
+            self.plan_task_edit.setEnabled(False)
+            self.plan_task_edit.setToolTip("Свойство задается только для корневой задачи-плана.")
+        project_row_layout.addWidget(self.plan_task_edit)
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
@@ -141,6 +149,9 @@ class TaskEditDialog(QDialog):
         self.priority_edit = QComboBox()
         self.priority_edit.addItems(["High", "Medium", "Low", "Отложенная"])
         self.priority_edit.setCurrentText(task.priority or "Medium")
+        if self._is_plan_item:
+            self.priority_edit.setEnabled(False)
+            self.priority_edit.setToolTip("Пункты плана не используют приоритет.")
 
         self.marker_color_edit = QComboBox()
         self.marker_color_edit.addItem("Нет", "")
@@ -980,6 +991,20 @@ class TaskEditDialog(QDialog):
         )
         show_dialog_standard(dialog, self)
 
+    def _resolve_plan_item_state(self, task_id: int) -> bool:
+        by_id = {task.id: task for task in self._db.fetch_tasks()}
+        current = by_id.get(task_id)
+        seen: set[int] = set()
+        while current is not None and current.parent_id is not None and current.id not in seen:
+            seen.add(current.id)
+            parent_task = by_id.get(current.parent_id)
+            if parent_task is None:
+                return False
+            if parent_task.is_plan_task:
+                return True
+            current = parent_task
+        return False
+
     def values(self):
         """Возвращает текущие значения формы в виде словаря."""
         qd = self.day_edit.date()
@@ -995,6 +1020,7 @@ class TaskEditDialog(QDialog):
             "project_id": self.project_edit.currentData(),
             "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
             "recurrence_interval": 1,
+            "is_plan_task": self.plan_task_edit.isChecked(),
             "marker_color": self.marker_color_edit.currentData() or "",
             "marker_theme": self.marker_theme_edit.currentData() or "",
         }
@@ -1002,7 +1028,7 @@ class TaskEditDialog(QDialog):
             f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
             f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
             f"priority={payload['priority']!r} done={payload['done']} project_id={payload['project_id']} "
-            f"recurrence={payload['recurrence_kind']!r} marker_color={payload['marker_color']!r} "
+            f"recurrence={payload['recurrence_kind']!r} is_plan_task={payload['is_plan_task']} marker_color={payload['marker_color']!r} "
             f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
         )
         return payload
@@ -1015,7 +1041,8 @@ class TaskEditDialog(QDialog):
         return (
             f"title={title!r} day={day} time={self._current_time_text()!r} "
             f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
-            f"project_id={self.project_edit.currentData()} recurrence_enabled={self.recurrence_toggle.isChecked()} "
+            f"project_id={self.project_edit.currentData()} is_plan_task={self.plan_task_edit.isChecked()} "
+            f"recurrence_enabled={self.recurrence_toggle.isChecked()} "
             f"recurrence={self.recurrence_type_edit.currentData()!r} marker_color={self.marker_color_edit.currentData()!r} "
             f"marker_theme={self.marker_theme_edit.currentData()!r} description_len={len(description)}"
         )

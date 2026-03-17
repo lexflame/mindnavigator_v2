@@ -25,5 +25,7 @@ class TaskData:
     gantt_forecasted: bool = False
     marker_color: str = ""
     marker_theme: str = ""
+    is_plan_task: bool = False
+    plan_order: int = 0
 
 __all__ = ["TaskData"]

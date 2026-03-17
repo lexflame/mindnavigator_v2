@@ -1429,3 +1429,23 @@
 [2026-03-17 19:19] OUT: 15 passed.
 [2026-03-17 19:19] ACTION: Updated TASK_B8182C38-918D-412A-B318-55253C9A26CB status -> Completed.
 [2026-03-17 19:19] ACTION: Completed TASK_B8182C38-918D-412A-B318-55253C9A26CB.
+[2026-03-17 22:13] SESSION_START: Started Tasks plan-task hierarchy feature delivery.
+[2026-03-17 22:13] CMD: git switch -c sprint/tasks-plan-task
+[2026-03-17 22:13] OUT: Switched to a new branch 'sprint/tasks-plan-task'.
+[2026-03-17 22:13] ACTION: Started TASK_87B88003-41A0-4A20-B263-94F4313E67AA (Tasks plan-task hierarchy).
+[2026-03-17 22:13] ACTION: Updated TASK_87B88003-41A0-4A20-B263-94F4313E67AA status -> In Progress.
+[2026-03-17 22:13] ACTION: Created docs/sprints/TASK_87B88003-41A0-4A20-B263-94F4313E67AA_PLAN.md.
+[2026-03-17 22:50] ACTION: Added persistent `is_plan_task` and `plan_order` task fields, plan-aware list/model logic, restricted plan-item drag-drop reorder, and task edit dialog support for the `Задача план` property.
+[2026-03-17 22:50] CMD: python -m compileall mindnavigator main.py
+[2026-03-17 22:50] OUT: OK.
+[2026-03-17 22:50] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_plan_db3
+[2026-03-17 22:50] OUT: 8 passed.
+[2026-03-17 22:50] CMD: $env:PYTHONPATH='.'; pytest tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_plan_ui3
+[2026-03-17 22:50] OUT: 44 passed.
+[2026-03-17 22:50] ACTION: Updated TASK_87B88003-41A0-4A20-B263-94F4313E67AA status -> Completed.
+[2026-03-17 22:50] ACTION: Completed TASK_87B88003-41A0-4A20-B263-94F4313E67AA.
+[2026-03-18 00:42] SESSION_START: Resumed TASK_87B88003-41A0-4A20-B263-94F4313E67AA delivery finalization.
+[2026-03-18 00:42] CMD: python -m compileall mindnavigator main.py
+[2026-03-18 00:42] OUT: OK.
+[2026-03-18 00:42] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_plan_task_resume
+[2026-03-18 00:42] OUT: 52 passed.
