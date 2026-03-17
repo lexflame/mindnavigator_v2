@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 class TasksModel(QAbstractListModel):
     task_moved = Signal(int)
 
@@ -313,7 +314,13 @@ class TasksModel(QAbstractListModel):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
         if r is None:
+            debug_task_dialog(f"tasks_model update_task_by_row skipped_invalid_row row={row_idx}")
             return
+        debug_task_dialog(
+            f"tasks_model update_task_by_row start row={row_idx} task_id={r.id} "
+            f"from_day={r.day.isoformat()} to_day={day.isoformat()} "
+            f"title={title!r} time={time_text!r} priority={priority!r} done={done}"
+        )
         updated = self._db.update_task(
             task_id=r.id,
             title=title,
@@ -329,12 +336,20 @@ class TasksModel(QAbstractListModel):
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
+        debug_task_dialog(
+            f"tasks_model update_task_by_row db_result task_id={updated.id} "
+            f"day={updated.day.isoformat()} time={updated.time_text!r} "
+            f"priority={updated.priority!r} done={updated.done}"
+        )
         priority_changed = r.priority != updated.priority
         cascade_needed = (
             (r.priority == "Отложенная" and updated.priority != "Отложенная")
             or (r.priority != "Отложенная" and updated.priority == "Отложенная")
         )
         if priority_changed and cascade_needed:
+            debug_task_dialog(
+                f"tasks_model update_task_by_row reload_for_cascade task_id={updated.id}"
+            )
             self._reload_from_db()
             return
 
@@ -385,7 +400,11 @@ class TasksModel(QAbstractListModel):
                             Qt.ItemDataRole.DisplayRole,
                         ],
                     )
+                    debug_task_dialog(
+                        f"tasks_model update_task_by_row marker_only_refresh task_id={updated.id} row={changed_row_idx}"
+                    )
                     return
+        debug_task_dialog(f"tasks_model update_task_by_row rebuild task_id={updated.id}")
         self._rebuild()
 
     def toggle_done_by_row(self, row_idx: int):

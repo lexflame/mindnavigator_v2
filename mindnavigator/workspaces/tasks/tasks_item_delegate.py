@@ -6,6 +6,7 @@ import math
 
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtGui import QPen
+from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from .task_details_dialog import TaskDetailsDialog
 from .task_edit_dialog import TaskEditDialog
 from .tasks_model import TasksModel
@@ -912,11 +913,24 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
 
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        debug_task_dialog(
+            f"tasks_delegate edit_start row={index.row()} task_id={task.id} "
+            f"title={task.title!r} day={task.day.isoformat()} done={task.done}"
+        )
         dialog = TaskEditDialog(task, parent=parent)
-        if exec_with_overlay(dialog, parent) != QDialog.DialogCode.Accepted:
+        dialog_result = exec_with_overlay(dialog, parent)
+        debug_task_dialog(
+            f"tasks_delegate edit_result row={index.row()} task_id={task.id} result={int(dialog_result)}"
+        )
+        if dialog_result != QDialog.DialogCode.Accepted:
             return
 
         values = dialog.values()
+        debug_task_dialog(
+            f"tasks_delegate edit_apply row={index.row()} task_id={task.id} "
+            f"title={values['title']!r} day={values['day'].isoformat()} time={values['time_text']!r} "
+            f"priority={values['priority']!r} done={values['done']}"
+        )
         try:
             tasks_model.update_task_by_row(
                 index.row(),
@@ -932,7 +946,13 @@ class TasksItemDelegate(QStyledItemDelegate):
                 marker_color=values["marker_color"],
                 marker_theme=values["marker_theme"],
             )
+            debug_task_dialog(
+                f"tasks_delegate edit_applied row={index.row()} task_id={task.id}"
+            )
         except ValueError as exc:
+            debug_task_dialog(
+                f"tasks_delegate edit_failed row={index.row()} task_id={task.id} error={exc}"
+            )
             QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def edit_task(self, index: QModelIndex) -> None:

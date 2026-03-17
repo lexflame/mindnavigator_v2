@@ -32,6 +32,12 @@ class TaskEditDialog(QDialog):
         debug_task_dialog(
             f"task_edit_dialog init task_id={self.property('task_dialog_id')} parent={type(parent).__name__ if parent is not None else 'None'}"
         )
+        self.finished.connect(
+            lambda result_code: debug_task_dialog(
+                f"task_edit_dialog finished task_id={self.property('task_dialog_id')} "
+                f"result={int(result_code)} state={self._debug_form_state()}"
+            )
+        )
         self._restore_saved_size()
 
         layout = QVBoxLayout(self)
@@ -372,6 +378,9 @@ class TaskEditDialog(QDialog):
         self._db.set_setting(self._SIZE_SETTING_KEY, f"{size.width()}x{size.height()}")
 
     def closeEvent(self, event) -> None:
+        debug_task_dialog(
+            f"task_edit_dialog close task_id={self.property('task_dialog_id')} state={self._debug_form_state()}"
+        )
         self._save_current_size()
         super().closeEvent(event)
 
@@ -558,7 +567,13 @@ class TaskEditDialog(QDialog):
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
         title = self.title_edit.text().strip()
+        debug_task_dialog(
+            f"task_edit_dialog accept_start task_id={self.property('task_dialog_id')} state={self._debug_form_state()}"
+        )
         if not title:
+            debug_task_dialog(
+                f"task_edit_dialog accept_blocked_empty_title task_id={self.property('task_dialog_id')}"
+            )
             QMessageBox.warning(self, "Проверка", "Введите название задачи.")
             return
         time_text = self._current_time_text()
@@ -566,8 +581,14 @@ class TaskEditDialog(QDialog):
             validate_time_text(time_text)
             normalize_priority(self.priority_edit.currentText())
         except ValueError as exc:
+            debug_task_dialog(
+                f"task_edit_dialog accept_blocked_validation task_id={self.property('task_dialog_id')} error={exc}"
+            )
             QMessageBox.warning(self, "Проверка", str(exc))
             return
+        debug_task_dialog(
+            f"task_edit_dialog accept_commit task_id={self.property('task_dialog_id')} state={self._debug_form_state()}"
+        )
         self.accept()
 
     def _current_time_text(self) -> str:
@@ -964,7 +985,7 @@ class TaskEditDialog(QDialog):
         qd = self.day_edit.date()
         day = date(qd.year(), qd.month(), qd.day())
         time_text = self._current_time_text()
-        return {
+        payload = {
             "title": self.title_edit.text().strip(),
             "description": self.description_edit.toPlainText().strip(),
             "day": day,
@@ -977,5 +998,26 @@ class TaskEditDialog(QDialog):
             "marker_color": self.marker_color_edit.currentData() or "",
             "marker_theme": self.marker_theme_edit.currentData() or "",
         }
+        debug_task_dialog(
+            f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
+            f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
+            f"priority={payload['priority']!r} done={payload['done']} project_id={payload['project_id']} "
+            f"recurrence={payload['recurrence_kind']!r} marker_color={payload['marker_color']!r} "
+            f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
+        )
+        return payload
+
+    def _debug_form_state(self) -> str:
+        title = self.title_edit.text().strip()
+        description = self.description_edit.toPlainText().strip()
+        qd = self.day_edit.date()
+        day = date(qd.year(), qd.month(), qd.day()).isoformat()
+        return (
+            f"title={title!r} day={day} time={self._current_time_text()!r} "
+            f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
+            f"project_id={self.project_edit.currentData()} recurrence_enabled={self.recurrence_toggle.isChecked()} "
+            f"recurrence={self.recurrence_type_edit.currentData()!r} marker_color={self.marker_color_edit.currentData()!r} "
+            f"marker_theme={self.marker_theme_edit.currentData()!r} description_len={len(description)}"
+        )
 
 __all__ = ["TaskEditDialog"]
