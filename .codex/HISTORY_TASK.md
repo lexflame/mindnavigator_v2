@@ -248,3 +248,19 @@ Status: Completed
 | Task GUID | Sprint | Title | Type | Status |
 | --- | --- | --- | --- | --- |
 | TASK_54F0D440-1A4E-4E8E-8C2D-91C78B50E5FA | theme-switch | Audit and refactor runtime theme switching so dark-to-light updates shell and key UI surfaces consistently | fix | Completed (follow-up light-mode gaps fixed) |
+
+## tasks-board - Day Filter Refactor
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_B73E670F-CE52-4E85-936D-05EFE51C283F | tasks-board | Refactor BOARD mode so day filtering is optional and exposed as a separate control | fix | Completed |
+
+## tasks-casts - Tasks Mode Cast Extraction
+Created: 2026-03-17
+Status: Completed
+
+| Task GUID | Sprint | Title | Type | Status |
+| --- | --- | --- | --- | --- |
+| TASK_2887FA24-5C8B-468B-9C68-60A417F7AF11 | tasks-casts | Extract BOARD, GANTT, DASH, and Tasks style logic into dedicated helper classes and packages | chore | Completed |
