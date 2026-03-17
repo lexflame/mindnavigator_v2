@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.ui.styles import get_theme_palette
 
 _COLLECTION_ENTITY_LABELS = {
     "building": "Здание",
@@ -39,6 +40,7 @@ class SearchNav(QWidget):
         """Создает и настраивает блок быстрого поиска."""
         super().__init__(parent)
         self.setObjectName("SearchNav")
+        self._theme_mode = "dark"
         self._ratio = 0.12
         self._min_w = 220
         self._max_w = 420
@@ -96,62 +98,70 @@ class SearchNav(QWidget):
 
         self.setFixedHeight(self._fixed_h)
 
-        self.setStyleSheet("""
-            QWidget#SearchNav {
-                background: #191a1d;
-                border-right: 1px solid #2a2b2f;
-                border-top: 1px solid #2a2b2f;
-            }
-            QLabel#SearchHeader {
-                color: #cfcfcf;
+        self.set_theme_mode("dark")
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#SearchNav {{
+                background: {palette.panel_bg};
+                border-right: 1px solid {palette.border};
+                border-top: 1px solid {palette.border};
+            }}
+            QLabel#SearchHeader {{
+                color: {palette.text};
                 font-size: 13px;
                 font-weight: 600;
-            }
-            QLabel#SearchHint {
-                color: #7a7a7a;
+            }}
+            QLabel#SearchHint {{
+                color: {palette.dim_text};
                 font-size: 12px;
-            }
-            QLineEdit#SearchInput {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
+            }}
+            QLineEdit#SearchInput {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 4px;
-                color: #cfcfcf;
+                color: {palette.text};
                 padding: 6px 8px;
-            }
-            QLineEdit#SearchInput:focus {
-                border: 1px solid #3a3c42;
-            }
-            QWidget#SearchResults {
-                background: #151618;
-                border: 1px solid #242529;
+            }}
+            QLineEdit#SearchInput:focus {{
+                border: 1px solid {palette.accent};
+            }}
+            QWidget#SearchResults {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
-            }
-            QLabel#SearchResultsTitle {
-                color: #b9bcc4;
+            }}
+            QLabel#SearchResultsTitle {{
+                color: {palette.text};
                 font-size: 12px;
                 font-weight: 600;
-            }
-            QLabel#SearchResultsPlaceholder {
-                color: #6e7178;
+            }}
+            QLabel#SearchResultsPlaceholder {{
+                color: {palette.muted_text};
                 font-size: 11px;
-            }
-            QListWidget#SearchResultsList {
+            }}
+            QListWidget#SearchResultsList {{
                 background: transparent;
                 border: none;
-            }
-            QListWidget#SearchResultsList::item {
-                color: #cfcfcf;
+            }}
+            QListWidget#SearchResultsList::item {{
+                color: {palette.text};
                 padding: 4px 6px;
-            }
-            QListWidget#SearchResultsList::item:selected {
-                background: #2a2b2f;
+            }}
+            QListWidget#SearchResultsList::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
                 border-radius: 4px;
-            }
-            QLabel#SearchResultItem {
-                color: #cfcfcf;
+            }}
+            QLabel#SearchResultItem {{
+                color: {palette.text};
                 font-size: 12px;
-            }
-        """)
+            }}
+        """
+        )
 
     def update_width_for_window(self, window_width: int):
         """Пересчитывает ширину панели в зависимости от ширины окна."""

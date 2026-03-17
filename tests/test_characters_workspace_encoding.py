@@ -22,6 +22,8 @@ def test_characters_workspace_uses_utf8_labels(monkeypatch) -> None:
 
     workspace = characters_module.CharactersWorkspace()
     try:
+        workspace.set_theme_mode("light")
+        palette = characters_module.get_theme_palette("light")
         labels = {label.text() for label in workspace.findChildren(QLabel)}
 
         assert "Персонажи" in labels
@@ -36,6 +38,7 @@ def test_characters_workspace_uses_utf8_labels(monkeypatch) -> None:
         assert workspace._kind_choices()[0][0]
         assert "Р¤" not in workspace.filter_label.text()
         assert "QFrame#CharactersDetailsContainer QLabel {" in workspace.styleSheet()
-        assert "color: #cfd5df;" in workspace.styleSheet()
+        assert f"color: {palette.text};" in workspace.styleSheet()
+        assert palette.window_bg in workspace.styleSheet()
     finally:
         workspace.deleteLater()

@@ -193,7 +193,30 @@ def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
     fake_db = _FakeDb()
     monkeypatch.setattr(main_window, "get_database", lambda: fake_db)
 
+    class _DummyApp:
+        def __init__(self) -> None:
+            self.styles: list[str] = []
+
+        def setStyleSheet(self, stylesheet: str) -> None:
+            self.styles.append(stylesheet)
+
+    fake_app = _DummyApp()
+
+    class _DummyQApplication:
+        @staticmethod
+        def instance():
+            return fake_app
+
+    monkeypatch.setattr(main_window, "QApplication", _DummyQApplication)
+
     class _DummyLeftRail:
+        def __init__(self) -> None:
+            self.values: list[str] = []
+
+        def set_theme_mode(self, theme_mode: str) -> None:
+            self.values.append(theme_mode)
+
+    class _DummyThemeTarget:
         def __init__(self) -> None:
             self.values: list[str] = []
 
@@ -205,6 +228,11 @@ def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
 
         def __init__(self) -> None:
             self.left_rail = _DummyLeftRail()
+            self.search_nav = _DummyThemeTarget()
+            self.projects_nav = _DummyThemeTarget()
+            self.page_tasks = _DummyThemeTarget()
+            self.page_projects = _DummyThemeTarget()
+            self.page_settings = _DummyThemeTarget()
             self._theme_mode = "dark"
             self.titlebar_calls = 0
             self.root_calls = 0
@@ -215,6 +243,7 @@ def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
         def _apply_root_style(self) -> None:
             self.root_calls += 1
 
+        _iter_theme_targets = MainWindow._iter_theme_targets
         _normalize_theme_mode = staticmethod(MainWindow._normalize_theme_mode)
 
     window = _DummyWindow()
@@ -222,7 +251,14 @@ def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
     MainWindow._apply_theme_mode(window, "light", persist=True)
 
     assert window._theme_mode == "light"
+    assert fake_app.styles
+    assert "#f5f7fb" in fake_app.styles[-1]
     assert window.left_rail.values == ["light"]
+    assert window.search_nav.values == ["light"]
+    assert window.projects_nav.values == ["light"]
+    assert window.page_tasks.values == ["light"]
+    assert window.page_projects.values == ["light"]
+    assert window.page_settings.values == ["light"]
     assert window.titlebar_calls == 1
     assert window.root_calls == 1
     assert fake_db.set_calls == [(MainWindow.APP_THEME_KEY, "light")]

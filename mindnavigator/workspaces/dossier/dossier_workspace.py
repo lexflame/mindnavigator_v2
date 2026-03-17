@@ -8,6 +8,7 @@ from .dossier_editor_dialog import DossierCreateDialog, DossierEditDialog
 from .dossier_item_delegate import DossierItemDelegate
 from .dossier_list_model import DossierListModel
 from .dossier_roles import DossierRoles
+from mindnavigator.ui.styles import get_theme_palette
 
 LINK_ID_ROLE = int(Qt.ItemDataRole.UserRole)
 LINK_ENTITY_KIND_ROLE = LINK_ID_ROLE + 1
@@ -78,6 +79,7 @@ class DossierWorkspace(BaseWorkspace):
         super().__init__(parent)
         self.setObjectName("DossierWorkspace")
         self.search_input.setPlaceholderText("Поиск по названию, описанию, тегам, источнику...")
+        self.set_theme_mode(self._theme_mode)
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -254,64 +256,6 @@ class DossierWorkspace(BaseWorkspace):
         content_layout.addWidget(splitter, 1)
         self.set_content(content_host)
 
-        self.setStyleSheet(
-            """
-            QWidget#DossierWorkspace {
-                background: #15161a;
-            }
-            QWidget#DossierWorkspace QLabel {
-                color: #d5d8de;
-            }
-            QWidget#DossierWorkspace QWidget#WorkspaceToolbar,
-            QWidget#DossierWorkspace QWidget#WorkspaceSearch,
-            QWidget#DossierWorkspace QWidget#WorkspaceFilters,
-            QWidget#DossierWorkspace QFrame#DossierSummaryCard {
-                background: #1b1c21;
-                border: 1px solid #2a2c33;
-                border-radius: 10px;
-                padding: 6px;
-            }
-            QWidget#DossierWorkspace QToolButton,
-            QWidget#DossierWorkspace QComboBox,
-            QWidget#DossierWorkspace QLineEdit,
-            QWidget#DossierWorkspace QPlainTextEdit,
-            QWidget#DossierWorkspace QListWidget,
-            QWidget#DossierWorkspace QListView {
-                background: #1d1f25;
-                color: #d5d8de;
-                border: 1px solid #2e3138;
-                border-radius: 8px;
-                padding: 6px 8px;
-            }
-            QWidget#DossierWorkspace QToolButton:hover {
-                background: #272a33;
-            }
-            QWidget#DossierWorkspace QToolButton:disabled {
-                color: #71757f;
-                background: #191a1f;
-            }
-            QLabel#DossierPreviewTitle {
-                font-size: 18px;
-                font-weight: 700;
-                color: #f3f5f8;
-            }
-            QLabel#DossierPreviewMeta {
-                color: #aeb6c2;
-            }
-            QLabel#DossierPreviewSummary {
-                color: #dfe4eb;
-            }
-            QLabel#DossierSummaryLabel {
-                color: #dfe4eb;
-            }
-            QFrame#DossierLinksCard {
-                background: #1a1c21;
-                border: 1px solid #2a2c33;
-                border-radius: 10px;
-            }
-            """
-        )
-
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Досье", self)
         action_new.triggered.connect(self._open_create_dialog)
@@ -337,6 +281,62 @@ class DossierWorkspace(BaseWorkspace):
         if details_action is not None:
             details_action.setEnabled(self.get_selection() is not None and not self._busy)
         self._update_link_action_states()
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#DossierWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QWidget#DossierWorkspace QLabel {{
+                color: {palette.text};
+            }}
+            QWidget#DossierWorkspace QWidget#WorkspaceToolbar,
+            QWidget#DossierWorkspace QWidget#WorkspaceSearch,
+            QWidget#DossierWorkspace QWidget#WorkspaceFilters,
+            QWidget#DossierWorkspace QFrame#DossierSummaryCard,
+            QWidget#DossierWorkspace QFrame#DossierLinksCard {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+                padding: 6px;
+            }}
+            QWidget#DossierWorkspace QToolButton,
+            QWidget#DossierWorkspace QComboBox,
+            QWidget#DossierWorkspace QLineEdit,
+            QWidget#DossierWorkspace QPlainTextEdit,
+            QWidget#DossierWorkspace QListWidget,
+            QWidget#DossierWorkspace QListView {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 6px 8px;
+            }}
+            QWidget#DossierWorkspace QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QWidget#DossierWorkspace QToolButton:disabled {{
+                color: {palette.muted_text};
+                background: {palette.panel_alt_bg};
+            }}
+            QLabel#DossierPreviewTitle {{
+                font-size: 18px;
+                font-weight: 700;
+                color: {palette.text};
+            }}
+            QLabel#DossierPreviewMeta {{
+                color: {palette.dim_text};
+            }}
+            QLabel#DossierPreviewSummary,
+            QLabel#DossierSummaryLabel {{
+                color: {palette.text};
+            }}
+            """
+        )
 
     def restore_state(self) -> None:
         super().restore_state()

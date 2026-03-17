@@ -5,6 +5,7 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
+from mindnavigator.ui.styles import get_theme_palette
 
 class IdeasWorkspace(BaseWorkspace):
     workspace_id = "ideas"
@@ -16,6 +17,7 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_idea_id: Optional[int] = None
         self._current_project_id: Optional[int] = None
         self._dirty = False
+        self._theme_mode = "dark"
         super().__init__(parent)
         self.setObjectName("IdeasWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
@@ -61,7 +63,6 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_status_btn.setObjectName("IdeasQuickStatusBtn")
         self.quick_status_label = QLabel("Все категории")
         self.quick_status_label.setObjectName("IdeasQuickStatus")
-        self.quick_status_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
         self.quick_title_input = QLineEdit()
         self.quick_title_input.setObjectName("IdeasQuickTitle")
         self.quick_title_input.setPlaceholderText("Быстрое создание идеи...")
@@ -204,106 +205,120 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_title_input.returnPressed.connect(self._create_idea_from_quick_form)
         self._set_quick_status(None)
 
-        self.setStyleSheet("""
-            QWidget#IdeasWorkspace { background: #16171a; }
+        self.set_theme_mode("dark")
 
-            QWidget#IdeasWorkspace QLabel {
-                color: #cfcfcf;
-            }
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#IdeasWorkspace {{ background: {palette.window_bg}; }}
+
+            QWidget#IdeasWorkspace QLabel {{
+                color: {palette.text};
+            }}
+
+            QLabel#IdeasQuickStatus {{
+                color: {palette.chart_muted};
+                font-size: 11px;
+            }}
 
             QWidget#IdeasWorkspace QWidget#WorkspaceToolbar,
             QWidget#IdeasWorkspace QWidget#WorkspaceSearch,
-            QWidget#IdeasWorkspace QWidget#WorkspaceFilters {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
+            QWidget#IdeasWorkspace QWidget#WorkspaceFilters {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
                 padding: 6px;
-            }
+            }}
 
-            QWidget#IdeasWorkspace QWidget#WorkspaceStatus {
-                color: #b8b8b8;
-            }
+            QWidget#IdeasWorkspace QWidget#WorkspaceStatus {{
+                color: {palette.dim_text};
+            }}
 
-            QWidget#IdeasWorkspace QToolButton {
-                color: #cfcfcf;
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
+            QWidget#IdeasWorkspace QToolButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
                 padding: 6px 10px;
                 border-radius: 6px;
-            }
-            QWidget#IdeasWorkspace QToolButton:hover {
-                background: #34363b;
-            }
-            QWidget#IdeasWorkspace QToolButton:disabled {
-                color: #6e6f75;
-                background: #1e1f23;
-                border-color: #2a2b2f;
-            }
+            }}
+            QWidget#IdeasWorkspace QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QWidget#IdeasWorkspace QToolButton:disabled {{
+                color: {palette.muted_text};
+                background: {palette.panel_bg};
+                border-color: {palette.border};
+            }}
 
             QWidget#IdeasWorkspace QLineEdit,
             QWidget#IdeasWorkspace QPlainTextEdit,
             QWidget#IdeasWorkspace QComboBox,
-            QWidget#IdeasWorkspace QSpinBox {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QWidget#IdeasWorkspace QSpinBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 6px 8px;
                 border-radius: 6px;
-            }
+            }}
 
             QWidget#IdeasWorkspace QLineEdit:focus,
             QWidget#IdeasWorkspace QPlainTextEdit:focus,
             QWidget#IdeasWorkspace QComboBox:focus,
-            QWidget#IdeasWorkspace QSpinBox:focus {
-                border-color: #3b3c43;
-            }
+            QWidget#IdeasWorkspace QSpinBox:focus {{
+                border-color: {palette.accent};
+            }}
 
-            QWidget#IdeasWorkspace QCheckBox {
-                color: #cfcfcf;
+            QWidget#IdeasWorkspace QCheckBox {{
+                color: {palette.text};
                 padding: 2px 4px;
-            }
+            }}
 
-            QListView#IdeasList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
+            QListView#IdeasList {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
                 padding: 6px;
-            }
+            }}
 
-            QStackedWidget#IdeasInspectorStack {
+            QStackedWidget#IdeasInspectorStack {{
                 background: transparent;
-            }
+            }}
 
-            QTabWidget#IdeasInspectorTabs::pane {
-                border: 1px solid #2a2b2f;
-                background: #1b1c1f;
+            QTabWidget#IdeasInspectorTabs::pane {{
+                border: 1px solid {palette.border};
+                background: {palette.panel_bg};
                 border-radius: 10px;
                 padding: 6px;
-            }
+            }}
 
-            QTabWidget#IdeasInspectorTabs QTabBar::tab {
-                background: #202127;
-                color: #cfcfcf;
+            QTabWidget#IdeasInspectorTabs QTabBar::tab {{
+                background: {palette.input_bg};
+                color: {palette.text};
                 padding: 6px 12px;
                 margin-right: 4px;
                 border-radius: 6px;
-            }
-            QTabWidget#IdeasInspectorTabs QTabBar::tab:selected {
-                background: #2a2b2f;
-            }
+            }}
+            QTabWidget#IdeasInspectorTabs QTabBar::tab:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
 
-            QWidget#IdeasWorkspace QListWidget {
-                background: #16171a;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
+            QWidget#IdeasWorkspace QListWidget {{
+                background: {palette.window_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
                 padding: 6px;
-            }
+            }}
 
-            QLabel#IdeasEmpty {
-                color: #8f9096;
-            }
-        """)
+            QLabel#IdeasEmpty {{
+                color: {palette.dim_text};
+            }}
+        """
+        )
 
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)

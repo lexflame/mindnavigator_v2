@@ -49,6 +49,7 @@ from mindnavigator.storage import (
 )
 from mindnavigator.spaceenity.update_service import UpdateService, UpdateServiceError
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
+from mindnavigator.ui.styles import get_theme_palette
 
 
 _storage_get_database = get_database
@@ -117,8 +118,96 @@ class SettingsWorkspace(QWidget):
         self._db = get_database()
         self._loading_settings = False
         self._backup_entries: list[dict[str, object]] = []
+        self._theme_mode = "dark"
         self._build_ui()
         self._load_settings()
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#SettingsTitle {{
+                color: {palette.text};
+                font-size: 20px;
+                font-weight: 600;
+            }}
+            QFrame#SettingsCard {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+            QScrollArea#SettingsScroll {{
+                background: transparent;
+                border: none;
+            }}
+            QWidget#SettingsContent, QWidget#qt_scrollarea_viewport {{
+                background: transparent;
+            }}
+            QLabel#SettingsLabel {{
+                color: {palette.text};
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QLabel#SettingsHint {{
+                color: {palette.dim_text};
+                font-size: 11px;
+            }}
+            QLineEdit#SettingsPath {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 6px 10px;
+                color: {palette.text};
+                font-size: 11px;
+            }}
+            QToolButton#SettingsEditButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 6px 14px;
+                color: {palette.text};
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QToolButton#SettingsEditButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QLabel#SettingsSectionTitle {{
+                color: {palette.text};
+                font-size: 15px;
+                font-weight: 600;
+            }}
+            QLabel#SettingsStatus {{
+                color: {palette.dim_text};
+                font-size: 11px;
+            }}
+            QCheckBox#SettingsToggle {{
+                color: {palette.text};
+                font-size: 11px;
+            }}
+            QComboBox#SettingsCombo, QSpinBox#SettingsSpin {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 4px 8px;
+                color: {palette.text};
+                font-size: 11px;
+                min-width: 130px;
+            }}
+            QComboBox#SettingsCombo::drop-down {{
+                border: none;
+                width: 16px;
+            }}
+            QComboBox#SettingsCombo QAbstractItemView {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+            }}
+            """
+        )
 
     def _build_ui(self) -> None:
         root_layout = QVBoxLayout(self)
@@ -478,87 +567,7 @@ class SettingsWorkspace(QWidget):
         layout.addWidget(behavior_card)
         layout.addStretch(1)
 
-        self.setStyleSheet(
-            """
-            QWidget#SettingsTitle {
-                color: #e6e6e6;
-                font-size: 20px;
-                font-weight: 600;
-            }
-            QFrame#SettingsCard {
-                background: #222429;
-                border: 1px solid #32343a;
-                border-radius: 10px;
-            }
-            QScrollArea#SettingsScroll {
-                background: transparent;
-                border: none;
-            }
-            QWidget#SettingsContent, QWidget#qt_scrollarea_viewport {
-                background: transparent;
-            }
-            QLabel#SettingsLabel {
-                color: #e2e2e2;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QLabel#SettingsHint {
-                color: #8f9299;
-                font-size: 11px;
-            }
-            QLineEdit#SettingsPath {
-                background: #1b1d22;
-                border: 1px solid #2f3136;
-                border-radius: 6px;
-                padding: 6px 10px;
-                color: #d6d6d6;
-                font-size: 11px;
-            }
-            QToolButton#SettingsEditButton {
-                background: #2a2d33;
-                border: 1px solid #3a3d44;
-                border-radius: 6px;
-                padding: 6px 14px;
-                color: #e0e0e0;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QToolButton#SettingsEditButton:hover {
-                background: #343841;
-            }
-            QLabel#SettingsSectionTitle {
-                color: #e6e6e6;
-                font-size: 15px;
-                font-weight: 600;
-            }
-            QLabel#SettingsStatus {
-                color: #9aa3ad;
-                font-size: 11px;
-            }
-            QCheckBox#SettingsToggle {
-                color: #d6d6d6;
-                font-size: 11px;
-            }
-            QComboBox#SettingsCombo, QSpinBox#SettingsSpin {
-                background: #1b1d22;
-                border: 1px solid #2f3136;
-                border-radius: 6px;
-                padding: 4px 8px;
-                color: #d6d6d6;
-                font-size: 11px;
-                min-width: 130px;
-            }
-            QComboBox#SettingsCombo::drop-down {
-                border: none;
-                width: 16px;
-            }
-            QComboBox#SettingsCombo QAbstractItemView {
-                background: #1b1d22;
-                color: #e0e0e0;
-                selection-background-color: #343841;
-            }
-            """
-        )
+        self.set_theme_mode("dark")
 
     def _load_settings(self) -> None:
         self._loading_settings = True

@@ -7,6 +7,7 @@ from .projects_model import ProjectsModel
 from .projects_item_delegate import ProjectsItemDelegate
 from .project_edit_dialog import ProjectEditDialog
 from ._projects_list_view import _ProjectsListView
+from mindnavigator.ui.styles import get_theme_palette
 
 class ProjectsWorkspace(QWidget):
     def __init__(self, parent=None):
@@ -14,6 +15,7 @@ class ProjectsWorkspace(QWidget):
         super().__init__(parent)
         self._db = get_database()
         self._csv_service = CsvTransferService()
+        self._theme_mode = "dark"
         self.setObjectName("ProjectsWorkspace")
 
         root = QVBoxLayout(self)
@@ -121,33 +123,43 @@ class ProjectsWorkspace(QWidget):
         self.btn_import.clicked.connect(self._import_projects_csv)
         self.btn_graph.clicked.connect(self._on_graph_clicked)
 
-        self.setStyleSheet("""
-            QWidget#ProjectsWorkspace { background: #16171a; }
+        self.set_theme_mode("dark")
 
-            QFrame#ProjectsTopbar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#ProjectsWorkspace {{ background: {palette.window_bg}; }}
 
-            QToolButton {
-                color: #cfcfcf;
+            QFrame#ProjectsTopbar {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+            }}
+
+            QToolButton {{
+                color: {palette.text};
                 border: none;
                 padding: 6px 8px;
-            }
-            QToolButton:checked { background: #2a2b2f; }
+            }}
+            QToolButton:checked {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
 
-            QComboBox, QLineEdit {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QComboBox, QLineEdit {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 6px 8px;
-            }
+            }}
 
-            QListView#ProjectsList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
-            }
-        """)
+            QListView#ProjectsList {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
+            }}
+        """
+        )
 
     def _on_tab_changed(self):
         """Обрабатывает переключение фильтров по статусу."""

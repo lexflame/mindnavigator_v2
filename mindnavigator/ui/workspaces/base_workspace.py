@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from mindnavigator.ui.styles import get_theme_palette
 
 class BaseWorkspace(QWidget):
     """Base class for workspace panels."""
@@ -25,6 +26,7 @@ class BaseWorkspace(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._theme_mode = "dark"
         self._query = ""
         self._filters: dict[str, Any] = {}
         self._busy = False
@@ -40,6 +42,50 @@ class BaseWorkspace(QWidget):
         self.actions = self.create_actions()
         self.build_toolbar(self.actions)
         self.update_action_states()
+        self._apply_base_theme_mode("dark")
+
+    def _apply_base_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#WorkspaceToolbar,
+            QWidget#WorkspaceSearch,
+            QWidget#WorkspaceFilters {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+                padding: 6px;
+            }}
+            QLabel#WorkspaceTitle {{
+                color: {palette.text};
+            }}
+            QLineEdit#WorkspaceSearchInput {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 6px 8px;
+            }}
+            QToolButton#WorkspaceSearchClear {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 4px 8px;
+            }}
+            QToolButton#WorkspaceSearchClear:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QLabel#WorkspaceStatus {{
+                color: {palette.dim_text};
+            }}
+        """
+        )
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._apply_base_theme_mode(theme_mode)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -211,11 +257,12 @@ class BaseWorkspace(QWidget):
         self.status_row.setText(text)
         self.status_row.setProperty("error", False)
         self.status_row.setStyleSheet("")
+        self._apply_base_theme_mode(self._theme_mode)
 
     def set_error(self, text: str) -> None:
         self.status_row.setText(f"Error: {text}")
         self.status_row.setProperty("error", True)
-        self.status_row.setStyleSheet("color: #d76b6b;")
+        self.status_row.setStyleSheet(f"color: {get_theme_palette(self._theme_mode).danger};")
 
     def on_enter(self, context: dict | None = None) -> None:
         if not self._state_restored:

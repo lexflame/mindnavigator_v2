@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from ._shop_parse_worker import _ShopParseWorker
+from mindnavigator.ui.styles import get_theme_palette
 
 class PurchasesWorkspace(BaseWorkspace):
     workspace_id = "purchases"
@@ -11,6 +12,7 @@ class PurchasesWorkspace(BaseWorkspace):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         self._db = get_database()
+        self._theme_mode = "dark"
         self._smooth_scroll_controllers: list[object] = []
         self._current_item_id: int | None = None
         self._current_source_id: int | None = None
@@ -335,9 +337,15 @@ class PurchasesWorkspace(BaseWorkspace):
         self.category_rename_btn.clicked.connect(self._rename_category)
         self.category_delete_btn.clicked.connect(self._delete_category)
 
-        self.setStyleSheet("""
-            QWidget#PurchasesWorkspace { background: #16171a; }
-            QWidget#PurchasesWorkspace QLabel { color: #cfcfcf; }
+        self.set_theme_mode("dark")
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#PurchasesWorkspace {{ background: {palette.window_bg}; }}
+            QWidget#PurchasesWorkspace QLabel {{ color: {palette.text}; }}
             QWidget#PurchasesWorkspace QTableWidget,
             QWidget#PurchasesWorkspace QTableWidget QLineEdit,
             QWidget#PurchasesWorkspace QTableWidget QAbstractItemView,
@@ -345,100 +353,108 @@ class PurchasesWorkspace(BaseWorkspace):
             QWidget#PurchasesWorkspace QTreeWidget QAbstractItemView,
             QWidget#PurchasesWorkspace QComboBox,
             QWidget#PurchasesWorkspace QLineEdit,
-            QWidget#PurchasesWorkspace QPlainTextEdit {
-                color: #cfcfcf;
-            }
+            QWidget#PurchasesWorkspace QPlainTextEdit {{
+                color: {palette.text};
+            }}
             QWidget#PurchasesWorkspace QWidget#WorkspaceToolbar,
             QWidget#PurchasesWorkspace QWidget#WorkspaceSearch,
-            QWidget#PurchasesWorkspace QWidget#WorkspaceFilters {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
+            QWidget#PurchasesWorkspace QWidget#WorkspaceFilters {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
                 padding: 6px;
-            }
-            QWidget#PurchasesWorkspace QWidget#WorkspaceStatus { color: #b8b8b8; }
-            QWidget#PurchasesWorkspace QToolButton {
-                color: #cfcfcf;
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
+            }}
+            QWidget#PurchasesWorkspace QWidget#WorkspaceStatus {{ color: {palette.dim_text}; }}
+            QWidget#PurchasesWorkspace QToolButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
                 padding: 8px 12px;
                 border-radius: 6px;
                 min-height: 28px;
-            }
-            QWidget#PurchasesWorkspace QToolButton:hover { background: #34363b; }
+            }}
+            QWidget#PurchasesWorkspace QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
             QWidget#PurchasesWorkspace QLineEdit,
             QWidget#PurchasesWorkspace QPlainTextEdit,
-            QWidget#PurchasesWorkspace QComboBox {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QWidget#PurchasesWorkspace QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 6px 8px;
                 border-radius: 6px;
-            }
-            QWidget#PurchasesWorkspace QCheckBox {
-                color: #cfcfcf;
-            }
-            QTreeWidget#PurchasesCategoryTree {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
+            }}
+            QWidget#PurchasesWorkspace QCheckBox {{
+                color: {palette.text};
+            }}
+            QTreeWidget#PurchasesCategoryTree {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
                 padding: 4px;
-            }
+            }}
             QTableWidget#PurchasesItemsTable,
-            QTableWidget {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
+            QTableWidget {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
-                color: #cfcfcf;
-            }
-            QTableWidget::horizontalHeader {
-                background: #2b2f36;
-            }
-            QHeaderView::section {
-                color: #000000;
-                background: #2b2f36;
-                border: 1px solid #3a3b40;
+                color: {palette.text};
+            }}
+            QTableWidget::horizontalHeader {{
+                background: {palette.panel_alt_bg};
+            }}
+            QHeaderView::section {{
+                color: {palette.text};
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border_strong};
                 padding: 6px;
-            }
-            QTableWidget::item:hover {
-                background: #23252b;
-            }
-            QTableWidget::item:selected {
-                background: #2b2f36;
-            }
-            QTabWidget#PurchasesCardTabs::pane {
-                border: 1px solid #2a2b2f;
-                background: #1b1c1f;
+            }}
+            QTableWidget::item:hover {{
+                background: {palette.elevated_bg};
+            }}
+            QTableWidget::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QTabWidget#PurchasesCardTabs::pane {{
+                border: 1px solid {palette.border};
+                background: {palette.panel_bg};
                 border-radius: 10px;
                 padding: 6px;
-            }
-            QTabWidget#PurchasesCardTabs QTabBar::tab {
-                background: #202127;
-                color: #cfcfcf;
+            }}
+            QTabWidget#PurchasesCardTabs QTabBar::tab {{
+                background: {palette.input_bg};
+                color: {palette.text};
                 padding: 6px 12px;
                 margin-right: 4px;
                 border-radius: 6px;
-            }
-            QTabWidget#PurchasesCardTabs QTabBar::tab:selected { background: #2a2b2f; }
-            QGroupBox#PurchasesAddBox {
-                border: 1px solid #2a2b2f;
+            }}
+            QTabWidget#PurchasesCardTabs QTabBar::tab:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QGroupBox#PurchasesAddBox {{
+                border: 1px solid {palette.border};
                 border-radius: 8px;
                 margin-top: 10px;
-                color: #cfcfcf;
-            }
-            QGroupBox#PurchasesAddBox::title {
+                color: {palette.text};
+            }}
+            QGroupBox#PurchasesAddBox::title {{
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px 0 4px;
-            }
+            }}
             QLineEdit[readOnly="true"],
-            QPlainTextEdit[readOnly="true"] {
-                background: #1c1d22;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
+            QPlainTextEdit[readOnly="true"] {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
-            }
-        """)
+            }}
+        """
+        )
 
     def create_actions(self) -> dict[str, QAction]:
         action_add = QAction("Добавить по URL", self)

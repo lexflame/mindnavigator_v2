@@ -9,12 +9,14 @@ from .marker_search_model import MarkerSearchModel
 from .maps_item_delegate import MapsItemDelegate
 from .maps_list_view import MapsListView
 from .maps_model import MapsModel
+from mindnavigator.ui.styles import get_theme_palette
 
 class MapsListWorkspace(QWidget):
     def __init__(self, parent=None):
         # Инициализируем рабочую область списка карт.
         super().__init__(parent)
         # Основные настройки рабочей области списка карт.
+        self._theme_mode = "dark"
         self.setObjectName("MapsWorkspace")
 
         self._db = get_database()
@@ -263,155 +265,7 @@ class MapsListWorkspace(QWidget):
         overlay_layout.addStretch(1)
 
         # Стили рабочей области.
-        self.setStyleSheet("""
-            QWidget#MapsWorkspace { background: #16171a; }
-
-            QFrame#MapsCreateBar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
-
-            QFrame#MapsCreateBar QLineEdit {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                color: #e6e6e6;
-            }
-
-            QFrame#MapsCreateBar QComboBox {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                padding: 4px 6px;
-                color: #e6e6e6;
-            }
-
-            QFrame#MapsCreateBar QFrame#MapsTilesBlock {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                border-radius: 8px;
-            }
-
-            QFrame#MapsCreateBar QFrame#MapsTilesBlock QLabel {
-                color: #cfcfcf;
-                padding: 0 4px;
-            }
-
-            QFrame#MapsCreateBar QFrame#MapsTilesBlock QSpinBox {
-                background: transparent;
-                border: none;
-                padding: 4px 6px;
-                color: #e6e6e6;
-            }
-
-            QFrame#MapsCreateBar QToolButton {
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
-                padding: 6px 10px;
-                border-radius: 6px;
-            }
-            QFrame#MapsCreateBar QToolButton:hover { background: #34363b; }
-
-            QFrame#MapsTopbar {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-            }
-
-            QToolButton {
-                color: #cfcfcf;
-                border: none;
-                padding: 6px 8px;
-            }
-            QToolButton:checked {
-                background: #2a2b2f;
-            }
-
-            QComboBox, QLineEdit {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-            }
-
-            QListView#MapsList {
-                background: #16171a;
-                border: 1px solid #2a2b2f;
-            }
-
-            QFrame#MapEditorHeader {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-                border-radius: 6px;
-            }
-
-            QFrame#MapEditorHeader QToolButton {
-                background: #2a2b2f;
-                border: 1px solid #3a3b40;
-                padding: 6px 10px;
-                border-radius: 6px;
-                color: #e6e6e6;
-            }
-
-            QLineEdit#MapMarkerSearch {
-                background: #202127;
-                color: #cfcfcf;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                border-radius: 6px;
-            }
-
-            QListView#MapMarkerSearchResults {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-                border-radius: 6px;
-                color: #e6e6e6;
-            }
-
-            QListView#MapMarkerSearchResults::item {
-                padding: 6px 8px;
-            }
-
-            QListView#MapMarkerSearchResults::item:selected {
-                background: #2a2b2f;
-            }
-
-            QLabel#MapEditorTitle {
-                color: #e6e6e6;
-                font-size: 14px;
-                font-weight: 600;
-            }
-
-            QFrame#MapsLoadingOverlay {
-                background: rgba(8, 9, 12, 0.75);
-            }
-
-            QFrame#MapsLoadingCard {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-                border-radius: 12px;
-            }
-
-            QLabel#MapsLoadingTitle {
-                color: #f2f2f2;
-                font-size: 16px;
-                font-weight: 600;
-            }
-
-            QLabel#MapsLoadingHint {
-                color: #cfcfcf;
-                font-size: 12px;
-            }
-
-            QProgressBar#MapsLoadingBar {
-                background: #2a2b2f;
-                border: none;
-                border-radius: 4px;
-            }
-
-            QProgressBar#MapsLoadingBar::chunk {
-                background: #5fa8ff;
-                border-radius: 4px;
-            }
-        """)
+        self.set_theme_mode("dark")
 
     def resizeEvent(self, event):
         # Обновляем геометрию оверлея и позицию выпадающего списка.
@@ -420,6 +274,161 @@ class MapsListWorkspace(QWidget):
             self.loading_overlay.setGeometry(self.rect())
         if hasattr(self, "marker_search_results") and self.marker_search_results.isVisible():
             self._position_marker_search_results()
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        overlay_color = "rgba(8, 9, 12, 0.75)" if self._theme_mode == "dark" else "rgba(235, 241, 250, 0.86)"
+        self.setStyleSheet(
+            f"""
+            QWidget#MapsWorkspace {{ background: {palette.window_bg}; }}
+
+            QFrame#MapsCreateBar,
+            QFrame#MapsTopbar,
+            QFrame#MapEditorHeader,
+            QFrame#MapsLoadingCard {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+            }}
+
+            QFrame#MapsCreateBar,
+            QFrame#MapsTopbar {{
+                border-radius: 10px;
+            }}
+
+            QFrame#MapEditorHeader {{
+                border-radius: 6px;
+            }}
+
+            QFrame#MapsCreateBar QLineEdit,
+            QFrame#MapsCreateBar QComboBox {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+                color: {palette.text};
+            }}
+
+            QFrame#MapsCreateBar QFrame#MapsTilesBlock {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+            }}
+
+            QFrame#MapsCreateBar QFrame#MapsTilesBlock QLabel {{
+                color: {palette.text};
+                padding: 0 4px;
+            }}
+
+            QFrame#MapsCreateBar QFrame#MapsTilesBlock QSpinBox {{
+                background: transparent;
+                border: none;
+                padding: 4px 6px;
+                color: {palette.text};
+            }}
+
+            QFrame#MapsCreateBar QToolButton,
+            QFrame#MapEditorHeader QToolButton {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                padding: 6px 10px;
+                border-radius: 6px;
+                color: {palette.text};
+            }}
+
+            QFrame#MapsCreateBar QToolButton:hover,
+            QFrame#MapEditorHeader QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+
+            QToolButton {{
+                color: {palette.text};
+                border: none;
+                padding: 6px 8px;
+            }}
+
+            QToolButton:checked {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+
+            QComboBox, QLineEdit {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+            }}
+
+            QListView#MapsList {{
+                background: {palette.window_bg};
+                border: 1px solid {palette.border};
+            }}
+
+            QLineEdit#MapMarkerSearch {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+
+            QListView#MapMarkerSearchResults {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                color: {palette.text};
+            }}
+
+            QListView#MapMarkerSearchResults::item {{
+                padding: 6px 8px;
+            }}
+
+            QListView#MapMarkerSearchResults::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+
+            QLabel#MapEditorTitle {{
+                color: {palette.text};
+                font-size: 14px;
+                font-weight: 600;
+            }}
+
+            QFrame#MapsLoadingOverlay {{
+                background: {overlay_color};
+            }}
+
+            QFrame#MapsLoadingCard {{
+                border-radius: 12px;
+            }}
+
+            QLabel#MapsLoadingTitle {{
+                color: {palette.text};
+                font-size: 16px;
+                font-weight: 600;
+            }}
+
+            QLabel#MapsLoadingHint {{
+                color: {palette.dim_text};
+                font-size: 12px;
+            }}
+
+            QProgressBar#MapsLoadingBar {{
+                background: {palette.border};
+                border: none;
+                border-radius: 4px;
+            }}
+
+            QProgressBar#MapsLoadingBar::chunk {{
+                background: {palette.accent};
+                border-radius: 4px;
+            }}
+            """
+        )
+        if hasattr(self.delegate, "set_theme_mode"):
+            self.delegate.set_theme_mode(self._theme_mode)
+        if hasattr(self.editor_workspace, "set_theme_mode"):
+            self.editor_workspace.set_theme_mode(self._theme_mode)
 
     @staticmethod
     def _project_titles() -> List[str]:

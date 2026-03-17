@@ -6,18 +6,21 @@ from ._shared import *  # noqa: F401,F403
 from .notes_model import NotesModel
 from .notes_controller import NotesController
 from .note_card_delegate import NoteCardDelegate
+from mindnavigator.ui.styles import get_theme_palette
 
 class NoteWorkspace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._db = get_database()
         self._csv_service = CsvTransferService()
+        self._theme_mode = "dark"
         self.setObjectName("NotesWorkspace")
         self._state = NoteWorkspaceState()
         self._smooth_scroll_controllers: list[object] = []
 
         self._build_ui()
         self._wire_logic()
+        self.set_theme_mode("dark")
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -90,76 +93,6 @@ class NoteWorkspace(QWidget):
         self.splitter.setStretchFactor(2, 1)
         self.splitter.setSizes([240, 520, 420])
 
-        self.setStyleSheet("""
-            QWidget#NotesWorkspace { background: #16171a; }
-
-            QFrame#NotesHeader {
-                background: #1b1c1f;
-                border: 1px solid #2a2b2f;
-                border-radius: 10px;
-            }
-
-            QLabel#NotesHeaderTitle {
-                color: #d7d7d7;
-                font-size: 12px;
-                letter-spacing: 0.6px;
-            }
-
-            QToolButton {
-                background: transparent;
-                border: none;
-                color: #cfcfcf;
-                padding: 4px 8px;
-            }
-
-            QToolButton:checked {
-                color: #ffffff;
-                background: #20242b;
-                border-radius: 6px;
-            }
-
-            QFrame#NotesNavPanel,
-            QFrame#NotesListPanel,
-            QFrame#NotesEditorPanel {
-                background: #1a1c20;
-                border: 1px solid #2a2b2f;
-                border-radius: 12px;
-            }
-
-            QLineEdit {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                padding: 6px 8px;
-                color: #e6e6e6;
-                border-radius: 8px;
-            }
-
-            QTextEdit {
-                background: #131417;
-                border: 1px solid #2a2b2f;
-                color: #e6e6e6;
-                padding: 10px;
-                border-radius: 10px;
-            }
-
-            QListView#NotesGrid {
-                background: transparent;
-                outline: none;
-            }
-
-            QTreeWidget {
-                background: transparent;
-                border: none;
-                color: #b5b9c0;
-            }
-
-            QTreeWidget::item:selected {
-                background: #20242b;
-                color: #ffffff;
-                border-radius: 6px;
-            }
-        """)
-
     def _build_nav_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("NotesNavPanel")
@@ -168,7 +101,7 @@ class NoteWorkspace(QWidget):
         layout.setSpacing(12)
 
         title = QLabel("Навигация")
-        title.setStyleSheet("color:#c7cbd3; font-size:12px; font-weight:600;")
+        title.setObjectName("NotesSectionTitle")
         layout.addWidget(title)
 
         self.nav_search = QLineEdit()
@@ -208,7 +141,7 @@ class NoteWorkspace(QWidget):
         layout.addWidget(filters)
 
         tree_label = QLabel("Структура")
-        tree_label.setStyleSheet("color:#8c9097; font-size:11px;")
+        tree_label.setObjectName("NotesSubtleLabel")
         layout.addWidget(tree_label)
 
         self.tree = QTreeWidget()
@@ -237,7 +170,7 @@ class NoteWorkspace(QWidget):
         quick_layout.setContentsMargins(0, 0, 0, 0)
         quick_layout.setSpacing(6)
         quick_label = QLabel("Быстрые действия")
-        quick_label.setStyleSheet("color:#8c9097; font-size:11px;")
+        quick_label.setObjectName("NotesSubtleLabel")
         quick_layout.addWidget(quick_label)
         quick_layout.addStretch(1)
         quick_btn = QToolButton()
@@ -263,12 +196,12 @@ class NoteWorkspace(QWidget):
         header_layout.setSpacing(8)
 
         self.list_title = QLabel("Заметки")
-        self.list_title.setStyleSheet("color:#c7cbd3; font-size:12px; font-weight:600;")
+        self.list_title.setObjectName("NotesSectionTitle")
         header_layout.addWidget(self.list_title)
         header_layout.addStretch(1)
 
         self.list_hint = QLabel("Categories view")
-        self.list_hint.setStyleSheet("color:#6e727a; font-size:10px;")
+        self.list_hint.setObjectName("NotesHintLabel")
         header_layout.addWidget(self.list_hint)
         layout.addWidget(header)
 
@@ -284,7 +217,6 @@ class NoteWorkspace(QWidget):
 
         self.quick_category_label = QLabel("Все категории")
         self.quick_category_label.setObjectName("NotesQuickCategory")
-        self.quick_category_label.setStyleSheet("color:#9ea3ac; font-size:11px;")
 
         self.quick_title_input = QLineEdit()
         self.quick_title_input.setPlaceholderText("Быстрое создание заметки…")
@@ -319,11 +251,11 @@ class NoteWorkspace(QWidget):
         empty_layout.setContentsMargins(0, 0, 0, 0)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_title = QLabel("Нет заметок")
-        empty_title.setStyleSheet("color:#c7cbd3; font-size:14px; font-weight:600;")
+        empty_title.setObjectName("NotesEmptyTitle")
         empty_desc = QLabel(
             "Создайте заметку через + или используйте поиск, чтобы быстро найти нужное."
         )
-        empty_desc.setStyleSheet("color:#7b7f86; font-size:11px;")
+        empty_desc.setObjectName("NotesEmptyHint")
         empty_desc.setWordWrap(True)
         empty_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_desc.setMaximumWidth(220)
@@ -348,11 +280,11 @@ class NoteWorkspace(QWidget):
         empty_layout = QVBoxLayout(empty)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_title = QLabel("Выберите заметку")
-        empty_title.setStyleSheet("color:#c7cbd3; font-size:14px; font-weight:600;")
+        empty_title.setObjectName("NotesEmptyTitle")
         empty_hint = QLabel(
             "Создайте новую заметку или выберите карточку слева. Zen-mode скрывает навигацию и список."
         )
-        empty_hint.setStyleSheet("color:#7b7f86; font-size:11px;")
+        empty_hint.setObjectName("NotesEmptyHint")
         empty_hint.setWordWrap(True)
         empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_hint.setMaximumWidth(260)
@@ -365,7 +297,7 @@ class NoteWorkspace(QWidget):
         editor_layout.setSpacing(8)
 
         breadcrumbs = QLabel("Проект → Заметка")
-        breadcrumbs.setStyleSheet("color:#7b7f86; font-size:10px;")
+        breadcrumbs.setObjectName("NotesBreadcrumbs")
         self.breadcrumbs_label = breadcrumbs
         editor_layout.addWidget(breadcrumbs)
 
@@ -387,7 +319,7 @@ class NoteWorkspace(QWidget):
 
         status_row = QHBoxLayout()
         self.autosave_label = QLabel("Автосохранение: включено")
-        self.autosave_label.setStyleSheet("color:#6e727a; font-size:10px;")
+        self.autosave_label.setObjectName("NotesAutosaveLabel")
         status_row.addWidget(self.autosave_label)
         status_row.addStretch(1)
         editor_layout.addLayout(status_row)
@@ -667,5 +599,106 @@ class NoteWorkspace(QWidget):
             "Notes",
             f"Импорт завершен: {result.imported}, пропущено: {result.skipped}.",
         )
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QWidget#NotesWorkspace {{
+                background: {palette.window_bg};
+            }}
+            QFrame#NotesHeader {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+            QLabel#NotesHeaderTitle {{
+                color: {palette.text};
+                font-size: 12px;
+                letter-spacing: 0.6px;
+            }}
+            QToolButton {{
+                background: transparent;
+                border: none;
+                color: {palette.text};
+                padding: 4px 8px;
+            }}
+            QToolButton:checked {{
+                color: {palette.selection_text};
+                background: {palette.selection_bg};
+                border-radius: 6px;
+            }}
+            QFrame#NotesNavPanel,
+            QFrame#NotesListPanel,
+            QFrame#NotesEditorPanel {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 12px;
+            }}
+            QLineEdit {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+                color: {palette.text};
+                border-radius: 8px;
+            }}
+            QTextEdit {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                color: {palette.text};
+                padding: 10px;
+                border-radius: 10px;
+            }}
+            QListView#NotesGrid {{
+                background: transparent;
+                outline: none;
+            }}
+            QTreeWidget {{
+                background: transparent;
+                border: none;
+                color: {palette.dim_text};
+            }}
+            QTreeWidget::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+                border-radius: 6px;
+            }}
+            QLabel#NotesSectionTitle {{
+                color: {palette.text};
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QLabel#NotesSubtleLabel,
+            QLabel#NotesQuickCategory {{
+                color: {palette.dim_text};
+                font-size: 11px;
+            }}
+            QLabel#NotesHintLabel,
+            QLabel#NotesBreadcrumbs,
+            QLabel#NotesAutosaveLabel {{
+                color: {palette.muted_text};
+                font-size: 10px;
+            }}
+            QLabel#NotesEmptyTitle {{
+                color: {palette.text};
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            QLabel#NotesEmptyHint {{
+                color: {palette.dim_text};
+                font-size: 11px;
+            }}
+            """
+        )
+        self._refresh_icons()
+
+    def _refresh_icons(self) -> None:
+        palette = get_theme_palette(self._theme_mode)
+        self.btn_toggle_left.setIcon(qta.icon("fa5s.columns", color=palette.text))
+        self.btn_toggle_right.setIcon(qta.icon("fa5s.align-right", color=palette.text))
+        self.btn_zen.setIcon(qta.icon("fa5s.eye", color=palette.text))
+        self.btn_new_note.setIcon(qta.icon("fa5s.plus", color=palette.text))
+        self.quick_new_btn.setIcon(qta.icon("fa5s.plus", color=palette.text))
 
 __all__ = ["NoteWorkspace"]
