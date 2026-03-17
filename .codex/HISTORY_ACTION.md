@@ -1449,3 +1449,16 @@
 [2026-03-18 00:42] OUT: OK.
 [2026-03-18 00:42] CMD: $env:PYTHONPATH='.'; pytest tests/test_db_migrations.py tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_tasks_plan_task_resume
 [2026-03-18 00:42] OUT: 52 passed.
+[2026-03-18 01:07] CMD: Create PR for `sprint/tasks-plan-task` via GitHub API.
+[2026-03-18 01:07] OUT: Created PR https://github.com/lexflame/mindnavigator_v2/pull/235.
+[2026-03-18 01:07] CMD: Query GitHub API check-runs for commit `6547c41e55f32b24e85970bfa90b3d7f39a74024`.
+[2026-03-18 01:07] OUT: All four `build*` jobs failed in step `Test with pytest`.
+[2026-03-18 01:07] CMD: $env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp_full_ci_repro
+[2026-03-18 01:07] OUT: Reproduced 5 failures in `tests/test_dialog_minimize_behavior.py` caused by `TaskEditDialog` requiring `fetch_tasks()` on stub DBs and by a deferred edit-dialog payload missing `is_plan_task`.
+[2026-03-18 01:07] ACTION: Restored task-edit dialog compatibility for stub DBs and deferred edit payloads after PR #235 CI failures.
+[2026-03-18 01:07] CMD: python -m compileall mindnavigator main.py
+[2026-03-18 01:07] OUT: OK.
+[2026-03-18 01:07] CMD: $env:PYTHONPATH='.'; pytest tests/test_dialog_minimize_behavior.py -p no:cacheprovider --basetemp .pytest_dir/run_tmp_dialog_minimize_fix
+[2026-03-18 01:07] OUT: 18 passed.
+[2026-03-18 01:07] CMD: $env:PYTHONPATH='.'; pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp_full_ci_repro_fix
+[2026-03-18 01:07] OUT: 266 passed.

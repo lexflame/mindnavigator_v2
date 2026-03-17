@@ -999,6 +999,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             return
 
         values = dialog.values()
+        current_task = tasks_model.task_at_row(current_row)
         debug_task_dialog(
             f"tasks_delegate edit_apply row={current_row} task_id={task_id} "
             f"title={values['title']!r} day={values['day'].isoformat()} time={values['time_text']!r} "
@@ -1016,9 +1017,12 @@ class TasksItemDelegate(QStyledItemDelegate):
                 project_id=values["project_id"],
                 recurrence_kind=values["recurrence_kind"],
                 recurrence_interval=values["recurrence_interval"],
-                is_plan_task=values["is_plan_task"],
-                marker_color=values["marker_color"],
-                marker_theme=values["marker_theme"],
+                is_plan_task=values.get(
+                    "is_plan_task",
+                    bool(current_task.is_plan_task) if current_task is not None else False,
+                ),
+                marker_color=values.get("marker_color", ""),
+                marker_theme=values.get("marker_theme", ""),
             )
             dialog.setProperty("_task_edit_result_applied", True)
             debug_task_dialog(

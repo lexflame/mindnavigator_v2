@@ -992,7 +992,10 @@ class TaskEditDialog(QDialog):
         show_dialog_standard(dialog, self)
 
     def _resolve_plan_item_state(self, task_id: int) -> bool:
-        by_id = {task.id: task for task in self._db.fetch_tasks()}
+        fetch_tasks = getattr(self._db, "fetch_tasks", None)
+        if not callable(fetch_tasks):
+            return False
+        by_id = {task.id: task for task in fetch_tasks()}
         current = by_id.get(task_id)
         seen: set[int] = set()
         while current is not None and current.parent_id is not None and current.id not in seen:
