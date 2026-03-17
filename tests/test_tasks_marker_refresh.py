@@ -322,6 +322,64 @@ def test_tasks_model_today_mode_shows_subtasks_expanded(monkeypatch, unique_temp
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_model_plan_mode_expands_only_today_subtasks(monkeypatch, unique_temp_path) -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = unique_temp_path("tasks_plan_today_subtasks_expanded", ".sqlite3")
+    database = Database(path=db_path)
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    try:
+        today_root = database.create_task(
+            title="Today root",
+            description="",
+            day=today,
+            time_text="09:00",
+            priority="Medium",
+        )
+        today_child = database.create_task(
+            title="Today child",
+            description="",
+            day=today,
+            time_text="09:30",
+            priority="Medium",
+            parent_id=today_root.id,
+        )
+        tomorrow_root = database.create_task(
+            title="Tomorrow root",
+            description="",
+            day=tomorrow,
+            time_text="10:00",
+            priority="Medium",
+        )
+        _tomorrow_child = database.create_task(
+            title="Tomorrow child",
+            description="",
+            day=tomorrow,
+            time_text="10:30",
+            priority="Medium",
+            parent_id=tomorrow_root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        model.set_filter_mode("План")
+        model.set_focus_day(None)
+
+        visible_task_ids = [
+            model.index(row, 0).data(TaskRoles.TaskId)
+            for row in range(model.rowCount())
+            if model.index(row, 0).data(TaskRoles.RowType) == "task"
+        ]
+
+        assert today_root.id in visible_task_ids
+        assert today_child.id in visible_task_ids
+        assert tomorrow_root.id in visible_task_ids
+        assert _tomorrow_child.id not in visible_task_ids
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_quick_create_defaults_to_enabled_time_plus_one_hour(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_quick_create_defaults", ".sqlite3")
