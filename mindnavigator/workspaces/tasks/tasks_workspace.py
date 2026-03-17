@@ -12,6 +12,7 @@ class TasksWorkspace(BaseWorkspace):
 
     workspace_id = "tasks"
     workspace_title = "Задачи"
+    DASH_PULSE_DAYS = 6
     GANTT_DAY_START_HOUR = 8
     GANTT_DAY_END_HOUR = 22
     BOARD_COLUMN_ORDER = [
@@ -271,6 +272,7 @@ class TasksWorkspace(BaseWorkspace):
         self.dash_summary_label = None
         self.dash_bar_chart = None
         self.dash_pie_chart = None
+        self.dash_pulse_chart = None
         self.dash_projects_list = None
         super().__init__(parent)
         self.setObjectName("TasksWorkspace")
@@ -719,6 +721,20 @@ class TasksWorkspace(BaseWorkspace):
         charts_layout.addWidget(distribution_card, 1)
         layout.addWidget(charts_host)
 
+        pulse_card = QFrame(page)
+        pulse_card.setObjectName("TasksDashCard")
+        pulse_layout = QVBoxLayout(pulse_card)
+        pulse_layout.setContentsMargins(10, 10, 10, 10)
+        pulse_layout.setSpacing(8)
+        pulse_title = QLabel("Пульс результативности")
+        pulse_title.setObjectName("TasksDashChartTitle")
+        pulse_layout.addWidget(pulse_title)
+        self.dash_pulse_chart = self._DashBarChartWidget(pulse_card)
+        self.dash_pulse_chart.setObjectName("TasksDashPulseChart")
+        self.dash_pulse_chart.setMinimumHeight(220)
+        pulse_layout.addWidget(self.dash_pulse_chart, 1)
+        layout.addWidget(pulse_card)
+
         projects_title = QLabel("Топ проектов по активным задачам")
         projects_title.setObjectName("TasksDashProjectsTitle")
         layout.addWidget(projects_title)
@@ -833,6 +849,28 @@ class TasksWorkspace(BaseWorkspace):
         baseline_impulse = len(previous_completion_days) / (baseline_span_days / 2.0)
         return recent_impulse, baseline_impulse
 
+    def _build_dash_pulse_items(self, all_tasks: List) -> List[Tuple[str, int, QColor]]:
+        """Build a short completion pulse histogram ending on the focused day."""
+        window_start = self._focus_day - timedelta(days=self.DASH_PULSE_DAYS - 1)
+        recent_start = self._focus_day - timedelta(days=1)
+        completion_counts: Dict[date, int] = {}
+        for task in all_tasks:
+            if not task.done or task.day < window_start or task.day > self._focus_day:
+                continue
+            completion_counts[task.day] = completion_counts.get(task.day, 0) + 1
+
+        items: List[Tuple[str, int, QColor]] = []
+        for offset in range(self.DASH_PULSE_DAYS):
+            current_day = window_start + timedelta(days=offset)
+            if current_day < recent_start:
+                color = QColor("#35536f")
+            elif current_day == self._focus_day:
+                color = QColor("#8fe3ff")
+            else:
+                color = QColor("#4f7ecf")
+            items.append((current_day.strftime("%d.%m"), completion_counts.get(current_day, 0), color))
+        return items
+
     def _format_dash_resultativity(self, all_tasks: List) -> str:
         """Build a readable DASH summary for recent completion impulse against prior periods."""
         recent_impulse, baseline_impulse = self._calculate_dash_resultativity(all_tasks)
@@ -857,6 +895,7 @@ class TasksWorkspace(BaseWorkspace):
             or self.dash_projects_list is None
             or self.dash_bar_chart is None
             or self.dash_pie_chart is None
+            or self.dash_pulse_chart is None
         ):
             return
         all_tasks = self._db.fetch_tasks()
@@ -882,6 +921,7 @@ class TasksWorkspace(BaseWorkspace):
         ]
         self.dash_bar_chart.set_items(entity_items, animate=True)
         self.dash_pie_chart.set_items(entity_items, animate=True)
+        self.dash_pulse_chart.set_items(self._build_dash_pulse_items(all_tasks), animate=True)
         self.dash_summary_label.setText(
             (
                 f"DASH на {self._focus_day.isoformat()}: диаграммы пересчитаны и заполнены заново.\n"

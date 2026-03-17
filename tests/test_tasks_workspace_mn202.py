@@ -812,6 +812,7 @@ def test_tasks_dash_shows_classic_entity_statistics(monkeypatch, unique_temp_pat
         assert "Результативность: нет завершенных задач для сравнения." in summary
         assert workspace.dash_bar_chart is not None
         assert workspace.dash_pie_chart is not None
+        assert workspace.dash_pulse_chart is not None
         assert [(label, value) for label, value, _ in workspace.dash_bar_chart._items] == [
             ("Задачи", expected_totals[0]),
             ("Проекты", expected_totals[1]),
@@ -827,6 +828,14 @@ def test_tasks_dash_shows_classic_entity_statistics(monkeypatch, unique_temp_pat
             ("Метки", expected_totals[3]),
             ("Объекты", expected_totals[4]),
             ("Заметки", expected_totals[5]),
+        ]
+        assert [(label, value) for label, value, _ in workspace.dash_pulse_chart._items] == [
+            ("01.03", 0),
+            ("02.03", 0),
+            ("03.03", 0),
+            ("04.03", 0),
+            ("05.03", 0),
+            ("06.03", 0),
         ]
     finally:
         if workspace is not None:
@@ -859,6 +868,15 @@ def test_tasks_dash_shows_resultativity_against_previous_periods(monkeypatch, un
             "Результативность: 2.00x к прошлому темпу "
             "(импульс за последние 2 дня 3; база прошлых периодов 1.50 на 2 дня)."
         ) in summary
+        assert workspace.dash_pulse_chart is not None
+        assert [(label, value) for label, value, _ in workspace.dash_pulse_chart._items] == [
+            ("01.03", 1),
+            ("02.03", 1),
+            ("03.03", 0),
+            ("04.03", 1),
+            ("05.03", 1),
+            ("06.03", 2),
+        ]
     finally:
         if workspace is not None:
             workspace.deleteLater()
