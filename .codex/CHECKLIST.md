@@ -1,6 +1,8 @@
 # CHECKLIST.md
 
 ## Before Finishing
+- [ ] Work started from a dedicated task branch, not from `main`, `master`, `develop`, `dev`, or `release/*`.
+- [ ] Existing uncommitted user changes were either absent or explicitly addressed with user instructions.
 - [ ] Only task-related files were changed.
 - [ ] No accidental behavioral changes in desktop flow.
 - [ ] `python -m compileall mindnavigator main.py` passed for code changes.
@@ -12,4 +14,5 @@
 - [ ] For sprint, release, parity, or hotfix work: `TASK_GUID` tracking is updated in `.codex/HISTORY_TASK.md`.
 - [ ] For sprint, release, parity, or hotfix work: meaningful actions are appended to `.codex/HISTORY_ACTION.md`.
 - [ ] For sprint work: branch, commit, push, and pipeline status are aligned with the current delivery step.
+- [ ] If manual testing is required, the user confirmation gate is respected before PR creation.
 - [ ] Final summary includes changed files, validations, residual risks, and the next practical step.

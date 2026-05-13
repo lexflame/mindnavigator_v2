@@ -31,11 +31,15 @@ This file consolidates the practical rules from:
 - Assets and docs: `assets/`, `docs/`
 
 ## Default Task Flow
-1. Analyze the task and locate target modules with `rg`.
-2. Review impacted call sites before changing public behavior.
-3. Implement the smallest in-place patch that satisfies the task.
-4. Run validation for the changed scope.
-5. Report changed files, validation results, residual risks, and the next practical step.
+1. Inspect Git state with `git status` and `git branch --show-current`.
+2. If the current branch is protected or shared, create a dedicated task branch before editing.
+3. If uncommitted user changes exist, stop and ask for instructions before proceeding.
+4. Analyze the task and locate target modules with `rg`.
+5. Review impacted call sites before changing public behavior.
+6. Implement the smallest in-place patch that satisfies the task.
+7. Run validation for the changed scope.
+8. If manual testing is required, stop after reporting results and wait for user confirmation before creating a PR.
+9. Report changed files, validation results, residual risks, and the next practical step.
 
 ## Validation Gates
 ### Minimum Before Final Response

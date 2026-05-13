@@ -71,5 +71,6 @@ When the repository workflow, validation flow, sprint delivery flow, or history-
 ## Operational Principle
 - Minimal diffs.
 - Focused verification first.
+- Dedicated task branch before edits.
 - Zero unrelated edits.
 - Stable desktop behavior first.
