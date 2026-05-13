@@ -13,6 +13,7 @@ class TaskAttachmentData:
     created_at: str
 
     SUPPORTED_KINDS: ClassVar[tuple[str, ...]] = (
+        "task",
         "note",
         "object",
         "map",

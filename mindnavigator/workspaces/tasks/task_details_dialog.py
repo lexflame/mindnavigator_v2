@@ -21,6 +21,7 @@ class TaskDetailsDialog(QDialog):
         self._db = get_database()
         self._task = task
         self._attachments: List = []
+        self._tasks_by_id = {}
         self._notes_by_id = {}
         self._objects_by_id = {}
         self._maps_by_id = {}
@@ -57,7 +58,7 @@ class TaskDetailsDialog(QDialog):
         desc_title = QLabel("Описание")
         desc_title.setObjectName("TaskDetailsSectionTitle")
         desc_layout.addWidget(desc_title)
-        desc_layout.addWidget(_build_markdown_preview_widget(task.description, desc_block))
+        desc_layout.addWidget(_build_markdown_preview_widget(task.description, desc_block, self._open_linked_task))
         content_layout.addWidget(desc_block)
 
         props_block = QFrame()
@@ -198,13 +199,28 @@ class TaskDetailsDialog(QDialog):
                 return task.title
         return "—"
 
+    def _open_linked_task(self, task_id: int) -> bool:
+        task = self._tasks_by_id.get(task_id)
+        if task is None:
+            tasks = self._db.fetch_tasks()
+            self._tasks_by_id = {item.id: item for item in tasks}
+            task = self._tasks_by_id.get(task_id)
+        if task is None:
+            QMessageBox.warning(self, "Связанные задачи", f"Задача MN-{task_id} не найдена.")
+            return False
+        dialog = TaskDetailsDialog(task, parent=self)
+        show_dialog_standard(dialog, self)
+        return True
+
     def _load_attachment_sources(self) -> None:
+        tasks = self._db.fetch_tasks()
         notes = self._db.fetch_notes()
         ideas = self._db.fetch_ideas(archived=True)
         objects = self._db.fetch_objects()
         maps = self._db.fetch_maps()
         markers = self._db.fetch_map_markers()
         cloud_files = self._db.fetch_cloud_files()
+        self._tasks_by_id = {task.id: task for task in tasks}
         self._notes_by_id = {note.id: note for note in notes}
         self._ideas_by_id = {idea.id: idea for idea in ideas}
         self._objects_by_id = {item.id: item for item in objects}
@@ -264,6 +280,13 @@ class TaskDetailsDialog(QDialog):
         return file_item.name
 
     def _attachment_display_text(self, attachment) -> str:
+        if attachment.kind == "task":
+            task = self._tasks_by_id.get(attachment.ref_id)
+            if not task:
+                return "Задача не найдена"
+            if task.project_title:
+                return f"{task.title} · {task.project_title}"
+            return task.title
         if attachment.kind == "note":
             note = self._notes_by_id.get(attachment.ref_id)
             return note.title if note else "Заметка не найдена"
@@ -300,6 +323,22 @@ class TaskDetailsDialog(QDialog):
                 QMessageBox.warning(self, "Вложения", "Файл изображения не найден.")
                 return
             self._open_image_preview(file_item)
+            return
+        if attachment.kind == "task":
+            task = self._tasks_by_id.get(attachment.ref_id)
+            if not task:
+                QMessageBox.warning(self, "Вложения", "Задача не найдена.")
+                return
+            rows = [
+                ("Название", task.title),
+                ("Проект", task.project_title or "—"),
+                ("Дата", task.day.isoformat()),
+                ("Время", task.time_text or "—"),
+                ("Приоритет", task.priority),
+                ("Статус", "Выполнена" if task.done else "Активна"),
+                ("Описание", task.description or "—"),
+            ]
+            self._open_info_dialog("Задача", rows, wrap_rows={"Описание"})
             return
         if attachment.kind == "file":
             file_item = self._cloud_files_by_id.get(attachment.ref_id)
@@ -399,7 +438,7 @@ class TaskDetailsDialog(QDialog):
         wrap_rows = wrap_rows or set()
         for label, value in rows:
             if label in wrap_rows:
-                value_label = _build_markdown_preview_widget(value, dialog)
+                value_label = _build_markdown_preview_widget(value, dialog, self._open_linked_task)
             else:
                 value_label = QLabel(value or "—")
             form.addRow(label, value_label)

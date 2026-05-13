@@ -97,6 +97,37 @@ def test_task_attachment_supports_idea_entities(unique_temp_path) -> None:
         db_path.unlink(missing_ok=True)
 
 
+def test_task_attachment_supports_task_entities(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_task", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Attachment task target",
+            description="",
+            day=date(2026, 2, 25),
+            time_text="",
+            priority="Medium",
+        )
+        linked_task = database.create_task(
+            title="Attached task",
+            description="Linked body",
+            day=date(2026, 2, 26),
+            time_text="09:00",
+            priority="High",
+        )
+
+        created = database.add_task_attachment(task.id, "task", linked_task.id)
+        fetched = database.fetch_task_attachments(task.id)
+
+        assert created.kind == "task"
+        assert len(fetched) == 1
+        assert fetched[0].kind == "task"
+        assert fetched[0].ref_id == linked_task.id
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_attachment_add_rejects_non_positive_ids(unique_temp_path) -> None:
     db_path = unique_temp_path("task_attachment_invalid_ids", ".sqlite3")
     database = Database(path=db_path)
@@ -105,6 +136,102 @@ def test_task_attachment_add_rejects_non_positive_ids(unique_temp_path) -> None:
             database.add_task_attachment(0, "note", 1)
         with pytest.raises(ValueError):
             database.add_task_attachment(1, "note", 0)
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_attachment_rejects_same_task_as_attachment(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_self_task", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Self attachment task",
+            description="",
+            day=date(2026, 2, 25),
+            time_text="",
+            priority="Medium",
+        )
+
+        with pytest.raises(ValueError):
+            database.add_task_attachment(task.id, "task", task.id)
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_mentions_auto_attach_linked_tasks_on_create(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_mentions_create", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        linked_task = database.create_task(
+            title="Linked task",
+            description="",
+            day=date(2026, 2, 24),
+            time_text="",
+            priority="Medium",
+        )
+
+        task = database.create_task(
+            title=f"Main task for MN-{linked_task.id}",
+            description=f"Body with duplicate mention #{linked_task.id} and MN-{linked_task.id}.",
+            day=date(2026, 2, 25),
+            time_text="",
+            priority="Medium",
+        )
+
+        fetched = database.fetch_task_attachments(task.id)
+
+        assert len(fetched) == 1
+        assert fetched[0].kind == "task"
+        assert fetched[0].ref_id == linked_task.id
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_mentions_auto_attach_linked_tasks_on_update(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_mentions_update", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Main task",
+            description="",
+            day=date(2026, 2, 25),
+            time_text="",
+            priority="Medium",
+        )
+        linked_task = database.create_task(
+            title="Linked later",
+            description="",
+            day=date(2026, 2, 26),
+            time_text="10:00",
+            priority="High",
+        )
+
+        database.update_task(
+            task_id=task.id,
+            title=f"Main task #{linked_task.id}",
+            description=f"Also MN-{task.id} should ignore self and MN-99999 should ignore missing.",
+            day=task.day,
+            time_text=task.time_text,
+            priority=task.priority,
+            done=task.done,
+            project_id=task.project_id,
+            parent_id=task.parent_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
+            is_plan_task=task.is_plan_task,
+            plan_order=task.plan_order,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
+        )
+
+        fetched = database.fetch_task_attachments(task.id)
+
+        assert len(fetched) == 1
+        assert fetched[0].kind == "task"
+        assert fetched[0].ref_id == linked_task.id
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

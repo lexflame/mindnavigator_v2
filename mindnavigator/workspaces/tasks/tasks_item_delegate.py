@@ -858,6 +858,9 @@ class TasksItemDelegate(QStyledItemDelegate):
     def _attachment_display_name(attachment: TaskAttachmentData) -> str:
         db = get_database()
         kind = (attachment.kind or "").strip().lower()
+        if kind == "task":
+            task = next((item for item in db.fetch_tasks() if item.id == attachment.ref_id), None)
+            return task.title if task is not None else f"id={attachment.ref_id}"
         if kind == "note":
             note = next((item for item in db.fetch_notes() if item.id == attachment.ref_id), None)
             return note.title if note is not None else f"id={attachment.ref_id}"
@@ -885,6 +888,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         title = attachment_kind_label(attachment.kind)
         kind = (attachment.kind or "").strip().lower()
+        if kind == "task":
+            task = next((item for item in db.fetch_tasks() if item.id == attachment.ref_id), None)
+            if task is None:
+                QMessageBox.information(parent, title, "Вложенная задача не найдена.")
+                return
+            details = (task.description or "").strip()
+            QMessageBox.information(parent, title, f"{task.title}\n\n{details[:700] or task.day.isoformat()}")
+            return
         if kind == "note":
             note = next((item for item in db.fetch_notes() if item.id == attachment.ref_id), None)
             if note is None:

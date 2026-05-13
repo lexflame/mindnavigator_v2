@@ -620,21 +620,6 @@ class GlobalSpellCheckService(QObject):
                 menu.insertSeparator(first_standard_action)
                 menu.exec(event.globalPos())
                 return True
-                inserted_any = False
-                for suggestion in issue.suggestions:
-                    action = menu.insertAction(first_standard_action, suggestion)
-                    action.triggered.connect(
-                        lambda _checked=False, current_issue=issue, replacement=suggestion: controller.replace_issue(
-                            current_issue, replacement
-                        )
-                    )
-                    inserted_any = True
-                ignore_action = menu.insertAction(first_standard_action, "Игнорировать слово")
-                ignore_action.triggered.connect(
-                    lambda _checked=False, current_word=issue.word: controller.ignore_word(current_word)
-                )
-                if inserted_any:
-                    menu.insertSeparator(first_standard_action)
             menu.exec(event.globalPos())
         finally:
             menu.deleteLater()

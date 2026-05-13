@@ -16,11 +16,11 @@ import json
 from pathlib import Path
 import re
 import sys
-from typing import Dict, List, Union, Optional, Set, Tuple, Any, cast
+from typing import Callable, Dict, List, Union, Optional, Set, Tuple, Any, cast
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel, QVariantAnimation, QEasingCurve, Signal, QObject
-from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel, QVariantAnimation, QEasingCurve, Signal, QObject, QUrl
+from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
     QComboBox, QDateEdit, QTimeEdit, QLineEdit, QListView, QMenu, QStyledItemDelegate, QStyle,
@@ -59,6 +59,7 @@ WEEKDAY_RU = ["Понедельник", "Вторник", "Среда", "Чет�
 _PARENT_UNSET = object()
 
 ATTACHMENT_KIND_LABELS = {
+    "task": "Задача",
     "note": "Заметка",
     "idea": "Идея",
     "object": "Объект",
@@ -67,8 +68,9 @@ ATTACHMENT_KIND_LABELS = {
     "file": "Файл",
     "image": "Изображение",
 }
-ATTACHMENT_KIND_ORDER = ("note", "idea", "object", "map", "marker", "file", "image")
+ATTACHMENT_KIND_ORDER = ("task", "note", "idea", "object", "map", "marker", "file", "image")
 _URL_RE = re.compile(r"(https?://[^\s<>'\"()]+)")
+_TASK_REFERENCE_RE = re.compile(r"(?<![A-Za-z0-9_])(?P<label>(?:MN-|#)(?P<id>\d+))(?![A-Za-z0-9_])", re.IGNORECASE)
 _FENCED_CODE_RE = re.compile(r"```([^\n`]*)\n?(.*?)```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _INLINE_CODE_STYLE = (
@@ -109,11 +111,27 @@ def attachment_kind_label(kind: str) -> str:
 
 
 def _linkify_escaped_text(escaped_text: str) -> str:
+    def replace_task_reference(match: re.Match[str]) -> str:
+        task_id = int(match.group("id"))
+        label = match.group("label")
+        return f"<a href='task:{task_id}' style=\"{_LINK_STYLE}\">{label}</a>"
+
     def replace_url(match: re.Match[str]) -> str:
         url = match.group(1)
         return f"<a href='{url}' style=\"{_LINK_STYLE}\">{url}</a>"
 
-    return _URL_RE.sub(replace_url, escaped_text)
+    rendered: list[str] = []
+    cursor = 0
+    for match in _URL_RE.finditer(escaped_text):
+        plain = escaped_text[cursor:match.start()]
+        if plain:
+            rendered.append(_TASK_REFERENCE_RE.sub(replace_task_reference, plain))
+        rendered.append(replace_url(match))
+        cursor = match.end()
+    tail = escaped_text[cursor:]
+    if tail:
+        rendered.append(_TASK_REFERENCE_RE.sub(replace_task_reference, tail))
+    return "".join(rendered)
 
 
 def _extract_markdown_code_blocks(text: str) -> list[str]:
@@ -142,7 +160,27 @@ def _configure_markdown_preview_label(value_label: QLabel) -> None:
     value_label.setOpenExternalLinks(True)
 
 
-def _build_markdown_preview_widget(text: str, parent: Optional[QWidget] = None) -> QWidget:
+def _handle_markdown_preview_link(
+    link: str,
+    task_link_opener: Optional[Callable[[int], bool]] = None,
+) -> None:
+    if link.startswith("task:"):
+        if task_link_opener is None:
+            return
+        try:
+            task_id = int(link.split(":", 1)[1])
+        except ValueError:
+            return
+        task_link_opener(task_id)
+        return
+    QDesktopServices.openUrl(QUrl(link))
+
+
+def _build_markdown_preview_widget(
+    text: str,
+    parent: Optional[QWidget] = None,
+    task_link_opener: Optional[Callable[[int], bool]] = None,
+) -> QWidget:
     container = QWidget(parent)
     container_layout = QVBoxLayout(container)
     container_layout.setContentsMargins(0, 0, 0, 0)
@@ -150,6 +188,11 @@ def _build_markdown_preview_widget(text: str, parent: Optional[QWidget] = None) 
 
     value_label = QLabel(_linkify_description_text(text))
     _configure_markdown_preview_label(value_label)
+    if task_link_opener is not None:
+        value_label.setOpenExternalLinks(False)
+        value_label.linkActivated.connect(
+            lambda link, current_opener=task_link_opener: _handle_markdown_preview_link(link, current_opener)
+        )
     container_layout.addWidget(value_label)
 
     code_blocks = _extract_markdown_code_blocks(text)
@@ -221,6 +264,19 @@ def _linkify_description_text(text: str) -> str:
     if tail_text:
         rendered.append(_render_inline_description_html(tail_text))
     return "".join(rendered)
+
+
+def extract_task_reference_ids(*texts: str) -> list[int]:
+    seen: set[int] = set()
+    result: list[int] = []
+    for text in texts:
+        for match in _TASK_REFERENCE_RE.finditer(text or ""):
+            task_id = int(match.group("id"))
+            if task_id <= 0 or task_id in seen:
+                continue
+            seen.add(task_id)
+            result.append(task_id)
+    return result
 
 
 def should_show_today_badge(header_day: date) -> bool:
@@ -409,9 +465,11 @@ __all__.extend([
     "_extract_markdown_code_blocks",
     "_copy_markdown_code_blocks_to_clipboard",
     "_configure_markdown_preview_label",
+    "_handle_markdown_preview_link",
     "_build_markdown_preview_widget",
     "_render_inline_description_html",
     "_linkify_description_text",
+    "extract_task_reference_ids",
     "_tokenize_text_for_match",
     "_TaskQuoteAutoReplaceFilter",
 ])

@@ -36,3 +36,98 @@
 [2026-05-13 19:18:09] application_state_changed state=2
 [2026-05-13 19:21:40] application_state_changed state=2
 [2026-05-14 01:27:25] application_state_changed state=2
+[2026-05-14 01:56:08] tasks_delegate edit_start row=1 task_id=326 title='Доработки MindNavigator' day=2026-05-15 done=False
+[2026-05-14 01:56:08] task_edit_dialog init task_id=326 parent=QListView
+[2026-05-14 01:56:08] attach_overlay dialog=TaskEditDialog task_id=326 overlay_parent=MainWindow overlay=yes
+[2026-05-14 01:56:08] task_edit_dialog show task_id=326 geometry=(440, 180, 1040, 760)
+[2026-05-14 01:56:10] main_window app_click visible_dialogs=1 global_pos=(1391,833)
+[2026-05-14 01:56:10] main_window app_click visible_dialogs=1 global_pos=(1391,833)
+[2026-05-14 01:56:10] task_edit_dialog schedule_deactivate task_id=326
+[2026-05-14 01:56:11] main_window app_click visible_dialogs=1 global_pos=(442,157)
+[2026-05-14 01:56:11] main_window app_click visible_dialogs=1 global_pos=(442,157)
+[2026-05-14 01:56:17] main_window app_click visible_dialogs=1 global_pos=(431,534)
+[2026-05-14 01:56:17] main_window app_click visible_dialogs=1 global_pos=(431,534)
+[2026-05-14 01:56:19] main_window app_click visible_dialogs=1 global_pos=(430,150)
+[2026-05-14 01:56:19] main_window app_click visible_dialogs=1 global_pos=(430,150)
+[2026-05-14 01:56:20] main_window app_click visible_dialogs=1 global_pos=(415,146)
+[2026-05-14 01:56:20] main_window app_click visible_dialogs=1 global_pos=(415,146)
+[2026-05-14 01:56:21] main_window app_click visible_dialogs=1 global_pos=(411,196)
+[2026-05-14 01:56:21] main_window app_click visible_dialogs=1 global_pos=(411,196)
+[2026-05-14 01:56:23] main_window app_click visible_dialogs=1 global_pos=(494,573)
+[2026-05-14 01:56:23] main_window app_click visible_dialogs=1 global_pos=(494,573)
+[2026-05-14 01:56:24] application_state_changed state=2
+[2026-05-14 01:56:24] main_window minimize start task_id=326 dialog=TaskEditDialog is_edit=True visible=True
+[2026-05-14 01:56:33] tasks_delegate edit_result row=1 task_id=326 result=0
+[2026-05-14 01:56:34] modal_overlay mouse_press handler=direct
+[2026-05-14 01:56:34] try_minimize skipped invisible dialog=TaskEditDialog task_id=326
+[2026-05-14 01:56:35] restore_minimizable_task_dialog dialog=TaskEditDialog task_id=326
+[2026-05-14 01:56:35] attach_overlay dialog=TaskEditDialog task_id=326 overlay_parent=MainWindow overlay=yes
+[2026-05-14 01:56:35] task_edit_dialog show task_id=326 geometry=(452, 192, 1016, 736)
+[2026-05-14 01:56:35] attach_overlay dialog=TaskEditDialog task_id=326 overlay_parent=MainWindow overlay=reused
+[2026-05-14 01:56:35] task_edit_dialog finished task_id=326 result=0 state=title='Доработки MindNavigator' day=2026-05-15 time='' priority='Medium' done=False project_id=24 is_plan_task=True recurrence_enabled=False recurrence='daily' marker_color='#6b5ad4' marker_theme='personal' description_len=0
+[2026-05-14 01:56:35] tasks_delegate edit_deferred_skip task_id=326 result=0
+[2026-05-14 02:07:30] tasks_delegate edit_start row=1 task_id=326 title='Доработки MindNavigator' day=2026-05-15 done=False
+[2026-05-14 02:07:30] task_edit_dialog init task_id=326 parent=QListView
+[2026-05-14 02:07:31] attach_overlay dialog=TaskEditDialog task_id=326 overlay_parent=MainWindow overlay=yes
+[2026-05-14 02:07:31] task_edit_dialog show task_id=326 geometry=(440, 180, 1040, 760)
+[2026-05-14 02:07:32] main_window app_click visible_dialogs=1 global_pos=(1415,817)
+[2026-05-14 02:07:32] main_window app_click visible_dialogs=1 global_pos=(1415,817)
+[2026-05-14 02:07:32] task_edit_dialog schedule_deactivate task_id=326
+[2026-05-14 02:07:34] main_window app_click visible_dialogs=1 global_pos=(1588,904)
+[2026-05-14 02:07:34] main_window app_click visible_dialogs=1 global_pos=(1588,904)
+[2026-05-14 02:07:35] main_window app_click visible_dialogs=1 global_pos=(1389,907)
+[2026-05-14 02:07:35] main_window app_click visible_dialogs=1 global_pos=(1389,907)
+[2026-05-14 02:07:35] task_edit_dialog finished task_id=326 result=0 state=title='Доработки MindNavigator' day=2026-05-15 time='' priority='Medium' done=False project_id=24 is_plan_task=True recurrence_enabled=False recurrence='daily' marker_color='#6b5ad4' marker_theme='personal' description_len=0
+[2026-05-14 02:07:35] tasks_delegate edit_deferred_skip task_id=326 result=0
+[2026-05-14 02:07:35] tasks_delegate edit_result row=1 task_id=326 result=0
+[2026-05-14 02:07:44] application_state_changed state=2
+[2026-05-14 02:07:44] tasks_delegate edit_start row=20 task_id=382 title='Задачи :: Фича :: Привязка задачи по указанию ее ИД через хе-тег в описании или в названии' day=2026-12-01 done=False
+[2026-05-14 02:07:44] task_edit_dialog init task_id=382 parent=QListView
+[2026-05-14 02:07:44] attach_overlay dialog=TaskEditDialog task_id=382 overlay_parent=MainWindow overlay=yes
+[2026-05-14 02:07:45] task_edit_dialog show task_id=382 geometry=(440, 180, 1040, 760)
+[2026-05-14 02:07:45] application_state_changed state=2
+[2026-05-14 02:07:45] main_window minimize start task_id=382 dialog=TaskEditDialog is_edit=True visible=True
+[2026-05-14 02:07:45] task_edit_dialog schedule_deactivate task_id=382
+[2026-05-14 02:07:45] task_edit_dialog schedule_deactivate task_id=382
+[2026-05-14 02:07:45] application_state_changed state=2
+[2026-05-14 02:07:45] tasks_delegate edit_result row=20 task_id=382 result=0
+[2026-05-14 02:07:45] task_edit_dialog deactivate skipped invisible task_id=382
+[2026-05-14 02:07:46] modal_overlay mouse_press handler=direct
+[2026-05-14 02:07:46] try_minimize skipped invisible dialog=TaskEditDialog task_id=382
+[2026-05-14 02:07:46] restore_minimizable_task_dialog dialog=TaskEditDialog task_id=382
+[2026-05-14 02:07:46] attach_overlay dialog=TaskEditDialog task_id=382 overlay_parent=MainWindow overlay=yes
+[2026-05-14 02:07:46] task_edit_dialog show task_id=382 geometry=(462, 202, 996, 716)
+[2026-05-14 02:07:46] attach_overlay dialog=TaskEditDialog task_id=382 overlay_parent=MainWindow overlay=reused
+[2026-05-14 02:07:48] task_edit_dialog finished task_id=382 result=0 state=title='Задачи :: Фича :: Привязка задачи по указанию ее ИД через хе-тег в описании или в названии' day=2026-12-01 time='' priority='Medium' done=False project_id=24 is_plan_task=False recurrence_enabled=False recurrence='daily' marker_color='#6b5ad4' marker_theme='personal' description_len=83
+[2026-05-14 02:07:48] tasks_delegate edit_deferred_skip task_id=382 result=0
+[2026-05-14 02:07:50] application_state_changed state=2
+[2026-05-14 02:08:24] main_window app_click visible_dialogs=1 global_pos=(449,223)
+[2026-05-14 02:08:24] main_window app_click visible_dialogs=1 global_pos=(449,223)
+[2026-05-14 02:08:24] main_window app_click visible_dialogs=1 global_pos=(449,223)
+[2026-05-14 02:08:24] main_window app_click visible_dialogs=1 global_pos=(449,223)
+[2026-05-14 02:08:24] main_window app_click visible_dialogs=1 global_pos=(449,223)
+[2026-05-14 02:08:27] main_window app_click visible_dialogs=1 global_pos=(1617,895)
+[2026-05-14 02:08:27] main_window app_click visible_dialogs=1 global_pos=(1617,895)
+[2026-05-14 02:08:28] application_state_changed state=2
+[2026-05-14 02:18:36] tasks_delegate edit_start row=23 task_id=381 title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 done=False
+[2026-05-14 02:18:36] task_edit_dialog init task_id=381 parent=QListView
+[2026-05-14 02:18:37] attach_overlay dialog=TaskEditDialog task_id=381 overlay_parent=MainWindow overlay=yes
+[2026-05-14 02:18:37] task_edit_dialog show task_id=381 geometry=(440, 160, 1040, 760)
+[2026-05-14 02:18:39] main_window app_click visible_dialogs=1 global_pos=(1267,894)
+[2026-05-14 02:18:39] main_window app_click visible_dialogs=1 global_pos=(1267,894)
+[2026-05-14 02:18:39] task_edit_dialog accept_start task_id=381 state=title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 time='11:00' priority='Medium' done=False project_id=None is_plan_task=False recurrence_enabled=False recurrence='daily' marker_color='' marker_theme='' description_len=107
+[2026-05-14 02:18:39] task_edit_dialog accept_commit task_id=381 state=title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 time='11:00' priority='Medium' done=False project_id=None is_plan_task=False recurrence_enabled=False recurrence='daily' marker_color='' marker_theme='' description_len=107
+[2026-05-14 02:18:39] task_edit_dialog finished task_id=381 result=1 state=title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 time='11:00' priority='Medium' done=False project_id=None is_plan_task=False recurrence_enabled=False recurrence='daily' marker_color='' marker_theme='' description_len=107
+[2026-05-14 02:18:39] task_edit_dialog values task_id=381 title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 time='11:00' priority='Medium' done=False project_id=None recurrence='' is_plan_task=False marker_color='' marker_theme='' description_len=107
+[2026-05-14 02:18:39] tasks_delegate edit_apply row=23 task_id=381 title='Необходимое: Для перехода к выполнению задачи #MN-372' day=2026-05-19 time='11:00' priority='Medium' done=False
+[2026-05-14 02:18:39] tasks_model update_task_by_row start row=23 task_id=381 from_day=2026-05-19 to_day=2026-05-19 title='Необходимое: Для перехода к выполнению задачи #MN-372' time='11:00' priority='Medium' done=False
+[2026-05-14 02:18:40] tasks_model update_task_by_row db_result task_id=381 day=2026-05-19 time='11:00' priority='Medium' done=False
+[2026-05-14 02:18:40] tasks_model update_task_by_row rebuild task_id=381
+[2026-05-14 02:18:40] tasks_delegate edit_applied row=23 task_id=381
+[2026-05-14 02:18:40] tasks_delegate edit_result row=23 task_id=381 result=1
+[2026-05-14 02:18:44] main_window app_click visible_dialogs=1 global_pos=(403,231)
+[2026-05-14 02:18:44] main_window app_click visible_dialogs=1 global_pos=(403,231)
+[2026-05-14 02:18:46] main_window app_click visible_dialogs=1 global_pos=(1606,834)
+[2026-05-14 02:18:46] main_window app_click visible_dialogs=1 global_pos=(1606,834)
+[2026-05-14 02:18:47] main_window app_click visible_dialogs=1 global_pos=(1633,875)
+[2026-05-14 02:18:47] main_window app_click visible_dialogs=1 global_pos=(1633,875)

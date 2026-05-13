@@ -199,6 +199,7 @@ class TaskEditDialog(QDialog):
 
         self._task_id = task.id
         self._attachments: List = []
+        self._tasks_by_id = {}
         self._notes_by_id = {}
         self._objects_by_id = {}
         self._maps_by_id = {}
@@ -619,12 +620,14 @@ class TaskEditDialog(QDialog):
         return self.time_edit.time().toString("HH:mm")
 
     def _load_attachment_sources(self) -> None:
+        tasks = self._db.fetch_tasks()
         notes = self._db.fetch_notes()
         ideas = self._db.fetch_ideas(archived=True)
         objects = self._db.fetch_objects()
         maps = self._db.fetch_maps()
         markers = self._db.fetch_map_markers()
         cloud_files = self._db.fetch_cloud_files()
+        self._tasks_by_id = {task.id: task for task in tasks}
         self._notes_by_id = {note.id: note for note in notes}
         self._ideas_by_id = {idea.id: idea for idea in ideas}
         self._objects_by_id = {item.id: item for item in objects}
@@ -695,6 +698,13 @@ class TaskEditDialog(QDialog):
         return file_item.name
 
     def _attachment_display_text(self, attachment) -> str:
+        if attachment.kind == "task":
+            task = self._tasks_by_id.get(attachment.ref_id)
+            if not task:
+                return "Задача не найдена"
+            if task.project_title:
+                return f"{task.title} · {task.project_title}"
+            return task.title
         if attachment.kind == "note":
             note = self._notes_by_id.get(attachment.ref_id)
             return note.title if note else "Заметка не найдена"
@@ -735,6 +745,7 @@ class TaskEditDialog(QDialog):
 
         kind_combo = QComboBox()
         kind_items = [
+            ("Задача", "task"),
             ("Заметка", "note"),
             ("Идея", "idea"),
             ("Объект", "object"),
@@ -750,7 +761,12 @@ class TaskEditDialog(QDialog):
 
         def fill_items(selected_kind: str) -> None:
             item_combo.clear()
-            if selected_kind == "note":
+            if selected_kind == "task":
+                tasks = [task for task in self._tasks_by_id.values() if task.id != self._task_id]
+                for task_row in sorted(tasks, key=lambda task: (task.title.lower(), task.id)):
+                    row_label = f"{task_row.title} · {task_row.project_title}" if task_row.project_title else task_row.title
+                    item_combo.addItem(row_label, task_row.id)
+            elif selected_kind == "note":
                 for note_row in sorted(self._notes_by_id.values(), key=lambda note: note.title.lower()):
                     row_label = f"{note_row.title} · {note_row.project}" if note_row.project else note_row.title
                     item_combo.addItem(row_label, note_row.id)
@@ -845,6 +861,22 @@ class TaskEditDialog(QDialog):
                 return
             self._open_image_preview(file_item)
             return
+        if attachment.kind == "task":
+            task = self._tasks_by_id.get(attachment.ref_id)
+            if not task:
+                QMessageBox.warning(self, "Вложения", "Задача не найдена.")
+                return
+            rows = [
+                ("Название", task.title),
+                ("Проект", task.project_title or "—"),
+                ("Дата", task.day.isoformat()),
+                ("Время", task.time_text or "—"),
+                ("Приоритет", task.priority),
+                ("Статус", "Выполнена" if task.done else "Активна"),
+                ("Описание", task.description or "—"),
+            ]
+            self._open_info_dialog("Задача", rows, wrap_rows={"Описание"})
+            return
         if attachment.kind == "file":
             file_item = self._cloud_files_by_id.get(attachment.ref_id)
             if not file_item:
@@ -932,6 +964,21 @@ class TaskEditDialog(QDialog):
             ]
             self._open_info_dialog("Метка карты", rows, wrap_rows={"Описание", "Свойства"})
 
+    def _open_linked_task(self, task_id: int) -> bool:
+        task = self._tasks_by_id.get(task_id)
+        if task is None:
+            tasks = self._db.fetch_tasks()
+            self._tasks_by_id = {item.id: item for item in tasks}
+            task = self._tasks_by_id.get(task_id)
+        if task is None:
+            QMessageBox.warning(self, "Связанные задачи", f"Задача MN-{task_id} не найдена.")
+            return False
+        from .task_details_dialog import TaskDetailsDialog
+
+        dialog = TaskDetailsDialog(task, parent=self)
+        show_dialog_standard(dialog, self)
+        return True
+
     def _open_info_dialog(self, title: str, rows: List[Tuple[str, str]], wrap_rows: Optional[Set[str]] = None) -> None:
         dialog = QDialog(self)
         dialog.setObjectName("TaskAttachmentInfoDialog")
@@ -943,7 +990,7 @@ class TaskEditDialog(QDialog):
         wrap_rows = wrap_rows or set()
         for label, value in rows:
             if label in wrap_rows:
-                value_label = _build_markdown_preview_widget(value, dialog)
+                value_label = _build_markdown_preview_widget(value, dialog, self._open_linked_task)
             else:
                 value_label = QLabel(value or "—")
             form.addRow(label, value_label)

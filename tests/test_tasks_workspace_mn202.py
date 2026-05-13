@@ -1135,6 +1135,35 @@ def test_tasks_delegate_attachment_display_name_for_note(monkeypatch, unique_tem
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_delegate_attachment_display_name_for_task(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_attachment_menu_task", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Task with attachment",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        linked_task = database.create_task(
+            title="Attached task",
+            description="Body",
+            day=date(2026, 3, 7),
+            time_text="10:00",
+            priority="High",
+        )
+        database.add_task_attachment(task.id, "task", linked_task.id)
+        attachment = database.fetch_task_attachments(task.id)[0]
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        delegate = tasks_workspace.TasksItemDelegate()
+        assert delegate._attachment_display_name(attachment) == "Attached task"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_model_keeps_done_plan_items_visible_and_numbered_until_parent_done(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_plan_items_visible", ".sqlite3")

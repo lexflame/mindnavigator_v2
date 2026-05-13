@@ -3,6 +3,7 @@ from __future__ import annotations
 from mindnavigator.workspaces.tasks._shared import (
     _extract_markdown_code_blocks,
     _linkify_description_text,
+    extract_task_reference_ids,
 )
 
 
@@ -45,3 +46,20 @@ def test_extract_markdown_code_blocks_collects_fenced_content_only() -> None:
     )
 
     assert blocks == ["print('a')", "value = 42"]
+
+
+def test_linkify_description_text_renders_task_reference_links_outside_urls() -> None:
+    rendered = _linkify_description_text("See MN-42 and #7, but keep https://example.com/#123 as url.")
+
+    assert "<a href='task:42'" in rendered
+    assert ">MN-42</a>" in rendered
+    assert "<a href='task:7'" in rendered
+    assert ">#7</a>" in rendered
+    assert "https://example.com/#123</a>" in rendered
+    assert "task:123" not in rendered
+
+
+def test_extract_task_reference_ids_collects_unique_ids_in_order() -> None:
+    extracted = extract_task_reference_ids("MN-42 then #7 then MN-42", "ignore text", "#99")
+
+    assert extracted == [42, 7, 99]
