@@ -38,5 +38,5 @@ This file defines policy constraints. Execution flow is defined in `APP_DEVEL_SK
   - `scripts/build_win.sh`
   - `scripts/build_start_win.sh`
 - For packaged artifacts, verify required directories:
-  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `definition`.
+  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `defenition`.
 - Ensure packaged root includes a DB cleanup script when release packaging is in scope.

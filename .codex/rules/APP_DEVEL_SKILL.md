@@ -13,7 +13,7 @@ Operational workflow for tasks in this repository under `APP_DEVEL_AGENTS.md` po
 3. Implement minimal in-place patch aligned with MVP boundaries.
 4. Run validation for changed scope:
    - `python -m compileall mindnavigator main.py` (for code changes)
-   - `pytest tests -k <changed_scope>`
+   - `PYTHONPATH=. pytest tests -k <changed_scope>`
 5. Report:
    - changed files
    - validation results
@@ -40,7 +40,7 @@ Apply this section only when the task is explicitly sprint/release work.
 
 ## Packaging Validation Checklist (Release Scope)
 - Verify compiled app directories:
-  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `definition`.
+  `lib`, `assets`, `conf`, `data`, `local_data`, `lang`, `defenition`.
 - Verify compiled app root is minimal and includes DB cleanup script.
 - For deployment target `C:\Program Portable\MindNavigator\`, use `assets/icon.ico`.
 
