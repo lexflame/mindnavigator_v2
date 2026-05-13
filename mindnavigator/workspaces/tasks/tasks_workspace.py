@@ -396,6 +396,7 @@ class TasksWorkspace(BaseWorkspace):
         create_layout.setSpacing(8)
 
         self.new_title = QLineEdit()
+        self._quick_quote_filters = attach_task_quote_autoreplace(self.new_title)
         self.new_title.setPlaceholderText("Название задачи…")
 
         self.new_day = QDateEdit()
@@ -1714,9 +1715,11 @@ class TasksWorkspace(BaseWorkspace):
 
     def _on_create_task(self):
         """Создает задачу из формы и очищает ввод."""
-        title = self.new_title.text().strip()
+        title = normalize_task_text_quotes(self.new_title.text()).strip()
         if not title:
             return
+        if title != self.new_title.text():
+            self.new_title.setText(title)
 
         qd = self.new_day.date()
         d = date(qd.year(), qd.month(), qd.day())

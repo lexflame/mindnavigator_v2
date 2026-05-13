@@ -15,6 +15,7 @@ from mindnavigator.storage import (
     Database,
 )
 from mindnavigator.workspaces.tasks import task_edit_dialog
+from mindnavigator.workspaces.tasks._shared import normalize_task_text_quotes
 from mindnavigator.workspaces.tasks.cast_board import TasksBoardCast
 from mindnavigator.workspaces.tasks.cast_dash import TasksDashCast
 from mindnavigator.workspaces.tasks.cast_gantt import TasksGanttCast
@@ -1258,6 +1259,65 @@ def test_tasks_model_plan_item_drag_drop_reorders_only_within_parent(monkeypatch
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_quotes_quick_create", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace.new_title.setText('Задача "тест"')
+        workspace._quick_quote_filters[0]._normalize_line_edit(workspace.new_title.text())
+
+        assert workspace.new_title.text() == "Задача «тест»"
+
+        workspace._on_create_task()
+
+        created = database.fetch_tasks()
+        assert any(task.title == "Задача «тест»" for task in created)
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_replaces_and_normalizes_ascii_quotes(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_quotes_dialog", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        dialog = tasks_workspace.TaskCreateDialog()
+        dialog.title_edit.setText('Новая "задача"')
+        dialog._quote_filters[0]._normalize_line_edit(dialog.title_edit.text())
+        dialog.description_edit.setPlainText('Описание "теста"')
+        dialog._quote_filters[1]._normalize_plain_text_edit()
+
+        assert dialog.title_edit.text() == "Новая «задача»"
+        assert dialog.description_edit.toPlainText() == "Описание «теста»"
+
+        dialog.title_edit.setText('Вставка "заголовка"')
+        dialog.description_edit.setPlainText('Вставка "описания"')
+
+        values = dialog.values()
+        assert values["title"] == "Вставка «заголовка»"
+        assert values["description"] == "Вставка «описания»"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_normalize_task_text_quotes_uses_russian_guillemets() -> None:
+    assert normalize_task_text_quotes('"тест"') == "«тест»"
+    assert normalize_task_text_quotes('Он сказал: "да"') == 'Он сказал: «да»'
+    assert normalize_task_text_quotes('""') == "«»"
 
 
 def test_plan_mode_keeps_deferred_plan_root_visible_for_subtask_creation(monkeypatch, unique_temp_path) -> None:
