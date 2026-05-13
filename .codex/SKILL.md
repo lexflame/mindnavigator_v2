@@ -18,7 +18,7 @@ This file consolidates the practical rules from:
 4. Supporting reference files inside `.codex/`.
 
 ## Scope
-- Work only inside `D:\_Branch\PROJECTS\project_work\mindnavigator\mindnavigator_v2`.
+- Work only inside this repository root.
 - Use this skill for routine work: bug fixes, small features, targeted refactors, tests, and release preparation.
 - Keep patches minimal, task-scoped, and reversible.
 - Preserve stable desktop behavior unless the task explicitly requires behavior changes.
@@ -40,7 +40,7 @@ This file consolidates the practical rules from:
 ## Validation Gates
 ### Minimum Before Final Response
 - Run `python -m compileall mindnavigator main.py` for code changes.
-- Run `pytest tests -k <changed_scope>` for changed behavior.
+- Run `PYTHONPATH=. pytest tests -k <changed_scope>` for changed behavior.
 - If tests were not run, state why.
 
 ### Conditional Gates
@@ -87,7 +87,7 @@ Apply these when build, packaging, or release delivery is in scope.
 - `data`
 - `local_data`
 - `lang`
-- `definition`
+- `defenition`
 - Ensure the packaged root remains minimal and includes the DB cleanup script when release packaging is in scope.
 - For deployment target `C:\Program Portable\MindNavigator\`, use `assets/icon.ico`.
 
@@ -98,7 +98,7 @@ Apply these when build, packaging, or release delivery is in scope.
 
 ### Validation
 - Syntax check: `python -m compileall mindnavigator main.py`
-- Focused tests: `pytest tests -k <scope>`
+- Focused tests: `PYTHONPATH=. pytest tests -k <scope>`
 - Full tests, env-safe: `PYTHONPATH=. pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
 
 ### Build Triggers

@@ -7,7 +7,7 @@
 
 ## Validation
 - Syntax check: `python -m compileall mindnavigator main.py`
-- Focused tests: `pytest tests -k <scope>`
+- Focused tests: `PYTHONPATH=. pytest tests -k <scope>`
 - Full tests (env-safe): `PYTHONPATH=. pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
 - Full tests (headless Qt): `PYTHONPATH=. QT_QPA_PLATFORM=offscreen pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
 
