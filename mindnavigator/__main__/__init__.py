@@ -12,6 +12,7 @@ from mindnavigator.spaceenity.constants import APP_NAME
 from mindnavigator.spaceenity.resources import resource_path
 from mindnavigator.storage import get_database
 from mindnavigator.ui.dialogs.frameless_patch import enable_frameless_qdialogs
+from mindnavigator.ui.spellcheck import install_global_spellcheck
 from mindnavigator.ui.splash import show_splash
 from mindnavigator.ui.styles import build_app_stylesheet
 from mindnavigator.window.collections import MainWindow
@@ -76,6 +77,7 @@ def main() -> None:
     app.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(build_app_stylesheet("dark"))
+    spellcheck_service = install_global_spellcheck(app)
     _connect_shutdown_handlers(app)
     db = get_database()
     single_instance_enabled = db.get_setting("app.single_instance", "1") == "1"
@@ -106,6 +108,7 @@ def main() -> None:
     except Exception:
         close_splash()
         raise
+    spellcheck_service.attach_widget_tree(window)
     if single_instance_bridge is not None:
         single_instance_bridge.set_callback(lambda _msg: window.restore_from_tray())
     startup_steps = [
