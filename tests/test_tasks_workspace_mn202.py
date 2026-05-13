@@ -1177,7 +1177,8 @@ def test_tasks_model_keeps_done_plan_items_visible_and_numbered_until_parent_don
         assert grandchild_row >= 0
         assert model.index(child_row, 0).data(TaskRoles.IsPlanItem) is True
         assert model.index(child_row, 0).data(TaskRoles.PlanNumber) == "1."
-        assert model.index(grandchild_row, 0).data(TaskRoles.PlanNumber) == "1.1."
+        assert model.index(grandchild_row, 0).data(TaskRoles.IsPlanItem) is False
+        assert model.index(grandchild_row, 0).data(TaskRoles.PlanNumber) == ""
 
         model.toggle_done_by_row(child_row)
         child_row = _find_task_row(model, child.id)
@@ -1259,6 +1260,41 @@ def test_tasks_model_plan_item_drag_drop_reorders_only_within_parent(monkeypatch
         db_path.unlink(missing_ok=True)
 
 
+def test_plan_mode_keeps_deferred_plan_root_visible_for_subtask_creation(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_deferred_root_visible", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Deferred plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority=DEFERRED_PRIORITY,
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+
+        model.quick_add_subtask(root.id)
+
+        created = next(task for task in database.fetch_tasks() if task.parent_id == root.id)
+        assert created.priority == "Medium"
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+        child_row = _find_task_row(model, created.id)
+        assert child_row >= 0
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_dialog_plan_checkbox", ".sqlite3")
@@ -1297,6 +1333,69 @@ def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(mon
         finally:
             root_dialog.deleteLater()
             child_dialog.deleteLater()
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_quick_subtask_under_plan_item_remains_regular_task(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_item_regular_subtask", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        child = database.create_task(
+            title="Plan child",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Low",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        model.quick_add_subtask(child.id)
+
+        created = max(
+            (task for task in database.fetch_tasks() if task.parent_id == child.id),
+            key=lambda task: task.id,
+        )
+        assert model.is_plan_item(created.id) is False
+        assert created.priority == child.priority
+
+        child_row = _find_task_row(model, child.id)
+        assert child_row >= 0
+        model.expand_subtasks_tree_by_row(child_row)
+        created_row = _find_task_row(model, created.id)
+        assert created_row >= 0
+        assert model.index(created_row, 0).data(TaskRoles.IsPlanItem) is False
+        assert model.index(created_row, 0).data(TaskRoles.PlanNumber) == ""
+
+        model.step_priority_by_row(created_row, +1)
+        updated = next(task for task in database.fetch_tasks() if task.id == created.id)
+        assert updated.priority == "Medium"
+
+        dialog = task_edit_dialog.TaskEditDialog(model.task_by_id(created.id))
+        try:
+            assert dialog.priority_edit.isEnabled() is True
+            assert dialog.project_edit.isEnabled() is True
+            assert dialog.plan_task_edit.isEnabled() is True
+        finally:
+            dialog.deleteLater()
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

@@ -1,0 +1,25 @@
+[2026-05-13 17:33:00] task_edit_dialog init task_id=10 parent=None
+[2026-05-13 17:33:00] task_edit_dialog init task_id=11 parent=None
+[2026-05-13 17:33:00] task_edit_dialog values task_id=11 title='Plan child' day=2026-03-06 time='09:10' priority='Low' done=False project_id=None recurrence='' is_plan_task=False marker_color='' marker_theme='' description_len=0
+[2026-05-13 17:33:01] tasks_model update_task_by_row start row=3 task_id=12 from_day=2026-03-06 to_day=2026-03-06 title='Новая подзадача' time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row db_result task_id=12 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row rebuild task_id=12
+[2026-05-13 17:33:01] tasks_model update_task_by_row start row=1 task_id=10 from_day=2026-03-06 to_day=2026-03-06 title='Plan root' time='09:00' priority='High' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row db_result task_id=10 day=2026-03-06 time='09:00' priority='High' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row sync_plan_projects task_id=10 project_id=9
+[2026-05-13 17:33:01] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:01] tasks_model update_task_by_row rebuild task_id=11
+[2026-05-13 17:33:30] task_edit_dialog init task_id=10 parent=None
+[2026-05-13 17:33:30] task_edit_dialog init task_id=11 parent=None
+[2026-05-13 17:33:30] task_edit_dialog values task_id=11 title='Plan child' day=2026-03-06 time='09:10' priority='Low' done=False project_id=None recurrence='' is_plan_task=False marker_color='' marker_theme='' description_len=0
+[2026-05-13 17:33:31] tasks_model update_task_by_row start row=3 task_id=12 from_day=2026-03-06 to_day=2026-03-06 title='Новая подзадача' time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row db_result task_id=12 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row rebuild task_id=12
+[2026-05-13 17:33:31] task_edit_dialog init task_id=12 parent=None
+[2026-05-13 17:33:31] tasks_model update_task_by_row start row=1 task_id=10 from_day=2026-03-06 to_day=2026-03-06 title='Plan root' time='09:00' priority='High' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row db_result task_id=10 day=2026-03-06 time='09:00' priority='High' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row sync_plan_projects task_id=10 project_id=9
+[2026-05-13 17:33:31] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-13 17:33:31] tasks_model update_task_by_row rebuild task_id=11

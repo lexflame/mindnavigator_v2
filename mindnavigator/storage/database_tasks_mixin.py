@@ -506,19 +506,11 @@ class DatabaseTasksMixin:
     def _task_is_plan_item(self, task_id: int) -> bool:
         row = self._conn.execute(
             """
-            WITH RECURSIVE ancestors(id, parent_id, is_plan_task, depth) AS (
-                SELECT id, parent_id, is_plan_task, 0
-                FROM tasks
-                WHERE id = ?
-                UNION ALL
-                SELECT t.id, t.parent_id, t.is_plan_task, ancestors.depth + 1
-                FROM tasks t
-                JOIN ancestors ON t.id = ancestors.parent_id
-            )
             SELECT 1
-            FROM ancestors
-            WHERE depth > 0
-              AND is_plan_task = 1
+            FROM tasks child
+            JOIN tasks parent ON parent.id = child.parent_id
+            WHERE child.id = ?
+              AND parent.is_plan_task = 1
             LIMIT 1;
             """,
             (task_id,),

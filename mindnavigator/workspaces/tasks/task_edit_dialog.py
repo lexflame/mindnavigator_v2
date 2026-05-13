@@ -1001,16 +1001,10 @@ class TaskEditDialog(QDialog):
             return False
         by_id = {task.id: task for task in fetch_tasks()}
         current = by_id.get(task_id)
-        seen: set[int] = set()
-        while current is not None and current.parent_id is not None and current.id not in seen:
-            seen.add(current.id)
-            parent_task = by_id.get(current.parent_id)
-            if parent_task is None:
-                return False
-            if parent_task.is_plan_task:
-                return True
-            current = parent_task
-        return False
+        if current is None or current.parent_id is None:
+            return False
+        parent_task = by_id.get(current.parent_id)
+        return bool(parent_task is not None and parent_task.is_plan_task)
 
     def values(self):
         """Возвращает текущие значения формы в виде словаря."""

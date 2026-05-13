@@ -74,9 +74,9 @@ class TasksModel(QAbstractListModel):
         self._task_plan_branch = {}
         self._task_plan_numbers = {}
 
-        def visit(task: TaskRow, parent_plan_active: bool, number_path: list[int]) -> None:
-            is_plan_item = parent_plan_active
-            current_branch_active = bool(task.is_plan_task) or is_plan_item
+        def visit(task: TaskRow, parent_is_plan_task: bool, number_path: list[int]) -> None:
+            is_plan_item = parent_is_plan_task
+            current_branch_active = bool(task.is_plan_task)
             self._task_is_plan_item[task.id] = is_plan_item
             self._task_plan_branch[task.id] = current_branch_active
             self._task_plan_numbers[task.id] = (
@@ -91,7 +91,7 @@ class TasksModel(QAbstractListModel):
             else:
                 child_rows = sorted(child_rows, key=lambda item: (item.day, item.time_text or "", item.id))
             for child_index, child in enumerate(child_rows, start=1):
-                child_number_path = number_path + [child_index] if current_branch_active else []
+                child_number_path = [child_index] if current_branch_active else []
                 visit(child, current_branch_active, child_number_path)
 
         root_rows = sorted(
@@ -967,7 +967,11 @@ class TasksModel(QAbstractListModel):
             elif self._filter_mode == "План":
                 if it.done and not keep_done_plan_item(it):
                     continue
-                if it.priority == "Отложенная":
+                if (
+                    it.priority == "Отложенная"
+                    and not it.is_plan_task
+                    and not self._task_is_plan_item.get(it.id, False)
+                ):
                     continue
             elif self._filter_mode == "Отложенные":
                 if it.priority != "Отложенная":
