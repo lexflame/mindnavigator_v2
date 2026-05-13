@@ -4,8 +4,8 @@ model = "gpt-5.3-codex"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
-# Use repository instructions file.
-instructions_file = "AGENTS.md"
+# Use the consolidated repository instructions file.
+instructions_file = ".codex/AGENTS.md"
 
 [history]
 persistence = "save-all"

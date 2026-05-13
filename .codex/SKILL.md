@@ -13,7 +13,7 @@ This file consolidates the practical rules from:
 
 ## Rule Priority
 1. Direct task request.
-2. Repository root `AGENTS.md`.
+2. `.codex/AGENTS.md`.
 3. This file: `.codex/SKILL.md`.
 4. Supporting reference files inside `.codex/`.
 

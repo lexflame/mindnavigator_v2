@@ -9,7 +9,7 @@
 ## Conflict Resolution
 - If rules conflict, apply this order:
   1. Direct task request.
-  2. Repository `AGENTS.md` in project root.
+  2. `.codex/AGENTS.md`.
   3. `.codex/SKILL.md`.
   4. Other supporting files from `.codex/`, including `.codex/rules/`.
 - Breaking changes are allowed only when the task explicitly requires them.

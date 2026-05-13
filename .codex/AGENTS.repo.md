@@ -1,17 +1,16 @@
 # AGENTS.md (Repo Template)
 
 ## Purpose
-Compact repository template for a Codex pack that uses a split model:
-- repository root `AGENTS.md` as the source of truth,
-- local `.codex/SKILL.md` as the main workflow file,
-- local `.codex/AGENTS.md` as the concise policy mirror.
+Compact repository template for a Codex pack that uses a consolidated model:
+- local `.codex/AGENTS.md` as the source of truth,
+- repository root `AGENTS.md` as a compatibility bridge,
+- local `.codex/SKILL.md` as the main workflow file.
 
 ## Recommended Rule Priority
 1. Direct task request.
-2. Repository root `AGENTS.md`.
+2. `.codex/AGENTS.md`.
 3. `.codex/SKILL.md`.
-4. `.codex/AGENTS.md`.
-5. Other supporting `.codex` reference files.
+4. Other supporting `.codex` reference files.
 
 ## Template Working Rules
 - Deliver minimal, correct, reversible changes.
@@ -37,9 +36,9 @@ Apply only when the task is explicitly sprint, release, parity, or hotfix work.
 - Push only after successful validation and only when requested or required by the delivery flow.
 
 ## Template File Roles
-- `AGENTS.md`: authoritative repository policy.
+- `.codex/AGENTS.md`: authoritative repository policy.
+- `AGENTS.md`: compatibility bridge for root-level autodiscovery.
 - `.codex/SKILL.md`: primary local workflow.
-- `.codex/AGENTS.md`: concise local policy mirror.
 - `.codex/COMMANDS.md`: quick command reference.
 - `.codex/CHECKLIST.md`: finish checklist.
 - `.codex/rules/*.md`: modular source rules for audit and reuse.

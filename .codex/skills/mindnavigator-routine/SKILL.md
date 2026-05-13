@@ -10,7 +10,7 @@ Use this skill for routine repository work in `mindnavigator_v2`: bug fixes, sma
 
 ## Rule Priority
 1. Direct task request.
-2. Repository root `AGENTS.md`.
+2. `.codex/AGENTS.md`.
 3. `.codex/SKILL.md`.
 4. This file.
 

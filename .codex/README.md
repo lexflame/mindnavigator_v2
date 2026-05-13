@@ -1,7 +1,9 @@
 # CODEX CLI Config Pack
 
 This folder contains the active Codex support pack for productive work in this repository.
-The workflow was consolidated so the main execution guidance now lives in `.codex/SKILL.md`, while the other files remain supporting references, templates, and configuration assets.
+The policy and workflow were consolidated so the main repository rules now live in `.codex/AGENTS.md`
+and the primary execution guidance lives in `.codex/SKILL.md`, while the other files remain supporting
+references, templates, and configuration assets.
 
 ## Files
 - `AGENTS.md`: policy and guardrails for Codex.
@@ -19,15 +21,16 @@ The workflow was consolidated so the main execution guidance now lives in `.code
 
 ## Role Inventory
 ### Source Of Truth
-- Repository root `AGENTS.md`: authoritative repository policy and delivery rules.
+- `.codex/AGENTS.md`: authoritative repository policy and delivery rules.
 - `.codex/SKILL.md`: authoritative workflow inside the local Codex pack.
 
 ### Active Runtime Files
+- `AGENTS.md`: compatibility bridge for root-level autodiscovery.
+- `.codex/AGENTS.md`: active consolidated instruction file for this repository.
 - `.codex/config.toml`: active project Codex configuration for this repository.
 - `.codex/skills/mindnavigator-routine/SKILL.md`: active local skill enabled by `.codex/config.toml`.
 
 ### Reference Files
-- `.codex/AGENTS.md`: concise policy mirror for the local Codex pack.
 - `.codex/COMMANDS.md`: quick command map.
 - `.codex/CHECKLIST.md`: quick finish checklist.
 - `.codex/rules/*.md`: modular source rules kept for audit and reuse.
@@ -47,21 +50,23 @@ The workflow was consolidated so the main execution guidance now lives in `.code
 
 ## Change Maintenance Rule
 When the repository workflow, validation flow, sprint delivery flow, or history-tracking contract changes, keep these files aligned in the same change set:
-1. Repository root `AGENTS.md` for authoritative policy.
-2. `.codex/SKILL.md` for the primary local workflow.
-3. `.codex/skills/mindnavigator-routine/SKILL.md` for the active runtime skill loaded by `.codex/config.toml`.
-4. `.codex/AGENTS.md` and `.codex/AGENTS.repo.md` for the local policy mirror and template layer.
-5. `.codex/CHECKLIST.md` and `.codex/COMMANDS.md` for quick-reference drift prevention.
-6. `.codex/README.md` when file roles, rule priority, or pack structure changes.
-7. `.codex/HISTORY_TASK.md` and `.codex/HISTORY_ACTION.md` when the change is explicit sprint, release, parity, or hotfix work.
+1. `.codex/AGENTS.md` for authoritative policy.
+2. Repository root `AGENTS.md` for the compatibility bridge.
+3. `.codex/SKILL.md` for the primary local workflow.
+4. `.codex/skills/mindnavigator-routine/SKILL.md` for the active runtime skill loaded by `.codex/config.toml`.
+5. `.codex/AGENTS.repo.md` for the template layer when the structural model changes.
+6. `.codex/CHECKLIST.md` and `.codex/COMMANDS.md` for quick-reference drift prevention.
+7. `.codex/README.md` when file roles, rule priority, or pack structure changes.
+8. `.codex/HISTORY_TASK.md` and `.codex/HISTORY_ACTION.md` when the change is explicit sprint, release, parity, or hotfix work.
 
 ## Recommended Setup
-1. Keep repository-level rules in the root `AGENTS.md` as the source of truth.
-2. Use `.codex/SKILL.md` as the primary workflow source inside the local Codex pack.
-3. Keep `skills/mindnavigator-routine/SKILL.md` aligned with `.codex/SKILL.md`, because it is the enabled project skill in `.codex/config.toml`.
-4. Treat `rules/*.md`, `COMMANDS.md`, and `CHECKLIST.md` as supporting reference modules, not the primary workflow source.
-5. Copy `config-basic.toml` to `%USERPROFILE%\.codex\config.toml` as a starting point when creating an external user-level setup.
-6. For extended setup, merge `config-advanced.toml` and enable needed profiles.
+1. Keep `.codex/AGENTS.md` as the single authoritative policy file for this repository.
+2. Keep the root `AGENTS.md` as a compatibility bridge that points to `.codex/AGENTS.md`.
+3. Use `.codex/SKILL.md` as the primary workflow source inside the local Codex pack.
+4. Keep `skills/mindnavigator-routine/SKILL.md` aligned with `.codex/SKILL.md`, because it is the enabled project skill in `.codex/config.toml`.
+5. Treat `rules/*.md`, `COMMANDS.md`, and `CHECKLIST.md` as supporting reference modules, not the primary workflow source.
+6. Copy `config-basic.toml` to `%USERPROFILE%\.codex\config.toml` as a starting point when creating an external user-level setup.
+7. For extended setup, merge `config-advanced.toml` and enable needed profiles.
 
 ## Operational Principle
 - Minimal diffs.
