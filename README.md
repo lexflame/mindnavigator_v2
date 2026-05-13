@@ -1,4 +1,4 @@
-# MindNavigator v2 (build: 07.03.2026)
+# MindNavigator v2 (build: 13.05.2026)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Qt](https://img.shields.io/badge/Qt-PySide6-41CD52?logo=qt&logoColor=white)](https://doc.qt.io/qtforpython/)
