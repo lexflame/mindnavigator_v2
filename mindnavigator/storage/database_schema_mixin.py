@@ -559,6 +559,7 @@ class DatabaseSchemaMixin:
         # Some deployed databases have user_version already advanced while a subset
         # of projects columns is still missing. Enforce critical project columns
         # unconditionally to keep startup queries backward compatible.
+        self._ensure_priority_values()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
         self._ensure_dossier_schema()
@@ -580,6 +581,7 @@ class DatabaseSchemaMixin:
     def apply_schema_updates(self) -> int:
         """РџСЂРёРјРµРЅСЏРµС‚ РІСЃРµ РґРѕСЃС‚СѓРїРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ user_version."""
         self._run_schema_migrations()
+        self._ensure_priority_values()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
         self._ensure_task_plan_columns()
@@ -890,6 +892,7 @@ class DatabaseSchemaMixin:
             self._priority_constraint_is_current("tasks")
             and self._priority_constraint_is_current("projects")
             and not self._task_project_fk_needs_repair()
+            and not self._idea_project_fk_needs_repair()
         ):
             return
         with self._conn:
@@ -900,6 +903,8 @@ class DatabaseSchemaMixin:
                 projects_rebuilt = True
             if projects_rebuilt or not self._priority_constraint_is_current("tasks") or self._task_project_fk_needs_repair():
                 self._rebuild_tasks_table()
+            if projects_rebuilt or self._idea_project_fk_needs_repair():
+                self._rebuild_ideas_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._ensure_priority_indexes()
 
@@ -930,6 +935,20 @@ class DatabaseSchemaMixin:
             self._rebuild_tasks_table()
             self._conn.execute("PRAGMA foreign_keys=ON;")
             self._ensure_priority_indexes()
+
+    def _idea_project_fk_needs_repair(self) -> bool:
+        """Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЏР ВµРЎвЂљ, РЎвЂЎРЎвЂљР С• project_id Р Р† ideas РЎРѓРЎРѓРЎвЂ№Р В»Р В°Р ВµРЎвЂљРЎРѓРЎРЏ Р Р…Р В° РЎвЂљР В°Р В±Р В»Р С‘РЎвЂ РЎС“ projects."""
+        tables = {
+            row["name"]
+            for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
+        }
+        if "ideas" not in tables:
+            return False
+        rows = self._conn.execute("PRAGMA foreign_key_list(ideas);").fetchall()
+        project_refs = [row for row in rows if row["from"] == "project_id"]
+        if not project_refs:
+            return True
+        return any(row["table"] != "projects" for row in project_refs)
 
     def _map_marker_fk_needs_repair(self) -> bool:
         """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё map_markers РЅРµ СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РёРµ С‚Р°Р±Р»РёС†С‹."""
@@ -1269,6 +1288,59 @@ class DatabaseSchemaMixin:
         self._conn.execute("DROP TABLE tasks_old;")
         self._rebuild_task_attachments_table()
         self._normalize_task_plan_order()
+
+    def _rebuild_ideas_table(self) -> None:
+        self._recover_rebuild_source_table("ideas")
+        self._conn.execute("ALTER TABLE ideas RENAME TO ideas_old;")
+        idea_columns = self._conn.execute("PRAGMA table_info(ideas_old);").fetchall()
+        idea_column_names = {row["name"] for row in idea_columns}
+
+        def _source(column_name: str, fallback_sql: str) -> str:
+            return column_name if column_name in idea_column_names else fallback_sql
+
+        self._conn.execute(
+            """
+            CREATE TABLE ideas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                title TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                body_md TEXT NOT NULL DEFAULT '',
+                type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('feature', 'story', 'art', 'research', 'tech', 'other')),
+                status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'work', 'ripe', 'done', 'archived')),
+                value_score INTEGER NOT NULL DEFAULT 3 CHECK (value_score BETWEEN 1 AND 5),
+                effort_score INTEGER NOT NULL DEFAULT 3 CHECK (effort_score BETWEEN 1 AND 5),
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                archived_at TEXT
+            );
+            """
+        )
+        self._conn.execute(
+            f"""
+            INSERT INTO ideas (
+                id, project_id, title, summary, body_md, type, status,
+                value_score, effort_score, source, created_at, updated_at, archived_at
+            )
+            SELECT
+                id,
+                {_source("project_id", "NULL")},
+                COALESCE({_source("title", "''")}, ''),
+                COALESCE({_source("summary", "''")}, ''),
+                COALESCE({_source("body_md", "''")}, ''),
+                COALESCE({_source("type", "'other'")}, 'other'),
+                COALESCE({_source("status", "'inbox'")}, 'inbox'),
+                COALESCE({_source("value_score", "3")}, 3),
+                COALESCE({_source("effort_score", "3")}, 3),
+                COALESCE({_source("source", "''")}, ''),
+                created_at,
+                updated_at,
+                {_source("archived_at", "NULL")}
+            FROM ideas_old;
+            """
+        )
+        self._conn.execute("DROP TABLE ideas_old;")
 
     def _rebuild_projects_table(self) -> None:
         self._recover_rebuild_source_table("projects")

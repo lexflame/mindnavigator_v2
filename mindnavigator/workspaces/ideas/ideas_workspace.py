@@ -322,7 +322,7 @@ class IdeasWorkspace(BaseWorkspace):
 
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)
-        action_new.triggered.connect(self._create_idea)
+        action_new.triggered.connect(self._create_default_idea)
         action_export = QAction("Экспорт", self)
         action_export.triggered.connect(self._export_ideas_csv)
         action_import = QAction("Импорт", self)
@@ -360,18 +360,18 @@ class IdeasWorkspace(BaseWorkspace):
     def _set_status(self, text: str) -> None:
         self.status_row.setText(text)
 
-    def _mark_dirty(self) -> None:
+    def _mark_dirty(self, *_args: object) -> None:
         self._dirty = True
 
-    def _on_status_filter_changed(self) -> None:
+    def _on_status_filter_changed(self, *_args: object) -> None:
         status = self.status_filter.currentData()
         self.set_filter("status", status)
         self._set_quick_status(status if isinstance(status, str) else None)
 
-    def _on_type_filter_changed(self) -> None:
+    def _on_type_filter_changed(self, *_args: object) -> None:
         self.set_filter("type", self.type_filter.currentData())
 
-    def _on_archived_filter_changed(self) -> None:
+    def _on_archived_filter_changed(self, *_args: object) -> None:
         self.set_filter("archived", self.archived_only.isChecked())
 
     def apply_query(self, query: str) -> None:
@@ -431,7 +431,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_stack.setCurrentWidget(self.inspector_empty)
         self.update_action_states()
 
-    def _on_selection_changed(self) -> None:
+    def _on_selection_changed(self, *_args: object) -> None:
         if self._dirty and not self._maybe_save_changes():
             self._sync_selection()
             return
@@ -447,7 +447,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_stack.setCurrentWidget(self.inspector_tabs)
         self.update_action_states()
 
-    def _open_selected(self) -> None:
+    def _open_selected(self, *_args: object) -> None:
         if self._current_idea_id is None:
             return
         self.inspector_stack.setCurrentWidget(self.inspector_tabs)
@@ -491,7 +491,7 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = False
         return True
 
-    def _save_current(self) -> bool:
+    def _save_current(self, *_args: object) -> bool:
         if self._current_idea_id is None:
             return False
         idea = self._db.update_idea(
@@ -515,7 +515,7 @@ class IdeasWorkspace(BaseWorkspace):
                 self.list_view.setCurrentIndex(index)
         return True
 
-    def _revert_current(self) -> None:
+    def _revert_current(self, *_args: object) -> None:
         if self._current_idea_id is None:
             return
         self._load_idea(self._current_idea_id)
@@ -530,6 +530,10 @@ class IdeasWorkspace(BaseWorkspace):
         self._sync_selection()
         self._open_selected()
 
+    def _create_default_idea(self, checked: bool = False) -> None:
+        _ = checked
+        self._create_idea()
+
     def _set_quick_status(self, status: Optional[str]) -> None:
         normalized = (status or "").strip().lower()
         if not normalized:
@@ -539,7 +543,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_status_label.setText(normalize_idea_category(normalized))
         self.quick_status_label.setProperty("quick_status", normalized)
 
-    def _open_quick_status_menu(self) -> None:
+    def _open_quick_status_menu(self, *_args: object) -> None:
         menu = QMenu(self)
         action_all = menu.addAction("Все категории")
         menu.addSeparator()
@@ -562,14 +566,14 @@ class IdeasWorkspace(BaseWorkspace):
                 self.status_filter.setCurrentIndex(idx)
                 break
 
-    def _create_idea_from_quick_form(self) -> None:
+    def _create_idea_from_quick_form(self, *_args: object) -> None:
         title = (self.quick_title_input.text() or "").strip() or "Новая идея"
         quick_status = self.quick_status_label.property("quick_status")
         status = quick_status if isinstance(quick_status, str) and quick_status else "inbox"
         self._create_idea(title=title, status=status)
         self.quick_title_input.clear()
 
-    def _archive_selected(self) -> None:
+    def _archive_selected(self, *_args: object) -> None:
         idea_id = self.get_selection()
         if idea_id is None:
             return
@@ -705,7 +709,7 @@ class IdeasWorkspace(BaseWorkspace):
         self._load_relations(idea.id)
         self.refresh()
 
-    def _export_ideas_csv(self) -> None:
+    def _export_ideas_csv(self, *_args: object) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Ideas",
@@ -725,7 +729,7 @@ class IdeasWorkspace(BaseWorkspace):
             return
         self._set_status("Экспорт завершен")
 
-    def _import_ideas_csv(self) -> None:
+    def _import_ideas_csv(self, *_args: object) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Import Ideas",

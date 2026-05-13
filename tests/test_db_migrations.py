@@ -324,6 +324,230 @@ def test_database_migration_recovers_from_stale_projects_old_table(unique_temp_p
         db_path.unlink(missing_ok=True)
 
 
+def test_database_migration_repairs_idea_project_fk_after_projects_rebuild(unique_temp_path) -> None:
+    db_path = unique_temp_path("ideas_projects_old_fk", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.executescript(
+            f"""
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE ideas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                title TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                body_md TEXT NOT NULL DEFAULT '',
+                type TEXT NOT NULL DEFAULT 'other',
+                status TEXT NOT NULL DEFAULT 'inbox',
+                value_score INTEGER NOT NULL DEFAULT 3,
+                effort_score INTEGER NOT NULL DEFAULT 3,
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                archived_at TEXT
+            );
+            CREATE TABLE projects_old (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO projects(area, title, updated, priority, archived)
+            VALUES ('Work', 'Current projects row', '01.01.2026', 'Medium', 0);
+            INSERT INTO projects_old(area, title, updated, priority, archived)
+            VALUES ('Work', 'Recovered from projects_old', '02.01.2026', '{LEGACY_DEFERRED_PRIORITY}', 0);
+            INSERT INTO tasks(title, day, time_text, priority, done, created_at, updated_at)
+            VALUES ('Task from stale state', '2026-02-25', '10:00', 'Medium', 0, '{now}', '{now}');
+            INSERT INTO ideas(project_id, title, summary, body_md, type, status, value_score, effort_score, source, created_at, updated_at, archived_at)
+            VALUES (1, 'Idea from stale state', '', '', 'other', 'inbox', 3, 3, '', '{now}', '{now}', NULL);
+            """
+        )
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        fk_rows = database._conn.execute("PRAGMA foreign_key_list(ideas);").fetchall()
+        project_refs = [row for row in fk_rows if row["from"] == "project_id"]
+        assert project_refs
+        assert all(row["table"] == "projects" for row in project_refs)
+
+        updated = database.update_idea(
+            1,
+            title="Idea after repair",
+            summary="updated",
+            body_md="body",
+            idea_type="other",
+            status="work",
+            value_score=4,
+            effort_score=2,
+            project_id=1,
+        )
+        assert updated.title == "Idea after repair"
+        assert updated.status == "work"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_database_repairs_idea_project_fk_even_when_user_version_is_current(unique_temp_path) -> None:
+    db_path = unique_temp_path("ideas_projects_old_fk_current_version", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.executescript(
+            f"""
+            PRAGMA user_version = 6;
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', '{DEFERRED_PRIORITY}')),
+                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                parent_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                default_task_priority TEXT NOT NULL DEFAULT '',
+                force_recurrence_kind TEXT NOT NULL DEFAULT '',
+                linked_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
+                linked_note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+                linked_object_id INTEGER REFERENCES objects(id) ON DELETE SET NULL,
+                repository_catalog TEXT NOT NULL DEFAULT '',
+                marker_color TEXT NOT NULL DEFAULT '',
+                marker_theme TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', '{DEFERRED_PRIORITY}')),
+                board_column TEXT NOT NULL DEFAULT '{BOARD_COLUMN_QUEUE}' CHECK (board_column IN ('{BOARD_COLUMN_DEFERRED}', '{BOARD_COLUMN_QUEUE}', 'in_progress', 'completed')),
+                done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+                completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
+                gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
+                gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
+                project_id INTEGER REFERENCES projects_old(id),
+                parent_id INTEGER REFERENCES tasks(id),
+                recurrence_kind TEXT NOT NULL DEFAULT '',
+                recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                is_plan_task INTEGER NOT NULL DEFAULT 0 CHECK (is_plan_task IN (0, 1)),
+                plan_order INTEGER NOT NULL DEFAULT 0,
+                marker_color TEXT NOT NULL DEFAULT '',
+                marker_theme TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE ideas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER REFERENCES projects_old(id) ON DELETE SET NULL,
+                title TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                body_md TEXT NOT NULL DEFAULT '',
+                type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('feature', 'story', 'art', 'research', 'tech', 'other')),
+                status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'work', 'ripe', 'done', 'archived')),
+                value_score INTEGER NOT NULL DEFAULT 3 CHECK (value_score BETWEEN 1 AND 5),
+                effort_score INTEGER NOT NULL DEFAULT 3 CHECK (effort_score BETWEEN 1 AND 5),
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                archived_at TEXT
+            );
+            CREATE TABLE projects_old (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                area TEXT NOT NULL,
+                title TEXT NOT NULL,
+                updated TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE maps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                project TEXT NOT NULL DEFAULT '',
+                tiles_path TEXT NOT NULL DEFAULT '',
+                tiles_h INTEGER NOT NULL,
+                tiles_w INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                preview TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '[]',
+                project TEXT NOT NULL DEFAULT '',
+                favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                attachment INTEGER NOT NULL DEFAULT 0 CHECK (attachment IN (0, 1)),
+                locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE objects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                catalog TEXT NOT NULL DEFAULT '',
+                object_type TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO projects(area, title, updated, priority, archived, sort_order)
+            VALUES ('Work', 'Current projects row', '2026-01-01', 'Medium', 0, 0);
+            INSERT INTO ideas(project_id, title, summary, body_md, type, status, value_score, effort_score, source, created_at, updated_at, archived_at)
+            VALUES (1, 'Idea from stale current schema', '', '', 'other', 'inbox', 3, 3, '', '{now}', '{now}', NULL);
+            """
+        )
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        fk_rows = database._conn.execute("PRAGMA foreign_key_list(ideas);").fetchall()
+        project_refs = [row for row in fk_rows if row["from"] == "project_id"]
+        assert project_refs
+        assert all(row["table"] == "projects" for row in project_refs)
+
+        updated = database.update_idea(
+            1,
+            title="Idea after current-version repair",
+            summary="updated",
+            body_md="body",
+            idea_type="other",
+            status="work",
+            value_score=4,
+            effort_score=2,
+            project_id=1,
+        )
+        assert updated.title == "Idea after current-version repair"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_database_backfills_project_columns_when_user_version_is_current(unique_temp_path) -> None:
     db_path = unique_temp_path("projects_columns_backfill", ".sqlite3")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")

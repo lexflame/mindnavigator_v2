@@ -23,3 +23,15 @@
 [2026-05-13 17:33:31] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
 [2026-05-13 17:33:31] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
 [2026-05-13 17:33:31] tasks_model update_task_by_row rebuild task_id=11
+[2026-05-13 19:11:02] application_state_changed state=2
+[2026-05-13 19:11:03] application_state_changed state=2
+[2026-05-13 19:11:14] application_state_changed state=2
+[2026-05-13 19:11:33] application_state_changed state=2
+[2026-05-13 19:11:41] application_state_changed state=2
+[2026-05-13 19:12:27] application_state_changed state=2
+[2026-05-13 19:12:29] application_state_changed state=2
+[2026-05-13 19:12:31] application_state_changed state=2
+[2026-05-13 19:12:35] application_state_changed state=2
+[2026-05-13 19:18:03] application_state_changed state=2
+[2026-05-13 19:18:09] application_state_changed state=2
+[2026-05-13 19:21:40] application_state_changed state=2
