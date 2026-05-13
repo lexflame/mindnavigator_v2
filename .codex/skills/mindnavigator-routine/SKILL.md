@@ -21,11 +21,15 @@ Use this skill for routine repository work in `mindnavigator_v2`: bug fixes, sma
 - Preserve backward compatibility unless the task explicitly requires a breaking change.
 
 ## Default Flow
-1. Discover scope with `rg`.
-2. Read impacted modules and call sites.
-3. Implement the minimal in-place patch.
-4. Validate the changed scope.
-5. Return a concise summary with changed files, validation results, and residual risks.
+1. Inspect Git state with `git status` and `git branch --show-current`.
+2. Create a dedicated task branch before editing; do not work directly in protected or shared branches.
+3. If uncommitted user changes exist, stop and ask for instructions.
+4. Discover scope with `rg`.
+5. Read impacted modules and call sites.
+6. Implement the minimal in-place patch.
+7. Validate the changed scope.
+8. If manual testing is required, stop after reporting automated results and wait for user confirmation before creating a PR.
+9. Return a concise summary with changed files, validation results, and residual risks.
 
 ## Validation Gates
 - For code changes, run `python -m compileall mindnavigator main.py`.

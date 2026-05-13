@@ -183,6 +183,105 @@ The agent must not, unless explicitly requested by the user:
      - `fix//:: TASK_GUID`
      - `parity::// TASK_GUID`
 
+## Git Branch And Pull Request Workflow
+For every task started through Codex CLI, the agent must work in a separate Git branch.
+
+### Mandatory Branch Workflow
+1. Before making any changes, inspect the current Git state:
+   - `git status`
+   - `git branch --show-current`
+2. The agent must not work directly in protected or shared branches, including but not limited to:
+   - `main`
+   - `master`
+   - `develop`
+   - `dev`
+   - `release/*`
+3. For each new task, create a new dedicated branch from the current base branch.
+4. Branch names must be descriptive and use one of the following prefixes:
+   - `codex/`
+   - `feature/`
+   - `fix/`
+   - `chore/`
+   - `docs/`
+   - `refactor/`
+5. Preferred branch naming format:
+   - `codex/<short-task-name>`
+   - examples: `codex/update-agents-config`, `codex/fix-python-desktop-startup`, `codex/refactor-settings-loader`
+6. If there are uncommitted user changes before starting the task, the agent must not overwrite them.
+7. If uncommitted user changes exist, the agent must report the existing changes and ask for explicit instructions before proceeding.
+8. All code changes for the task must be committed only to the task branch.
+9. The agent must keep changes minimal and related only to the current task.
+10. The agent must not mix unrelated changes into the same branch.
+
+### Testing Before Pull Request
+Before preparing a pull request, the agent must run the safest available validation checks for the project.
+
+The agent must determine available checks from the repository, including documented project commands such as:
+- `python -m compileall mindnavigator main.py`
+- `PYTHONPATH=. pytest tests -k <scope>`
+- `PYTHONPATH=. pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+- project-specific commands from `README.md`, `pyproject.toml`, `Makefile`, or other documented sources when present
+
+If a check cannot be run, the agent must document why.
+
+The task branch must not be proposed for merge until:
+- the required changes are complete
+- available automated checks have been run
+- the result of each check is reported
+- the user has manually tested the result when manual testing is required
+
+### User Manual Testing Gate
+After Codex CLI finishes implementation and automated checks, it must stop and report:
+- branch name
+- changed files
+- summary of changes
+- commands and checks executed
+- test results
+- any risks or unresolved questions
+
+Codex CLI must wait for the user's confirmation that manual testing was successful before creating a pull request.
+
+Expected user confirmations may be phrased as:
+- `Тестирование успешно, создай PR.`
+- `Можно отправлять в PR.`
+
+### Pull Request Creation
+After successful user testing and explicit confirmation, Codex CLI must create a pull request from the task branch into the target base branch.
+
+Preferred method:
+- `git push --set-upstream origin <branch-name>`
+- `gh pr create --base <base-branch> --head <branch-name> --title "<PR title>" --body "<PR description>"`
+
+If GitHub CLI is unavailable or unauthenticated, Codex CLI must not fake pull request creation.
+
+Instead, it must report the problem and provide the exact commands the user can run manually.
+
+The pull request description must include:
+- task summary
+- list of important changes
+- validation commands executed
+- test results
+- manual testing status
+- known risks, if any
+
+### Pull Request Restrictions
+The agent must not:
+1. Merge the pull request unless the user explicitly requests it.
+2. Push directly to `main`, `master`, `develop`, `dev`, or release branches.
+3. Force-push unless explicitly allowed by the user.
+4. Create a pull request before tests or checks are run, unless the reason for skipping them is documented.
+5. Create a pull request before the user confirms successful manual testing.
+6. Include unrelated changes in the pull request.
+7. Hide failing tests or unresolved problems.
+8. Rewrite Git history without explicit permission.
+9. Delete local or remote branches without explicit permission.
+
+### Done Criteria
+A Codex CLI task is complete only when one of the following is true:
+1. The task branch is created, changes are committed, checks are reported, and the branch is ready for user testing.
+2. After successful user testing and explicit confirmation, the branch is pushed and a pull request is created.
+3. If pull request creation is impossible, the agent clearly reports why and provides manual commands for pushing the branch and creating the pull request.
+
 ## Before Editing
 1. Confirm scope and non-goals from the user task.
 2. Inspect related modules and call sites with `rg` plus targeted file reads.

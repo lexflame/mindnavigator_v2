@@ -16,11 +16,15 @@
 - `b_build`: build + compile + place into `C:\Program Portable\MindNavigator\` (without run)
 
 ## Git Hygiene
+- Current branch: `git branch --show-current`
 - Status: `git status --short`
 - Branch status: `git status --short --branch`
 - Diff summary: `git diff --stat`
 - Changed files: `git diff --name-only`
 - Last commit: `git log -1 --stat`
+- Create task branch: `git switch -c codex/<task>` or `git switch -c feature/<task>`
+- Push task branch: `git push --set-upstream origin <branch>`
+- Create PR: `gh pr create --base <base-branch> --head <branch> --title "<title>" --body "<body>"`
 
 ## Sprint Delivery
 - Create sprint branch: `git switch -c sprint/<id_or_topic>`
