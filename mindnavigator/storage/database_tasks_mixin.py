@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import re
+
 from ._shared import *  # noqa: F401,F403
+
+
+_TASK_REFERENCE_RE = re.compile(r"(?<![A-Za-z0-9_])(?:MN-|#)(?P<id>\d+)(?![A-Za-z0-9_])", re.IGNORECASE)
+
 
 class DatabaseTasksMixin:
     def fetch_tasks(self) -> List[TaskData]:
@@ -165,6 +171,7 @@ class DatabaseTasksMixin:
             )
         for kind, ref_id in project_links:
             self.add_task_attachment(cur.lastrowid, kind, ref_id)
+        self._sync_task_text_attachments(cur.lastrowid, title, description)
         return TaskData(
             id=cur.lastrowid,
             day=day,
@@ -332,6 +339,7 @@ class DatabaseTasksMixin:
                 )
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
+        self._sync_task_text_attachments(task_id, title, description)
         return TaskData(
             id=task_id,
             day=day,
@@ -436,7 +444,7 @@ class DatabaseTasksMixin:
             if done and not prev_done and recurrence_kind:
                 current_day = planned_day
                 next_day = self._next_recurrence_day(current_day, recurrence_kind, recurrence_interval)
-                self._conn.execute(
+                cur = self._conn.execute(
                     """
                     INSERT INTO tasks (
                         title, description, day, time_text, priority, board_column, done, project_id, parent_id,
@@ -463,6 +471,7 @@ class DatabaseTasksMixin:
                         now_utc,
                     ),
                 )
+                self._sync_task_text_attachments(cur.lastrowid, row["title"], row["description"] or "")
 
     def _next_task_plan_order(
         self,
@@ -618,6 +627,37 @@ class DatabaseTasksMixin:
         ).fetchall()
         return [TaskAttachmentData.from_row(row) for row in rows]
 
+    @staticmethod
+    def _extract_task_reference_ids(*texts: str) -> list[int]:
+        seen: set[int] = set()
+        result: list[int] = []
+        for text in texts:
+            for match in _TASK_REFERENCE_RE.finditer(text or ""):
+                task_id = int(match.group("id"))
+                if task_id <= 0 or task_id in seen:
+                    continue
+                seen.add(task_id)
+                result.append(task_id)
+        return result
+
+    def _sync_task_text_attachments(self, task_id: int, title: str, description: str) -> None:
+        mentioned_ids = [
+            linked_task_id
+            for linked_task_id in self._extract_task_reference_ids(title, description)
+            if linked_task_id != int(task_id)
+        ]
+        if not mentioned_ids:
+            return
+        placeholders = ",".join("?" for _ in mentioned_ids)
+        rows = self._conn.execute(
+            f"SELECT id FROM tasks WHERE id IN ({placeholders});",
+            tuple(mentioned_ids),
+        ).fetchall()
+        existing_ids = {int(row["id"]) for row in rows}
+        for linked_task_id in mentioned_ids:
+            if linked_task_id in existing_ids:
+                self.add_task_attachment(task_id, "task", linked_task_id)
+
     def add_task_attachment(self, task_id: int, kind: str, ref_id: int) -> TaskAttachmentData:
         """Р”РѕР±Р°РІР»СЏРµС‚ РІР»РѕР¶РµРЅРёРµ Рє Р·Р°РґР°С‡Рµ."""
         task_id = int(task_id)
@@ -627,6 +667,8 @@ class DatabaseTasksMixin:
         if ref_id <= 0:
             raise ValueError("РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РІР»РѕР¶РµРЅРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Рј.")
         kind = TaskAttachmentData.normalize_kind(kind)
+        if kind == "task" and task_id == ref_id:
+            raise ValueError("Нельзя прикрепить задачу к самой себе.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
