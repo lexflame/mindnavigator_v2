@@ -6,6 +6,61 @@
 
 **MindNavigator** - настольный центр управления задачами, проектами, картами, заметками, файлами, объектами, идеями и покупками в одном интерфейсе. Приложение использует локальную SQLite-базу, кастомный заголовок окна, левый rail режимов и быстрый поиск по сущностям.
 
+## Preview
+
+> GitHub README не поддерживает полноценный JS-слайдер, поэтому ниже встроена кликабельная галерея превью.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="preview/task.jpg">
+        <img src="preview/task.jpg" alt="Рабочее пространство задач" width="100%">
+      </a>
+      <br>
+      <sub><b>Задачи</b> — список задач, цветовые маркеры и быстрые действия.</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="preview/gant.jpg">
+        <img src="preview/gant.jpg" alt="Gantt режим задач" width="100%">
+      </a>
+      <br>
+      <sub><b>GANTT</b> — почасовая раскладка и лента выполнения на день.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="preview/maps.jpg">
+        <img src="preview/maps.jpg" alt="Редактор карт и меток" width="100%">
+      </a>
+      <br>
+      <sub><b>Карты</b> — карта, метки и карточка выбранного объекта.</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="preview/ideas.jpg">
+        <img src="preview/ideas.jpg" alt="Пространство идей" width="100%">
+      </a>
+      <br>
+      <sub><b>Идеи</b> — inbox, категории, фильтры и быстрый разбор.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="preview/statistiks.jpg">
+        <img src="preview/statistiks.jpg" alt="DASH статистика" width="100%">
+      </a>
+      <br>
+      <sub><b>DASH</b> — результативность, структура данных и обзор активности.</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="preview/task.jpg">
+        <img src="preview/task.jpg" alt="MindNavigator overview" width="100%">
+      </a>
+      <br>
+      <sub><b>Общий вид</b> — тёмный desktop UI с единым левым rail и режимами работы.</sub>
+    </td>
+  </tr>
+</table>
+
 
 
 
