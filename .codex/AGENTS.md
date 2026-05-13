@@ -33,7 +33,7 @@ This file is a compact policy layer inside `.codex`; the authoritative repositor
 
 ## Validation Baseline
 - For code changes, run `python -m compileall mindnavigator main.py`.
-- Run `pytest tests -k <changed_scope>` for changed behavior.
+- Run `PYTHONPATH=. pytest tests -k <changed_scope>` for changed behavior.
 - If tests are not run, state why.
 - Report validation commands, outcomes, and residual risks.
 

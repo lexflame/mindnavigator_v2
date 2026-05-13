@@ -29,7 +29,7 @@ Use this skill for routine repository work in `mindnavigator_v2`: bug fixes, sma
 
 ## Validation Gates
 - For code changes, run `python -m compileall mindnavigator main.py`.
-- Run focused tests: `pytest tests -k <scope>`.
+- Run focused tests: `PYTHONPATH=. pytest tests -k <scope>`.
 - If tests are not run, say why.
 - If storage schema changes, validate migration plus read and write paths together.
 - If UI behavior changes, validate the affected interaction path with a test or an explicit manual verification note.

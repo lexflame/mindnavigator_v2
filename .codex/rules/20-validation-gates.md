@@ -2,7 +2,7 @@
 
 ## Minimum Before Final Response
 - Run `python -m compileall mindnavigator main.py` for code changes.
-- Run `pytest tests -k <changed_scope>` for changed behavior.
+- Run `PYTHONPATH=. pytest tests -k <changed_scope>` for changed behavior.
 - If tests were not run, explain why.
 
 ## Conditional Gates
