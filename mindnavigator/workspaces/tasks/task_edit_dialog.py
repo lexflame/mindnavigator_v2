@@ -61,6 +61,7 @@ class TaskEditDialog(QDialog):
         self.description_edit = QPlainTextEdit(task.description)
         self.description_edit.setPlaceholderText("Описание задачи")
         self.description_edit.setMinimumHeight(90)
+        self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
 
         self.project_edit = QComboBox()
         self._populate_projects(task.project_id)
@@ -581,6 +582,12 @@ class TaskEditDialog(QDialog):
 
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
+        normalized_title = normalize_task_text_quotes(self.title_edit.text())
+        if normalized_title != self.title_edit.text():
+            self.title_edit.setText(normalized_title)
+        normalized_description = normalize_task_text_quotes(self.description_edit.toPlainText())
+        if normalized_description != self.description_edit.toPlainText():
+            self.description_edit.setPlainText(normalized_description)
         title = self.title_edit.text().strip()
         debug_task_dialog(
             f"task_edit_dialog accept_start task_id={self.property('task_dialog_id')} state={self._debug_form_state()}"
@@ -1012,8 +1019,8 @@ class TaskEditDialog(QDialog):
         day = date(qd.year(), qd.month(), qd.day())
         time_text = self._current_time_text()
         payload = {
-            "title": self.title_edit.text().strip(),
-            "description": self.description_edit.toPlainText().strip(),
+            "title": normalize_task_text_quotes(self.title_edit.text()).strip(),
+            "description": normalize_task_text_quotes(self.description_edit.toPlainText()).strip(),
             "day": day,
             "time_text": time_text,
             "priority": self.priority_edit.currentText().strip() or "Medium",

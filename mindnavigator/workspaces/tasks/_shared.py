@@ -19,7 +19,7 @@ import sys
 from typing import Dict, List, Union, Optional, Set, Tuple, Any, cast
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel, QVariantAnimation, QEasingCurve, Signal
+from PySide6.QtCore import Qt, QSize, QRect, QPoint, QAbstractListModel, QAbstractItemModel, QModelIndex, QEvent, QDate, QTime, QMimeData, QItemSelectionModel, QVariantAnimation, QEasingCurve, Signal, QObject
 from PySide6.QtGui import QAction, QPainter, QColor, QFont, QFontMetrics, QCursor, QPixmap, QShortcut, QKeySequence, QPalette, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QButtonGroup,
@@ -231,6 +231,85 @@ def _tokenize_text_for_match(text: str) -> list[str]:
     tokens = re.findall(r"[A-Za-zА-Яа-я0-9]+", (text or "").lower())
     return [token for token in tokens if len(token) >= 2]
 
+def _is_opening_task_quote(previous_char: str) -> bool:
+    if not previous_char:
+        return True
+    if previous_char.isspace():
+        return True
+    return previous_char in "([{-–—/:;"
+
+
+def task_quote_for_insert(text: str, insert_pos: int) -> str:
+    previous_char = text[insert_pos - 1] if insert_pos > 0 else ""
+    return "«" if _is_opening_task_quote(previous_char) else "»"
+
+
+def normalize_task_text_quotes(text: str) -> str:
+    raw = text or ""
+    if '"' not in raw:
+        return raw
+    normalized: list[str] = []
+    for char in raw:
+        if char == '"':
+            previous_char = normalized[-1] if normalized else ""
+            normalized.append("«" if _is_opening_task_quote(previous_char) else "»")
+            continue
+        normalized.append(char)
+    return "".join(normalized)
+
+
+class _TaskQuoteAutoReplaceFilter(QObject):
+    def __init__(self, widget: QWidget) -> None:
+        super().__init__(widget)
+        self._widget = widget
+        self._applying_plain_text = False
+        if isinstance(widget, QLineEdit):
+            widget.textEdited.connect(self._normalize_line_edit)
+        elif isinstance(widget, QPlainTextEdit):
+            widget.textChanged.connect(self._normalize_plain_text_edit)
+
+    def _normalize_line_edit(self, text: str) -> None:
+        line_edit = self._widget
+        if not isinstance(line_edit, QLineEdit):
+            return
+        normalized = normalize_task_text_quotes(text)
+        if normalized == text:
+            return
+        cursor_pos = line_edit.cursorPosition()
+        line_edit.setText(normalized)
+        line_edit.setCursorPosition(min(cursor_pos, len(normalized)))
+
+    def _normalize_plain_text_edit(self) -> None:
+        plain_text_edit = self._widget
+        if not isinstance(plain_text_edit, QPlainTextEdit) or self._applying_plain_text:
+            return
+        text = plain_text_edit.toPlainText()
+        normalized = normalize_task_text_quotes(text)
+        if normalized == text:
+            return
+        cursor = plain_text_edit.textCursor()
+        cursor_pos = cursor.position()
+        self._applying_plain_text = True
+        try:
+            plain_text_edit.setPlainText(normalized)
+        finally:
+            self._applying_plain_text = False
+        cursor = plain_text_edit.textCursor()
+        cursor.setPosition(min(cursor_pos, len(normalized)))
+        plain_text_edit.setTextCursor(cursor)
+
+    def eventFilter(self, obj, event) -> bool:
+        return super().eventFilter(obj, event)
+
+
+def attach_task_quote_autoreplace(*widgets: QWidget) -> list[QObject]:
+    filters: list[QObject] = []
+    for widget in widgets:
+        filter_obj = _TaskQuoteAutoReplaceFilter(widget)
+        filters.append(filter_obj)
+    return filters
+
+
 def get_database():
     for module_name in ("mindnavigator.workspaces.tasks", "mindnavigator.workspaces.tasks.module_impl"):
         module = sys.modules.get(module_name)
@@ -334,4 +413,5 @@ __all__.extend([
     "_render_inline_description_html",
     "_linkify_description_text",
     "_tokenize_text_for_match",
+    "_TaskQuoteAutoReplaceFilter",
 ])
