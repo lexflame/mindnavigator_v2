@@ -1,24 +1,18 @@
-"""Заставка приложения и функции её показа.
+"""Splash screen widget and show helper."""
 
-Входные данные:
-    Экземпляр QApplication и путь к изображению заставки.
+from __future__ import annotations
 
-Выходные данные:
-    Виджет заставки и обновлённые статусы загрузки.
-"""
-
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QApplication, QGraphicsOpacityEffect
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtWidgets import QApplication, QFrame, QGraphicsOpacityEffect, QLabel, QVBoxLayout, QWidget
 
 from mindnavigator.spaceenity.resources import resource_path
 
 
 class SplashWidget(QWidget):
-    """Быстрая заставка без прозрачности и анимаций."""
+    """Fast splash screen with a preloaded image."""
 
-    def __init__(self, app: QApplication, image_path: str, w: int = 460, h: int = 280):
-        """Создает виджет заставки и подготавливает содержимое."""
+    def __init__(self, app: QApplication, image_source: str | QPixmap, w: int = 460, h: int = 280):
         super().__init__(None)
         self._app = app
 
@@ -27,14 +21,13 @@ class SplashWidget(QWidget):
         )
         self.setFixedSize(w, h)
 
-        # Эффект прозрачности
         self.opacity_effect = QGraphicsOpacityEffect()
         self.opacity_effect.setOpacity(0.0)
         self.setGraphicsEffect(self.opacity_effect)
-        # Анимация прозрачности
+
         self.animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.animation.setDuration(500)  # длительность анимации в мс
-        self.animation.setEasingCurve(QEasingCurve.Type.OutQuad)  # плавный спад
+        self.animation.setDuration(500)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutQuad)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -51,15 +44,15 @@ class SplashWidget(QWidget):
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        pm = QPixmap(image_path)
+        pm = image_source if isinstance(image_source, QPixmap) else QPixmap(image_source)
         if not pm.isNull():
-            pm2 = pm.scaled(
+            scaled = pm.scaled(
                 w - 28,
                 h - 70,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.FastTransformation,
             )
-            self.image_label.setPixmap(pm2)
+            self.image_label.setPixmap(scaled)
 
         self.status_label = QLabel("Запуск…")
         self.status_label.setObjectName("SplashStatus")
@@ -68,7 +61,8 @@ class SplashWidget(QWidget):
         card_layout.addWidget(self.image_label, 1)
         card_layout.addWidget(self.status_label, 0)
 
-        self.setStyleSheet("""
+        self.setStyleSheet(
+            """
             QFrame#SplashCard {
                 background: #16171a;
                 border: 1px solid #2a2b2f;
@@ -78,20 +72,16 @@ class SplashWidget(QWidget):
                 font-size: 12px;
                 padding-left: 2px;
             }
-        """)
+            """
+        )
 
-    def fade_in(self):
-        """Плавно показать заставку (от 0 до 1)."""
+    def fade_in(self) -> None:
         self.animation.stop()
         self.animation.setStartValue(0.0)
         self.animation.setEndValue(1.0)
         self.animation.start()
 
-    def fade_out(self, on_finished=None):
-        """
-        Плавно скрыть заставку (от 1 до 0).
-        on_finished: коллбэк, который вызовется после завершения анимации.
-        """
+    def fade_out(self, on_finished=None) -> None:
         self.animation.stop()
         self.animation.setStartValue(1.0)
         self.animation.setEndValue(0.0)
@@ -99,22 +89,21 @@ class SplashWidget(QWidget):
             self.animation.finished.connect(on_finished)
         self.animation.start()
 
-    def center_on_screen(self):
-        """Центрирует заставку на активном экране."""
+    def center_on_screen(self) -> None:
         screen = self._app.primaryScreen().availableGeometry()
-        r = self.frameGeometry()
-        r.moveCenter(screen.center())
-        self.move(r.topLeft())
+        geometry = self.frameGeometry()
+        geometry.moveCenter(screen.center())
+        self.move(geometry.topLeft())
 
-    def set_status(self, text: str):
-        """Обновляет текст статуса и принудительно обрабатывает события."""
+    def set_status(self, text: str) -> None:
         self.status_label.setText(text)
         self._app.processEvents()
 
 
 def show_splash(app: QApplication, image_path: str = "assets/splash.jpg") -> SplashWidget:
-    """Показывает заставку и возвращает её объект."""
-    splash = SplashWidget(app, resource_path(image_path), w=460, h=280)
+    """Show splash screen using a pixmap loaded before the widget is shown."""
+    splash_pixmap = QPixmap(resource_path(image_path))
+    splash = SplashWidget(app, splash_pixmap, w=460, h=280)
     splash.center_on_screen()
     splash.show()
     app.processEvents()
