@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import mindnavigator.window.collections.main_window as main_window
+from PySide6.QtWidgets import QApplication
+import mindnavigator.workspaces.mutaboard.module_impl as mutaboard_module
+from mindnavigator.workspaces.settings.settings_workspace import SettingsWorkspace
 from mindnavigator.window.collections.main_window import (
     MainWindow,
     normalize_enabled_workspace_ids,
@@ -36,6 +39,7 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
     class _DummyWindow:
         MODE_PROJECTS = MainWindow.MODE_PROJECTS
         MODE_TASKS = MainWindow.MODE_TASKS
+        MODE_MUTABOARD = MainWindow.MODE_MUTABOARD
         MODE_PURCHASES = MainWindow.MODE_PURCHASES
         MODE_IDEAS = MainWindow.MODE_IDEAS
         MODE_DOSSIER = MainWindow.MODE_DOSSIER
@@ -50,8 +54,35 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
     mapping = MainWindow._workspace_mode_map(_DummyWindow())
 
     assert mapping["dossier"] == MainWindow.MODE_DOSSIER
+    assert mapping["mutaboard"] == MainWindow.MODE_MUTABOARD
     assert mapping["characters"] == MainWindow.MODE_CHARACTERS
     assert mapping["minddraw"] == MainWindow.MODE_MINDDRAW
+
+
+def test_settings_workspace_options_include_mutaboard() -> None:
+    assert ("mutaboard", "Мутаборд") in SettingsWorkspace.WORKSPACE_OPTIONS
+
+
+class _MutaBoardWorkspaceDbStub:
+    def fetch_tasks(self):
+        return []
+
+    def fetch_ideas(self, archived=True):
+        return []
+
+    def fetch_objects(self):
+        return []
+
+
+def test_mutaboard_workspace_builds_phase_one_shell(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+
+    assert workspace.workspace_id == "mutaboard"
+    assert workspace.search_input.placeholderText() == "Поиск по мутаборду"
+    assert workspace.status_row.text() == "Мутаборд: карточек 0."
 
 
 def test_normalize_nav_collapsed_setting_parses_known_values() -> None:
