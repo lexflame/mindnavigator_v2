@@ -28,7 +28,7 @@ class TaskAttachmentData:
         normalized = (kind or "").strip().lower()
         if normalized not in cls.SUPPORTED_KINDS:
             supported = ", ".join(cls.SUPPORTED_KINDS)
-            raise ValueError(f"РќРµРїРѕРґРґРµСЂР¶РёРІР°РµРјС‹Р№ С‚РёРї РІР»РѕР¶РµРЅРёСЏ: {kind!r}. РћР¶РёРґР°РµС‚СЃСЏ: {supported}.")
+            raise ValueError(f"Неподдерживаемый тип вложения: {kind!r}. Ожидается: {supported}.")
         return normalized
 
     @classmethod

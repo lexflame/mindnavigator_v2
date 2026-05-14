@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseNotesIdeasMixin:
     def fetch_notes(self) -> List[NoteData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІСЃРµС… Р·Р°РјРµС‚РѕРє."""
+        """Возвращает список всех заметок."""
         rows = self._conn.execute(
             """
             SELECT
@@ -51,8 +51,8 @@ class DatabaseNotesIdeasMixin:
         attachment: bool = False,
         locked: bool = False,
     ) -> NoteData:
-        """РЎРѕР·РґР°РµС‚ Р·Р°РјРµС‚РєСѓ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ Р·Р°РјРµС‚РєРё")
+        """Создает заметку в базе данных."""
+        title = validate_title(title, field_name="Название заметки")
         preview = (preview or "").strip()
         project = (project or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
@@ -94,8 +94,8 @@ class DatabaseNotesIdeasMixin:
         preview: str,
         tags: List[str],
     ) -> NoteData:
-        """РћР±РЅРѕРІР»СЏРµС‚ РґР°РЅРЅС‹Рµ Р·Р°РјРµС‚РєРё."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ Р·Р°РјРµС‚РєРё")
+        """Обновляет данные заметки."""
+        title = validate_title(title, field_name="Название заметки")
         preview = (preview or "").strip()
         tags = [tag.strip() for tag in tags if tag.strip()]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -146,7 +146,7 @@ class DatabaseNotesIdeasMixin:
         tags: Optional[List[str]] = None,
         archived: bool = False,
     ) -> List[IdeaData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РёРґРµР№ СЃ СѓС‡РµС‚РѕРј С„РёР»СЊС‚СЂРѕРІ."""
+        """Возвращает список идей с учетом фильтров."""
         conditions = []
         params: list[object] = []
         if project_id is not None:
@@ -225,7 +225,7 @@ class DatabaseNotesIdeasMixin:
         return ideas
 
     def get_idea(self, idea_id: int) -> Optional[IdeaData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РёРґРµСЋ РїРѕ ID."""
+        """Возвращает идею по ID."""
         row = self._conn.execute(
             """
             SELECT
@@ -280,8 +280,8 @@ class DatabaseNotesIdeasMixin:
         project_id: Optional[int] = None,
         source: str = "",
     ) -> IdeaData:
-        """РЎРѕР·РґР°РµС‚ РёРґРµСЋ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
-        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+        """Создает идею в базе данных."""
+        title = (title or "").strip() or "Без названия"
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
@@ -343,8 +343,8 @@ class DatabaseNotesIdeasMixin:
         project_id: Optional[int] = None,
         source: str = "",
     ) -> IdeaData:
-        """РћР±РЅРѕРІР»СЏРµС‚ РёРґРµСЋ."""
-        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+        """Обновляет идею."""
+        title = (title or "").strip() or "Без названия"
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
@@ -407,7 +407,7 @@ class DatabaseNotesIdeasMixin:
         )
 
     def set_idea_archived(self, idea_id: int, archived: bool) -> None:
-        """РђСЂС…РёРІРёСЂСѓРµС‚ РёР»Рё РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ РёРґРµСЋ."""
+        """Архивирует или восстанавливает идею."""
         archived_at = datetime.now(timezone.utc).isoformat(timespec="seconds") if archived else None
         with self._conn:
             self._conn.execute(
@@ -416,12 +416,12 @@ class DatabaseNotesIdeasMixin:
             )
 
     def delete_idea(self, idea_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РёРґРµСЋ."""
+        """Удаляет идею."""
         with self._conn:
             self._conn.execute("DELETE FROM ideas WHERE id = ?;", (idea_id,))
 
     def fetch_idea_relations(self, idea_id: int) -> List[IdeaRelationData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє СЃРІСЏР·РµР№ РёРґРµРё."""
+        """Возвращает список связей идеи."""
         rows = self._conn.execute(
             """
             SELECT id, idea_id, entity_type, entity_id, created_at
@@ -547,7 +547,7 @@ class DatabaseNotesIdeasMixin:
             self._conn.execute("DELETE FROM idea_images WHERE id = ?;", (image_id,))
 
     def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
-        """РЎРѕР·РґР°РµС‚ СЃРІСЏР·СЊ РёРґРµРё СЃ СЃСѓС‰РЅРѕСЃС‚СЊСЋ."""
+        """Создает связь идеи с сущностью."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -559,7 +559,7 @@ class DatabaseNotesIdeasMixin:
             )
 
     def toggle_note_favorite(self, note_id: int) -> NoteData:
-        """РџРµСЂРµРєР»СЋС‡Р°РµС‚ РёР·Р±СЂР°РЅРЅРѕРµ Сѓ Р·Р°РјРµС‚РєРё."""
+        """Переключает избранное у заметки."""
         row = self._conn.execute(
             """
             SELECT title, preview, tags, project, favorite, attachment, locked
@@ -569,7 +569,7 @@ class DatabaseNotesIdeasMixin:
             (note_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Заметка не найдена.")
         favorite = not bool(row["favorite"])
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -595,7 +595,7 @@ class DatabaseNotesIdeasMixin:
         )
 
     def set_note_favorite(self, note_id: int, favorite: bool) -> NoteData:
-        """РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃС‚Р°С‚СѓСЃ РёР·Р±СЂР°РЅРЅРѕРіРѕ Сѓ Р·Р°РјРµС‚РєРё."""
+        """Устанавливает статус избранного у заметки."""
         row = self._conn.execute(
             """
             SELECT title, preview, tags, project, attachment, locked
@@ -605,7 +605,7 @@ class DatabaseNotesIdeasMixin:
             (note_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Заметка не найдена.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -630,7 +630,7 @@ class DatabaseNotesIdeasMixin:
         )
 
     def set_note_locked(self, note_id: int, locked: bool) -> NoteData:
-        """РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃС‚Р°С‚СѓСЃ Р±Р»РѕРєРёСЂРѕРІРєРё Р·Р°РјРµС‚РєРё."""
+        """Устанавливает статус блокировки заметки."""
         row = self._conn.execute(
             """
             SELECT title, preview, tags, project, favorite, attachment
@@ -640,7 +640,7 @@ class DatabaseNotesIdeasMixin:
             (note_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Р—Р°РјРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Заметка не найдена.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -665,7 +665,7 @@ class DatabaseNotesIdeasMixin:
         )
 
     def delete_note(self, note_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ Р·Р°РјРµС‚РєСѓ."""
+        """Удаляет заметку."""
         with self._conn:
             self._conn.execute("DELETE FROM notes WHERE id = ?;", (note_id,))
 

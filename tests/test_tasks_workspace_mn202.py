@@ -1281,7 +1281,7 @@ def test_plan_execution_advances_current_item_and_records_actuals(monkeypatch, u
 
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         model = tasks_workspace.TasksModel()
-        model.set_filter_mode("РџР»Р°РЅ")
+        model.set_filter_mode("План")
 
         root_row = _find_task_row(model, root.id)
         assert root_row >= 0
@@ -1421,7 +1421,7 @@ def test_plan_reorder_promotes_new_first_item_to_current_and_starts_it(monkeypat
         )
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         model = tasks_workspace.TasksModel()
-        model.set_filter_mode("РџР»Р°РЅ")
+        model.set_filter_mode("План")
 
         root_row = _find_task_row(model, root.id)
         assert root_row >= 0

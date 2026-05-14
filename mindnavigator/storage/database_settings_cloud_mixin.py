@@ -6,10 +6,10 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseSettingsCloudMixin:
     def get_setting(self, key: str, default: str = "") -> str:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РЅР°СЃС‚СЂРѕР№РєРё."""
+        """Возвращает значение настройки."""
         key = (key or "").strip()
         if not key:
-            raise ValueError("РљР»СЋС‡ РЅР°СЃС‚СЂРѕР№РєРё РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("Ключ настройки не должен быть пустым.")
         cur = self._conn.execute("SELECT value FROM settings WHERE key = ?;", (key,))
         row = cur.fetchone()
         if not row:
@@ -17,10 +17,10 @@ class DatabaseSettingsCloudMixin:
         return row["value"]
 
     def set_setting(self, key: str, value: str) -> None:
-        """РЎРѕС…СЂР°РЅСЏРµС‚ Р·РЅР°С‡РµРЅРёРµ РЅР°СЃС‚СЂРѕР№РєРё."""
+        """Сохраняет значение настройки."""
         key = (key or "").strip()
         if not key:
-            raise ValueError("РљР»СЋС‡ РЅР°СЃС‚СЂРѕР№РєРё РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("Ключ настройки не должен быть пустым.")
         value = (value or "").strip()
         with self._conn:
             self._conn.execute(
@@ -44,14 +44,14 @@ class DatabaseSettingsCloudMixin:
         is_image: bool,
         valid: bool,
     ) -> CloudFileData:
-        """РЎРѕР·РґР°РµС‚ РёР»Рё РѕР±РЅРѕРІР»СЏРµС‚ Р·Р°РїРёСЃСЊ Рѕ С„Р°Р№Р»Рµ РѕР±Р»Р°РєР°."""
+        """Создает или обновляет запись о файле облака."""
         rel_path = (rel_path or "").strip()
         if not rel_path:
-            raise ValueError("РџСѓС‚СЊ С„Р°Р№Р»Р° РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("Путь файла не должен быть пустым.")
         name = (name or "").strip()
         checksum = (checksum or "").strip()
         if not name or not checksum:
-            raise ValueError("РРјСЏ С„Р°Р№Р»Р° Рё РєРѕРЅС‚СЂРѕР»СЊРЅР°СЏ СЃСѓРјРјР° РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.")
+            raise ValueError("Имя файла и контрольная сумма обязательны.")
         description = (description or "").strip()
         hash_value = (hash_value or "").strip()
         size = max(0, int(size))
@@ -106,7 +106,7 @@ class DatabaseSettingsCloudMixin:
         )
 
     def fetch_cloud_files(self) -> List[CloudFileData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ РѕР±Р»Р°РєР°."""
+        """Возвращает список файлов облака."""
         rows = self._conn.execute(
             """
             SELECT id, rel_path, name, description, checksum, hash_value, size, is_image, valid, updated_at
@@ -131,7 +131,7 @@ class DatabaseSettingsCloudMixin:
         ]
 
     def remove_missing_cloud_files(self, rel_paths: Iterable[str]) -> None:
-        """РЈРґР°Р»СЏРµС‚ Р·Р°РїРёСЃРё Рѕ С„Р°Р№Р»Р°С…, РєРѕС‚РѕСЂС‹С… РЅРµС‚ РІ РѕР±Р»Р°С‡РЅРѕРј РєР°С‚Р°Р»РѕРіРµ."""
+        """Удаляет записи о файлах, которых нет в облачном каталоге."""
         rel_paths = [path for path in rel_paths if path]
         with self._conn:
             if not rel_paths:

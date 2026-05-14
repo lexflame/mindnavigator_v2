@@ -787,8 +787,8 @@ class TasksWorkspace(BaseWorkspace):
 
     def _fetch_board_tasks(self) -> List:
         return self._board_cast.collect_tasks()
-        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Р›СЋР±РѕР№"
-        priority_filter = None if priority_value == "Р›СЋР±РѕР№" else priority_value
+        priority_value = self.cmb_priority.currentText() if hasattr(self, "cmb_priority") else "Любой"
+        priority_filter = None if priority_value == "Любой" else priority_value
         filter_by_day = self._is_board_day_filter_enabled()
         tasks = [
             task
@@ -802,10 +802,10 @@ class TasksWorkspace(BaseWorkspace):
 
     def _format_board_task_text(self, task) -> str:
         return self._board_cast.format_task_text(task)
-        time_text = task.time_text or "вЂ”"
+        time_text = task.time_text or "—"
         if self._is_board_day_filter_enabled():
-            return f"{time_text} В· {task.title}"
-        return f"{task.day.isoformat()} В· {time_text} В· {task.title}"
+            return f"{time_text} · {task.title}"
+        return f"{task.day.isoformat()} · {time_text} · {task.title}"
 
     def _collect_board_tasks(self) -> List:
         return self._board_cast.collect_tasks()

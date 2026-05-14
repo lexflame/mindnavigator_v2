@@ -17,12 +17,12 @@ class DatabaseCoreMixin:
         self._init_db()
 
     def reindex(self) -> None:
-        """РџРµСЂРµРёРЅРґРµРєСЃРёСЂСѓРµС‚ С‚Р°Р±Р»РёС†С‹ Р±Р°Р·С‹ РґР°РЅРЅС‹С…."""
+        """Переиндексирует таблицы базы данных."""
         with self._conn:
             self._conn.execute("REINDEX;")
 
     def backup_to(self, destination_path: Path) -> Path:
-        """РЎРѕР·РґР°РµС‚ РєРѕРЅСЃРёСЃС‚РµРЅС‚РЅСѓСЋ РєРѕРїРёСЋ Р±Р°Р·С‹ РґР°РЅРЅС‹С… РІ СѓРєР°Р·Р°РЅРЅС‹Р№ С„Р°Р№Р»."""
+        """Создает консистентную копию базы данных в указанный файл."""
         destination_path = Path(destination_path)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         if destination_path.resolve() == self.path.resolve():
@@ -42,7 +42,7 @@ class DatabaseCoreMixin:
         return destination_path
 
     def close(self) -> None:
-        """Р—Р°РєСЂС‹РІР°РµС‚ СЃРѕРµРґРёРЅРµРЅРёРµ СЃ Р±Р°Р·РѕР№ РґР°РЅРЅС‹С…."""
+        """Закрывает соединение с базой данных."""
         if self._closed:
             return
         self._conn.close()

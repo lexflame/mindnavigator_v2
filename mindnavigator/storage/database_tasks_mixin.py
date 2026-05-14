@@ -32,7 +32,7 @@ class DatabaseTasksMixin:
         return max(15, min(8 * 60, int(round(raw / 5.0) * 5)))
 
     def fetch_tasks(self) -> List[TaskData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІСЃРµС… Р·Р°РґР°С‡."""
+        """Возвращает список всех задач."""
         rows = self._conn.execute(
             """
             SELECT
@@ -120,7 +120,7 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
-        """РЎРѕР·РґР°РµС‚ Р·Р°РґР°С‡Сѓ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
+        """Создает задачу в базе данных."""
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
@@ -131,7 +131,7 @@ class DatabaseTasksMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
-            raise ValueError("Р”Р°С‚Р° Р·Р°РґР°С‡Рё РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
+            raise ValueError("Дата задачи некорректна.")
         if plan_order is None:
             plan_order = self._next_task_plan_order(parent_id)
         plan_order = max(0, int(plan_order))
@@ -254,7 +254,7 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> TaskData:
-        """РћР±РЅРѕРІР»СЏРµС‚ Р·Р°РґР°С‡Сѓ."""
+        """Обновляет задачу."""
         prev_row = self._conn.execute(
             "SELECT priority, board_column, parent_id, is_plan_task, plan_order FROM tasks WHERE id = ?;",
             (task_id,),
@@ -283,7 +283,7 @@ class DatabaseTasksMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if not isinstance(day, date):
-            raise ValueError("Р”Р°С‚Р° Р·Р°РґР°С‡Рё РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
+            raise ValueError("Дата задачи некорректна.")
 
         project_title = ""
         project_area = ""
@@ -419,7 +419,7 @@ class DatabaseTasksMixin:
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
-        """РћР±РЅРѕРІР»СЏРµС‚ СЃС‚Р°С‚СѓСЃ РІС‹РїРѕР»РЅРµРЅРёСЏ Р·Р°РґР°С‡Рё."""
+        """Обновляет статус выполнения задачи."""
         row = self._conn.execute(
             """
             SELECT
@@ -784,7 +784,7 @@ class DatabaseTasksMixin:
             )
 
     def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:
-        """РЎРѕС…СЂР°РЅСЏРµС‚ РѕС†РµРЅРєСѓ РІСЂРµРјРµРЅРё Р·Р°РґР°С‡Рё РґР»СЏ СЂРµР¶РёРјР° РґРёР°РіСЂР°РјРјС‹ Р“Р°РЅС‚Р°."""
+        """Сохраняет оценку времени задачи для режима диаграммы Ганта."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         safe_minutes = max(0, int(minutes or 0))
         with self._conn:
@@ -823,7 +823,7 @@ class DatabaseTasksMixin:
         return date(year, month, day)
 
     def delete_task(self, task_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ Р·Р°РґР°С‡Сѓ РїРѕ id."""
+        """Удаляет задачу по id."""
         with self._conn:
             self._conn.execute(
                 """
@@ -839,7 +839,7 @@ class DatabaseTasksMixin:
             )
 
     def fetch_task_attachments(self, task_id: int) -> List[TaskAttachmentData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІР»РѕР¶РµРЅРёР№ Р·Р°РґР°С‡Рё."""
+        """Возвращает список вложений задачи."""
         task_id = int(task_id)
         rows = self._conn.execute(
             """
@@ -884,13 +884,13 @@ class DatabaseTasksMixin:
                 self.add_task_attachment(task_id, "task", linked_task_id)
 
     def add_task_attachment(self, task_id: int, kind: str, ref_id: int) -> TaskAttachmentData:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РІР»РѕР¶РµРЅРёРµ Рє Р·Р°РґР°С‡Рµ."""
+        """Добавляет вложение к задаче."""
         task_id = int(task_id)
         if task_id <= 0:
-            raise ValueError("РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°РґР°С‡Рё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Рј.")
+            raise ValueError("Идентификатор задачи должен быть положительным.")
         ref_id = int(ref_id)
         if ref_id <= 0:
-            raise ValueError("РРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РІР»РѕР¶РµРЅРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Рј.")
+            raise ValueError("Идентификатор вложенного элемента должен быть положительным.")
         kind = TaskAttachmentData.normalize_kind(kind)
         if kind == "task" and task_id == ref_id:
             raise ValueError("Нельзя прикрепить задачу к самой себе.")
@@ -914,7 +914,7 @@ class DatabaseTasksMixin:
         return TaskAttachmentData.from_row(row)
 
     def delete_task_attachment(self, attachment_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РІР»РѕР¶РµРЅРёРµ Р·Р°РґР°С‡Рё."""
+        """Удаляет вложение задачи."""
         with self._conn:
             self._conn.execute("DELETE FROM task_attachments WHERE id = ?;", (attachment_id,))
 

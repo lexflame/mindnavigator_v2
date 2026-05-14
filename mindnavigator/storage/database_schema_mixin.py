@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseSchemaMixin:
     def _init_db(self) -> None:
-        """РРЅРёС†РёР°Р»РёР·РёСЂСѓРµС‚ СЃС…РµРјСѓ Рё РїР°СЂР°РјРµС‚СЂС‹ SQLite."""
+        """Инициализирует схему и параметры SQLite."""
         with self._conn:
             _configure_connection_pragmas(self._conn, self.path)
 
@@ -585,7 +585,7 @@ class DatabaseSchemaMixin:
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
-        """РџСЂРёРјРµРЅСЏРµС‚ РІРµСЂСЃРёРѕРЅРёСЂРѕРІР°РЅРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ SQLite."""
+        """Применяет версионированные миграции схемы SQLite."""
         steps = [
             MigrationStep(1, "core_task_project_schema", self._migration_v1_core_task_project_schema),
             MigrationStep(2, "map_marker_and_attachment_schema", self._migration_v2_map_marker_and_attachment_schema),
@@ -600,7 +600,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_board_column()
 
     def apply_schema_updates(self) -> int:
-        """РџСЂРёРјРµРЅСЏРµС‚ РІСЃРµ РґРѕСЃС‚СѓРїРЅС‹Рµ РјРёРіСЂР°С†РёРё СЃС…РµРјС‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ user_version."""
+        """Применяет все доступные миграции схемы и возвращает user_version."""
         self._run_schema_migrations()
         self._ensure_priority_values()
         self._ensure_project_extended_columns()
@@ -613,7 +613,7 @@ class DatabaseSchemaMixin:
         return int(row[0]) if row else 0
 
     def _migration_v1_core_task_project_schema(self, _connection: sqlite3.Connection) -> None:
-        """РњРёРіСЂР°С†РёСЏ v1: РІС‹СЂР°РІРЅРёРІР°РЅРёРµ Р±Р°Р·РѕРІС‹С… РєРѕР»РѕРЅРѕРє Р·Р°РґР°С‡/РїСЂРѕРµРєС‚РѕРІ Рё РёРЅРґРµРєСЃРѕРІ."""
+        """Миграция v1: выравнивание базовых колонок задач/проектов и индексов."""
         self._ensure_task_project_column()
         self._ensure_project_extended_columns()
         self._ensure_task_description_column()
@@ -629,7 +629,7 @@ class DatabaseSchemaMixin:
         self._ensure_project_marker_columns()
 
     def _migration_v2_map_marker_and_attachment_schema(self, _connection: sqlite3.Connection) -> None:
-        """РњРёРіСЂР°С†РёСЏ v2: РїСЂРёРІРµРґРµРЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ РјРµС‚РѕРє РєР°СЂС‚С‹ Рё РІР»РѕР¶РµРЅРёР№ Р·Р°РґР°С‡."""
+        """Миграция v2: приведение структуры меток карты и вложений задач."""
         self._ensure_marker_attachment_columns()
         self._ensure_marker_parent_path_column()
         self._ensure_marker_image_column()
@@ -637,7 +637,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_attachment_foreign_keys()
 
     def _migration_v3_collection_schema(self, _connection: sqlite3.Connection) -> None:
-        """РњРёРіСЂР°С†РёСЏ v3: РїСЂРёРІРµРґРµРЅРёРµ С‚Р°Р±Р»РёС† РєРѕР»Р»РµРєС†РёР№ Рё СЃРІСЏР·Р°РЅРЅС‹С… РєРѕР»РѕРЅРѕРє."""
+        """Миграция v3: приведение таблиц коллекций и связанных колонок."""
         self._ensure_collection_category_table()
         self._ensure_collection_item_category_column()
         self._ensure_collection_item_extra_columns()
@@ -726,7 +726,7 @@ class DatabaseSchemaMixin:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
 
     def _ensure_task_project_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ project_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку project_id, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "project_id" not in names:
@@ -734,7 +734,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);")
 
     def _ensure_project_extended_columns(self) -> None:
-        """Р вЂќР С•Р В±Р В°Р Р†Р В»РЎРЏР ВµРЎвЂљ РЎР‚Р В°РЎРѓРЎв‚¬Р С‘РЎР‚Р ВµР Р…Р Р…РЎвЂ№Р Вµ Р С”Р С•Р В»Р С•Р Р…Р С”Р С‘ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР С•Р Р†, Р ВµРЎРѓР В»Р С‘ Р С•Р Р…Р С‘ Р С•РЎвЂљРЎРѓРЎС“РЎвЂљРЎРѓРЎвЂљР Р†РЎС“РЎР‹РЎвЂљ."""
+        """Добавляет расширенные колонки проектов, если они отсутствуют."""
         columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
         names = {row["name"] for row in columns}
         additions = {
@@ -758,7 +758,7 @@ class DatabaseSchemaMixin:
             self._normalize_project_sort_order()
 
     def _normalize_project_sort_order(self) -> None:
-        """РќРѕСЂРјР°Р»РёР·СѓРµС‚ РїРѕСЂСЏРґРѕРє РїСЂРѕРµРєС‚РѕРІ РІРЅСѓС‚СЂРё РєР°Р¶РґРѕРіРѕ СЂРѕРґРёС‚РµР»СЏ."""
+        """Нормализует порядок проектов внутри каждого родителя."""
         rows = self._conn.execute(
             """
             SELECT id, parent_project_id, COALESCE(sort_order, 0) AS sort_order
@@ -777,7 +777,7 @@ class DatabaseSchemaMixin:
                 )
 
     def _next_project_sort_order(self, parent_project_id: Optional[int], exclude_id: Optional[int] = None) -> int:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃР»РµРґСѓСЋС‰РёР№ РёРЅРґРµРєСЃ СЃРѕСЂС‚РёСЂРѕРІРєРё РґР»СЏ РґРѕС‡РµСЂРЅРёС… РїСЂРѕРµРєС‚РѕРІ."""
+        """Возвращает следующий индекс сортировки для дочерних проектов."""
         if exclude_id is None:
             row = self._conn.execute(
                 """
@@ -800,7 +800,7 @@ class DatabaseSchemaMixin:
         return int(row["max_order"]) + 1 if row is not None else 0
 
     def _ensure_task_description_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ description, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку description, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "description" not in names:
@@ -808,7 +808,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT '';")
 
     def _ensure_task_parent_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ parent_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку parent_id, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "parent_id" not in names:
@@ -816,7 +816,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id);")
 
     def _ensure_task_recurrence_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚Рё Р·Р°РґР°С‡Рё, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        """Добавляет колонки периодичности задачи, если они отсутствуют."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -843,7 +843,7 @@ class DatabaseSchemaMixin:
             self._normalize_task_plan_order()
 
     def _ensure_task_marker_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° Р·Р°РґР°С‡Рё, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        """Добавляет колонки визуального маркера задачи, если они отсутствуют."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -853,7 +853,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
 
     def _ensure_task_completion_delay_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ СЂР°СЃС…РѕР¶РґРµРЅРёСЏ РїРѕ РІСЂРµРјРµРЅРё РІС‹РїРѕР»РЅРµРЅРёСЏ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку расхождения по времени выполнения, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "completion_delay_minutes" not in names:
@@ -863,7 +863,7 @@ class DatabaseSchemaMixin:
                 )
 
     def _ensure_task_gantt_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РѕС†РµРЅРѕРє Р“Р°РЅС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        """Добавляет колонки оценок Ганта, если они отсутствуют."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -939,7 +939,7 @@ class DatabaseSchemaMixin:
                 )
 
     def _ensure_project_marker_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєРё РІРёР·СѓР°Р»СЊРЅРѕРіРѕ РјР°СЂРєРµСЂР° РїСЂРѕРµРєС‚Р°, РµСЃР»Рё РѕРЅРё РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚."""
+        """Добавляет колонки визуального маркера проекта, если они отсутствуют."""
         columns = self._conn.execute("PRAGMA table_info(projects);").fetchall()
         names = {row["name"] for row in columns}
         with self._conn:
@@ -949,7 +949,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE projects ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
 
     def _ensure_priority_values(self) -> None:
-        """РћР±РЅРѕРІР»СЏРµС‚ РѕРіСЂР°РЅРёС‡РµРЅРёСЏ РїСЂРёРѕСЂРёС‚РµС‚Р° РґРѕ Р°РєС‚СѓР°Р»СЊРЅРѕРіРѕ СЃРїРёСЃРєР° Р·РЅР°С‡РµРЅРёР№."""
+        """Обновляет ограничения приоритета до актуального списка значений."""
         if (
             self._priority_constraint_is_current("tasks")
             and self._priority_constraint_is_current("projects")
@@ -971,7 +971,7 @@ class DatabaseSchemaMixin:
             self._ensure_priority_indexes()
 
     def _task_project_fk_needs_repair(self) -> bool:
-        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ project_id РІ tasks СЃСЃС‹Р»Р°РµС‚СЃСЏ РЅР° С‚Р°Р±Р»РёС†Сѓ projects."""
+        """Проверяет, что project_id в tasks ссылается на таблицу projects."""
         rows = self._conn.execute("PRAGMA foreign_key_list(tasks);").fetchall()
         project_refs = [row for row in rows if row["from"] == "project_id"]
         if not project_refs:
@@ -979,7 +979,7 @@ class DatabaseSchemaMixin:
         return any(row["table"] != "projects" for row in project_refs)
 
     def _repair_task_project_fk(self) -> None:
-        """РСЃРїСЂР°РІР»СЏРµС‚ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё tasks.project_id, РµСЃР»Рё РѕРЅРё СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰СѓСЋ С‚Р°Р±Р»РёС†Сѓ."""
+        """Исправляет внешние ключи tasks.project_id, если они ссылаются на отсутствующую таблицу."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -999,7 +999,7 @@ class DatabaseSchemaMixin:
             self._ensure_priority_indexes()
 
     def _idea_project_fk_needs_repair(self) -> bool:
-        """Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЏР ВµРЎвЂљ, РЎвЂЎРЎвЂљР С• project_id Р Р† ideas РЎРѓРЎРѓРЎвЂ№Р В»Р В°Р ВµРЎвЂљРЎРѓРЎРЏ Р Р…Р В° РЎвЂљР В°Р В±Р В»Р С‘РЎвЂ РЎС“ projects."""
+        """Проверяет, что project_id в ideas ссылается на таблицу projects."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1013,7 +1013,7 @@ class DatabaseSchemaMixin:
         return any(row["table"] != "projects" for row in project_refs)
 
     def _map_marker_fk_needs_repair(self) -> bool:
-        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё map_markers РЅРµ СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РёРµ С‚Р°Р±Р»РёС†С‹."""
+        """Проверяет, что внешние ключи map_markers не ссылаются на отсутствующие таблицы."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1026,7 +1026,7 @@ class DatabaseSchemaMixin:
         return any(row["table"] not in tables for row in rows)
 
     def _ensure_map_marker_foreign_keys(self) -> None:
-        """РСЃРїСЂР°РІР»СЏРµС‚ СѓСЃС‚Р°СЂРµРІС€РёРµ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё map_markers, РµСЃР»Рё С‚Р°Р±Р»РёС†Р°-РёСЃС‚РѕС‡РЅРёРє РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Исправляет устаревшие внешние ключи map_markers, если таблица-источник отсутствует."""
         if not self._map_marker_fk_needs_repair():
             return
         with self._conn:
@@ -1036,7 +1036,7 @@ class DatabaseSchemaMixin:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_map_markers_map ON map_markers(map_id);")
 
     def _task_attachment_fk_needs_repair(self) -> bool:
-        """РџСЂРѕРІРµСЂСЏРµС‚, С‡С‚Рѕ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё task_attachments СЃСЃС‹Р»Р°СЋС‚СЃСЏ РЅР° tasks."""
+        """Проверяет, что внешние ключи task_attachments ссылаются на tasks."""
         tables = {
             row["name"]
             for row in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
@@ -1049,7 +1049,7 @@ class DatabaseSchemaMixin:
         return any(row["table"] not in tables or row["table"] != "tasks" for row in rows)
 
     def _ensure_task_attachment_foreign_keys(self) -> None:
-        """РСЃРїСЂР°РІР»СЏРµС‚ СѓСЃС‚Р°СЂРµРІС€РёРµ РІРЅРµС€РЅРёРµ РєР»СЋС‡Рё task_attachments, РµСЃР»Рё С‚Р°Р±Р»РёС†Р°-РёСЃС‚РѕС‡РЅРёРє РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Исправляет устаревшие внешние ключи task_attachments, если таблица-источник отсутствует."""
         if not self._task_attachment_fk_needs_repair():
             return
         with self._conn:
@@ -1528,7 +1528,7 @@ class DatabaseSchemaMixin:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
 
     def _ensure_map_tiles_path_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ tiles_path, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку tiles_path, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(maps);").fetchall()
         names = {row["name"] for row in columns}
         if "tiles_path" not in names:
@@ -1536,7 +1536,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE maps ADD COLUMN tiles_path TEXT NOT NULL DEFAULT '';")
 
     def _ensure_marker_attachment_columns(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РЅРѕРІС‹Рµ РєРѕР»РѕРЅРєРё РґР»СЏ РІР»РѕР¶РµРЅРёР№ РјР°СЂРєРµСЂР° РєР°СЂС‚С‹."""
+        """Добавляет новые колонки для вложений маркера карты."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         additions = {
@@ -1583,7 +1583,7 @@ class DatabaseSchemaMixin:
                     )
 
     def _ensure_marker_image_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ РїСЂРµРІСЊСЋ РґР»СЏ РјР°СЂРєРµСЂРѕРІ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку превью для маркеров, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         if "image_path" not in names:
@@ -1591,7 +1591,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE map_markers ADD COLUMN image_path TEXT NOT NULL DEFAULT '';")
 
     def _ensure_marker_parent_path_column(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ СЂРѕРґРёС‚РµР»СЊСЃРєРѕРіРѕ РєР°С‚Р°Р»РѕРіР° РґР»СЏ РјР°СЂРєРµСЂРѕРІ, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""
+        """Добавляет колонку родительского каталога для маркеров, если она отсутствует."""
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
         if "parent_path" not in names:
@@ -1599,7 +1599,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE map_markers ADD COLUMN parent_path TEXT NOT NULL DEFAULT '';")
 
     def _seed_defaults(self) -> None:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РґРµРјРѕРЅСЃС‚СЂР°С†РёРѕРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ, РµСЃР»Рё Р±Р°Р·Р° РїСѓСЃС‚Р°СЏ."""
+        """Добавляет демонстрационные данные, если база пустая."""
         cur = self._conn.execute("SELECT COUNT(*) FROM tasks;")
         if cur.fetchone()[0] == 0:
             self._seed_tasks()
@@ -1625,13 +1625,13 @@ class DatabaseSchemaMixin:
         days = [today - timedelta(days=1), today, today + timedelta(days=1), today + timedelta(days=2)]
         examples = [
             (days[0], "13:00", "BorderDev", "High", 0),
-            (days[0], "14:00", "Wiki в†’ Picture", "High", 0),
-            (days[1], "15:00", "РџРѕРґСѓРјР°С‚СЊ РЅР°Рґ DragAndDrop РґР»СЏ СЃРїРёСЃРєР° Р·Р°РґР°С‡ РІ СЂРµР¶РёРјРµ РїР»Р°РЅ", "Medium", 0),
-            (days[1], "16:00", "Р‘РёР»РµС‚С‹ РџР”Р”", "Low", 0),
-            (days[1], "17:00", "РџСЂРѕСЃРјРѕС‚СЂРµС‚СЊ FAV", "Medium", 0),
-            (days[1], "19:00", "РџСЂРѕСЃРјРѕС‚СЂРµС‚СЊ Р·Р°РїРёСЃРё РІРѕ РІСЃРµС… РєР°РЅР°Р»Р°С… РР·Р±СЂР°РЅРЅРѕРіРѕ", "Medium", 0),
-            (days[2], "20:00", "SimCity Societies в†’ KitBash в†’ Р—РґР°РЅРёСЏ СѓСЃР°РґСЊР±С‹. Р—РґР°РЅРёРµ С€РєРѕР»С‹. РњРЅРѕРіРѕСЌС‚Р°Р¶РєР°вЂ¦", "High", 0),
-            (days[3], "22:00", "Stygian В· Reign of the Old Ones", "High", 0),
+            (days[0], "14:00", "Wiki → Picture", "High", 0),
+            (days[1], "15:00", "Подумать над DragAndDrop для списка задач в режиме план", "Medium", 0),
+            (days[1], "16:00", "Билеты ПДД", "Low", 0),
+            (days[1], "17:00", "Просмотреть FAV", "Medium", 0),
+            (days[1], "19:00", "Просмотреть записи во всех каналах Избранного", "Medium", 0),
+            (days[2], "20:00", "SimCity Societies → KitBash → Здания усадьбы. Здание школы. Многоэтажка…", "High", 0),
+            (days[3], "22:00", "Stygian · Reign of the Old Ones", "High", 0),
             (days[3], "23:00", "The Council", "High", 1),
         ]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1648,12 +1648,12 @@ class DatabaseSchemaMixin:
     def _seed_projects(self) -> None:
         examples = [
             ("SPACE", "MindNavigator v2", "06.01.2026", "High", 0),
-            ("SPACE", "РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ FastAPI + S3", "05.01.2026", "Medium", 0),
-            ("TACMap", "Р РµРґР°РєС‚РѕСЂ СЃР»РѕС‘РІ / РјР°СЂРєРµСЂРѕРІ", "03.01.2026", "High", 0),
-            ("MakerTask", "ProjectsWorkspace UI (РїСЂРѕС‚РѕС‚РёРї)", "02.10.2025", "Medium", 0),
-            ("MakerTask", "Drag&Drop РїР»Р°РЅРёСЂРѕРІС‰РёРєР°", "01.10.2025", "High", 1),
-            ("Wiki", "Cities: Skylines в†’ DokuWiki", "22.07.2025", "Low", 0),
-            ("Misc", "РЎР±РѕСЂ СЂРµС„РµСЂРµРЅСЃРѕРІ / moodboard", "01.01.2026", "Low", 0),
+            ("SPACE", "Синхронизация FastAPI + S3", "05.01.2026", "Medium", 0),
+            ("TACMap", "Редактор слоёв / маркеров", "03.01.2026", "High", 0),
+            ("MakerTask", "ProjectsWorkspace UI (прототип)", "02.10.2025", "Medium", 0),
+            ("MakerTask", "Drag&Drop планировщика", "01.10.2025", "High", 1),
+            ("Wiki", "Cities: Skylines → DokuWiki", "22.07.2025", "Low", 0),
+            ("Misc", "Сбор референсов / moodboard", "01.01.2026", "Low", 0),
         ]
         with self._conn:
             for idx, (area, title, updated, priority, archived) in enumerate(examples):
@@ -1667,9 +1667,9 @@ class DatabaseSchemaMixin:
 
     def _seed_maps(self) -> None:
         examples = [
-            ("Northern Ridge", "РўРѕС‡РєРё РѕР±Р·РѕСЂР° Рё РјР°СЂС€СЂСѓС‚С‹ РїР°С‚СЂСѓР»РµР№.", "MindNavigator v2", "", 18, 24),
-            ("Sector 12", "Р—РѕРЅС‹ РєРѕРЅС‚СЂРѕР»СЏ Рё РјРёРЅРЅС‹Рµ РїРѕР»СЏ.", "TACMap", "", 32, 32),
-            ("Green Hills", "РђСЂС‚РёР»Р»РµСЂРёР№СЃРєРёРµ РїРѕР·РёС†РёРё Рё РЅР°Р±Р»СЋРґР°С‚РµР»Рё.", "Wiki", "", 12, 20),
+            ("Northern Ridge", "Точки обзора и маршруты патрулей.", "MindNavigator v2", "", 18, 24),
+            ("Sector 12", "Зоны контроля и минные поля.", "TACMap", "", 32, 32),
+            ("Green Hills", "Артиллерийские позиции и наблюдатели.", "Wiki", "", 12, 20),
         ]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -1686,8 +1686,8 @@ class DatabaseSchemaMixin:
         now = datetime.now(timezone.utc)
         examples = [
             (
-                "РћРЅР±РѕСЂРґРёРЅРі РїСЂРѕРґСѓРєС‚Р°",
-                "РљР»СЋС‡РµРІС‹Рµ С€Р°РіРё Р·Р°РїСѓСЃРєР°, СЃРїРёСЃРѕРє СЂРёСЃРєРѕРІ Рё СЃРїРёСЃРѕРє Р±Р»РѕРєРµСЂРѕРІ РґР»СЏ РїРµСЂРІРѕР№ РІРµСЂСЃРёРё...",
+                "Онбординг продукта",
+                "Ключевые шаги запуска, список рисков и список блокеров для первой версии...",
                 ["product", "launch", "priority"],
                 now - timedelta(hours=2),
                 "MindNavigator",
@@ -1696,8 +1696,8 @@ class DatabaseSchemaMixin:
                 False,
             ),
             (
-                "РСЃСЃР»РµРґРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№",
-                "РЎРІРѕРґРєР° РёРЅС‚РµСЂРІСЊСЋ: Р±РѕР»РµРІС‹Рµ С‚РѕС‡РєРё, РїСЂРёРІС‹С‡РєРё РІРµРґРµРЅРёСЏ Р·Р°РјРµС‚РѕРє, РѕР¶РёРґР°РЅРёСЏ РѕС‚ РїРѕРёСЃРєР°...",
+                "Исследование пользователей",
+                "Сводка интервью: болевые точки, привычки ведения заметок, ожидания от поиска...",
                 ["research", "ux"],
                 now - timedelta(days=1, hours=3),
                 "Discovery",
@@ -1706,8 +1706,8 @@ class DatabaseSchemaMixin:
                 False,
             ),
             (
-                "РђСЂС…РёС‚РµРєС‚СѓСЂР° СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё",
-                "РљРѕРЅС‚СѓСЂС‹ API: FastAPI, SQLite, РѕС„С„Р»Р°Р№РЅ-РѕС‡РµСЂРµРґРё, С„РѕСЂРјР°С‚С‹ СЃРѕР±С‹С‚РёР№...",
+                "Архитектура синхронизации",
+                "Контуры API: FastAPI, SQLite, оффлайн-очереди, форматы событий...",
                 ["backend", "sync"],
                 now - timedelta(days=2),
                 "Platform",
@@ -1716,8 +1716,8 @@ class DatabaseSchemaMixin:
                 True,
             ),
             (
-                "UI-СЂРµС„РµСЂРµРЅСЃС‹",
-                "Obsidian + Notion + IDE: РєРѕРЅС‚СЂР°СЃС‚, РєР°СЂС‚РѕС‡РєРё, РјРёРЅРёРјР°Р»РёР·Рј, Р±С‹СЃС‚СЂС‹Рµ СЌРєС€РµРЅС‹...",
+                "UI-референсы",
+                "Obsidian + Notion + IDE: контраст, карточки, минимализм, быстрые экшены...",
                 ["ui", "references"],
                 now - timedelta(days=3, hours=5),
                 "Design",
@@ -1726,8 +1726,8 @@ class DatabaseSchemaMixin:
                 False,
             ),
             (
-                "Р§РµРєР»РёСЃС‚ СЂРµР»РёР·Р°",
-                "Checklist: С‚РµСЃС‚С‹, РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ, СЃРєСЂРёРЅС€РѕС‚С‹, СЂРµР»РёР·РЅС‹Рµ Р·Р°РјРµС‚РєРё...",
+                "Чеклист релиза",
+                "Checklist: тесты, документация, скриншоты, релизные заметки...",
                 ["release", "ops"],
                 now - timedelta(days=4),
                 "Delivery",
@@ -1761,18 +1761,18 @@ class DatabaseSchemaMixin:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         examples = [
             (
-                "Р¦РµРЅС‚СЂР°Р»СЊРЅС‹Р№ РѕС„РёСЃ",
-                "Р“РѕСЂРѕРґ / РђРґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅС‹Рµ",
-                "Р‘РёР·РЅРµСЃ-С†РµРЅС‚СЂ",
-                "Р’ СЌРєСЃРїР»СѓР°С‚Р°С†РёРё",
-                "Р“Р»Р°РІРЅС‹Р№ РѕС„РёСЃ СЃ Р·РѕРЅР°РјРё РїСЂРёРµРјР° Рё РїРµСЂРµРіРѕРІРѕСЂРЅС‹РјРё.",
+                "Центральный офис",
+                "Город / Административные",
+                "Бизнес-центр",
+                "В эксплуатации",
+                "Главный офис с зонами приема и переговорными.",
             ),
             (
-                "РЎРєР»Р°РґСЃРєР°СЏ Р·РѕРЅР° РЎРµРІРµСЂ",
-                "Р›РѕРіРёСЃС‚РёРєР°",
-                "РЎРєР»Р°Рґ",
-                "РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ",
-                "РџР»РѕС‰Р°РґРєР° РїРѕРґ СЂР°СЃРїСЂРµРґРµР»РёС‚РµР»СЊРЅС‹Р№ С†РµРЅС‚СЂ Рё С‚РµС…РЅРѕР»РѕРіРёС‡РµСЃРєРёРµ Р±Р»РѕРєРё.",
+                "Складская зона Север",
+                "Логистика",
+                "Склад",
+                "Проектирование",
+                "Площадка под распределительный центр и технологические блоки.",
             ),
         ]
         with self._conn:
