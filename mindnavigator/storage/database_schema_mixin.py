@@ -176,6 +176,19 @@ class DatabaseSchemaMixin:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS idea_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                    rel_path TEXT NOT NULL,
+                    caption TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(idea_id, rel_path)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS task_attachments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -520,6 +533,7 @@ class DatabaseSchemaMixin:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_links_idea_id ON idea_links(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_tags_idea_id ON idea_tags(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
@@ -567,6 +581,7 @@ class DatabaseSchemaMixin:
         self._ensure_project_marker_columns()
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
+        self._ensure_idea_image_schema()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
@@ -579,6 +594,7 @@ class DatabaseSchemaMixin:
             MigrationStep(5, "dossier_schema", self._migration_v5_dossier_schema),
             MigrationStep(6, "task_plan_schema", self._migration_v6_task_plan_schema),
             MigrationStep(7, "task_execution_schema", self._migration_v7_task_execution_schema),
+            MigrationStep(8, "idea_image_schema", self._migration_v8_idea_image_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -592,6 +608,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_plan_columns()
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
+        self._ensure_idea_image_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
 
@@ -642,6 +659,10 @@ class DatabaseSchemaMixin:
         """Adds execution tracking columns for plan-task progression."""
         self._ensure_task_execution_columns()
 
+    def _migration_v8_idea_image_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds storage for idea images and captions."""
+        self._ensure_idea_image_schema()
+
     def _ensure_dossier_schema(self) -> None:
         """Гарантирует наличие таблиц и индексов режима досье."""
         with self._conn:
@@ -685,6 +706,24 @@ class DatabaseSchemaMixin:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_dossier_links_target ON dossier_links(entity_kind, entity_id);"
             )
+
+    def _ensure_idea_image_schema(self) -> None:
+        """Ensures storage for idea images and captions exists."""
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idea_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                    rel_path TEXT NOT NULL,
+                    caption TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(idea_id, rel_path)
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
 
     def _ensure_task_project_column(self) -> None:
         """Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»РѕРЅРєСѓ project_id, РµСЃР»Рё РѕРЅР° РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚."""

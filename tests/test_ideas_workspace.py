@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import ideas as ideas_workspace
@@ -149,6 +150,78 @@ def test_ideas_workspace_triage_promotes_inbox_and_advances(monkeypatch, unique_
         assert workspace.get_selection() == remaining_inbox_id
         assert database.get_idea(remaining_inbox_id).status == "inbox"
         assert "Осталось inbox: 1" in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_materials_attach_and_save_caption(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_materials", ".sqlite3")
+    cloud_root = db_path.parent / "cloud"
+    cloud_root.mkdir(parents=True, exist_ok=True)
+    image_path = cloud_root / "ideas" / "sample.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image = QImage(24, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0xFF4A90E2)
+    assert image.save(str(image_path))
+
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea with materials", status="inbox")
+        database.set_setting("cloud_storage_path", str(cloud_root))
+        database.upsert_cloud_file(
+            rel_path="ideas/sample.png",
+            name="sample.png",
+            description="",
+            checksum="checksum-material",
+            hash_value="hash-material",
+            size=image_path.stat().st_size,
+            is_image=True,
+            valid=True,
+        )
+
+        class _FakeAttachDialog(QDialog):
+            def __init__(self, parent=None) -> None:
+                super().__init__(parent)
+
+            def selected_rel_path(self) -> str:
+                return "ideas/sample.png"
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "AttachFileSelectNav", _FakeAttachDialog)
+        monkeypatch.setattr(
+            ideas_workspace_module,
+            "exec_with_overlay",
+            lambda dialog, parent=None: QDialog.DialogCode.Accepted,
+        )
+
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        QTest.mouseClick(workspace.materials_attach_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        assert workspace.materials_thumbnail_list.count() == 1
+        assert database.fetch_idea_images(idea.id)[0].rel_path == "ideas/sample.png"
+
+        workspace.materials_caption_input.setPlainText("Главный референс")
+        QTest.mouseClick(workspace.materials_save_caption_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        saved = database.fetch_idea_images(idea.id)
+        assert len(saved) == 1
+        assert saved[0].caption == "Главный референс"
     finally:
         if workspace is not None:
             workspace.deleteLater()

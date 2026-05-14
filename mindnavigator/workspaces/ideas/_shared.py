@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Optional, Any, List, Union, Dict
 
 from PySide6.QtCore import Qt, QSize, QAbstractListModel, QModelIndex
-from PySide6.QtGui import QAction, QPainter, QColor, QFont, QCursor
+from PySide6.QtGui import QAction, QPainter, QColor, QFont, QCursor, QPixmap, QImageReader
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QWidget,
@@ -44,7 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
-from mindnavigator.storage import get_database
+from mindnavigator.storage import IdeaImageData, get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 from mindnavigator.workspaces.csv_transfer import (
