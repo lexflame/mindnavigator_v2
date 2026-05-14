@@ -81,6 +81,31 @@ class IdeasListModel(QAbstractListModel):
                 return self.index(row)
         return QModelIndex()
 
+    def first_idea_index(self, status: Optional[str] = None) -> QModelIndex:
+        normalized_status = (status or "").strip().lower()
+        for row, item in enumerate(self._rows):
+            if not isinstance(item, IdeaItem):
+                continue
+            if normalized_status and (item.status or "").strip().lower() != normalized_status:
+                continue
+            return self.index(row)
+        return QModelIndex()
+
+    def next_idea_index(self, idea_id: int, status: Optional[str] = None) -> QModelIndex:
+        normalized_status = (status or "").strip().lower()
+        seen_current = False
+        for row, item in enumerate(self._rows):
+            if not isinstance(item, IdeaItem):
+                continue
+            if not seen_current:
+                if item.id == idea_id:
+                    seen_current = True
+                continue
+            if normalized_status and (item.status or "").strip().lower() != normalized_status:
+                continue
+            return self.index(row)
+        return QModelIndex()
+
     def statuses(self) -> List[str]:
         return sorted(
             {(item.status or "").strip().lower() for item in self._ideas if (item.status or "").strip()},

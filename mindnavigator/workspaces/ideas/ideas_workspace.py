@@ -17,8 +17,16 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_idea_id: Optional[int] = None
         self._current_project_id: Optional[int] = None
         self._dirty = False
+        self._triage_mode = False
         self._theme_mode = "dark"
         super().__init__(parent)
+        triage_action = self.actions.get("triage")
+        if triage_action is not None:
+            try:
+                triage_action.triggered.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            triage_action.triggered.connect(self._start_inbox_triage)
         self.setObjectName("IdeasWorkspace")
         self.search_input.setPlaceholderText("Поиск…")
         self.refresh()
@@ -160,13 +168,43 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_tabs.addTab(materials_tab, "Материалы")
 
         transform_tab = QWidget()
+        self.transform_tab = transform_tab
         transform_layout = QVBoxLayout(transform_tab)
         transform_layout.setContentsMargins(12, 12, 12, 12)
         transform_layout.setSpacing(8)
+        self.triage_hint = QLabel(
+            "Разбор инбокса: переведите идею в work или ripe, создайте задачу или отправьте в архив."
+        )
+        self.triage_hint.setObjectName("IdeasTriageHint")
+        self.triage_hint.setWordWrap(True)
+        transform_layout.addWidget(self.triage_hint)
+        triage_row = QHBoxLayout()
+        triage_row.setSpacing(6)
+        self.triage_skip_btn = QToolButton()
+        self.triage_skip_btn.setText("Пропустить")
+        self.triage_skip_btn.setObjectName("IdeasTriageSkip")
+        self.triage_skip_btn.clicked.connect(self._skip_inbox_idea)
+        self.triage_work_btn = QToolButton()
+        self.triage_work_btn.setText("В work")
+        self.triage_work_btn.setObjectName("IdeasTriageWork")
+        self.triage_work_btn.clicked.connect(lambda: self._triage_current_status("work"))
+        self.triage_ripe_btn = QToolButton()
+        self.triage_ripe_btn.setText("В ripe")
+        self.triage_ripe_btn.setObjectName("IdeasTriageRipe")
+        self.triage_ripe_btn.clicked.connect(lambda: self._triage_current_status("ripe"))
+        self.triage_archive_btn = QToolButton()
+        self.triage_archive_btn.setText("В архив")
+        self.triage_archive_btn.setObjectName("IdeasTriageArchive")
+        self.triage_archive_btn.clicked.connect(self._triage_archive_current)
+        triage_row.addWidget(self.triage_skip_btn)
+        triage_row.addWidget(self.triage_work_btn)
+        triage_row.addWidget(self.triage_ripe_btn)
+        triage_row.addWidget(self.triage_archive_btn)
+        transform_layout.addLayout(triage_row)
         self.transform_task_btn = QToolButton()
         self.transform_task_btn.setText("✅ Создать задачу")
         self.transform_task_btn.setObjectName("IdeasTransformTask")
-        self.transform_task_btn.clicked.connect(lambda: self._transform_idea("task"))
+        self.transform_task_btn.clicked.connect(lambda: self._triage_transform("task"))
         self.transform_note_btn = QToolButton()
         self.transform_note_btn.setText("📝 Создать заметку")
         self.transform_note_btn.setObjectName("IdeasTransformNote")
@@ -708,6 +746,114 @@ class IdeasWorkspace(BaseWorkspace):
         )
         self._load_relations(idea.id)
         self.refresh()
+
+    def _start_inbox_triage(self, *_args: object) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        self._triage_mode = True
+        self.search_input.setText("")
+        self.type_filter.setCurrentIndex(0)
+        self.archived_only.setChecked(False)
+        inbox_index = self.status_filter.findData("inbox")
+        if inbox_index >= 0:
+            self.status_filter.setCurrentIndex(inbox_index)
+        if not self._select_first_inbox_idea():
+            self._triage_mode = False
+            self._set_status("Инбокс пуст: нет идей со статусом inbox.")
+            return
+        self.inspector_tabs.setCurrentWidget(self.transform_tab)
+        self._set_status(f"Разбор инбокса: {self._inbox_count()} идей в очереди.")
+
+    def _select_first_inbox_idea(self) -> bool:
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return False
+        index = model.first_idea_index("inbox")
+        if not index.isValid():
+            return False
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+        return True
+
+    def _select_next_inbox_idea(self) -> bool:
+        if self._current_idea_id is None:
+            return self._select_first_inbox_idea()
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return False
+        index = model.next_idea_index(self._current_idea_id, "inbox")
+        if not index.isValid():
+            return False
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+        return True
+
+    def _inbox_count(self) -> int:
+        return len(self._db.fetch_ideas(status="inbox"))
+
+    def _advance_inbox_triage(self, status_message: str) -> None:
+        self.refresh()
+        if self._triage_mode and self._select_first_inbox_idea():
+            self.inspector_tabs.setCurrentWidget(self.transform_tab)
+            self._set_status(f"{status_message} Осталось inbox: {self._inbox_count()}.")
+            return
+        self._triage_mode = False
+        self._current_idea_id = None
+        self._sync_selection()
+        self._set_status(f"{status_message} Инбокс разобран.")
+
+    def _triage_current_status(self, status: str) -> None:
+        if self._current_idea_id is None:
+            return
+        if self._dirty:
+            self._set_combo_value(self.status_input, status)
+            if not self._save_current():
+                return
+        else:
+            idea = self._db.get_idea(self._current_idea_id)
+            if idea is None:
+                return
+            self._db.update_idea(
+                idea_id=idea.id,
+                title=idea.title,
+                summary=idea.summary,
+                body_md=idea.body_md,
+                idea_type=idea.type,
+                status=status,
+                value_score=idea.value_score,
+                effort_score=idea.effort_score,
+                project_id=idea.project_id,
+                source=idea.source,
+            )
+        self._advance_inbox_triage(f"Идея переведена в {normalize_idea_category(status)}.")
+
+    def _triage_archive_current(self) -> None:
+        if self._current_idea_id is None:
+            return
+        if self._dirty and not self._save_current():
+            return
+        self._db.set_idea_archived(self._current_idea_id, True)
+        self._advance_inbox_triage("Идея отправлена в архив.")
+
+    def _triage_transform(self, kind: str) -> None:
+        if self._current_idea_id is None:
+            return
+        if self._dirty and not self._save_current():
+            return
+        self._transform_idea(kind)
+        if kind == "task" and self._triage_mode:
+            self._advance_inbox_triage("Из идеи создана задача.")
+
+    def _skip_inbox_idea(self) -> None:
+        if self._current_idea_id is None:
+            if not self._select_first_inbox_idea():
+                self._set_status("Инбокс пуст.")
+            return
+        if self._select_next_inbox_idea():
+            self.inspector_tabs.setCurrentWidget(self.transform_tab)
+            self._set_status("Идея пропущена.")
+            return
+        self._set_status("Это последняя идея в inbox.")
 
     def _export_ideas_csv(self, *_args: object) -> None:
         path, _ = QFileDialog.getSaveFileName(

@@ -87,3 +87,70 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_triage_focuses_first_inbox_idea(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_start", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_idea(title="Old inbox", status="inbox")
+        latest_inbox = database.create_idea(title="Latest inbox", status="inbox")
+        database.create_idea(title="Already work", status="work")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+
+        model = workspace.list_view.model()
+        first_inbox_index = model.first_idea_index("inbox")
+        assert first_inbox_index.isValid()
+        assert workspace.status_filter.currentData() == "inbox"
+        assert workspace.get_selection() == first_inbox_index.data(ideas_workspace_module.IdeaRoles.IdeaId)
+        assert workspace.title_input.text() == first_inbox_index.data(ideas_workspace_module.IdeaRoles.Title)
+        assert workspace.inspector_tabs.currentWidget() is workspace.transform_tab
+        assert "Разбор инбокса" in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_triage_promotes_inbox_and_advances(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_advance", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        older_inbox = database.create_idea(title="Older inbox", status="inbox")
+        latest_inbox = database.create_idea(title="Latest inbox", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {older_inbox.id, latest_inbox.id}
+
+        QTest.mouseClick(workspace.triage_work_btn, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        updated = database.get_idea(current_before)
+        assert updated is not None
+        assert updated.status == "work"
+        remaining_inbox_id = older_inbox.id if current_before == latest_inbox.id else latest_inbox.id
+        assert workspace.get_selection() == remaining_inbox_id
+        assert database.get_idea(remaining_inbox_id).status == "inbox"
+        assert "Осталось inbox: 1" in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
