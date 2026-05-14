@@ -1220,6 +1220,11 @@ def test_tasks_model_keeps_done_plan_items_visible_and_numbered_until_parent_don
         priority_after = next(task.priority for task in database.fetch_tasks() if task.id == child.id)
         assert priority_after == priority_before
         assert tasks_workspace.TasksItemDelegate._is_overdue(date(2026, 3, 5), False, is_plan_item=True) is False
+        assert tasks_workspace.TasksItemDelegate._is_overdue(
+            date(2026, 3, 5),
+            False,
+            priority=DEFERRED_PRIORITY,
+        ) is False
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -1736,6 +1741,19 @@ def test_plan_item_stage_only_controls_center_stage_text() -> None:
     assert controls["priority_up"].isNull()
     assert controls["priority_down"].isNull()
     assert abs(controls["value"].center().x() - chip_rect.center().x()) <= 12
+
+
+def test_tasks_delegate_does_not_mark_deferred_tasks_overdue() -> None:
+    assert tasks_workspace.TasksItemDelegate._is_overdue(
+        date(2026, 3, 5),
+        False,
+        priority=DEFERRED_PRIORITY,
+    ) is False
+    assert tasks_workspace.TasksItemDelegate._is_overdue(
+        date(2026, 3, 5),
+        False,
+        priority="Medium",
+    ) is True
 
 
 def test_tasks_delegate_formats_plan_execution_text_for_current_item() -> None:
