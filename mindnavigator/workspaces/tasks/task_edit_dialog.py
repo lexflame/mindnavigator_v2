@@ -661,7 +661,7 @@ class TaskEditDialog(QDialog):
             kind_label = QLabel(self._attachment_kind_label(attachment.kind))
             kind_label.setObjectName("TaskAttachmentKind")
             link_text = self._attachment_display_text(attachment)
-            link_label = QLabel(f"<a href='{attachment.id}'>{link_text}</a>")
+            link_label = QLabel(f"<a style='color:#6ecbe0;' href='{attachment.id}'>{link_text}</a>")
             link_label.setObjectName("TaskAttachmentLink")
             link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             link_label.setOpenExternalLinks(False)
