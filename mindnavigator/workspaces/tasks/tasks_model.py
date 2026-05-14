@@ -18,6 +18,7 @@ class TasksModel(QAbstractListModel):
         self._task_is_plan_item: dict[int, bool] = {}
         self._task_plan_branch: dict[int, bool] = {}
         self._task_plan_numbers: dict[int, str] = {}
+        self._current_plan_item_ids: set[int] = set()
         self._filter_mode = "Все"      # Все | План | Сегодня | Выполнено | Отложенные
         self._search = ""
         self._focus_day: Optional[date] = None
@@ -42,25 +43,28 @@ class TasksModel(QAbstractListModel):
     @staticmethod
     def _row_from_task_data(task: TaskData) -> TaskRow:
         return TaskRow(
-            task.id,
-            task.day,
-            task.time_text,
-            task.title,
-            task.description,
-            task.priority,
-            task.done,
-            task.board_column,
-            task.project_id,
-            task.project_title,
-            task.project_area,
-            task.parent_id,
-            task.recurrence_kind,
-            task.recurrence_interval,
-            task.completion_delay_minutes,
-            task.marker_color,
-            task.marker_theme,
-            task.is_plan_task,
-            task.plan_order,
+            id=task.id,
+            day=task.day,
+            time_text=task.time_text,
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            done=task.done,
+            board_column=task.board_column,
+            project_id=task.project_id,
+            project_title=task.project_title,
+            project_area=task.project_area,
+            parent_id=task.parent_id,
+            recurrence_kind=task.recurrence_kind,
+            recurrence_interval=task.recurrence_interval,
+            completion_delay_minutes=task.completion_delay_minutes,
+            started_at=task.started_at,
+            finished_at=task.finished_at,
+            actual_minutes=task.actual_minutes,
+            marker_color=task.marker_color,
+            marker_theme=task.marker_theme,
+            is_plan_task=task.is_plan_task,
+            plan_order=task.plan_order,
         )
 
     def _recompute_plan_meta(self) -> None:
@@ -73,6 +77,18 @@ class TasksModel(QAbstractListModel):
         self._task_is_plan_item = {}
         self._task_plan_branch = {}
         self._task_plan_numbers = {}
+        self._current_plan_item_ids = set()
+
+        for row in self._all_rows:
+            if not isinstance(row, TaskRow) or not row.is_plan_task:
+                continue
+            open_children = [
+                child for child in by_parent.get(row.id, [])
+                if not child.done
+            ]
+            open_children.sort(key=lambda item: (item.plan_order, item.id))
+            if open_children:
+                self._current_plan_item_ids.add(open_children[0].id)
 
         def visit(task: TaskRow, parent_is_plan_task: bool, number_path: list[int]) -> None:
             is_plan_item = parent_is_plan_task
@@ -189,10 +205,18 @@ class TasksModel(QAbstractListModel):
             return r.is_plan_task
         if role == TaskRoles.IsPlanItem:
             return self._task_is_plan_item.get(r.id, False)
+        if role == TaskRoles.IsCurrentPlanItem:
+            return r.id in self._current_plan_item_ids
         if role == TaskRoles.PlanNumber:
             return self._task_plan_numbers.get(r.id, "")
         if role == TaskRoles.PlanOrder:
             return r.plan_order
+        if role == TaskRoles.StartedAt:
+            return r.started_at
+        if role == TaskRoles.FinishedAt:
+            return r.finished_at
+        if role == TaskRoles.ActualMinutes:
+            return r.actual_minutes
         if role == TaskRoles.MarkerColor:
             return r.marker_color
         if role == TaskRoles.MarkerTheme:

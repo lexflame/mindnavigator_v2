@@ -23,6 +23,9 @@ class TaskData:
     completion_delay_minutes: int = 0
     gantt_estimate_minutes: int = 0
     gantt_forecasted: bool = False
+    started_at: str = ""
+    finished_at: str = ""
+    actual_minutes: int = 0
     marker_color: str = ""
     marker_theme: str = ""
     is_plan_task: bool = False

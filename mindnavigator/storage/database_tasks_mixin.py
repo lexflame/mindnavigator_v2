@@ -11,6 +11,26 @@ _TASK_REFERENCE_RE = re.compile(r"(?<![A-Za-z0-9_])(?:MN-|#)(?P<id>\d+)(?![A-Za-
 
 
 class DatabaseTasksMixin:
+    @staticmethod
+    def _default_task_estimate_minutes(title: str, description: str, priority: str) -> int:
+        text = f"{title or ''} {description or ''}".lower()
+        words = len((description or "").split())
+        base = 50
+        if priority == "High":
+            base = 90
+        elif priority == "Low":
+            base = 35
+        elif priority == DEFERRED_PRIORITY:
+            base = 25
+        complexity_markers = [
+            "исследование", "архитектура", "интеграция", "рефакторинг", "оптимизация",
+            "debug", "тест", "документация", "design", "api", "sql",
+            "миграция", "парсинг", "настройка", "синхрон",
+        ]
+        marker_hits = sum(1 for marker in complexity_markers if marker in text)
+        raw = base + words * 2 + marker_hits * 15
+        return max(15, min(8 * 60, int(round(raw / 5.0) * 5)))
+
     def fetch_tasks(self) -> List[TaskData]:
         """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РІСЃРµС… Р·Р°РґР°С‡."""
         rows = self._conn.execute(
@@ -27,6 +47,9 @@ class DatabaseTasksMixin:
                 t.completion_delay_minutes,
                 t.gantt_estimate_minutes,
                 t.gantt_forecasted,
+                t.started_at,
+                t.finished_at,
+                t.actual_minutes,
                 t.project_id,
                 t.is_plan_task,
                 t.plan_order,
@@ -60,6 +83,9 @@ class DatabaseTasksMixin:
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
                     gantt_estimate_minutes=max(0, int(row["gantt_estimate_minutes"] or 0)),
                     gantt_forecasted=bool(row["gantt_forecasted"]),
+                    started_at=(row["started_at"] or "").strip(),
+                    finished_at=(row["finished_at"] or "").strip(),
+                    actual_minutes=max(0, int(row["actual_minutes"] or 0)),
                     project_id=row["project_id"],
                     project_title=row["project_title"] or "",
                     project_area=row["project_area"] or "",
@@ -73,6 +99,10 @@ class DatabaseTasksMixin:
                 )
             )
         return tasks
+
+    def _fetch_task_by_id(self, task_id: int) -> Optional[TaskData]:
+        normalized_task_id = int(task_id)
+        return next((task for task in self.fetch_tasks() if task.id == normalized_task_id), None)
 
     def create_task(
         self,
@@ -172,6 +202,13 @@ class DatabaseTasksMixin:
         for kind, ref_id in project_links:
             self.add_task_attachment(cur.lastrowid, kind, ref_id)
         self._sync_task_text_attachments(cur.lastrowid, title, description)
+        plan_root_id = self._plan_root_id_for_parent(parent_id)
+        if plan_root_id is not None:
+            self._ensure_task_estimate(cur.lastrowid, title, description, priority)
+            self._ensure_active_plan_item_state(plan_root_id)
+        created = self._fetch_task_by_id(cur.lastrowid)
+        if created is not None:
+            return created
         return TaskData(
             id=cur.lastrowid,
             day=day,
@@ -190,6 +227,9 @@ class DatabaseTasksMixin:
             completion_delay_minutes=0,
             gantt_estimate_minutes=0,
             gantt_forecasted=False,
+            started_at="",
+            finished_at="",
+            actual_minutes=0,
             is_plan_task=is_plan_task,
             plan_order=plan_order,
             marker_color=marker_color,
@@ -222,6 +262,7 @@ class DatabaseTasksMixin:
         prev_priority = prev_row["priority"] if prev_row else priority
         prev_board_column = prev_row["board_column"] if prev_row else BOARD_COLUMN_QUEUE
         prev_parent_id = prev_row["parent_id"] if prev_row else parent_id
+        prev_plan_root_id = self._plan_root_id_for_parent(prev_parent_id)
         prev_is_plan_task = bool(prev_row["is_plan_task"]) if prev_row else False
         prev_plan_order = max(0, int(prev_row["plan_order"] or 0)) if prev_row else 0
         title = validate_title(title)
@@ -340,6 +381,16 @@ class DatabaseTasksMixin:
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         self._sync_task_text_attachments(task_id, title, description)
+        new_plan_root_id = self._plan_root_id_for_parent(parent_id)
+        if new_plan_root_id is not None:
+            self._ensure_task_estimate(task_id, title, description, priority)
+        if prev_plan_root_id is not None:
+            self._ensure_active_plan_item_state(prev_plan_root_id)
+        if new_plan_root_id is not None and new_plan_root_id != prev_plan_root_id:
+            self._ensure_active_plan_item_state(new_plan_root_id)
+        updated = self._fetch_task_by_id(task_id)
+        if updated is not None:
+            return updated
         return TaskData(
             id=task_id,
             day=day,
@@ -358,6 +409,9 @@ class DatabaseTasksMixin:
             completion_delay_minutes=0,
             gantt_estimate_minutes=0,
             gantt_forecasted=False,
+            started_at="",
+            finished_at="",
+            actual_minutes=0,
             is_plan_task=is_plan_task,
             plan_order=plan_order,
             marker_color=marker_color,
@@ -370,7 +424,8 @@ class DatabaseTasksMixin:
             """
             SELECT
                 id, title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme
+                recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
+                started_at, finished_at, actual_minutes, gantt_estimate_minutes, gantt_forecasted
             FROM tasks
             WHERE id = ?;
             """,
@@ -379,9 +434,11 @@ class DatabaseTasksMixin:
         if row is None:
             return
         prev_done = bool(row["done"])
+        plan_root_id = self._plan_root_id_for_task(task_id)
         recurrence_kind = (row["recurrence_kind"] or "").strip().lower()
         recurrence_interval = max(1, int(row["recurrence_interval"] or 1))
-        now_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        completed_utc = datetime.now(timezone.utc)
+        now_utc = completed_utc.isoformat(timespec="seconds")
         completed_local = datetime.now()
         planned_day = date.fromisoformat(row["day"])
         planned_time_text = (row["time_text"] or "").strip()
@@ -401,17 +458,37 @@ class DatabaseTasksMixin:
             if delta_minutes > 0:
                 completion_delay_minutes = delta_minutes
         is_plan_item = self._task_is_plan_item(task_id)
+        started_at = (row["started_at"] or "").strip()
+        estimate_minutes = max(
+            1,
+            int(row["gantt_estimate_minutes"] or 0)
+            or self._default_task_estimate_minutes(row["title"], row["description"] or "", row["priority"]),
+        )
+        actual_minutes = max(0, int(row["actual_minutes"] or 0))
+        finished_at = ""
+        if done and is_plan_item:
+            if not started_at:
+                started_at = now_utc
+            try:
+                started_dt = datetime.fromisoformat(started_at)
+                actual_minutes = max(1, int(round((completed_utc - started_dt).total_seconds() / 60.0)))
+            except ValueError:
+                actual_minutes = estimate_minutes
+            finished_at = now_utc
         with self._conn:
             if done:
                 if is_plan_item:
                     self._conn.execute(
                         """
                         UPDATE tasks
-                        SET done = ?, completion_delay_minutes = 0, updated_at = ?
+                        SET done = ?, completion_delay_minutes = 0, started_at = ?, finished_at = ?, actual_minutes = ?, updated_at = ?
                         WHERE id = ?;
                         """,
                         (
                             int(done),
+                            started_at,
+                            finished_at,
+                            actual_minutes,
                             now_utc,
                             task_id,
                         ),
@@ -436,7 +513,7 @@ class DatabaseTasksMixin:
                 self._conn.execute(
                     """
                     UPDATE tasks
-                    SET done = ?, completion_delay_minutes = 0, updated_at = ?
+                    SET done = ?, completion_delay_minutes = 0, finished_at = '', actual_minutes = 0, updated_at = ?
                     WHERE id = ?;
                     """,
                     (int(done), now_utc, task_id),
@@ -472,6 +549,151 @@ class DatabaseTasksMixin:
                     ),
                 )
                 self._sync_task_text_attachments(cur.lastrowid, row["title"], row["description"] or "")
+        if done and is_plan_item and plan_root_id is not None:
+            self._reforecast_plan_branch(plan_root_id, task_id, actual_minutes, estimate_minutes)
+            self._ensure_active_plan_item_state(plan_root_id)
+        elif not done and plan_root_id is not None:
+            self._ensure_active_plan_item_state(plan_root_id)
+
+    def _plan_root_id_for_parent(self, parent_id: Optional[int]) -> Optional[int]:
+        if parent_id is None:
+            return None
+        row = self._conn.execute(
+            "SELECT id FROM tasks WHERE id = ? AND is_plan_task = 1 LIMIT 1;",
+            (int(parent_id),),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    def _plan_root_id_for_task(self, task_id: int) -> Optional[int]:
+        row = self._conn.execute(
+            """
+            SELECT parent.id AS root_id
+            FROM tasks child
+            JOIN tasks parent ON parent.id = child.parent_id
+            WHERE child.id = ?
+              AND parent.is_plan_task = 1
+            LIMIT 1;
+            """,
+            (int(task_id),),
+        ).fetchone()
+        return int(row["root_id"]) if row is not None else None
+
+    def _first_open_plan_item_id(self, root_id: int) -> Optional[int]:
+        row = self._conn.execute(
+            """
+            SELECT id
+            FROM tasks
+            WHERE parent_id = ?
+              AND done = 0
+            ORDER BY plan_order, id
+            LIMIT 1;
+            """,
+            (int(root_id),),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    def _ensure_task_estimate(self, task_id: int, title: str, description: str, priority: str) -> int:
+        row = self._conn.execute(
+            "SELECT gantt_estimate_minutes FROM tasks WHERE id = ? LIMIT 1;",
+            (int(task_id),),
+        ).fetchone()
+        current_estimate = max(0, int(row["gantt_estimate_minutes"] or 0)) if row is not None else 0
+        if current_estimate > 0:
+            return current_estimate
+        estimate = self._default_task_estimate_minutes(title, description, priority)
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET gantt_estimate_minutes = ?, gantt_forecasted = 1, updated_at = ?
+                WHERE id = ?;
+                """,
+                (estimate, now, int(task_id)),
+            )
+        return estimate
+
+    def _ensure_active_plan_item_state(self, root_id: int) -> Optional[int]:
+        active_task_id = self._first_open_plan_item_id(root_id)
+        if active_task_id is None:
+            return None
+        row = self._conn.execute(
+            """
+            SELECT id, title, description, priority, started_at
+            FROM tasks
+            WHERE id = ?;
+            """,
+            (active_task_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        self._ensure_task_estimate(
+            active_task_id,
+            row["title"],
+            row["description"] or "",
+            row["priority"],
+        )
+        if not (row["started_at"] or "").strip():
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            with self._conn:
+                self._conn.execute(
+                    """
+                    UPDATE tasks
+                    SET started_at = ?, updated_at = ?
+                    WHERE id = ?
+                      AND COALESCE(started_at, '') = ''
+                      AND done = 0;
+                    """,
+                    (now, now, active_task_id),
+                )
+        return active_task_id
+
+    def _reforecast_plan_branch(
+        self,
+        root_id: int,
+        completed_task_id: int,
+        actual_minutes: int,
+        estimate_minutes: int,
+    ) -> None:
+        if actual_minutes <= 0 or estimate_minutes <= 0:
+            return
+        rows = self._conn.execute(
+            """
+            SELECT id, title, description, priority, done, gantt_estimate_minutes, gantt_forecasted
+            FROM tasks
+            WHERE parent_id = ?
+            ORDER BY plan_order, id;
+            """,
+            (int(root_id),),
+        ).fetchall()
+        ratio = max(0.1, min(8.0, float(actual_minutes) / float(estimate_minutes)))
+        apply_changes = False
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        seen_completed = False
+        for row in rows:
+            if int(row["id"]) == int(completed_task_id):
+                seen_completed = True
+                continue
+            if not seen_completed or bool(row["done"]) or not bool(row["gantt_forecasted"]):
+                continue
+            base_estimate = max(
+                5,
+                int(row["gantt_estimate_minutes"] or 0)
+                or self._default_task_estimate_minutes(row["title"], row["description"] or "", row["priority"]),
+            )
+            recalculated = max(5, min(8 * 60, int(round((base_estimate * ratio) / 5.0) * 5)))
+            if recalculated == int(row["gantt_estimate_minutes"] or 0):
+                continue
+            if not apply_changes:
+                apply_changes = True
+            self._conn.execute(
+                """
+                UPDATE tasks
+                SET gantt_estimate_minutes = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (recalculated, now, int(row["id"])),
+            )
 
     def _next_task_plan_order(
         self,
@@ -511,6 +733,9 @@ class DatabaseTasksMixin:
                     """,
                     (plan_order, now, task_id, parent_id),
                 )
+        plan_root_id = self._plan_root_id_for_parent(parent_id)
+        if plan_root_id is not None:
+            self._ensure_active_plan_item_state(plan_root_id)
 
     def _task_is_plan_item(self, task_id: int) -> bool:
         row = self._conn.execute(
