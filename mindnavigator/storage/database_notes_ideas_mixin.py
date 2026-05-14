@@ -442,6 +442,110 @@ class DatabaseNotesIdeasMixin:
             for row in rows
         ]
 
+    def fetch_idea_images(self, idea_id: int) -> List[IdeaImageData]:
+        """Returns idea images with idea-specific captions."""
+        rows = self._conn.execute(
+            """
+            SELECT id, idea_id, rel_path, caption, created_at, updated_at
+            FROM idea_images
+            WHERE idea_id = ?
+            ORDER BY created_at ASC, id ASC;
+            """,
+            (idea_id,),
+        ).fetchall()
+        return [
+            IdeaImageData(
+                row["id"],
+                row["idea_id"],
+                row["rel_path"],
+                row["caption"] or "",
+                row["created_at"],
+                row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def add_idea_image(self, idea_id: int, rel_path: str, caption: str = "") -> IdeaImageData:
+        """Attaches an image from cloud files to an idea."""
+        rel_path = (rel_path or "").strip()
+        if not rel_path:
+            raise ValueError("Путь к изображению не должен быть пустым.")
+        caption = (caption or "").strip()
+        file_row = self._conn.execute(
+            """
+            SELECT is_image
+            FROM cloud_files
+            WHERE rel_path = ?;
+            """,
+            (rel_path,),
+        ).fetchone()
+        if file_row is None:
+            raise ValueError("Файл не найден в базе облака.")
+        if not bool(file_row["is_image"]):
+            raise ValueError("Можно прикреплять только изображения.")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO idea_images (idea_id, rel_path, caption, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (idea_id, rel_path, caption, now, now),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, idea_id, rel_path, caption, created_at, updated_at
+            FROM idea_images
+            WHERE idea_id = ? AND rel_path = ?;
+            """,
+            (idea_id, rel_path),
+        ).fetchone()
+        return IdeaImageData(
+            row["id"],
+            row["idea_id"],
+            row["rel_path"],
+            row["caption"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def update_idea_image(self, image_id: int, caption: str) -> IdeaImageData:
+        """Updates an idea image caption."""
+        caption = (caption or "").strip()
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE idea_images
+                SET caption = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (caption, now, image_id),
+            )
+        row = self._conn.execute(
+            """
+            SELECT id, idea_id, rel_path, caption, created_at, updated_at
+            FROM idea_images
+            WHERE id = ?;
+            """,
+            (image_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Изображение идеи не найдено.")
+        return IdeaImageData(
+            row["id"],
+            row["idea_id"],
+            row["rel_path"],
+            row["caption"] or "",
+            row["created_at"],
+            row["updated_at"],
+        )
+
+    def delete_idea_image(self, image_id: int) -> None:
+        """Deletes an image attachment from an idea."""
+        with self._conn:
+            self._conn.execute("DELETE FROM idea_images WHERE id = ?;", (image_id,))
+
     def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
         """РЎРѕР·РґР°РµС‚ СЃРІСЏР·СЊ РёРґРµРё СЃ СЃСѓС‰РЅРѕСЃС‚СЊСЋ."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")

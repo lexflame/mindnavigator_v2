@@ -5,7 +5,10 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
+from .idea_image_preview_dialog import IdeaImagePreviewDialog
+from .image_utils import load_scaled_pixmap
 from mindnavigator.ui.styles import get_theme_palette
+from mindnavigator.ui.dialogs import AttachFileSelectNav
 
 class IdeasWorkspace(BaseWorkspace):
     workspace_id = "ideas"
@@ -19,6 +22,8 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = False
         self._triage_mode = False
         self._theme_mode = "dark"
+        self._idea_images: List[IdeaImageData] = []
+        self._current_material_index = 0
         super().__init__(parent)
         triage_action = self.actions.get("triage")
         if triage_action is not None:
@@ -164,7 +169,63 @@ class IdeasWorkspace(BaseWorkspace):
         materials_tab = QWidget()
         materials_layout = QVBoxLayout(materials_tab)
         materials_layout.setContentsMargins(12, 12, 12, 12)
-        materials_layout.addWidget(QLabel("Добавление материалов будет доступно позже."))
+        materials_layout.setSpacing(8)
+        materials_actions = QHBoxLayout()
+        self.materials_attach_button = QToolButton()
+        self.materials_attach_button.setText("Прикрепить изображение")
+        self.materials_attach_button.setObjectName("IdeasMaterialsAttach")
+        self.materials_attach_button.clicked.connect(self._attach_material_image)
+        self.materials_remove_button = QToolButton()
+        self.materials_remove_button.setText("Удалить")
+        self.materials_remove_button.setObjectName("IdeasMaterialsRemove")
+        self.materials_remove_button.clicked.connect(self._remove_material_image)
+        self.materials_preview_button = QToolButton()
+        self.materials_preview_button.setText("Просмотр")
+        self.materials_preview_button.setObjectName("IdeasMaterialsPreview")
+        self.materials_preview_button.clicked.connect(self._preview_material_image)
+        materials_actions.addWidget(self.materials_attach_button)
+        materials_actions.addWidget(self.materials_remove_button)
+        materials_actions.addWidget(self.materials_preview_button)
+        materials_actions.addStretch(1)
+
+        self.materials_hint = QLabel("Прикрепите изображения из режима Файлы.")
+        self.materials_hint.setObjectName("IdeasMaterialsHint")
+        self.materials_hint.setWordWrap(True)
+
+        self.materials_thumbnail_list = QListWidget()
+        self.materials_thumbnail_list.setObjectName("IdeasMaterialsThumbnails")
+        self.materials_thumbnail_list.setViewMode(QListView.ViewMode.IconMode)
+        self.materials_thumbnail_list.setFlow(QListView.Flow.LeftToRight)
+        self.materials_thumbnail_list.setResizeMode(QListView.ResizeMode.Adjust)
+        self.materials_thumbnail_list.setMovement(QListView.Movement.Static)
+        self.materials_thumbnail_list.setIconSize(QSize(64, 64))
+        self.materials_thumbnail_list.setGridSize(QSize(92, 96))
+        self.materials_thumbnail_list.setFixedHeight(112)
+        self.materials_thumbnail_list.setSpacing(8)
+        self.materials_thumbnail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.materials_thumbnail_list.currentRowChanged.connect(self._on_material_thumbnail_selected)
+        self.materials_thumbnail_list.itemDoubleClicked.connect(lambda _item: self._preview_material_image())
+
+        self.materials_image_label = QLabel("Нет прикреплённых изображений")
+        self.materials_image_label.setObjectName("IdeasMaterialsPreviewLabel")
+        self.materials_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.materials_image_label.setMinimumHeight(220)
+
+        self.materials_caption_input = QPlainTextEdit()
+        self.materials_caption_input.setObjectName("IdeasMaterialsCaption")
+        self.materials_caption_input.setPlaceholderText("Подпись к изображению...")
+
+        self.materials_save_caption_button = QToolButton()
+        self.materials_save_caption_button.setText("Сохранить подпись")
+        self.materials_save_caption_button.setObjectName("IdeasMaterialsCaptionSave")
+        self.materials_save_caption_button.clicked.connect(self._save_material_caption)
+
+        materials_layout.addLayout(materials_actions)
+        materials_layout.addWidget(self.materials_hint)
+        materials_layout.addWidget(self.materials_thumbnail_list)
+        materials_layout.addWidget(self.materials_image_label)
+        materials_layout.addWidget(self.materials_caption_input)
+        materials_layout.addWidget(self.materials_save_caption_button, 0, Qt.AlignmentFlag.AlignRight)
         self.inspector_tabs.addTab(materials_tab, "Материалы")
 
         transform_tab = QWidget()
@@ -242,6 +303,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_status_btn.clicked.connect(self._open_quick_status_menu)
         self.quick_title_input.returnPressed.connect(self._create_idea_from_quick_form)
         self._set_quick_status(None)
+        self._update_material_view()
 
         self.set_theme_mode("dark")
 
@@ -505,6 +567,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.effort_input.setValue(idea.effort_score)
         self._dirty = False
         self._load_relations(idea_id)
+        self._load_materials(idea_id)
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: str) -> None:
@@ -692,6 +755,145 @@ class IdeasWorkspace(BaseWorkspace):
         for relation in relations:
             label = f"{relation.entity_type} #{relation.entity_id}"
             self.relations_list.addItem(QListWidgetItem(label))
+
+    def _load_materials(self, idea_id: int) -> None:
+        self._idea_images = self._db.fetch_idea_images(idea_id)
+        self._current_material_index = 0
+        self._refresh_material_thumbnails()
+        self._update_material_view()
+
+    def _refresh_material_thumbnails(self) -> None:
+        self.materials_thumbnail_list.blockSignals(True)
+        self.materials_thumbnail_list.clear()
+        cloud_root = self._cloud_root_path()
+        for idx, image in enumerate(self._idea_images):
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, idx)
+            item.setToolTip(image.rel_path)
+            if cloud_root is not None:
+                pixmap = load_scaled_pixmap(cloud_root / image.rel_path, self.materials_thumbnail_list.iconSize())
+                if not pixmap.isNull():
+                    item.setIcon(pixmap)
+            self.materials_thumbnail_list.addItem(item)
+        if self._idea_images:
+            self.materials_thumbnail_list.setCurrentRow(self._current_material_index)
+        self.materials_thumbnail_list.blockSignals(False)
+
+    def _update_material_view(self) -> None:
+        enabled = self._current_idea_id is not None
+        self.materials_attach_button.setEnabled(enabled)
+        has_images = bool(self._idea_images)
+        self.materials_remove_button.setEnabled(has_images)
+        self.materials_preview_button.setEnabled(has_images)
+        self.materials_thumbnail_list.setEnabled(has_images)
+        self.materials_caption_input.setEnabled(has_images)
+        self.materials_save_caption_button.setEnabled(has_images)
+        if not has_images:
+            self.materials_hint.setText("Прикрепите изображения из режима Файлы.")
+            self.materials_image_label.setPixmap(QPixmap())
+            self.materials_image_label.setText("Нет прикреплённых изображений")
+            self.materials_caption_input.setPlainText("")
+            return
+
+        self._current_material_index = max(0, min(self._current_material_index, len(self._idea_images) - 1))
+        image = self._idea_images[self._current_material_index]
+        self.materials_hint.setText(image.rel_path)
+        self.materials_caption_input.setPlainText(image.caption)
+        self.materials_thumbnail_list.blockSignals(True)
+        self.materials_thumbnail_list.setCurrentRow(self._current_material_index)
+        self.materials_thumbnail_list.blockSignals(False)
+
+        cloud_root = self._cloud_root_path()
+        target_size = self.materials_image_label.size()
+        if not target_size.isValid() or target_size.width() < 10:
+            target_size = QSize(720, 420)
+        pixmap = QPixmap()
+        if cloud_root is not None:
+            pixmap = load_scaled_pixmap(cloud_root / image.rel_path, target_size)
+        if pixmap.isNull():
+            self.materials_image_label.setPixmap(QPixmap())
+            self.materials_image_label.setText("Изображение недоступно")
+            return
+        self.materials_image_label.setPixmap(pixmap)
+        self.materials_image_label.setText("")
+
+    def _cloud_root_path(self) -> Optional[Path]:
+        cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()
+        return Path(cloud_root) if cloud_root else None
+
+    def _attach_material_image(self) -> None:
+        if self._current_idea_id is None:
+            return
+        dialog = AttachFileSelectNav(self)
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        rel_path = dialog.selected_rel_path()
+        if not rel_path:
+            return
+        try:
+            self._db.add_idea_image(self._current_idea_id, rel_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Материалы", str(exc))
+            return
+        self._load_materials(self._current_idea_id)
+        for idx, image in enumerate(self._idea_images):
+            if image.rel_path == rel_path:
+                self._current_material_index = idx
+                break
+        self._update_material_view()
+
+    def _remove_material_image(self) -> None:
+        if not self._idea_images:
+            return
+        image = self._idea_images[self._current_material_index]
+        confirm = QMessageBox.question(
+            self,
+            "Материалы",
+            "Удалить прикреплённое изображение?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._db.delete_idea_image(image.id)
+        self._idea_images.pop(self._current_material_index)
+        if self._current_material_index >= len(self._idea_images):
+            self._current_material_index = max(0, len(self._idea_images) - 1)
+        self._refresh_material_thumbnails()
+        self._update_material_view()
+
+    def _save_material_caption(self) -> None:
+        if not self._idea_images:
+            return
+        image = self._idea_images[self._current_material_index]
+        try:
+            updated = self._db.update_idea_image(image.id, self.materials_caption_input.toPlainText())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Материалы", str(exc))
+            return
+        self._idea_images[self._current_material_index] = updated
+        self._set_status("Подпись изображения сохранена")
+
+    def _on_material_thumbnail_selected(self, row: int) -> None:
+        if row < 0 or row >= len(self._idea_images):
+            return
+        self._current_material_index = row
+        self._update_material_view()
+
+    def _preview_material_image(self) -> None:
+        if self._current_idea_id is None or not self._idea_images:
+            return
+        cloud_root = self._cloud_root_path()
+        if cloud_root is None:
+            QMessageBox.warning(self, "Материалы", "Путь к облаку не задан.")
+            return
+        dialog = IdeaImagePreviewDialog(
+            self,
+            idea_id=self._current_idea_id,
+            images=self._idea_images,
+            start_index=self._current_material_index,
+            cloud_root=cloud_root,
+        )
+        dialog.exec()
 
     def _transform_idea(self, kind: str) -> None:
         if self._current_idea_id is None:
