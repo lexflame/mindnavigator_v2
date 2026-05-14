@@ -10,7 +10,7 @@ class DatabaseCollectionsMixin:
         value = (entity_type or "").strip().lower() or "other"
         if value not in COLLECTION_ENTITY_TYPES:
             raise ValueError(
-                "РўРёРї РєРѕР»Р»РµРєС†РёРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРЅРёРј РёР·: building, city, film, game, character, other."
+                "Тип коллекции должен быть одним из: building, city, film, game, character, other."
             )
         return value
 
@@ -21,7 +21,7 @@ class DatabaseCollectionsMixin:
         entity_type: Optional[str] = None,
         category_ids: Optional[Iterable[int]] = None,
     ) -> List[CollectionItemData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЌР»РµРјРµРЅС‚С‹ СЂРµР¶РёРјР° РєРѕР»Р»РµРєС†РёР№."""
+        """Возвращает элементы режима коллекций."""
         clauses: list[str] = []
         params: list[object] = []
         search_text = (search_text or "").strip().lower()
@@ -86,7 +86,7 @@ class DatabaseCollectionsMixin:
         return [dict(row) for row in rows]
 
     def fetch_collection_topics(self) -> List[str]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє С‚РµРј РєРѕР»Р»РµРєС†РёР№."""
+        """Возвращает список тем коллекций."""
         rows = self._conn.execute(
             """
             SELECT DISTINCT topic
@@ -110,7 +110,7 @@ class DatabaseCollectionsMixin:
         source_folder_path: str = "",
         import_options_json: str = "",
     ) -> CollectionItemData:
-        """РЎРѕР·РґР°РµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
+        """Создает элемент коллекции."""
         title = validate_title(title)
         entity_type = self._normalize_collection_entity_type(entity_type)
         topic = (topic or "").strip()
@@ -171,7 +171,7 @@ class DatabaseCollectionsMixin:
         source_folder_path: Optional[str] = None,
         import_options_json: Optional[str] = None,
     ) -> CollectionItemData:
-        """РћР±РЅРѕРІР»СЏРµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
+        """Обновляет элемент коллекции."""
         title = validate_title(title)
         entity_type = self._normalize_collection_entity_type(entity_type)
         topic = (topic or "").strip()
@@ -188,7 +188,7 @@ class DatabaseCollectionsMixin:
                 (item_id,),
             ).fetchone()
             if existing is None:
-                raise ValueError("Р В­Р В»Р ВµР СР ВµР Р…РЎвЂљ Р С”Р С•Р В»Р В»Р ВµР С”РЎвЂ Р С‘Р С‘ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р….")
+                raise ValueError("Элемент коллекции не найден.")
             if source_folder_path is None:
                 source_folder_path = existing["source_folder_path"] or ""
             if import_options_json is None:
@@ -228,7 +228,7 @@ class DatabaseCollectionsMixin:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Р­Р»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё РЅРµ РЅР°Р№РґРµРЅ.")
+            raise ValueError("Элемент коллекции не найден.")
         return CollectionItemData(
             row["id"],
             row["title"],
@@ -245,7 +245,7 @@ class DatabaseCollectionsMixin:
         )
 
     def delete_collection_item(self, item_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ СЌР»РµРјРµРЅС‚ РєРѕР»Р»РµРєС†РёРё."""
+        """Удаляет элемент коллекции."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_items WHERE id = ?;", (item_id,))
 
@@ -255,7 +255,7 @@ class DatabaseCollectionsMixin:
         parent_id: Optional[int] = None,
         sort_index: int = 0,
     ) -> CollectionCategoryData:
-        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
+        title = validate_title(title, field_name="Категория")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             cur = self._conn.execute(
@@ -346,7 +346,7 @@ class DatabaseCollectionsMixin:
         )
 
     def update_collection_category_title(self, category_id: int, title: str) -> CollectionCategoryData:
-        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
+        title = validate_title(title, field_name="Категория")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
@@ -366,7 +366,7 @@ class DatabaseCollectionsMixin:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
+            raise ValueError("Категория не найдена.")
         return CollectionCategoryData(
             row["id"],
             row["title"],
@@ -396,7 +396,7 @@ class DatabaseCollectionsMixin:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
+            raise ValueError("Категория не найдена.")
         return CollectionCategoryData(
             row["id"],
             row["title"],
@@ -422,9 +422,9 @@ class DatabaseCollectionsMixin:
             (category_id,),
         ).fetchone()["cnt"]
         if children_count and not move_children_to_root:
-            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ СЃРѕРґРµСЂР¶РёС‚ РїРѕРґРєР°С‚РµРіРѕСЂРёРё.")
+            raise ValueError("Категория содержит подкатегории.")
         if items_count and not move_items_to_root:
-            raise ValueError("РљР°С‚РµРіРѕСЂРёСЏ СЃРѕРґРµСЂР¶РёС‚ РєРѕР»Р»РµРєС†РёРё.")
+            raise ValueError("Категория содержит коллекции.")
         with self._conn:
             if move_children_to_root:
                 self._conn.execute(
@@ -439,7 +439,7 @@ class DatabaseCollectionsMixin:
             self._conn.execute("DELETE FROM collection_category WHERE id = ?;", (category_id,))
 
     def fetch_collection_relations(self, item_id: Optional[int] = None) -> List[CollectionRelationData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРІСЏР·Рё СЌР»РµРјРµРЅС‚РѕРІ РєРѕР»Р»РµРєС†РёРё."""
+        """Возвращает связи элементов коллекции."""
         if item_id is None:
             rows = self._conn.execute(
                 """
@@ -475,9 +475,9 @@ class DatabaseCollectionsMixin:
         right_item_id: int,
         relation_kind: str = "=",
     ) -> CollectionRelationData:
-        """РЎРѕР·РґР°РµС‚ РїРµСЂРµРєСЂРµСЃС‚РЅСѓСЋ СЃРІСЏР·СЊ РјРµР¶РґСѓ СЌР»РµРјРµРЅС‚Р°РјРё РєРѕР»Р»РµРєС†РёРё."""
+        """Создает перекрестную связь между элементами коллекции."""
         if left_item_id == right_item_id:
-            raise ValueError("РќРµР»СЊР·СЏ СЃРІСЏР·Р°С‚СЊ СЌР»РµРјРµРЅС‚ СЃР°Рј СЃ СЃРѕР±РѕР№.")
+            raise ValueError("Нельзя связать элемент сам с собой.")
         left_id, right_id = sorted((int(left_item_id), int(right_item_id)))
         relation_kind = (relation_kind or "=").strip() or "="
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -499,7 +499,7 @@ class DatabaseCollectionsMixin:
             (left_id, right_id, relation_kind),
         ).fetchone()
         if row is None:
-            raise ValueError("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃРІСЏР·СЊ РєРѕР»Р»РµРєС†РёРё.")
+            raise ValueError("Не удалось создать связь коллекции.")
         return CollectionRelationData(
             row["id"],
             row["left_item_id"],
@@ -509,7 +509,7 @@ class DatabaseCollectionsMixin:
         )
 
     def delete_collection_relation(self, relation_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ СЃРІСЏР·СЊ РєРѕР»Р»РµРєС†РёРё."""
+        """Удаляет связь коллекции."""
         with self._conn:
             self._conn.execute("DELETE FROM collection_relations WHERE id = ?;", (relation_id,))
 

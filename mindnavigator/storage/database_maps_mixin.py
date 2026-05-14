@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseMapsMixin:
     def fetch_maps(self) -> List[MapData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РєР°СЂС‚."""
+        """Возвращает список карт."""
         rows = self._conn.execute(
             "SELECT id, title, description, project, tiles_path, tiles_h, tiles_w FROM maps;"
         ).fetchall()
@@ -34,13 +34,13 @@ class DatabaseMapsMixin:
         tiles_h: int,
         tiles_w: int,
     ) -> MapData:
-        """РЎРѕР·РґР°РµС‚ РєР°СЂС‚Сѓ."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РєР°СЂС‚С‹")
+        """Создает карту."""
+        title = validate_title(title, field_name="Название карты")
         description = (description or "").strip()
         project = (project or "").strip()
         tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
-            raise ValueError("Р Р°Р·РјРµСЂ СЃРµС‚РєРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ.")
+            raise ValueError("Размер сетки должен быть больше нуля.")
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -63,13 +63,13 @@ class DatabaseMapsMixin:
         tiles_h: int,
         tiles_w: int,
     ) -> MapData:
-        """РћР±РЅРѕРІР»СЏРµС‚ СЃРІРѕР№СЃС‚РІР° РєР°СЂС‚С‹."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РєР°СЂС‚С‹")
+        """Обновляет свойства карты."""
+        title = validate_title(title, field_name="Название карты")
         description = (description or "").strip()
         project = (project or "").strip()
         tiles_path = (tiles_path or "").strip()
         if tiles_h <= 0 or tiles_w <= 0:
-            raise ValueError("Р Р°Р·РјРµСЂ СЃРµС‚РєРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ.")
+            raise ValueError("Размер сетки должен быть больше нуля.")
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -91,7 +91,7 @@ class DatabaseMapsMixin:
             self._conn.execute("DELETE FROM maps WHERE id = ?;", (map_id,))
 
     def fetch_map_markers(self, map_id: Optional[int] = None) -> List[MapMarkerData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РјРµС‚РѕРє РєР°СЂС‚С‹."""
+        """Возвращает список меток карты."""
         if map_id is None:
             rows = self._conn.execute(
                 """
@@ -201,7 +201,7 @@ class DatabaseMapsMixin:
         parent_path: str = "",
         image_path: str = "",
     ) -> MapMarkerData:
-        """РЎРѕР·РґР°РµС‚ РёР»Рё РѕР±РЅРѕРІР»СЏРµС‚ РјРµС‚РєСѓ РєР°СЂС‚С‹."""
+        """Создает или обновляет метку карты."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         task_ids = task_ids or []
         project_ids = project_ids or []
@@ -342,12 +342,12 @@ class DatabaseMapsMixin:
         )
 
     def delete_map_marker(self, marker_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РјРµС‚РєСѓ РєР°СЂС‚С‹."""
+        """Удаляет метку карты."""
         with self._conn:
             self._conn.execute("DELETE FROM map_markers WHERE id = ?;", (marker_id,))
 
     def fetch_map_overlays(self, map_id: Optional[int] = None) -> List[MapOverlayData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РіРµРѕРјРµС‚СЂРёР№ РєР°СЂС‚С‹ (РѕР±Р»Р°СЃС‚Рё/РїСѓС‚Рё)."""
+        """Возвращает список геометрий карты (области/пути)."""
         if map_id is None:
             rows = self._conn.execute(
                 """
@@ -400,10 +400,10 @@ class DatabaseMapsMixin:
         color: str,
         title: str = "",
     ) -> MapOverlayData:
-        """РЎРѕР·РґР°РµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЃРѕС…СЂР°РЅРµРЅРЅСѓСЋ Р·Р°РїРёСЃСЊ."""
+        """Создает геометрию карты и возвращает сохраненную запись."""
         overlay_kind = (kind or "").strip().lower()
         if overlay_kind not in {"region", "path"}:
-            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї РіРµРѕРјРµС‚СЂРёРё РєР°СЂС‚С‹.")
+            raise ValueError("Некорректный тип геометрии карты.")
         normalized: List[Tuple[float, float]] = []
         for pair in points or []:
             if not isinstance(pair, (list, tuple)) or len(pair) != 2:
@@ -414,7 +414,7 @@ class DatabaseMapsMixin:
                 continue
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
-            raise ValueError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ С‚РѕС‡РµРє РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РіРµРѕРјРµС‚СЂРёРё.")
+            raise ValueError("Недостаточно точек для сохранения геометрии.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
@@ -453,10 +453,10 @@ class DatabaseMapsMixin:
         color: str,
         title: str = "",
     ) -> MapOverlayData:
-        """РћР±РЅРѕРІР»СЏРµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ Р°РєС‚СѓР°Р»СЊРЅСѓСЋ Р·Р°РїРёСЃСЊ."""
+        """Обновляет геометрию карты и возвращает актуальную запись."""
         overlay_kind = (kind or "").strip().lower()
         if overlay_kind not in {"region", "path"}:
-            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї РіРµРѕРјРµС‚СЂРёРё РєР°СЂС‚С‹.")
+            raise ValueError("Некорректный тип геометрии карты.")
         normalized: List[Tuple[float, float]] = []
         for pair in points or []:
             if not isinstance(pair, (list, tuple)) or len(pair) != 2:
@@ -467,7 +467,7 @@ class DatabaseMapsMixin:
                 continue
         min_points = 3 if overlay_kind == "region" else 2
         if len(normalized) < min_points:
-            raise ValueError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ С‚РѕС‡РµРє РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РіРµРѕРјРµС‚СЂРёРё.")
+            raise ValueError("Недостаточно точек для сохранения геометрии.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         color_value = (color or "").strip() or "#6cb5ff"
         title_value = (title or "").strip()
@@ -496,7 +496,7 @@ class DatabaseMapsMixin:
             (overlay_id,),
         ).fetchone()
         if not row:
-            raise ValueError("Р“РµРѕРјРµС‚СЂРёСЏ РєР°СЂС‚С‹ РЅРµ РЅР°Р№РґРµРЅР°.")
+            raise ValueError("Геометрия карты не найдена.")
         parsed = []
         try:
             raw_points = json.loads(row["points"] or "[]")
@@ -521,7 +521,7 @@ class DatabaseMapsMixin:
         )
 
     def delete_map_overlay(self, overlay_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РіРµРѕРјРµС‚СЂРёСЋ РєР°СЂС‚С‹."""
+        """Удаляет геометрию карты."""
         with self._conn:
             self._conn.execute("DELETE FROM map_overlays WHERE id = ?;", (overlay_id,))
 

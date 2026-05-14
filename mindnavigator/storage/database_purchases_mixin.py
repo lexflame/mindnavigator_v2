@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabasePurchasesMixin:
     def create_shop_category(self, title: str, parent_id: Optional[int] = None) -> ShopCategoryData:
-        title = validate_title(title, field_name="РљР°С‚РµРіРѕСЂРёСЏ")
+        title = validate_title(title, field_name="Категория")
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -44,7 +44,7 @@ class DatabasePurchasesMixin:
         return ShopCategoryData(row["id"], row["title"], row["parent_id"])
 
     def update_shop_category_title(self, category_id: int, title: str) -> ShopCategoryData:
-        title = validate_title(title, field_name="Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ")
+        title = validate_title(title, field_name="Категория")
         with self._conn:
             self._conn.execute(
                 """
@@ -59,7 +59,7 @@ class DatabasePurchasesMixin:
             (category_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В°.")
+            raise ValueError("Категория не найдена.")
         return ShopCategoryData(row["id"], row["title"], row["parent_id"])
 
     def delete_shop_category(self, category_id: int) -> None:
@@ -110,7 +110,7 @@ class DatabasePurchasesMixin:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Р СћР С•Р Р†Р В°РЎР‚ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р….")
+            raise ValueError("Товар не найден.")
         return ShopItemData(
             row["id"],
             row["title"],
@@ -355,7 +355,7 @@ class DatabasePurchasesMixin:
         return [WishlistData(row["id"], row["title"], row["notes"] or "") for row in rows]
 
     def create_wishlist(self, title: str, notes: str = "") -> WishlistData:
-        title = validate_title(title, field_name="РЎРїРёСЃРѕРє")
+        title = validate_title(title, field_name="Список")
         notes = (notes or "").strip()
         with self._conn:
             cur = self._conn.execute(
@@ -368,7 +368,7 @@ class DatabasePurchasesMixin:
         return WishlistData(cur.lastrowid, title, notes)
 
     def update_wishlist(self, wishlist_id: int, title: str, notes: str = "") -> WishlistData:
-        title = validate_title(title, field_name="РЎРїРёСЃРѕРє")
+        title = validate_title(title, field_name="Список")
         notes = (notes or "").strip()
         with self._conn:
             self._conn.execute(
@@ -477,7 +477,7 @@ class DatabasePurchasesMixin:
             if key in existing_categories:
                 category_map[cat["id"]] = existing_categories[key]
                 continue
-            created = self.create_shop_category(cat.get("title") or "Р‘РµР· РєР°С‚РµРіРѕСЂРёРё", cat.get("parent_id"))
+            created = self.create_shop_category(cat.get("title") or "Без категории", cat.get("parent_id"))
             category_map[cat["id"]] = created.id
 
         source_by_url = {s.url: s for s in self.fetch_shop_sources_for_items([item.id for item in self.fetch_shop_items()])}
@@ -496,7 +496,7 @@ class DatabasePurchasesMixin:
                 item_map[item["id"]] = existing_item_id
                 continue
             created = self.create_shop_item(
-                item.get("title") or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ",
+                item.get("title") or "Без названия",
                 category_id=category_map.get(item.get("category_id")),
                 user_notes=item.get("user_notes") or "",
             )
@@ -567,7 +567,7 @@ class DatabasePurchasesMixin:
         wishlist_map: dict[int, int] = {}
         existing_wishlists = {w.title: w.id for w in self.fetch_wishlists()}
         for wl in wishlists:
-            title = wl.get("title") or "РЎРїРёСЃРѕРє"
+            title = wl.get("title") or "Список"
             if title in existing_wishlists:
                 wishlist_map[wl["id"]] = existing_wishlists[title]
                 continue
@@ -602,7 +602,7 @@ class DatabasePurchasesMixin:
         category_id: Optional[int] = None,
         user_notes: str = "",
     ) -> ShopItemData:
-        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+        title = (title or "").strip() or "Без названия"
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
@@ -625,7 +625,7 @@ class DatabasePurchasesMixin:
         category_id: Optional[int],
         user_notes: str,
     ) -> ShopItemData:
-        title = (title or "").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+        title = (title or "").strip() or "Без названия"
         if len(title) > MAX_TITLE_LEN:
             title = title[:MAX_TITLE_LEN].rstrip()
         user_notes = (user_notes or "").strip()
@@ -648,7 +648,7 @@ class DatabasePurchasesMixin:
             (item_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РўРѕРІР°СЂ РЅРµ РЅР°Р№РґРµРЅ.")
+            raise ValueError("Товар не найден.")
         return ShopItemData(
             row["id"],
             row["title"],
@@ -675,7 +675,7 @@ class DatabasePurchasesMixin:
         shop_code = (shop_code or "").strip()
         url = (url or "").strip()
         if not url:
-            raise ValueError("URL РёСЃС‚РѕС‡РЅРёРєР° РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("URL источника не должен быть пустым.")
         sku = (sku or "").strip()
         currency = (currency or "").strip()
         stock_text = (stock_text or "").strip()

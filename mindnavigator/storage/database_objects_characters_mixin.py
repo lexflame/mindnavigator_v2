@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseObjectsCharactersMixin:
     def fetch_objects(self) -> List[ObjectData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹С… РѕР±СЉРµРєС‚РѕРІ."""
+        """Возвращает список архитектурных объектов."""
         rows = self._conn.execute(
             """
             SELECT id, title, catalog, object_type, status, description, created_at, updated_at
@@ -36,8 +36,8 @@ class DatabaseObjectsCharactersMixin:
         status: str,
         description: str,
     ) -> ObjectData:
-        """РЎРѕР·РґР°РµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РѕР±СЉРµРєС‚Р°")
+        """Создает архитектурный объект."""
+        title = validate_title(title, field_name="Название объекта")
         catalog = (catalog or "").strip()
         object_type = (object_type or "").strip()
         status = (status or "").strip()
@@ -62,8 +62,8 @@ class DatabaseObjectsCharactersMixin:
         status: str,
         description: str,
     ) -> ObjectData:
-        """РћР±РЅРѕРІР»СЏРµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РѕР±СЉРµРєС‚Р°")
+        """Обновляет архитектурный объект."""
+        title = validate_title(title, field_name="Название объекта")
         catalog = (catalog or "").strip()
         object_type = (object_type or "").strip()
         status = (status or "").strip()
@@ -90,23 +90,23 @@ class DatabaseObjectsCharactersMixin:
         return ObjectData(object_id, title, catalog, object_type, status, description, created_at, now)
 
     def delete_object(self, object_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Р№ РѕР±СЉРµРєС‚."""
+        """Удаляет архитектурный объект."""
         with self._conn:
             self._conn.execute("DELETE FROM objects WHERE id = ?;", (object_id,))
 
     def create_object_from_folder_path(self, folder_path: str) -> ObjectData:
-        """РЎРѕР·РґР°РµС‚ РѕР±СЉРµРєС‚ РЅР° РѕСЃРЅРѕРІРµ РїСѓС‚Рё Рє РїР°РїРєРµ."""
+        """Создает объект на основе пути к папке."""
         path = (folder_path or "").strip().strip("/")
         if not path:
-            raise ValueError("РџСѓС‚СЊ Рє РїР°РїРєРµ РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("Путь к папке не должен быть пустым.")
         parts = [part for part in path.split("/") if part]
-        title = parts[-1] if parts else "РќРѕРІС‹Р№ РѕР±СЉРµРєС‚"
+        title = parts[-1] if parts else "Новый объект"
         catalog = " / ".join(parts[:-1])
-        description = f"РћР±СЉРµРєС‚ СЃРѕР·РґР°РЅ РёР· РїР°РїРєРё: {path}"
+        description = f"Объект создан из папки: {path}"
         return self.create_object(title, catalog, "", "", description)
 
     def fetch_object_images(self, object_id: int) -> List[ObjectImageData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РёР·РѕР±СЂР°Р¶РµРЅРёР№ РѕР±СЉРµРєС‚Р°."""
+        """Возвращает список изображений объекта."""
         rows = self._conn.execute(
             """
             SELECT id, object_id, rel_path, description, created_at, updated_at
@@ -129,10 +129,10 @@ class DatabaseObjectsCharactersMixin:
         ]
 
     def add_object_image(self, object_id: int, rel_path: str, description: str = "") -> ObjectImageData:
-        """Р”РѕР±Р°РІР»СЏРµС‚ РёР·РѕР±СЂР°Р¶РµРЅРёРµ Рє РѕР±СЉРµРєС‚Сѓ."""
+        """Добавляет изображение к объекту."""
         rel_path = (rel_path or "").strip()
         if not rel_path:
-            raise ValueError("РџСѓС‚СЊ Рє РёР·РѕР±СЂР°Р¶РµРЅРёСЋ РЅРµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.")
+            raise ValueError("Путь к изображению не должен быть пустым.")
         description = (description or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -161,7 +161,7 @@ class DatabaseObjectsCharactersMixin:
         )
 
     def update_object_image(self, image_id: int, description: str) -> ObjectImageData:
-        """РћР±РЅРѕРІР»СЏРµС‚ РѕРїРёСЃР°РЅРёРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РѕР±СЉРµРєС‚Р°."""
+        """Обновляет описание изображения объекта."""
         description = (description or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
@@ -191,7 +191,7 @@ class DatabaseObjectsCharactersMixin:
         )
 
     def delete_object_image(self, image_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РѕР±СЉРµРєС‚Р°."""
+        """Удаляет изображение объекта."""
         with self._conn:
             self._conn.execute("DELETE FROM object_images WHERE id = ?;", (image_id,))
 

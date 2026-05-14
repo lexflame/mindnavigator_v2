@@ -6,7 +6,7 @@ from ._shared import *  # noqa: F401,F403
 
 class DatabaseProjectsMixin:
     def fetch_projects(self) -> List[ProjectData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РїСЂРѕРµРєС‚РѕРІ."""
+        """Возвращает список проектов."""
         rows = self._conn.execute(
             """
             SELECT
@@ -62,9 +62,9 @@ class DatabaseProjectsMixin:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
-        """РЎРѕР·РґР°РµС‚ РїСЂРѕРµРєС‚ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…."""
+        """Создает проект в базе данных."""
         area = validate_area(area)
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РїСЂРѕРµРєС‚Р°")
+        title = validate_title(title, field_name="Название проекта")
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
@@ -72,9 +72,9 @@ class DatabaseProjectsMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
-            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°.")
+            raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
-            raise ValueError("Р”Р°С‚Р° РїСЂРѕРµРєС‚Р° РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
+            raise ValueError("Дата проекта некорректна.")
 
         if sort_order is None:
             sort_order = self._next_project_sort_order(parent_project_id)
@@ -146,9 +146,9 @@ class DatabaseProjectsMixin:
         marker_color: str = "",
         marker_theme: str = "",
     ) -> ProjectData:
-        """РћР±РЅРѕРІР»СЏРµС‚ РґР°РЅРЅС‹Рµ РїСЂРѕРµРєС‚Р°."""
+        """Обновляет данные проекта."""
         area = validate_area(area)
-        title = validate_title(title, field_name="РќР°Р·РІР°РЅРёРµ РїСЂРѕРµРєС‚Р°")
+        title = validate_title(title, field_name="Название проекта")
         priority = normalize_priority(priority)
         default_task_priority = normalize_priority(default_task_priority) if default_task_priority else ""
         force_recurrence_kind = (force_recurrence_kind or "").strip().lower()
@@ -156,9 +156,9 @@ class DatabaseProjectsMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         if force_recurrence_kind not in {"", "daily", "weekly", "monthly"}:
-            raise ValueError("РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РїРµСЂРёРѕРґРёС‡РЅРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°.")
+            raise ValueError("Некорректная периодичность проекта.")
         if not isinstance(updated, date):
-            raise ValueError("Р”Р°С‚Р° РїСЂРѕРµРєС‚Р° РЅРµРєРѕСЂСЂРµРєС‚РЅР°.")
+            raise ValueError("Дата проекта некорректна.")
         current_row = self._conn.execute(
             "SELECT parent_project_id, COALESCE(sort_order, 0) AS sort_order FROM projects WHERE id = ?;",
             (project_id,),
@@ -170,7 +170,7 @@ class DatabaseProjectsMixin:
             seen: set[int] = set()
             while cursor is not None and cursor not in seen:
                 if cursor == project_id:
-                    raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
+                    raise ValueError("Циклическая связь проектов не допускается.")
                 seen.add(cursor)
                 row = self._conn.execute(
                     "SELECT parent_project_id FROM projects WHERE id = ?;",
@@ -234,11 +234,11 @@ class DatabaseProjectsMixin:
         )
 
     def fetch_project_tree(self) -> List[ProjectData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїСЂРѕРµРєС‚С‹ РІ РїРѕСЂСЏРґРєРµ РѕР±С…РѕРґР° РїРѕ parent/sort_order."""
+        """Возвращает проекты в порядке обхода по parent/sort_order."""
         return self.fetch_projects()
 
     def fetch_project_children(self, parent_project_id: Optional[int]) -> List[ProjectData]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РґРѕС‡РµСЂРЅРёРµ РїСЂРѕРµРєС‚С‹ РґР»СЏ СѓРєР°Р·Р°РЅРЅРѕРіРѕ СЂРѕРґРёС‚РµР»СЏ."""
+        """Возвращает дочерние проекты для указанного родителя."""
         rows = self._conn.execute(
             """
             SELECT
@@ -279,7 +279,7 @@ class DatabaseProjectsMixin:
         return children
 
     def _reindex_project_group(self, parent_project_id: Optional[int]) -> None:
-        """РџРµСЂРµСЃРѕР±РёСЂР°РµС‚ РЅРµРїСЂРµСЂС‹РІРЅС‹Р№ sort_order РґР»СЏ РіСЂСѓРїРїС‹ РґРѕС‡РµСЂРЅРёС… РїСЂРѕРµРєС‚РѕРІ."""
+        """Пересобирает непрерывный sort_order для группы дочерних проектов."""
         rows = self._conn.execute(
             """
             SELECT id
@@ -296,9 +296,9 @@ class DatabaseProjectsMixin:
             )
 
     def move_project(self, project_id: int, new_parent_project_id: Optional[int], new_sort_order: Optional[int] = None) -> None:
-        """РџРµСЂРµРјРµС‰Р°РµС‚ РїСЂРѕРµРєС‚ РІ РЅРѕРІСѓСЋ РІРµС‚РєСѓ Рё/РёР»Рё РїРѕР·РёС†РёСЋ СЃСЂРµРґРё siblings."""
+        """Перемещает проект в новую ветку и/или позицию среди siblings."""
         if new_parent_project_id == project_id:
-            raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
+            raise ValueError("Циклическая связь проектов не допускается.")
 
         row = self._conn.execute(
             """
@@ -309,7 +309,7 @@ class DatabaseProjectsMixin:
             (project_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
+            raise ValueError("Проект не найден.")
         old_parent = row["parent_project_id"]
 
         if new_parent_project_id is not None:
@@ -317,14 +317,14 @@ class DatabaseProjectsMixin:
             seen: set[int] = set()
             while cursor is not None and cursor not in seen:
                 if cursor == project_id:
-                    raise ValueError("Р¦РёРєР»РёС‡РµСЃРєР°СЏ СЃРІСЏР·СЊ РїСЂРѕРµРєС‚РѕРІ РЅРµ РґРѕРїСѓСЃРєР°РµС‚СЃСЏ.")
+                    raise ValueError("Циклическая связь проектов не допускается.")
                 seen.add(cursor)
                 parent_row = self._conn.execute(
                     "SELECT parent_project_id FROM projects WHERE id = ?;",
                     (cursor,),
                 ).fetchone()
                 if parent_row is None:
-                    raise ValueError("РќРѕРІС‹Р№ СЂРѕРґРёС‚РµР»СЊСЃРєРёР№ РїСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
+                    raise ValueError("Новый родительский проект не найден.")
                 cursor = parent_row["parent_project_id"]
 
         siblings_count_row = self._conn.execute(
@@ -355,23 +355,23 @@ class DatabaseProjectsMixin:
             self._reindex_project_group(new_parent_project_id)
 
     def reorder_project(self, project_id: int, new_sort_order: int) -> None:
-        """РњРµРЅСЏРµС‚ РїРѕСЂСЏРґРѕРє РїСЂРѕРµРєС‚Р° СЃСЂРµРґРё siblings Р±РµР· СЃРјРµРЅС‹ СЂРѕРґРёС‚РµР»СЏ."""
+        """Меняет порядок проекта среди siblings без смены родителя."""
         row = self._conn.execute(
             "SELECT parent_project_id FROM projects WHERE id = ?;",
             (project_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.")
+            raise ValueError("Проект не найден.")
         parent_project_id = row["parent_project_id"]
         self.move_project(project_id, parent_project_id, new_sort_order=new_sort_order)
 
     def delete_project(self, project_id: int) -> None:
-        """РЈРґР°Р»СЏРµС‚ РїСЂРѕРµРєС‚ РїРѕ id."""
+        """Удаляет проект по id."""
         with self._conn:
             self._conn.execute("DELETE FROM projects WHERE id = ?;", (project_id,))
 
     def set_project_archived(self, project_id: int, archived: bool) -> None:
-        """РћР±РЅРѕРІР»СЏРµС‚ СЃС‚Р°С‚СѓСЃ Р°СЂС…РёРІРёСЂРѕРІР°РЅРёСЏ РїСЂРѕРµРєС‚Р°."""
+        """Обновляет статус архивирования проекта."""
         with self._conn:
             self._conn.execute(
                 "UPDATE projects SET archived = ? WHERE id = ?;",
@@ -379,7 +379,7 @@ class DatabaseProjectsMixin:
             )
 
     def set_projects_archived_for_area(self, area: str, archived: bool) -> None:
-        """РђСЂС…РёРІРёСЂСѓРµС‚ РІСЃРµ РїСЂРѕРµРєС‚С‹ РІ РѕР±Р»Р°СЃС‚Рё."""
+        """Архивирует все проекты в области."""
         area = validate_area(area)
         with self._conn:
             self._conn.execute(
@@ -388,13 +388,13 @@ class DatabaseProjectsMixin:
             )
 
     def delete_projects_by_area(self, area: str) -> None:
-        """РЈРґР°Р»СЏРµС‚ РІСЃРµ РїСЂРѕРµРєС‚С‹ РІ РѕР±Р»Р°СЃС‚Рё."""
+        """Удаляет все проекты в области."""
         area = validate_area(area)
         with self._conn:
             self._conn.execute("DELETE FROM projects WHERE area = ?;", (area,))
 
     def rename_project_area(self, area: str, new_area: str) -> None:
-        """РџРµСЂРµРёРјРµРЅРѕРІС‹РІР°РµС‚ РѕР±Р»Р°СЃС‚СЊ РїСЂРѕРµРєС‚РѕРІ."""
+        """Переименовывает область проектов."""
         area = validate_area(area)
         new_area = validate_area(new_area)
         with self._conn:
@@ -404,7 +404,7 @@ class DatabaseProjectsMixin:
             )
 
     def project_areas(self) -> List[str]:
-        """Р’РѕР·РІСЂР°С‰Р°РµС‚ РѕС‚СЃРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Р№ СЃРїРёСЃРѕРє РѕР±Р»Р°СЃС‚РµР№ РїСЂРѕРµРєС‚Р°."""
+        """Возвращает отсортированный список областей проекта."""
         rows = self._conn.execute("SELECT DISTINCT area FROM projects ORDER BY area;").fetchall()
         return [row["area"] for row in rows]
 

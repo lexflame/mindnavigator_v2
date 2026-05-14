@@ -381,7 +381,7 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             title_rect = QRect(x + 18, r.top(), pr_rect.left() - (x + 18) - 10, r.height())
             title = index.data(ProjectRoles.Title) or ""
             marker_theme = (index.data(ProjectRoles.MarkerTheme) or "").strip()
-            display_title = f"{title} В· {marker_theme.upper()}" if marker_theme else title
+            display_title = f"{title} · {marker_theme.upper()}" if marker_theme else title
             quick_rect = self._project_quick_rect(title_rect, display_title)
 
             if marker_rect.contains(pos):
