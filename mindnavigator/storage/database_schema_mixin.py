@@ -24,6 +24,9 @@ class DatabaseSchemaMixin:
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                     gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
                     gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
+                    started_at TEXT NOT NULL DEFAULT '',
+                    finished_at TEXT NOT NULL DEFAULT '',
+                    actual_minutes INTEGER NOT NULL DEFAULT 0 CHECK (actual_minutes >= 0),
                     project_id INTEGER REFERENCES projects(id),
                     parent_id INTEGER REFERENCES tasks(id),
                     recurrence_kind TEXT NOT NULL DEFAULT '',
@@ -562,6 +565,7 @@ class DatabaseSchemaMixin:
         self._ensure_priority_values()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
+        self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._seed_defaults()
 
@@ -574,6 +578,7 @@ class DatabaseSchemaMixin:
             MigrationStep(4, "task_board_schema", self._migration_v4_task_board_schema),
             MigrationStep(5, "dossier_schema", self._migration_v5_dossier_schema),
             MigrationStep(6, "task_plan_schema", self._migration_v6_task_plan_schema),
+            MigrationStep(7, "task_execution_schema", self._migration_v7_task_execution_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -585,6 +590,7 @@ class DatabaseSchemaMixin:
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
         self._ensure_task_plan_columns()
+        self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
@@ -600,6 +606,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_marker_columns()
         self._ensure_task_completion_delay_column()
         self._ensure_task_gantt_columns()
+        self._ensure_task_execution_columns()
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_project_marker_columns()
@@ -630,6 +637,10 @@ class DatabaseSchemaMixin:
     def _migration_v6_task_plan_schema(self, _connection: sqlite3.Connection) -> None:
         """Добавляет поля plan-задач и порядка пунктов плана."""
         self._ensure_task_plan_columns()
+
+    def _migration_v7_task_execution_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds execution tracking columns for plan-task progression."""
+        self._ensure_task_execution_columns()
 
     def _ensure_dossier_schema(self) -> None:
         """Гарантирует наличие таблиц и индексов режима досье."""
@@ -825,6 +836,18 @@ class DatabaseSchemaMixin:
                 self._conn.execute(
                     "ALTER TABLE tasks ADD COLUMN gantt_forecasted INTEGER NOT NULL DEFAULT 0;"
                 )
+
+    def _ensure_task_execution_columns(self) -> None:
+        """Adds execution tracking columns for plan-item timing if they are absent."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "started_at" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN started_at TEXT NOT NULL DEFAULT '';")
+            if "finished_at" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN finished_at TEXT NOT NULL DEFAULT '';")
+            if "actual_minutes" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN actual_minutes INTEGER NOT NULL DEFAULT 0;")
 
     def _ensure_task_board_column(self) -> None:
         """Добавляет колонку board_column для канбан-статуса задач."""
@@ -1252,6 +1275,9 @@ class DatabaseSchemaMixin:
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
                 gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
                 gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
+                started_at TEXT NOT NULL DEFAULT '',
+                finished_at TEXT NOT NULL DEFAULT '',
+                actual_minutes INTEGER NOT NULL DEFAULT 0 CHECK (actual_minutes >= 0),
                 project_id INTEGER REFERENCES projects(id),
                 parent_id INTEGER REFERENCES tasks(id),
                 recurrence_kind TEXT NOT NULL DEFAULT '',
@@ -1269,7 +1295,7 @@ class DatabaseSchemaMixin:
             f"""
             INSERT INTO tasks (
                 id, title, description, day, time_text, priority, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
-                gantt_forecasted, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
+                gantt_forecasted, started_at, finished_at, actual_minutes, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
             )
             SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
                    CASE
@@ -1278,7 +1304,9 @@ class DatabaseSchemaMixin:
                        ELSE '{BOARD_COLUMN_QUEUE}'
                    END,
                    done, COALESCE({_source("completion_delay_minutes", "0")}, 0),
-                   COALESCE({_source("gantt_estimate_minutes", "0")}, 0), COALESCE({_source("gantt_forecasted", "0")}, 0), {_source("project_id", "NULL")}, {_source("parent_id", "NULL")},
+                   COALESCE({_source("gantt_estimate_minutes", "0")}, 0), COALESCE({_source("gantt_forecasted", "0")}, 0),
+                   COALESCE({_source("started_at", "''")}, ''), COALESCE({_source("finished_at", "''")}, ''), COALESCE({_source("actual_minutes", "0")}, 0),
+                   {_source("project_id", "NULL")}, {_source("parent_id", "NULL")},
                    COALESCE({_source("recurrence_kind", "''")}, ''), COALESCE({_source("recurrence_interval", "1")}, 1),
                    COALESCE({_source("is_plan_task", "0")}, 0), COALESCE({_source("plan_order", "0")}, 0),
                    COALESCE({_source("marker_color", "''")}, ''), COALESCE({_source("marker_theme", "''")}, ''), created_at, updated_at

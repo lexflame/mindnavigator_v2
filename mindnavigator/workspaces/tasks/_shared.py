@@ -407,6 +407,9 @@ def is_marker_only_task_update(previous: TaskRow, updated: TaskRow) -> bool:
         and previous.recurrence_kind == updated.recurrence_kind
         and previous.recurrence_interval == updated.recurrence_interval
         and previous.completion_delay_minutes == updated.completion_delay_minutes
+        and previous.started_at == updated.started_at
+        and previous.finished_at == updated.finished_at
+        and previous.actual_minutes == updated.actual_minutes
     )
 
 

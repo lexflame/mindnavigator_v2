@@ -141,6 +141,19 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         title = index.data(Qt.ItemDataRole.DisplayRole) or ""
         description = index.data(TaskRoles.Description) or ""
+        is_plan_item = bool(index.data(TaskRoles.IsPlanItem))
+        is_current_plan_item = bool(index.data(TaskRoles.IsCurrentPlanItem))
+        started_at = (index.data(TaskRoles.StartedAt) or "").strip()
+        finished_at = (index.data(TaskRoles.FinishedAt) or "").strip()
+        actual_minutes = max(0, int(index.data(TaskRoles.ActualMinutes) or 0))
+        execution_text = self._format_plan_execution_text(
+            is_plan_item=is_plan_item,
+            is_current_plan_item=is_current_plan_item,
+            done=bool(index.data(TaskRoles.Done)),
+            started_at=started_at,
+            finished_at=finished_at,
+            actual_minutes=actual_minutes,
+        )
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
         layout = self._row_layout(option_rect, depth, has_subtasks)
@@ -155,6 +168,8 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         tags = index.data(TaskRoles.AttachmentSummary) or []
         total_height = title_height + desc_height
+        if execution_text:
+            total_height += self.TEXT_GAP + desc_metrics.height()
         if description:
             total_height += self.TEXT_GAP
         if tags:
@@ -395,11 +410,23 @@ class TasksItemDelegate(QStyledItemDelegate):
         board_column: str = index.data(TaskRoles.BoardColumn) or BOARD_COLUMN_QUEUE
         done: bool = bool(index.data(TaskRoles.Done))
         is_plan_item: bool = bool(index.data(TaskRoles.IsPlanItem))
+        is_current_plan_item: bool = bool(index.data(TaskRoles.IsCurrentPlanItem))
         plan_number: str = (index.data(TaskRoles.PlanNumber) or "").strip()
+        started_at: str = (index.data(TaskRoles.StartedAt) or "").strip()
+        finished_at: str = (index.data(TaskRoles.FinishedAt) or "").strip()
+        actual_minutes = max(0, int(index.data(TaskRoles.ActualMinutes) or 0))
         completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
         overdue = self._is_overdue(day, done, is_plan_item=is_plan_item)
         show_completion_delay = done and completion_delay_minutes > 4 * 60
         completion_delay_text = self._format_completion_delay(completion_delay_minutes) if show_completion_delay else ""
+        execution_text = self._format_plan_execution_text(
+            is_plan_item=is_plan_item,
+            is_current_plan_item=is_current_plan_item,
+            done=done,
+            started_at=started_at,
+            finished_at=finished_at,
+            actual_minutes=actual_minutes,
+        )
         expanded = bool(index.data(TaskRoles.Expanded))
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
         subtasks_expanded = bool(index.data(TaskRoles.SubtasksExpanded))
@@ -412,6 +439,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         bg = blend_task_row_background(bg, marker_color, selected=selected)
 
         painter.fillRect(r, bg)
+        if is_current_plan_item:
+            painter.fillRect(QRect(r.left(), r.top(), 4, r.height()), self.C_TODAY)
         self._draw_marker_theme_overlay(painter, r, marker_theme)
         task_id_value = index.data(TaskRoles.TaskId)
         try:
@@ -478,6 +507,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             title_color = self.C_OVERDUE
         else:
             title_color = self.C_TEXT
+        execution_color = self.C_LOW if done and actual_minutes > 0 else (self.C_TODAY if is_current_plan_item else self.C_DIM)
         painter.setPen(title_color)
 
         menu_rect = layout["menu"]
@@ -518,6 +548,20 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.setPen(title_color)
                 current_y += self.TEXT_GAP + title_metrics.height()
 
+            if execution_text:
+                execution_box = QRect(
+                    title_content_rect.left(),
+                    current_y + self.TEXT_GAP,
+                    title_content_rect.width(),
+                    QFontMetrics(self._font_small).height(),
+                )
+                painter.setFont(self._font_small)
+                painter.setPen(execution_color)
+                painter.drawText(execution_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, execution_text)
+                painter.setFont(self._font)
+                painter.setPen(title_color)
+                current_y += self.TEXT_GAP + QFontMetrics(self._font_small).height()
+
             if description:
                 desc_box = QRect(
                     title_content_rect.left(),
@@ -557,6 +601,23 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(title_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title_part)
                 painter.setPen(self.C_OVERDUE)
                 painter.drawText(delay_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, delay_text)
+                painter.setPen(title_color)
+            elif execution_text:
+                execution_suffix = f" · {execution_text}"
+                suffix_width = title_metrics.horizontalAdvance(execution_suffix)
+                title_width = max(40, title_content_rect.width() - suffix_width)
+                title_part = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
+                title_part_rect = QRect(title_content_rect.left(), title_content_rect.top(), title_width, title_content_rect.height())
+                suffix_part_rect = QRect(
+                    title_part_rect.right(),
+                    title_content_rect.top(),
+                    title_content_rect.width() - title_width,
+                    title_content_rect.height(),
+                )
+                painter.setPen(title_color)
+                painter.drawText(title_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title_part)
+                painter.setPen(execution_color)
+                painter.drawText(suffix_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, execution_suffix)
                 painter.setPen(title_color)
             else:
                 elided = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_content_rect.width())
@@ -1115,6 +1176,57 @@ class TasksItemDelegate(QStyledItemDelegate):
         days = minutes // (24 * 60)
         hours = (minutes % (24 * 60)) // 60
         return f"(Просрочена: {days}д {hours}ч)"
+
+    @staticmethod
+    def _format_duration_minutes(total_minutes: int) -> str:
+        minutes = max(0, int(total_minutes or 0))
+        hours, minutes = divmod(minutes, 60)
+        if hours and minutes:
+            return f"{hours}ч {minutes:02d}м"
+        if hours:
+            return f"{hours}ч"
+        return f"{minutes}м"
+
+    @staticmethod
+    def _elapsed_minutes_since(started_at: str, now_dt: datetime | None = None) -> Optional[int]:
+        started_text = str(started_at or "").strip()
+        if not started_text:
+            return None
+        try:
+            started_dt = datetime.fromisoformat(started_text)
+        except ValueError:
+            return None
+        if now_dt is None:
+            now_dt = datetime.now(started_dt.tzinfo) if started_dt.tzinfo is not None else datetime.now()
+        elapsed_seconds = (now_dt - started_dt).total_seconds()
+        if elapsed_seconds <= 0:
+            return 0
+        return max(0, int(round(elapsed_seconds / 60.0)))
+
+    @classmethod
+    def _format_plan_execution_text(
+        cls,
+        *,
+        is_plan_item: bool,
+        is_current_plan_item: bool,
+        done: bool,
+        started_at: str,
+        finished_at: str,
+        actual_minutes: int,
+        now_dt: datetime | None = None,
+    ) -> str:
+        if not is_plan_item:
+            return ""
+        if done and actual_minutes > 0:
+            return f"Факт: {cls._format_duration_minutes(actual_minutes)}"
+        if is_current_plan_item:
+            elapsed_minutes = cls._elapsed_minutes_since(started_at, now_dt=now_dt)
+            if elapsed_minutes is None:
+                return "В работе"
+            return f"В работе: {cls._format_duration_minutes(elapsed_minutes)}"
+        if finished_at.strip() and actual_minutes > 0:
+            return f"Факт: {cls._format_duration_minutes(actual_minutes)}"
+        return ""
 
     def _parent_schedule_action(self, index: QModelIndex, row_rect: QRect) -> Tuple[QRect, Optional[TaskRow], str]:
         """Возвращает геометрию и данные кнопки переноса на срок родителя."""

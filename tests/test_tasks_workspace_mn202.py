@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QRect
 from PySide6.QtGui import QImage, QPainter, QPalette
@@ -1225,6 +1225,101 @@ def test_tasks_model_keeps_done_plan_items_visible_and_numbered_until_parent_don
         db_path.unlink(missing_ok=True)
 
 
+def test_plan_execution_advances_current_item_and_records_actuals(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_execution_progression", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Execution plan",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        first = database.create_task(
+            title="Investigate API",
+            description="integration test setup",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title="Ship fix",
+            description="prepare rollout",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        started_at = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with database._conn:
+            database._conn.execute(
+                """
+                UPDATE tasks
+                SET started_at = ?, gantt_estimate_minutes = 20, gantt_forecasted = 1, updated_at = ?
+                WHERE id = ?;
+                """,
+                (started_at, now, first.id),
+            )
+            database._conn.execute(
+                """
+                UPDATE tasks
+                SET started_at = '', gantt_estimate_minutes = 40, gantt_forecasted = 1, updated_at = ?
+                WHERE id = ?;
+                """,
+                (now, second.id),
+            )
+
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("РџР»Р°РЅ")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        first_row = _find_task_row(model, first.id)
+        second_row = _find_task_row(model, second.id)
+        assert first_row >= 0 and second_row >= 0
+        assert model.index(first_row, 0).data(TaskRoles.IsPlanItem) is True
+        assert model.index(first_row, 0).data(TaskRoles.IsCurrentPlanItem) is True
+        assert model.index(first_row, 0).data(TaskRoles.StartedAt) == started_at
+        assert model.index(first_row, 0).data(TaskRoles.ActualMinutes) == 0
+        assert model.index(second_row, 0).data(TaskRoles.IsCurrentPlanItem) is False
+        assert model.index(second_row, 0).data(TaskRoles.StartedAt) == ""
+
+        model.toggle_done_by_row(first_row)
+
+        stored_tasks = {task.id: task for task in database.fetch_tasks()}
+        completed = stored_tasks[first.id]
+        next_item = stored_tasks[second.id]
+        assert completed.done is True
+        assert completed.finished_at
+        assert completed.actual_minutes >= 55
+        assert next_item.started_at
+        assert next_item.finished_at == ""
+        assert next_item.actual_minutes == 0
+        assert next_item.gantt_estimate_minutes >= 115
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        first_row = _find_task_row(model, first.id)
+        second_row = _find_task_row(model, second.id)
+        assert first_row >= 0 and second_row >= 0
+        assert model.index(first_row, 0).data(TaskRoles.IsCurrentPlanItem) is False
+        assert model.index(first_row, 0).data(TaskRoles.FinishedAt) == completed.finished_at
+        assert model.index(first_row, 0).data(TaskRoles.ActualMinutes) == completed.actual_minutes
+        assert model.index(second_row, 0).data(TaskRoles.IsCurrentPlanItem) is True
+        assert model.index(second_row, 0).data(TaskRoles.StartedAt) == next_item.started_at
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_model_plan_item_drag_drop_reorders_only_within_parent(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_plan_drag_drop", ".sqlite3")
@@ -1285,6 +1380,69 @@ def test_tasks_model_plan_item_drag_drop_reorders_only_within_parent(monkeypatch
 
         blocked = model.dropMimeData(mime_data, tasks_workspace.Qt.DropAction.MoveAction, other_row, 0, QModelIndex())
         assert blocked is False
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_plan_reorder_promotes_new_first_item_to_current_and_starts_it(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_reorder_current_item", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        first = database.create_task(
+            title="First step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title="Second step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("РџР»Р°РЅ")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        first_row = _find_task_row(model, first.id)
+        second_row = _find_task_row(model, second.id)
+        assert first_row >= 0 and second_row >= 0
+        first_started_at = model.index(first_row, 0).data(TaskRoles.StartedAt)
+        assert model.index(first_row, 0).data(TaskRoles.IsCurrentPlanItem) is True
+        assert first_started_at
+        assert model.index(second_row, 0).data(TaskRoles.StartedAt) == ""
+
+        assert model.reorder_plan_task_before(second.id, first.id) is True
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        first_row = _find_task_row(model, first.id)
+        second_row = _find_task_row(model, second.id)
+        assert first_row >= 0 and second_row >= 0
+        assert model.index(second_row, 0).data(TaskRoles.IsCurrentPlanItem) is True
+        assert model.index(second_row, 0).data(TaskRoles.StartedAt)
+        assert model.index(first_row, 0).data(TaskRoles.IsCurrentPlanItem) is False
+        assert model.index(first_row, 0).data(TaskRoles.StartedAt) == first_started_at
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -1578,3 +1736,34 @@ def test_plan_item_stage_only_controls_center_stage_text() -> None:
     assert controls["priority_up"].isNull()
     assert controls["priority_down"].isNull()
     assert abs(controls["value"].center().x() - chip_rect.center().x()) <= 12
+
+
+def test_tasks_delegate_formats_plan_execution_text_for_current_item() -> None:
+    now_dt = datetime(2026, 3, 6, 10, 5, tzinfo=timezone.utc)
+    started_at = datetime(2026, 3, 6, 9, 0, tzinfo=timezone.utc).isoformat(timespec="seconds")
+
+    text = tasks_workspace.TasksItemDelegate._format_plan_execution_text(
+        is_plan_item=True,
+        is_current_plan_item=True,
+        done=False,
+        started_at=started_at,
+        finished_at="",
+        actual_minutes=0,
+        now_dt=now_dt,
+    )
+
+    assert text == "В работе: 1ч 05м"
+
+
+def test_tasks_delegate_formats_plan_execution_text_for_completed_item() -> None:
+    text = tasks_workspace.TasksItemDelegate._format_plan_execution_text(
+        is_plan_item=True,
+        is_current_plan_item=False,
+        done=True,
+        started_at="2026-03-06T09:00:00+00:00",
+        finished_at="2026-03-06T10:40:00+00:00",
+        actual_minutes=100,
+        now_dt=datetime(2026, 3, 6, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert text == "Факт: 1ч 40м"

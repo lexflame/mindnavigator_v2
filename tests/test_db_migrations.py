@@ -99,6 +99,9 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "plan_order" in task_columns
         assert "marker_theme" in task_columns
         assert "completion_delay_minutes" in task_columns
+        assert "started_at" in task_columns
+        assert "finished_at" in task_columns
+        assert "actual_minutes" in task_columns
         dossier_tables = {
             row["name"]
             for row in database._conn.execute(
@@ -108,7 +111,7 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert dossier_tables == {"dossiers", "dossier_links"}
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 6
+        assert user_version == 7
 
         board_rows = database._conn.execute(
             "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
@@ -137,8 +140,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 6
-        assert database.apply_schema_updates() == 6
+        assert database.apply_schema_updates() == 7
+        assert database.apply_schema_updates() == 7
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -153,7 +156,7 @@ def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_curr
             database._conn.execute("DROP TABLE dossiers;")
             database._conn.execute("PRAGMA user_version = 5;")
 
-        assert database.apply_schema_updates() == 6
+        assert database.apply_schema_updates() == 7
 
         dossier_tables = {
             row["name"]
@@ -650,6 +653,72 @@ def test_database_backfills_task_board_column_when_missing(unique_temp_path) -> 
         }
         assert board_rows["Deferred legacy"] == BOARD_COLUMN_DEFERRED
         assert board_rows["Queued legacy"] == BOARD_COLUMN_QUEUE
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_database_backfills_task_execution_columns_when_migrating_from_v6(unique_temp_path) -> None:
+    db_path = unique_temp_path("tasks_execution_column_backfill", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            f"""
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                day TEXT NOT NULL,
+                time_text TEXT NOT NULL DEFAULT '',
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', '{DEFERRED_PRIORITY}')),
+                board_column TEXT NOT NULL DEFAULT '{BOARD_COLUMN_QUEUE}' CHECK (board_column IN ('{BOARD_COLUMN_DEFERRED}', '{BOARD_COLUMN_QUEUE}', 'in_progress', 'completed')),
+                done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+                completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
+                gantt_estimate_minutes INTEGER NOT NULL DEFAULT 0 CHECK (gantt_estimate_minutes >= 0),
+                gantt_forecasted INTEGER NOT NULL DEFAULT 0 CHECK (gantt_forecasted IN (0, 1)),
+                project_id INTEGER,
+                parent_id INTEGER REFERENCES tasks(id),
+                recurrence_kind TEXT NOT NULL DEFAULT '',
+                recurrence_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurrence_interval >= 1),
+                is_plan_task INTEGER NOT NULL DEFAULT 0 CHECK (is_plan_task IN (0, 1)),
+                plan_order INTEGER NOT NULL DEFAULT 0,
+                marker_color TEXT NOT NULL DEFAULT '',
+                marker_theme TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            INSERT INTO tasks(title, description, day, time_text, priority, done, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            ("Legacy execution task", "", "2026-02-25", "10:00", "Medium", 0, now, now),
+        )
+        legacy_conn.execute("PRAGMA user_version = 6;")
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        task_columns = {
+            row["name"] for row in database._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        }
+        assert "started_at" in task_columns
+        assert "finished_at" in task_columns
+        assert "actual_minutes" in task_columns
+        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == 7
+
+        row = database._conn.execute(
+            "SELECT started_at, finished_at, actual_minutes FROM tasks WHERE title = ?;",
+            ("Legacy execution task",),
+        ).fetchone()
+        assert row is not None
+        assert row["started_at"] == ""
+        assert row["finished_at"] == ""
+        assert int(row["actual_minutes"]) == 0
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

@@ -23,6 +23,9 @@ class TaskRow:
     recurrence_kind: str = ""
     recurrence_interval: int = 1
     completion_delay_minutes: int = 0
+    started_at: str = ""
+    finished_at: str = ""
+    actual_minutes: int = 0
     marker_color: str = ""
     marker_theme: str = ""
     is_plan_task: bool = False

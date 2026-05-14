@@ -619,14 +619,21 @@ class TaskEditDialog(QDialog):
             return ""
         return self.time_edit.time().toString("HH:mm")
 
+    def _safe_db_fetch(self, method_name: str, *args, **kwargs) -> List:
+        fetch_method = getattr(self._db, method_name, None)
+        if not callable(fetch_method):
+            return []
+        result = fetch_method(*args, **kwargs)
+        return list(result or [])
+
     def _load_attachment_sources(self) -> None:
-        tasks = self._db.fetch_tasks()
-        notes = self._db.fetch_notes()
-        ideas = self._db.fetch_ideas(archived=True)
-        objects = self._db.fetch_objects()
-        maps = self._db.fetch_maps()
-        markers = self._db.fetch_map_markers()
-        cloud_files = self._db.fetch_cloud_files()
+        tasks = self._safe_db_fetch("fetch_tasks")
+        notes = self._safe_db_fetch("fetch_notes")
+        ideas = self._safe_db_fetch("fetch_ideas", archived=True)
+        objects = self._safe_db_fetch("fetch_objects")
+        maps = self._safe_db_fetch("fetch_maps")
+        markers = self._safe_db_fetch("fetch_map_markers")
+        cloud_files = self._safe_db_fetch("fetch_cloud_files")
         self._tasks_by_id = {task.id: task for task in tasks}
         self._notes_by_id = {note.id: note for note in notes}
         self._ideas_by_id = {idea.id: idea for idea in ideas}
@@ -967,7 +974,7 @@ class TaskEditDialog(QDialog):
     def _open_linked_task(self, task_id: int) -> bool:
         task = self._tasks_by_id.get(task_id)
         if task is None:
-            tasks = self._db.fetch_tasks()
+            tasks = self._safe_db_fetch("fetch_tasks")
             self._tasks_by_id = {item.id: item for item in tasks}
             task = self._tasks_by_id.get(task_id)
         if task is None:

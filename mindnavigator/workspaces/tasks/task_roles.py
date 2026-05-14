@@ -33,5 +33,9 @@ class TaskRoles:
     IsPlanItem = Qt.ItemDataRole.UserRole + 26
     PlanNumber = Qt.ItemDataRole.UserRole + 27
     PlanOrder = Qt.ItemDataRole.UserRole + 28
+    IsCurrentPlanItem = Qt.ItemDataRole.UserRole + 29
+    StartedAt = Qt.ItemDataRole.UserRole + 30
+    FinishedAt = Qt.ItemDataRole.UserRole + 31
+    ActualMinutes = Qt.ItemDataRole.UserRole + 32
 
 __all__ = ["TaskRoles"]
