@@ -53,6 +53,7 @@ from mindnavigator.workspaces.files import FileWorkspace
 from mindnavigator.workspaces.ideas import IdeasWorkspace
 from mindnavigator.workspaces.maps import MapsListWorkspace
 from mindnavigator.workspaces.minddraw import MindDrawWorkspace
+from mindnavigator.workspaces.mutaboard import MutaBoardWorkspace
 from mindnavigator.workspaces.notes import NoteWorkspace
 from mindnavigator.workspaces.objects import ObjectWorkspace
 from mindnavigator.workspaces.projects import ProjectsWorkspace
@@ -116,6 +117,7 @@ class MainWindow(QMainWindow):
 
     MODE_PROJECTS = "Проекты"
     MODE_TASKS = "Задачи"
+    MODE_MUTABOARD = "Мутаборд"
     MODE_PURCHASES = "Покупки"
     MODE_IDEAS = "Идеи"
     MODE_DOSSIER = "Досье"
@@ -241,6 +243,7 @@ class MainWindow(QMainWindow):
         return {
             "projects": self.MODE_PROJECTS,
             "tasks": self.MODE_TASKS,
+            "mutaboard": self.MODE_MUTABOARD,
             "purchases": self.MODE_PURCHASES,
             "ideas": self.MODE_IDEAS,
             "dossier": self.MODE_DOSSIER,
@@ -284,6 +287,7 @@ class MainWindow(QMainWindow):
     def _first_enabled_mode(self) -> str:
         ordered_modes = [
             self.MODE_TASKS,
+            self.MODE_MUTABOARD,
             self.MODE_PROJECTS,
             self.MODE_PURCHASES,
             self.MODE_IDEAS,
@@ -317,6 +321,7 @@ class MainWindow(QMainWindow):
             "search_nav",
             "projects_nav",
             "page_tasks",
+            "page_mutaboard",
             "page_projects",
             "page_purchases",
             "page_ideas",
@@ -743,6 +748,7 @@ class MainWindow(QMainWindow):
             self.MODE_FILES: "Files",
             self.MODE_OBJECTS: "Objects",
             self.MODE_CHARACTERS: "Characters",
+            self.MODE_MUTABOARD: "MutaBoard",
             self.MODE_MINDDRAW: "MindDraw",
             self.MODE_SETTINGS: "Settings",
         }
@@ -875,6 +881,7 @@ class MainWindow(QMainWindow):
 
         # Pages
         self.page_tasks = TasksWorkspace()
+        self.page_mutaboard = MutaBoardWorkspace()
         self.page_projects = ProjectsWorkspace()
         self.page_purchases = PurchasesWorkspace()
         self.page_ideas = IdeasWorkspace()
@@ -893,6 +900,7 @@ class MainWindow(QMainWindow):
         self._page_index = {
             self.MODE_PROJECTS: self.workspace_stack.addWidget(self.page_projects),
             self.MODE_TASKS: self.workspace_stack.addWidget(self.page_tasks),
+            self.MODE_MUTABOARD: self.workspace_stack.addWidget(self.page_mutaboard),
             self.MODE_PURCHASES: self.workspace_stack.addWidget(self.page_purchases),
             self.MODE_IDEAS: self.workspace_stack.addWidget(self.page_ideas),
             self.MODE_DOSSIER: self.workspace_stack.addWidget(self.page_dossier),
@@ -1086,6 +1094,7 @@ class MainWindow(QMainWindow):
         self._btn_to_mode = {
             self.left_rail.btn_projects: self.MODE_PROJECTS,
             self.left_rail.btn_tasks: self.MODE_TASKS,
+            self.left_rail.btn_mutaboard: self.MODE_MUTABOARD,
             self.left_rail.btn_purchases: self.MODE_PURCHASES,
             self.left_rail.btn_ideas: self.MODE_IDEAS,
             self.left_rail.btn_dossier: self.MODE_DOSSIER,
@@ -1124,6 +1133,8 @@ class MainWindow(QMainWindow):
         # Обновляем данные активной страницы.
         if mode_name == self.MODE_TASKS:
             self.page_tasks.refresh_tasks()
+        elif mode_name == self.MODE_MUTABOARD:
+            self.page_mutaboard.refresh()
         elif mode_name == self.MODE_PURCHASES:
             if hasattr(self.page_purchases, "refresh"):
                 self.page_purchases.refresh()
