@@ -169,6 +169,7 @@ class MutaBoardWorkspace(BaseWorkspace):
 
     def _build_board_shell(self) -> None:
         root = QWidget(self)
+        root.setObjectName("MutaBoardRoot")
         root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(10)
@@ -257,6 +258,7 @@ class MutaBoardWorkspace(BaseWorkspace):
         self.inspector_stage_value = QLabel("—")
         self.inspector_project_value = QLabel("—")
         self.inspector_meta_value = QLabel("—")
+        self.inspector_links_value = QLabel("—")
         self.inspector_subtitle_value = QLabel("—")
         self.inspector_subtitle_value.setWordWrap(True)
 
@@ -265,10 +267,11 @@ class MutaBoardWorkspace(BaseWorkspace):
         form.addRow("Стадия", self.inspector_stage_value)
         form.addRow("Проект", self.inspector_project_value)
         form.addRow("Мета", self.inspector_meta_value)
+        form.addRow("Связи", self.inspector_links_value)
         form.addRow("Описание", self.inspector_subtitle_value)
         inspector_layout.addWidget(self.inspector_form_host)
 
-        self.inspector_footer = QLabel("Phase 3: read-only board + selection sync.")
+        self.inspector_footer = QLabel("Выберите карточку, чтобы увидеть связи и доступные мутации.")
         self.inspector_footer.setObjectName("MutaBoardInspectorFooter")
         self.inspector_footer.setWordWrap(True)
         self.inspector_primary_action = QToolButton(self.inspector)
@@ -296,6 +299,16 @@ class MutaBoardWorkspace(BaseWorkspace):
 
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
+        self._base_workspace_stylesheet = self.styleSheet()
+        self._apply_mutaboard_style()
+
+    def set_status(self, text: str) -> None:
+        super().set_status(text)
+        self._base_workspace_stylesheet = self.styleSheet()
+        self._apply_mutaboard_style()
+
+    def set_error(self, text: str) -> None:
+        super().set_error(text)
         self._base_workspace_stylesheet = self.styleSheet()
         self._apply_mutaboard_style()
 
@@ -438,7 +451,9 @@ class MutaBoardWorkspace(BaseWorkspace):
             self.inspector_stage_value.setText("—")
             self.inspector_project_value.setText("—")
             self.inspector_meta_value.setText("—")
+            self.inspector_links_value.setText("—")
             self.inspector_subtitle_value.setText("—")
+            self.inspector_footer.setText("Выберите карточку, чтобы увидеть связи и доступные мутации.")
             self._set_action_button(self.inspector_primary_action, None)
             self._set_action_button(self.inspector_secondary_action, None)
             return
@@ -449,10 +464,19 @@ class MutaBoardWorkspace(BaseWorkspace):
         self.inspector_stage_value.setText(_STAGE_TITLES.get(card.stage, card.stage))
         self.inspector_project_value.setText(card.project_title or "—")
         self.inspector_meta_value.setText(card.meta_text or "—")
+        self.inspector_links_value.setText(card.link_summary)
         self.inspector_subtitle_value.setText(card.subtitle or "—")
         actions = self._actions_for_card(card)
         self._set_action_button(self.inspector_primary_action, actions[0] if len(actions) > 0 else None)
         self._set_action_button(self.inspector_secondary_action, actions[1] if len(actions) > 1 else None)
+        self.inspector_footer.setText(self._inspector_footer_text(card, actions))
+
+    @staticmethod
+    def _inspector_footer_text(card: MutaBoardCard, actions: list[tuple[str, str]]) -> str:
+        if actions:
+            action_names = ", ".join(action[0] for action in actions)
+            return f"Связи: {card.link_summary}. Доступно: {action_names}."
+        return f"Связи: {card.link_summary}. Для этой карточки нет inspector actions."
 
     @staticmethod
     def _set_action_button(button: QToolButton, action_payload: tuple[str, str] | None) -> None:
@@ -717,63 +741,163 @@ class MutaBoardWorkspace(BaseWorkspace):
         return None
 
     def _apply_mutaboard_style(self) -> None:
-        palette = get_theme_palette(self._theme_mode)
+        palette = get_theme_palette("dark")
+        shell_bg = "#0d1218"
+        shell_panel = "#121922"
+        shell_panel_alt = "#18212c"
+        shell_input = "#141c26"
+        shell_input_hover = "#1a2431"
+        shell_border = "#273140"
+        shell_border_strong = "#3a4658"
+        shell_text = "#eef4ff"
+        shell_dim_text = "#95a3b8"
+        shell_muted = "#71839b"
         self.setStyleSheet(
             self._base_workspace_stylesheet
             + f"""
+            QWidget#WorkspaceToolbar,
+            QWidget#WorkspaceSearch,
+            QWidget#WorkspaceFilters,
+            QWidget#WorkspaceContent,
+            QWidget#MutaBoardRoot {{
+                background: {shell_panel};
+                border: 1px solid {shell_border};
+                border-radius: 12px;
+                padding: 6px;
+            }}
+            QWidget#WorkspaceContent,
+            QWidget#MutaBoardRoot {{
+                border: none;
+                border-radius: 0px;
+                padding: 0px;
+            }}
+            QLineEdit#WorkspaceSearchInput {{
+                background: {shell_input};
+                color: {shell_text};
+                border: 1px solid {shell_border};
+                border-radius: 8px;
+                padding: 6px 8px;
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+            }}
+            QLineEdit#WorkspaceSearchInput:focus {{
+                border: 1px solid {palette.accent};
+            }}
+            QToolButton#WorkspaceSearchClear {{
+                background: {shell_input};
+                color: {shell_text};
+                border: 1px solid {shell_border_strong};
+                border-radius: 8px;
+                padding: 4px 8px;
+            }}
+            QToolButton#WorkspaceSearchClear:hover {{
+                background: {shell_input_hover};
+                color: {palette.selection_text};
+            }}
+            QLabel#WorkspaceStatus {{
+                color: {shell_dim_text};
+            }}
             QWidget#MutaBoardWorkspace {{
-                background: transparent;
+                background: {shell_bg};
             }}
             QLabel#MutaBoardSummary {{
-                color: {palette.dim_text};
+                color: {shell_dim_text};
                 font-size: 12px;
             }}
             QFrame#MutaBoardBoardWrap,
             QFrame#MutaBoardInspector,
             QFrame#MutaBoardColumn {{
-                background: {palette.panel_bg};
-                border: 1px solid {palette.border};
+                background: {shell_panel};
+                border: 1px solid {shell_border};
                 border-radius: 14px;
+            }}
+            QFrame#MutaBoardInspector {{
+                background: {shell_panel_alt};
+                border-color: {shell_border_strong};
             }}
             QScrollArea#MutaBoardScroll,
             QWidget#MutaBoardColumnsHost,
             QWidget#qt_scrollarea_viewport {{
-                background: transparent;
+                background: {shell_bg};
                 border: none;
+            }}
+            QSplitter#MutaBoardSplitter::handle {{
+                background: {shell_bg};
+                width: 10px;
             }}
             QLabel#MutaBoardColumnTitle,
             QLabel#MutaBoardInspectorTitle {{
-                color: {palette.text};
+                color: {shell_text};
                 font-size: 13px;
                 font-weight: 700;
             }}
             QListWidget#MutaBoardColumnList {{
-                background: transparent;
-                border: none;
+                background: {shell_panel};
+                color: {shell_text};
+                border: 1px solid {shell_border};
+                border-radius: 10px;
                 outline: none;
             }}
             QListWidget#MutaBoardColumnList::item {{
                 background: transparent;
                 border: none;
             }}
+            QListWidget#MutaBoardColumnList::item:selected {{
+                background: transparent;
+                color: {shell_text};
+            }}
             QComboBox#MutaBoardKindFilter,
             QComboBox#MutaBoardProjectFilter,
             QComboBox#MutaBoardLinkedFilter {{
-                background: {palette.input_bg};
-                color: {palette.text};
-                border: 1px solid {palette.border};
-                border-radius: 6px;
+                background: {shell_input};
+                color: {shell_text};
+                border: 1px solid {shell_border};
+                border-radius: 8px;
                 padding: 5px 8px;
                 min-width: 140px;
             }}
+            QComboBox#MutaBoardKindFilter::drop-down,
+            QComboBox#MutaBoardProjectFilter::drop-down,
+            QComboBox#MutaBoardLinkedFilter::drop-down {{
+                border: none;
+                background: {shell_input};
+                width: 22px;
+            }}
+            QComboBox#MutaBoardKindFilter:hover,
+            QComboBox#MutaBoardProjectFilter:hover,
+            QComboBox#MutaBoardLinkedFilter:hover {{
+                background: {shell_input_hover};
+                border-color: {shell_border_strong};
+            }}
+            QComboBox#MutaBoardKindFilter QAbstractItemView,
+            QComboBox#MutaBoardProjectFilter QAbstractItemView,
+            QComboBox#MutaBoardLinkedFilter QAbstractItemView {{
+                background: {shell_panel_alt};
+                color: {shell_text};
+                border: 1px solid {shell_border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+                outline: none;
+            }}
             QCheckBox#MutaBoardActionableOnly {{
-                color: {palette.text};
+                color: {shell_text};
                 spacing: 6px;
             }}
+            QCheckBox#MutaBoardActionableOnly::indicator {{
+                width: 14px;
+                height: 14px;
+                border-radius: 4px;
+                border: 1px solid {shell_border_strong};
+                background: {shell_input};
+            }}
+            QCheckBox#MutaBoardActionableOnly::indicator:checked {{
+                background: {palette.accent};
+                border-color: {palette.accent_hover};
+            }}
             QToolButton#MutaBoardInspectorAction {{
-                color: {palette.text};
-                background: {palette.elevated_bg};
-                border: 1px solid {palette.border_strong};
+                color: {shell_text};
+                background: {shell_input};
+                border: 1px solid {shell_border_strong};
                 border-radius: 8px;
                 padding: 7px 10px;
                 min-height: 30px;
@@ -786,7 +910,37 @@ class MutaBoardWorkspace(BaseWorkspace):
             QLabel#MutaBoardInspectorEmpty,
             QLabel#MutaBoardInspectorFooter,
             QWidget#MutaBoardInspectorFormHost QLabel {{
-                color: {palette.dim_text};
+                color: {shell_dim_text};
+            }}
+            QWidget#MutaBoardInspectorFormHost {{
+                background: transparent;
+            }}
+            QWidget#MutaBoardInspectorFormHost QLabel {{
+                background: transparent;
+            }}
+            QScrollBar:vertical,
+            QScrollBar:horizontal {{
+                background: {shell_panel};
+                border: none;
+                margin: 0px;
+            }}
+            QScrollBar::handle:vertical,
+            QScrollBar::handle:horizontal {{
+                background: {shell_border_strong};
+                border-radius: 6px;
+                min-height: 24px;
+                min-width: 24px;
+            }}
+            QScrollBar::handle:vertical:hover,
+            QScrollBar::handle:horizontal:hover {{
+                background: {shell_muted};
+            }}
+            QScrollBar::add-line,
+            QScrollBar::sub-line,
+            QScrollBar::add-page,
+            QScrollBar::sub-page {{
+                background: transparent;
+                border: none;
             }}
             """
         )

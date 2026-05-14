@@ -325,6 +325,49 @@ def test_mutaboard_workspace_builds_board_and_counts(monkeypatch) -> None:
         workspace.deleteLater()
 
 
+def test_mutaboard_workspace_keeps_dark_shell_in_light_theme(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.set_theme_mode("light")
+        stylesheet = workspace.styleSheet()
+
+        assert "#0d1218" in stylesheet
+        assert "#121922" in stylesheet
+        assert "#141c26" in stylesheet
+        assert "QWidget#WorkspaceContent" in stylesheet
+        assert "QListWidget#MutaBoardColumnList" in stylesheet
+        assert "QComboBox#MutaBoardKindFilter::drop-down" in stylesheet
+        assert "QCheckBox#MutaBoardActionableOnly::indicator" in stylesheet
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_reapplies_dark_shell_after_status_updates(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.set_status("Manual status update")
+        stylesheet = workspace.styleSheet()
+
+        assert "#0d1218" in stylesheet
+        assert "QWidget#WorkspaceContent" in stylesheet
+        assert "QComboBox#MutaBoardKindFilter::drop-down" in stylesheet
+
+        workspace.set_error("Manual error update")
+        stylesheet = workspace.styleSheet()
+
+        assert "#0d1218" in stylesheet
+        assert "QListWidget#MutaBoardColumnList" in stylesheet
+        assert workspace.status_row.text().startswith("Error:")
+    finally:
+        workspace.deleteLater()
+
+
 def test_mutaboard_workspace_selection_updates_inspector(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
@@ -341,6 +384,8 @@ def test_mutaboard_workspace_selection_updates_inspector(monkeypatch) -> None:
         assert workspace.inspector_stage_value.text() == "Осмысление"
         assert workspace.inspector_project_value.text() == "Workspace Project"
         assert "ripe" in workspace.inspector_meta_value.text()
+        assert workspace.inspector_links_value.text() == "T0 · I0 · O0"
+        assert "Создать задачу" in workspace.inspector_footer.text()
     finally:
         workspace.deleteLater()
 
@@ -492,11 +537,87 @@ def test_mutaboard_workspace_linked_filter_tracks_new_relations(monkeypatch) -> 
         assert linked_idea_card.linked_object_count == 1
         assert workspace.board_columns["active"].count() == 1
         assert workspace.status_row.text() == "Мутаборд: карточек 2 из 4."
+        workspace.board_columns["inbox"].setCurrentRow(0)
+        QApplication.processEvents()
+        assert workspace.inspector_links_value.text() == "T0 · I0 · O1"
+        assert "T0 · I0 · O1" in workspace.inspector_footer.text()
 
         workspace.linked_filter.setCurrentIndex(workspace.linked_filter.findData("unlinked"))
         QApplication.processEvents()
         assert workspace.board_columns["inbox"].count() == 0
         assert workspace.board_columns["thinking"].count() == 1
         assert workspace.board_columns["prep"].count() == 1
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_inspector_action_creates_task_from_object(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.board_columns["active"].setCurrentRow(0)
+        QApplication.processEvents()
+        assert workspace.inspector_primary_action.text() == "Создать задачу"
+        workspace.inspector_primary_action.click()
+        QApplication.processEvents()
+
+        assert stub.created_task_ids == [1000]
+        assert stub.task_attachment_calls == [(1000, "object", 303)]
+        assert workspace.status_row.text() == "Мутаборд: из объекта создана задача."
+        assert any(
+            _card_from_column(workspace, "prep", row).entity_id == 1000
+            for row in range(workspace.board_columns["prep"].count())
+        )
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_inspector_action_creates_idea_from_task(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.board_columns["prep"].setCurrentRow(0)
+        QApplication.processEvents()
+        assert workspace.inspector_primary_action.text() == "Создать идею"
+        workspace.inspector_primary_action.click()
+        QApplication.processEvents()
+
+        assert stub.created_idea_ids == [2000]
+        assert stub.idea_relation_calls == [(2000, "task", 101)]
+        assert workspace.status_row.text() == "Мутаборд: из задачи создана идея."
+        assert any(
+            _card_from_column(workspace, "thinking", row).entity_id == 2000
+            for row in range(workspace.board_columns["thinking"].count())
+        )
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_inspector_action_creates_object_from_task(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.board_columns["prep"].setCurrentRow(0)
+        QApplication.processEvents()
+        assert workspace.inspector_secondary_action.text() == "Создать объект"
+        workspace.inspector_secondary_action.click()
+        QApplication.processEvents()
+
+        assert stub.created_object_ids == [3000]
+        assert stub.task_attachment_calls == [(101, "object", 3000)]
+        assert workspace.status_row.text() == "Мутаборд: из задачи создан объект."
+        assert any(
+            _card_from_column(workspace, "thinking", row).entity_id == 3000
+            for row in range(workspace.board_columns["thinking"].count())
+        )
     finally:
         workspace.deleteLater()

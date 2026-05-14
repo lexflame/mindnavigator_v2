@@ -132,3 +132,23 @@
 [2026-05-14 02:18:47] main_window app_click visible_dialogs=1 global_pos=(1633,875)
 [2026-05-14 02:18:47] main_window app_click visible_dialogs=1 global_pos=(1633,875)
 [2026-05-14 11:15:52] application_state_changed state=2
+[2026-05-14 12:40:03] tasks_model update_task_by_row start row=1 task_id=10 from_day=2026-03-06 to_day=2026-03-06 title='Plan root' time='09:00' priority='High' done=False
+[2026-05-14 12:40:03] tasks_model update_task_by_row db_result task_id=10 day=2026-03-06 time='09:00' priority='High' done=False
+[2026-05-14 12:40:03] tasks_model update_task_by_row sync_plan_projects task_id=10 project_id=9
+[2026-05-14 12:40:03] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
+[2026-05-14 12:40:03] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-14 12:40:03] tasks_model update_task_by_row rebuild task_id=11
+[2026-05-14 12:42:05] tasks_model update_task_by_row start row=1 task_id=10 from_day=2026-03-06 to_day=2026-03-06 title='Plan root' time='09:00' priority='High' done=False
+[2026-05-14 12:42:05] tasks_model update_task_by_row db_result task_id=10 day=2026-03-06 time='09:00' priority='High' done=False
+[2026-05-14 12:42:05] tasks_model update_task_by_row sync_plan_projects task_id=10 project_id=9
+[2026-05-14 12:42:05] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
+[2026-05-14 12:42:05] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-14 12:42:05] tasks_model update_task_by_row rebuild task_id=11
+[2026-05-14 16:36:09] tasks_model update_task_by_row start row=1 task_id=10 from_day=2026-03-06 to_day=2026-03-06 title='Plan root' time='09:00' priority='High' done=False
+[2026-05-14 16:36:09] tasks_model update_task_by_row db_result task_id=10 day=2026-03-06 time='09:00' priority='High' done=False
+[2026-05-14 16:36:09] tasks_model update_task_by_row sync_plan_projects task_id=10 project_id=9
+[2026-05-14 16:36:09] tasks_model update_task_by_row start row=2 task_id=11 from_day=2026-03-06 to_day=2026-03-06 title='Plan child' time='09:10' priority='Medium' done=False
+[2026-05-14 16:36:09] tasks_model update_task_by_row db_result task_id=11 day=2026-03-06 time='09:10' priority='Medium' done=False
+[2026-05-14 16:36:09] tasks_model update_task_by_row rebuild task_id=11
+[2026-05-14 16:39:06] application_state_changed state=2
+[2026-05-14 16:41:52] application_state_changed state=2

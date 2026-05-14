@@ -101,11 +101,12 @@ class MutaBoardDelegate(QStyledItemDelegate):
         footer = []
         if card.project_title:
             footer.append(card.project_title)
-        if card.total_linked_count:
-            footer.append(f"Links: {card.total_linked_count}")
+        footer.append(card.link_summary)
+        if card.can_mutate:
+            footer.append("Actions")
         if not card.can_drag:
             footer.append("Read-only")
-        footer_text = " · ".join(footer) if footer else "Mixed entity card"
+        footer_text = " · ".join(footer)
         painter.setFont(self._meta_font)
         painter.setPen(QColor("#73839a"))
         footer_text = meta_metrics.elidedText(footer_text, Qt.TextElideMode.ElideRight, width)

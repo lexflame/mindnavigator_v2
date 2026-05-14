@@ -55,6 +55,10 @@ class MutaBoardCard:
     def total_linked_count(self) -> int:
         return self.linked_task_count + self.linked_idea_count + self.linked_object_count
 
+    @property
+    def link_summary(self) -> str:
+        return f"T{self.linked_task_count} · I{self.linked_idea_count} · O{self.linked_object_count}"
+
 
 __all__ = [
     "MutaBoardCard",
