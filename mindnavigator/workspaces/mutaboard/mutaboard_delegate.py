@@ -11,6 +11,7 @@ from ._shared import (
     QSize,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     Qt,
 )
 
@@ -36,10 +37,10 @@ class MutaBoardDelegate(QStyledItemDelegate):
         self._badge_font.setPointSize(8)
         self._badge_font.setBold(True)
 
-    def sizeHint(self, option, index):  # noqa: N802
+    def sizeHint(self, option: QStyleOptionViewItem, index):  # noqa: N802
         return QSize(option.rect.width(), self.ROW_H)
 
-    def paint(self, painter, option, index) -> None:  # noqa: N802
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: N802
         card = index.data(Qt.ItemDataRole.UserRole)
         if card is None:
             super().paint(painter, option, index)

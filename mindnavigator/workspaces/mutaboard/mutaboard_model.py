@@ -11,8 +11,10 @@ from mindnavigator.storage import (
     BOARD_COLUMN_IN_PROGRESS,
     DEFERRED_PRIORITY,
     IdeaData,
+    IdeaRelationData,
     ObjectData,
     TaskData,
+    TaskAttachmentData,
     get_database as _storage_get_database,
 )
 
@@ -74,11 +76,19 @@ class MutaBoardModel:
         self._cards: list[MutaBoardCard] = []
 
     def reload(self) -> list[MutaBoardCard]:
+        tasks = self._db.fetch_tasks()
+        active_ideas = self._db.fetch_ideas(archived=False)
+        archived_ideas = self._db.fetch_ideas(archived=True)
+        ideas = [*active_ideas, *archived_ideas]
+        objects = self._db.fetch_objects()
+        task_attachments = {task.id: self._db.fetch_task_attachments(task.id) for task in tasks}
+        idea_relations = {idea.id: self._db.fetch_idea_relations(idea.id) for idea in ideas}
+        object_counts = self._collect_object_link_counts(task_attachments, idea_relations)
+
         cards: list[MutaBoardCard] = []
-        cards.extend(self._build_task_card(task) for task in self._db.fetch_tasks())
-        cards.extend(self._build_idea_card(idea) for idea in self._db.fetch_ideas(archived=False))
-        cards.extend(self._build_idea_card(idea) for idea in self._db.fetch_ideas(archived=True))
-        cards.extend(self._build_object_card(obj) for obj in self._db.fetch_objects())
+        cards.extend(self._build_task_card(task, task_attachments.get(task.id, [])) for task in tasks)
+        cards.extend(self._build_idea_card(idea, idea_relations.get(idea.id, [])) for idea in ideas)
+        cards.extend(self._build_object_card(obj, object_counts.get(obj.id, {})) for obj in objects)
         self._cards = sorted(cards, key=self._sort_key)
         return self.cards()
 
@@ -151,10 +161,13 @@ class MutaBoardModel:
             card.entity_id,
         )
 
-    def _build_task_card(self, task: TaskData) -> MutaBoardCard:
+    def _build_task_card(self, task: TaskData, attachments: list[TaskAttachmentData]) -> MutaBoardCard:
         stage = self._task_stage(task)
         subtitle = self._trim_excerpt(task.description)
         meta_parts = [task.project_title, task.day.isoformat(), task.priority]
+        linked_task_count = sum(1 for attachment in attachments if attachment.kind == "task")
+        linked_idea_count = sum(1 for attachment in attachments if attachment.kind == "idea")
+        linked_object_count = sum(1 for attachment in attachments if attachment.kind == "object")
         return MutaBoardCard(
             entity_kind=MUTABOARD_KIND_TASK,
             entity_id=task.id,
@@ -165,16 +178,22 @@ class MutaBoardModel:
             project_title=task.project_title,
             accent_color=_TASK_ACCENT,
             meta_text=self._join_meta(meta_parts),
-            can_drag=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
+            linked_task_count=linked_task_count,
+            linked_idea_count=linked_idea_count,
+            linked_object_count=linked_object_count,
+            can_drag=not task.done,
             can_mutate=True,
             is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
             source_payload=task,
         )
 
-    def _build_idea_card(self, idea: IdeaData) -> MutaBoardCard:
+    def _build_idea_card(self, idea: IdeaData, relations: list[IdeaRelationData]) -> MutaBoardCard:
         stage = self._idea_stage(idea)
         subtitle = self._trim_excerpt(idea.summary or idea.body_md or idea.source)
         meta_parts = [idea.project_title, idea.status, idea.type]
+        linked_task_count = sum(1 for relation in relations if relation.entity_type == "task")
+        linked_idea_count = sum(1 for relation in relations if relation.entity_type == "idea")
+        linked_object_count = sum(1 for relation in relations if relation.entity_type == "object")
         return MutaBoardCard(
             entity_kind=MUTABOARD_KIND_IDEA,
             entity_id=idea.id,
@@ -185,13 +204,16 @@ class MutaBoardModel:
             project_title=idea.project_title,
             accent_color=_IDEA_ACCENT,
             meta_text=self._join_meta(meta_parts),
-            can_drag=idea.status in {"inbox", "ripe", "work"},
+            linked_task_count=linked_task_count,
+            linked_idea_count=linked_idea_count,
+            linked_object_count=linked_object_count,
+            can_drag=True,
             can_mutate=True,
             is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
             source_payload=idea,
         )
 
-    def _build_object_card(self, obj: ObjectData) -> MutaBoardCard:
+    def _build_object_card(self, obj: ObjectData, object_counts: dict[str, int]) -> MutaBoardCard:
         stage = self._object_stage(obj)
         subtitle = self._trim_excerpt(obj.description or self._join_meta((obj.catalog, obj.object_type)))
         meta_parts = [obj.catalog, obj.object_type, obj.status]
@@ -205,11 +227,34 @@ class MutaBoardModel:
             project_title="",
             accent_color=_OBJECT_ACCENT,
             meta_text=self._join_meta(meta_parts),
+            linked_task_count=max(0, int(object_counts.get("task", 0))),
+            linked_idea_count=max(0, int(object_counts.get("idea", 0))),
+            linked_object_count=max(0, int(object_counts.get("object", 0))),
             can_drag=False,
             can_mutate=True,
             is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
             source_payload=obj,
         )
+
+    @staticmethod
+    def _collect_object_link_counts(
+        task_attachments: dict[int, list[TaskAttachmentData]],
+        idea_relations: dict[int, list[IdeaRelationData]],
+    ) -> dict[int, dict[str, int]]:
+        counts: dict[int, dict[str, int]] = {}
+        for attachments in task_attachments.values():
+            for attachment in attachments:
+                if attachment.kind != "object":
+                    continue
+                payload = counts.setdefault(attachment.ref_id, {"task": 0, "idea": 0, "object": 0})
+                payload["task"] += 1
+        for relations in idea_relations.values():
+            for relation in relations:
+                if relation.entity_type != "object":
+                    continue
+                payload = counts.setdefault(relation.entity_id, {"task": 0, "idea": 0, "object": 0})
+                payload["idea"] += 1
+        return counts
 
     @staticmethod
     def _task_stage(task: TaskData) -> str:

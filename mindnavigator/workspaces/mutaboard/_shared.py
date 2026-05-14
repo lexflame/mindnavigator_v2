@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )

@@ -8,13 +8,39 @@ from mindnavigator.storage import (
     BOARD_COLUMN_QUEUE,
     DEFERRED_PRIORITY,
     IdeaData,
+    IdeaRelationData,
     ObjectData,
     TaskData,
+    TaskAttachmentData,
 )
 from mindnavigator.workspaces.mutaboard.module_impl import MutaBoardModel
 
 
 class _MutaBoardDbStub:
+    def __init__(self) -> None:
+        self._attachments = {
+            1: [
+                TaskAttachmentData(
+                    id=501,
+                    task_id=1,
+                    kind="idea",
+                    ref_id=11,
+                    created_at="2026-05-14T12:00:00+00:00",
+                )
+            ],
+            2: [],
+            3: [],
+            4: [
+                TaskAttachmentData(
+                    id=502,
+                    task_id=4,
+                    kind="object",
+                    ref_id=21,
+                    created_at="2026-05-14T12:00:00+00:00",
+                )
+            ],
+        }
+
     def fetch_tasks(self):
         return [
             TaskData(
@@ -123,6 +149,14 @@ class _MutaBoardDbStub:
         ]
         return archived_items if archived else active
 
+    def fetch_idea_relations(self, idea_id: int):
+        now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+        if idea_id == 11:
+            return [IdeaRelationData(id=601, idea_id=11, entity_type="task", entity_id=1, created_at=now)]
+        if idea_id == 12:
+            return [IdeaRelationData(id=602, idea_id=12, entity_type="object", entity_id=21, created_at=now)]
+        return []
+
     def fetch_objects(self):
         return [
             ObjectData(
@@ -156,6 +190,9 @@ class _MutaBoardDbStub:
                 updated_at="2026-05-14T11:00:00+00:00",
             ),
         ]
+
+    def fetch_task_attachments(self, task_id: int):
+        return list(self._attachments.get(task_id, []))
 
 
 def test_mutaboard_model_derives_mixed_entity_stages() -> None:
@@ -195,6 +232,18 @@ def test_mutaboard_model_filters_by_kind_project_query_and_actionable() -> None:
     query_cards = model.filtered_cards(query="analysis")
     assert [card.title for card in query_cards] == ["Ripe idea"]
 
+    linked_cards = model.filtered_cards(linked_only=True)
+    assert {card.title for card in linked_cards} == {"Queued task", "Active task", "Inbox idea", "Ripe idea", "Active object"}
+
+    unlinked_cards = model.filtered_cards(linked_only=False)
+    assert {card.title for card in unlinked_cards} == {
+        "Deferred task",
+        "Completed task",
+        "Archived idea",
+        "Archived object",
+        "Loose object",
+    }
+
 
 def test_mutaboard_model_groups_cards_by_stage() -> None:
     model = MutaBoardModel(db=_MutaBoardDbStub())
@@ -203,3 +252,15 @@ def test_mutaboard_model_groups_cards_by_stage() -> None:
     assert {card.title for card in grouped["prep"]} == {"Queued task"}
     assert {card.title for card in grouped["active"]} == {"Active task", "Active object"}
     assert {card.title for card in grouped["frozen"]} == {"Deferred task", "Archived idea", "Archived object"}
+
+
+def test_mutaboard_model_populates_link_counts() -> None:
+    model = MutaBoardModel(db=_MutaBoardDbStub())
+    cards = {card.title: card for card in model.reload()}
+
+    assert cards["Queued task"].linked_idea_count == 1
+    assert cards["Inbox idea"].linked_task_count == 1
+    assert cards["Ripe idea"].linked_object_count == 1
+    assert cards["Active task"].linked_object_count == 1
+    assert cards["Active object"].linked_task_count == 1
+    assert cards["Active object"].linked_idea_count == 1
