@@ -416,7 +416,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         finished_at: str = (index.data(TaskRoles.FinishedAt) or "").strip()
         actual_minutes = max(0, int(index.data(TaskRoles.ActualMinutes) or 0))
         completion_delay_minutes = max(0, int(index.data(TaskRoles.CompletionDelayMinutes) or 0))
-        overdue = self._is_overdue(day, done, is_plan_item=is_plan_item)
+        overdue = self._is_overdue(day, done, priority=priority, is_plan_item=is_plan_item)
         show_completion_delay = done and completion_delay_minutes > 4 * 60
         completion_delay_text = self._format_completion_delay(completion_delay_minutes) if show_completion_delay else ""
         execution_text = self._format_plan_execution_text(
@@ -1154,9 +1154,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         return QColor("#d7dbe3")
 
     @staticmethod
-    def _is_overdue(d: date, done: bool, is_plan_item: bool = False) -> bool:
+    def _is_overdue(d: date, done: bool, priority: str = "", is_plan_item: bool = False) -> bool:
         """Проверяет, просрочена ли задача."""
-        if is_plan_item:
+        if is_plan_item or normalize_priority(priority) == DEFERRED_PRIORITY:
             return False
         return (d < date.today()) and (not done)
 
@@ -1238,7 +1238,8 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         done = bool(index.data(TaskRoles.Done))
         task_day: date = index.data(TaskRoles.Day)
-        if not self._is_overdue(task_day, done):
+        priority = str(index.data(TaskRoles.Priority) or "")
+        if not self._is_overdue(task_day, done, priority=priority):
             return QRect(), None, ""
 
         model = index.model()
@@ -1248,7 +1249,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         parent_task = tasks_model.task_by_id(parent_id)
         if parent_task is None:
             return QRect(), None, ""
-        if self._is_overdue(parent_task.day, parent_task.done):
+        if self._is_overdue(parent_task.day, parent_task.done, priority=parent_task.priority):
             return QRect(), None, ""
 
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
