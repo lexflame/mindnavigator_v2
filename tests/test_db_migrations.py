@@ -111,7 +111,7 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert dossier_tables == {"dossiers", "dossier_links"}
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 7
+        assert user_version == 8
 
         board_rows = database._conn.execute(
             "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
@@ -140,8 +140,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 7
-        assert database.apply_schema_updates() == 7
+        assert database.apply_schema_updates() == 8
+        assert database.apply_schema_updates() == 8
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -156,7 +156,7 @@ def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_curr
             database._conn.execute("DROP TABLE dossiers;")
             database._conn.execute("PRAGMA user_version = 5;")
 
-        assert database.apply_schema_updates() == 7
+        assert database.apply_schema_updates() == 8
 
         dossier_tables = {
             row["name"]
@@ -709,7 +709,7 @@ def test_database_backfills_task_execution_columns_when_migrating_from_v6(unique
         assert "started_at" in task_columns
         assert "finished_at" in task_columns
         assert "actual_minutes" in task_columns
-        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == 7
+        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == 8
 
         row = database._conn.execute(
             "SELECT started_at, finished_at, actual_minutes FROM tasks WHERE title = ?;",
