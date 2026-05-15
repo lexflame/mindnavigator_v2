@@ -629,7 +629,10 @@ class TaskEditDialog(QDialog):
     def _load_attachment_sources(self) -> None:
         tasks = self._safe_db_fetch("fetch_tasks")
         notes = self._safe_db_fetch("fetch_notes")
-        ideas = self._safe_db_fetch("fetch_ideas", archived=True)
+        ideas_active = self._safe_db_fetch("fetch_ideas", archived=False)
+        active_ids = {idea.id for idea in ideas_active}
+        ideas_archived = [idea for idea in self._safe_db_fetch("fetch_ideas", archived=True) if idea.id not in active_ids]
+        ideas = ideas_active + ideas_archived
         objects = self._safe_db_fetch("fetch_objects")
         maps = self._safe_db_fetch("fetch_maps")
         markers = self._safe_db_fetch("fetch_map_markers")

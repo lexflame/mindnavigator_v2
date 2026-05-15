@@ -411,6 +411,37 @@ def test_task_priority_pickers_use_high_medium_low_deferred_order(monkeypatch, u
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_attachment_sources_include_active_and_archived_ideas(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_attachment_ideas", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        active_idea = database.create_idea(title="Active idea", status="inbox")
+        archived_idea = database.create_idea(title="Archived idea", status="inbox")
+        database.set_idea_archived(archived_idea.id, True)
+
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        assert active_idea.id in dialog._ideas_by_id
+        assert archived_idea.id in dialog._ideas_by_id
+        assert dialog._ideas_by_id[active_idea.id].title == "Active idea"
+        assert dialog._ideas_by_id[archived_idea.id].title == "Archived idea"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_project_suggest", ".sqlite3")

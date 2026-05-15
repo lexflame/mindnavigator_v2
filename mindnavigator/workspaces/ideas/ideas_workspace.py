@@ -10,6 +10,144 @@ from .image_utils import load_scaled_pixmap
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 
+IDEA_RELATION_KIND_ITEMS = [
+    ("Задача", "task"),
+    ("Заметка", "note"),
+    ("Идея", "idea"),
+    ("Объект", "object"),
+    ("Карта", "map"),
+    ("Метка карты", "marker"),
+]
+
+IDEA_RELATION_KIND_LABELS = {value: label for label, value in IDEA_RELATION_KIND_ITEMS}
+
+
+class IdeaRelationDialog(QDialog):
+    def __init__(self, candidates_by_kind: Dict[str, List[tuple[int, str]]], parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("IdeaRelationDialog")
+        self.setWindowTitle("Добавить связь")
+        self.setMinimumWidth(520)
+        self._theme_mode = "dark"
+        self._candidates_by_kind = candidates_by_kind
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Связать идею с сущностью")
+        title.setObjectName("IdeaRelationDialogTitle")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.kind_combo = QComboBox()
+        for label, value in IDEA_RELATION_KIND_ITEMS:
+            self.kind_combo.addItem(label, value)
+
+        self.target_combo = QComboBox()
+        self.kind_combo.currentIndexChanged.connect(self._fill_targets)
+
+        form.addRow("Тип", self.kind_combo)
+        form.addRow("Элемент", self.target_combo)
+        layout.addLayout(form)
+
+        buttons_row = QHBoxLayout()
+        buttons_row.addStretch(1)
+        self.cancel_button = QToolButton()
+        self.cancel_button.setText("Отмена")
+        self.cancel_button.clicked.connect(self.reject)
+        self.save_button = QToolButton()
+        self.save_button.setText("Добавить")
+        self.save_button.clicked.connect(self._accept)
+        buttons_row.addWidget(self.cancel_button)
+        buttons_row.addWidget(self.save_button)
+        layout.addLayout(buttons_row)
+
+        self._fill_targets()
+        if parent is not None and hasattr(parent, "_theme_mode"):
+            self.set_theme_mode(getattr(parent, "_theme_mode"))
+        else:
+            self.set_theme_mode("dark")
+
+    def _fill_targets(self, *_args: object) -> None:
+        entity_type = self.kind_combo.currentData()
+        self.target_combo.clear()
+        for entity_id, label in self._candidates_by_kind.get(entity_type, []):
+            self.target_combo.addItem(label, entity_id)
+        if self.target_combo.count() == 0:
+            self.target_combo.addItem("— нет доступных элементов —", None)
+
+    def _accept(self) -> None:
+        if self.target_combo.currentData() is None:
+            QMessageBox.warning(self, "Связи", "Выберите элемент для связи.")
+            return
+        self.accept()
+
+    def values(self) -> dict[str, object]:
+        return {
+            "entity_type": self.kind_combo.currentData(),
+            "entity_id": self.target_combo.currentData(),
+        }
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QDialog#IdeaRelationDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QDialog#IdeaRelationDialog QLabel {{
+                color: {palette.text};
+            }}
+
+            QDialog#IdeaRelationDialog QLabel#IdeaRelationDialogTitle {{
+                color: {palette.text};
+                font-size: 16px;
+                font-weight: 600;
+            }}
+
+            QDialog#IdeaRelationDialog QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+
+            QDialog#IdeaRelationDialog QComboBox:focus {{
+                border-color: {palette.accent};
+            }}
+
+            QDialog#IdeaRelationDialog QComboBox QAbstractItemView {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+            }}
+
+            QDialog#IdeaRelationDialog QToolButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+
+            QDialog#IdeaRelationDialog QToolButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+        """
+        )
+
+
 class IdeasWorkspace(BaseWorkspace):
     workspace_id = "ideas"
     workspace_title = "Идеи"
@@ -123,6 +261,8 @@ class IdeasWorkspace(BaseWorkspace):
         self.title_input = QLineEdit()
         self.summary_input = QLineEdit()
         self.body_input = QPlainTextEdit()
+        self.project_input = QComboBox()
+        self._populate_projects()
         self.type_input = QComboBox()
         for label, value in IDEA_TYPES[1:]:
             self.type_input.addItem(label, value)
@@ -138,6 +278,7 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.addRow("Название", self.title_input)
         content_layout.addRow("Кратко", self.summary_input)
         content_layout.addRow("Описание", self.body_input)
+        content_layout.addRow("Проект", self.project_input)
         content_layout.addRow("Тип", self.type_input)
         content_layout.addRow("Статус", self.status_input)
         content_layout.addRow("Ценность", self.value_input)
@@ -159,10 +300,25 @@ class IdeasWorkspace(BaseWorkspace):
 
         self.inspector_tabs.addTab(content_tab, "Содержание")
 
-        self.relations_list = QListWidget()
         relations_tab = QWidget()
         relations_layout = QVBoxLayout(relations_tab)
         relations_layout.setContentsMargins(12, 12, 12, 12)
+        relations_layout.setSpacing(8)
+        relations_actions = QHBoxLayout()
+        self.relations_add_button = QToolButton()
+        self.relations_add_button.setText("Добавить связь")
+        self.relations_add_button.setObjectName("IdeasRelationsAdd")
+        self.relations_add_button.clicked.connect(self._add_relation)
+        self.relations_remove_button = QToolButton()
+        self.relations_remove_button.setText("Удалить связь")
+        self.relations_remove_button.setObjectName("IdeasRelationsRemove")
+        self.relations_remove_button.clicked.connect(self._remove_selected_relation)
+        relations_actions.addWidget(self.relations_add_button)
+        relations_actions.addWidget(self.relations_remove_button)
+        relations_actions.addStretch(1)
+        relations_layout.addLayout(relations_actions)
+        self.relations_list = QListWidget()
+        self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
         relations_layout.addWidget(self.relations_list, 1)
         self.inspector_tabs.addTab(relations_tab, "Связи")
 
@@ -295,6 +451,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.title_input.textChanged.connect(self._mark_dirty)
         self.summary_input.textChanged.connect(self._mark_dirty)
         self.body_input.textChanged.connect(self._mark_dirty)
+        self.project_input.currentIndexChanged.connect(self._on_project_changed)
         self.type_input.currentIndexChanged.connect(self._mark_dirty)
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
         self.value_input.valueChanged.connect(self._mark_dirty)
@@ -463,6 +620,184 @@ class IdeasWorkspace(BaseWorkspace):
     def _mark_dirty(self, *_args: object) -> None:
         self._dirty = True
 
+    def _populate_projects(self, selected_id: Optional[int] = None) -> None:
+        self.project_input.blockSignals(True)
+        self.project_input.clear()
+        self.project_input.addItem("Без проекта", None)
+        projects = get_database().fetch_projects()
+        projects_by_id = {project.id: project for project in projects}
+        title_cache: Dict[int, str] = {}
+
+        def full_title(project_id: int, seen: Optional[set[int]] = None) -> str:
+            cached = title_cache.get(project_id)
+            if cached is not None:
+                return cached
+            project = projects_by_id.get(project_id)
+            if project is None:
+                return ""
+            seen_set = seen or set()
+            if project_id in seen_set:
+                title_cache[project_id] = project.title
+                return project.title
+            if project.parent_project_id is None:
+                title_cache[project_id] = project.title
+                return project.title
+            parent_title = full_title(project.parent_project_id, seen_set | {project_id})
+            resolved = f"{parent_title} / {project.title}" if parent_title else project.title
+            title_cache[project_id] = resolved
+            return resolved
+
+        visible_projects = [
+            project
+            for project in projects
+            if not project.archived or project.id == selected_id
+        ]
+        visible_projects.sort(
+            key=lambda project: (
+                project.area.lower(),
+                full_title(project.id).lower(),
+                project.id,
+            )
+        )
+        for project in visible_projects:
+            title = full_title(project.id)
+            label = f"{project.area} · {title}" if project.area else title
+            if project.archived:
+                label = f"{label} (архив)"
+            self.project_input.addItem(label, project.id)
+        selected_index = self.project_input.findData(selected_id)
+        self.project_input.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+        self.project_input.blockSignals(False)
+
+    def _on_project_changed(self, _index: int) -> None:
+        self._current_project_id = self.project_input.currentData()
+        self._mark_dirty()
+
+    def _update_relations_actions(self) -> None:
+        has_idea = self._current_idea_id is not None
+        current_item = self.relations_list.currentItem()
+        relation_id = current_item.data(Qt.ItemDataRole.UserRole) if current_item is not None else None
+        self.relations_add_button.setEnabled(has_idea)
+        self.relations_remove_button.setEnabled(has_idea and relation_id is not None)
+
+    def refresh_current_relations(self) -> None:
+        if self._current_idea_id is None:
+            self._update_relations_actions()
+            return
+        self._load_relations(self._current_idea_id)
+
+    def _relation_candidates_by_kind(self) -> Dict[str, List[tuple[int, str]]]:
+        candidates: Dict[str, List[tuple[int, str]]] = {
+            "task": [],
+            "note": [],
+            "idea": [],
+            "object": [],
+            "map": [],
+            "marker": [],
+        }
+        for task in self._db.fetch_tasks():
+            label = f"{task.title} · {task.project_title}" if task.project_title else task.title
+            candidates["task"].append((task.id, label))
+        for note in self._db.fetch_notes():
+            label = f"{note.title} · {note.project}" if note.project else note.title
+            candidates["note"].append((note.id, label))
+        seen_idea_ids: set[int] = set()
+        for archived in (False, True):
+            for idea in self._db.fetch_ideas(archived=archived):
+                if idea.id == self._current_idea_id or idea.id in seen_idea_ids:
+                    continue
+                seen_idea_ids.add(idea.id)
+                label = f"{idea.title} · {idea.project_title}" if idea.project_title else idea.title
+                candidates["idea"].append((idea.id, label))
+        for obj in self._db.fetch_objects():
+            label = f"{obj.title} · {obj.catalog}" if obj.catalog else obj.title
+            candidates["object"].append((obj.id, label))
+        for map_item in self._db.fetch_maps():
+            label = f"{map_item.title} · {map_item.project}" if map_item.project else map_item.title
+            candidates["map"].append((map_item.id, label))
+        fetch_markers = getattr(self._db, "fetch_map_markers", None)
+        if callable(fetch_markers):
+            map_titles = {map_item.id: map_item.title for map_item in self._db.fetch_maps()}
+            for marker in fetch_markers():
+                map_title = map_titles.get(marker.map_id, "")
+                label = f"{marker.name} · {map_title}" if map_title else marker.name
+                candidates["marker"].append((marker.id, label))
+        for entity_type, items in candidates.items():
+            items.sort(key=lambda item: (item[1].casefold(), item[0]))
+            candidates[entity_type] = items
+        return candidates
+
+    def _relation_display_label(self, entity_type: str, entity_id: int) -> str:
+        label_prefix = IDEA_RELATION_KIND_LABELS.get(entity_type, entity_type.capitalize())
+        if entity_type == "task":
+            task = next((item for item in self._db.fetch_tasks() if item.id == entity_id), None)
+            if task is not None:
+                suffix = f"{task.title} · {task.project_title}" if task.project_title else task.title
+                return f"{label_prefix} · {suffix}"
+        elif entity_type == "note":
+            note = next((item for item in self._db.fetch_notes() if item.id == entity_id), None)
+            if note is not None:
+                suffix = f"{note.title} · {note.project}" if note.project else note.title
+                return f"{label_prefix} · {suffix}"
+        elif entity_type == "idea":
+            for archived in (False, True):
+                idea = next((item for item in self._db.fetch_ideas(archived=archived) if item.id == entity_id), None)
+                if idea is not None:
+                    suffix = f"{idea.title} · {idea.project_title}" if idea.project_title else idea.title
+                    return f"{label_prefix} · {suffix}"
+        elif entity_type == "object":
+            obj = next((item for item in self._db.fetch_objects() if item.id == entity_id), None)
+            if obj is not None:
+                suffix = f"{obj.title} · {obj.catalog}" if obj.catalog else obj.title
+                return f"{label_prefix} · {suffix}"
+        elif entity_type == "map":
+            map_item = next((item for item in self._db.fetch_maps() if item.id == entity_id), None)
+            if map_item is not None:
+                suffix = f"{map_item.title} · {map_item.project}" if map_item.project else map_item.title
+                return f"{label_prefix} · {suffix}"
+        elif entity_type == "marker":
+            fetch_markers = getattr(self._db, "fetch_map_markers", None)
+            if callable(fetch_markers):
+                marker = next((item for item in fetch_markers() if item.id == entity_id), None)
+                if marker is not None:
+                    map_titles = {map_item.id: map_item.title for map_item in self._db.fetch_maps()}
+                    map_title = map_titles.get(marker.map_id, "")
+                    suffix = f"{marker.name} · {map_title}" if map_title else marker.name
+                    return f"{label_prefix} · {suffix}"
+        return f"{label_prefix} #{entity_id}"
+
+    def _add_relation(self) -> None:
+        if self._current_idea_id is None:
+            return
+        candidates_by_kind = self._relation_candidates_by_kind()
+        if not any(candidates_by_kind.values()):
+            QMessageBox.information(self, "Связи", "Нет доступных элементов для связывания.")
+            return
+        dialog = IdeaRelationDialog(candidates_by_kind, parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        values = dialog.values()
+        entity_type = values.get("entity_type")
+        entity_id = values.get("entity_id")
+        if not isinstance(entity_type, str) or not isinstance(entity_id, int):
+            QMessageBox.warning(self, "Связи", "Выберите элемент для связи.")
+            return
+        self._db.add_idea_relation(self._current_idea_id, entity_type, entity_id)
+        self._load_relations(self._current_idea_id)
+        self._set_status("Связь добавлена")
+
+    def _remove_selected_relation(self) -> None:
+        if self._current_idea_id is None:
+            return
+        current_item = self.relations_list.currentItem()
+        if current_item is None or current_item.data(Qt.ItemDataRole.UserRole) is None:
+            QMessageBox.information(self, "Связи", "Выберите связь для удаления.")
+            return
+        relation_id = int(current_item.data(Qt.ItemDataRole.UserRole))
+        self._db.delete_idea_relation(relation_id)
+        self._load_relations(self._current_idea_id)
+        self._set_status("Связь удалена")
+
     def _on_status_filter_changed(self, *_args: object) -> None:
         status = self.status_filter.currentData()
         self.set_filter("status", status)
@@ -517,6 +852,7 @@ class IdeasWorkspace(BaseWorkspace):
         if self._current_idea_id is None:
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._update_relations_actions()
             self.update_action_states()
             return
         model = self.list_view.model()
@@ -529,6 +865,7 @@ class IdeasWorkspace(BaseWorkspace):
                 return
         self._current_idea_id = None
         self.inspector_stack.setCurrentWidget(self.inspector_empty)
+        self._update_relations_actions()
         self.update_action_states()
 
     def _on_selection_changed(self, *_args: object) -> None:
@@ -540,6 +877,7 @@ class IdeasWorkspace(BaseWorkspace):
             self._current_idea_id = None
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._update_relations_actions()
             self.update_action_states()
             return
         self._current_idea_id = index.data(IdeaRoles.IdeaId)
@@ -557,7 +895,8 @@ class IdeasWorkspace(BaseWorkspace):
         idea = self._db.get_idea(idea_id)
         if idea is None:
             return
-        self._current_project_id = idea.project_id
+        self._populate_projects(idea.project_id)
+        self._current_project_id = self.project_input.currentData()
         self.title_input.setText(idea.title)
         self.summary_input.setText(idea.summary)
         self.body_input.setPlainText(idea.body_md)
@@ -751,10 +1090,13 @@ class IdeasWorkspace(BaseWorkspace):
             item = QListWidgetItem("Связей пока нет")
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.relations_list.addItem(item)
+            self._update_relations_actions()
             return
         for relation in relations:
-            label = f"{relation.entity_type} #{relation.entity_id}"
-            self.relations_list.addItem(QListWidgetItem(label))
+            item = QListWidgetItem(self._relation_display_label(relation.entity_type, relation.entity_id))
+            item.setData(Qt.ItemDataRole.UserRole, relation.id)
+            self.relations_list.addItem(item)
+        self._update_relations_actions()
 
     def _load_materials(self, idea_id: int) -> None:
         self._idea_images = self._db.fetch_idea_images(idea_id)
