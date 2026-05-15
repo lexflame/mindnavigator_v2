@@ -1140,6 +1140,8 @@ class MainWindow(QMainWindow):
                 self.page_purchases.refresh()
         elif mode_name == self.MODE_IDEAS:
             self.page_ideas.refresh()
+            if hasattr(self.page_ideas, "refresh_current_relations"):
+                self.page_ideas.refresh_current_relations()
         elif mode_name == self.MODE_DOSSIER:
             self.page_dossier.refresh()
         elif mode_name == self.MODE_COLLECTIONS:

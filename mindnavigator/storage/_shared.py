@@ -41,7 +41,7 @@ from .wishlist_data import WishlistData
 from .wishlist_item_data import WishlistItemData
 
 DEFERRED_PRIORITY = "Отложенная"
-LEGACY_DEFERRED_PRIORITY = "Отложенная"
+LEGACY_DEFERRED_PRIORITY = "\u0420\u045b\u0421\u201a\u0420\u00bb\u0420\u0455\u0420\u00b6\u0420\u00b5\u0420\u0405\u0420\u0405\u0420\u00b0\u0421\u040f"
 PRIORITIES = ("Low", "Medium", "High", DEFERRED_PRIORITY)
 BOARD_COLUMN_DEFERRED = "deferred"
 BOARD_COLUMN_QUEUE = "queue"

@@ -558,6 +558,11 @@ class DatabaseNotesIdeasMixin:
                 (idea_id, entity_type, entity_id, now),
             )
 
+    def delete_idea_relation(self, relation_id: int) -> None:
+        """Deletes an idea relation."""
+        with self._conn:
+            self._conn.execute("DELETE FROM idea_relations WHERE id = ?;", (relation_id,))
+
     def toggle_note_favorite(self, note_id: int) -> NoteData:
         """Переключает избранное у заметки."""
         row = self._conn.execute(

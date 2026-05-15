@@ -215,7 +215,10 @@ class TaskDetailsDialog(QDialog):
     def _load_attachment_sources(self) -> None:
         tasks = self._db.fetch_tasks()
         notes = self._db.fetch_notes()
-        ideas = self._db.fetch_ideas(archived=True)
+        ideas_active = self._db.fetch_ideas(archived=False)
+        active_ids = {idea.id for idea in ideas_active}
+        ideas_archived = [idea for idea in self._db.fetch_ideas(archived=True) if idea.id not in active_ids]
+        ideas = ideas_active + ideas_archived
         objects = self._db.fetch_objects()
         maps = self._db.fetch_maps()
         markers = self._db.fetch_map_markers()

@@ -90,6 +90,174 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_save_button_persists_project_change(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_change_project", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        project_a = database.create_project(
+            area="Work",
+            title="Alpha",
+            updated=ideas_workspace_module.date.today(),
+            priority="Medium",
+        )
+        project_b = database.create_project(
+            area="Work",
+            title="Beta",
+            updated=ideas_workspace_module.date.today(),
+            priority="Medium",
+        )
+        created = database.create_idea(
+            title="Existing idea",
+            summary="Initial summary",
+            body_md="Initial body",
+            status="inbox",
+            project_id=project_a.id,
+        )
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(created.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.project_input.currentData() == project_a.id
+        project_b_index = workspace.project_input.findData(project_b.id)
+        assert project_b_index >= 0
+
+        workspace.project_input.setCurrentIndex(project_b_index)
+        QApplication.processEvents()
+
+        QTest.mouseClick(workspace.save_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        saved = database.get_idea(created.id)
+        assert saved is not None
+        assert saved.project_id == project_b.id
+        assert saved.project_title == project_b.title
+        assert workspace.project_input.currentData() == project_b.id
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_relations", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea with relation", status="inbox")
+        task = database.create_task(
+            title="Linked task",
+            description="Task description",
+            day=ideas_workspace_module.date.today(),
+            time_text="",
+            priority="Medium",
+        )
+
+        class _FakeIdeaRelationDialog(QDialog):
+            def __init__(self, candidates_by_kind, parent=None) -> None:
+                super().__init__(parent)
+                self.candidates_by_kind = candidates_by_kind
+
+            def values(self) -> dict:
+                return {
+                    "entity_type": "task",
+                    "entity_id": task.id,
+                }
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "IdeaRelationDialog", _FakeIdeaRelationDialog)
+        monkeypatch.setattr(
+            ideas_workspace_module,
+            "exec_with_overlay",
+            lambda dialog, parent=None: QDialog.DialogCode.Accepted,
+        )
+
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        QTest.mouseClick(workspace.relations_add_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        relations = database.fetch_idea_relations(idea.id)
+        assert len(relations) == 1
+        assert relations[0].entity_type == "task"
+        assert relations[0].entity_id == task.id
+        assert workspace.relations_list.count() == 1
+        assert "Linked task" in workspace.relations_list.item(0).text()
+
+        workspace.relations_list.setCurrentRow(0)
+        QApplication.processEvents()
+        QTest.mouseClick(workspace.relations_remove_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        assert database.fetch_idea_relations(idea.id) == []
+        assert workspace.relations_list.count() == 1
+        assert "Связей пока нет" in workspace.relations_list.item(0).text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_refresh_current_relations_reloads_selected_idea_relations(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_refresh_relations", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea with delayed relation", status="inbox")
+        task = database.create_task(
+            title="Late linked task",
+            description="",
+            day=ideas_workspace_module.date.today(),
+            time_text="",
+            priority="Medium",
+        )
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 1
+        assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+
+        database.add_idea_relation(idea.id, "task", task.id)
+        workspace.refresh_current_relations()
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 1
+        assert "Late linked task" in workspace.relations_list.item(0).text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_triage_focuses_first_inbox_idea(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_triage_start", ".sqlite3")
