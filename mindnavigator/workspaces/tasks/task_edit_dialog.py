@@ -10,6 +10,7 @@ from mindnavigator.ui.dialogs.frameless_patch import (
     show_minimizable_task_dialog,
 )
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from .quick_project_create_dialog import QuickProjectCreateDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
@@ -746,14 +747,36 @@ class TaskEditDialog(QDialog):
 
     def _open_attachment_dialog(self) -> None:
         self._load_attachment_sources()
+        dialog, kind_combo, item_combo = self._create_attachment_dialog()
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        kind = kind_combo.currentData()
+        ref_id = item_combo.currentData()
+        if ref_id is None:
+            QMessageBox.warning(self, "Вложения", "Нет доступных элементов для добавления.")
+            return
+        self._db.add_task_attachment(self._task_id, kind, ref_id)
+        self._refresh_attachments()
+
+    def _create_attachment_dialog(self) -> tuple[QDialog, QComboBox, FilterableComboBox]:
         dialog = QDialog(self)
         dialog.setWindowTitle("Добавить вложение")
         dialog.setObjectName("TaskAttachmentDialog")
+        dialog.setFixedSize(550, 200)
+
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
 
         kind_combo = QComboBox()
+        kind_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         kind_items = [
             ("Задача", "task"),
             ("Заметка", "note"),
@@ -767,7 +790,12 @@ class TaskEditDialog(QDialog):
         for label, key in kind_items:
             kind_combo.addItem(label, key)
 
-        item_combo = QComboBox()
+        item_combo = FilterableComboBox(dialog)
+        item_combo.setMinimumContentsLength(24)
+        item_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        item_view = item_combo.view()
+        if item_view is not None:
+            item_view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
 
         def fill_items(selected_kind: str) -> None:
             item_combo.clear()
@@ -811,15 +839,17 @@ class TaskEditDialog(QDialog):
                     item_combo.addItem(self._cloud_file_link_text(file_row), file_row.id)
             if item_combo.count() == 0:
                 item_combo.addItem("— нет доступных —", None)
+            item_combo.clear_filter()
+            item_combo.setCurrentIndex(0 if item_combo.count() else -1)
 
-        kind_combo.currentIndexChanged.connect(lambda idx: fill_items(kind_combo.currentData()))
+        kind_combo.currentIndexChanged.connect(lambda _idx: fill_items(kind_combo.currentData()))
         fill_items(kind_combo.currentData())
 
         form.addRow("Тип", kind_combo)
         form.addRow("Элемент", item_combo)
         layout.addLayout(form)
 
-        buttons = QDialogButtonBox(self)
+        buttons = QDialogButtonBox(dialog)
         buttons.addButton(QDialogButtonBox.StandardButton.Ok)
         buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
@@ -837,27 +867,20 @@ class TaskEditDialog(QDialog):
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 border-radius: 6px;
+                min-height: 28px;
             }}
             QDialog#TaskAttachmentDialog QDialogButtonBox QPushButton {{
                 background: #2a2b2f;
                 color: #e6e6e6;
                 border: 1px solid #3a3b40;
-                padding: 6px 12px;
+                padding: 4px 10px;
+                min-height: 28px;
                 border-radius: 6px;
             }}
         """)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        kind = kind_combo.currentData()
-        ref_id = item_combo.currentData()
-        if ref_id is None:
-            QMessageBox.warning(self, "Вложения", "Нет доступных элементов для добавления.")
-            return
-        self._db.add_task_attachment(self._task_id, kind, ref_id)
-        self._refresh_attachments()
+        return dialog, kind_combo, item_combo
 
     def _remove_attachment(self, attachment) -> None:
         self._db.delete_task_attachment(attachment.id)

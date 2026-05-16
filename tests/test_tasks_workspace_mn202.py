@@ -4,7 +4,8 @@ from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QRect
 from PySide6.QtGui import QImage, QPainter, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QComboBox
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -14,6 +15,7 @@ from mindnavigator.storage import (
     DEFERRED_PRIORITY,
     Database,
 )
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.workspaces.tasks import task_edit_dialog
 from mindnavigator.workspaces.tasks._shared import normalize_task_text_quotes
 from mindnavigator.workspaces.tasks.cast_board import TasksBoardCast
@@ -436,6 +438,95 @@ def test_task_edit_dialog_attachment_sources_include_active_and_archived_ideas(m
         assert dialog._ideas_by_id[active_idea.id].title == "Active idea"
         assert dialog._ideas_by_id[archived_idea.id].title == "Archived idea"
     finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_attachment_dialog_is_compact(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_attachment_compact", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    attachment_dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        database.create_note(
+            title="Very long attachment entity title for compact dialog verification",
+            preview="",
+            tags=[],
+            project="",
+        )
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        attachment_dialog, kind_combo, item_combo = dialog._create_attachment_dialog()
+
+        assert attachment_dialog.minimumWidth() == 550
+        assert attachment_dialog.maximumWidth() == 550
+        assert attachment_dialog.minimumHeight() == 200
+        assert attachment_dialog.maximumHeight() == 200
+        assert kind_combo.sizeAdjustPolicy() == QComboBox.SizeAdjustPolicy.AdjustToContents
+        assert isinstance(item_combo, FilterableComboBox)
+        assert item_combo.sizeAdjustPolicy() == QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        assert item_combo.minimumContentsLength() == 24
+        assert item_combo.completer().popup().objectName() == "FilterableComboPopup"
+        assert "#1f2026" in item_combo.completer().popup().styleSheet()
+    finally:
+        if attachment_dialog is not None:
+            attachment_dialog.deleteLater()
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_attachment_dialog_item_combo_filters_by_substring(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_attachment_filter", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    attachment_dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        keep = database.create_note(title="Alpha note", preview="", tags=[], project="")
+        target = database.create_note(title="Beta reference note", preview="", tags=[], project="")
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        attachment_dialog, kind_combo, item_combo = dialog._create_attachment_dialog()
+        kind_combo.setCurrentIndex(kind_combo.findData("note"))
+        QApplication.processEvents()
+
+        line_edit = item_combo.lineEdit()
+        assert line_edit is not None
+        line_edit.setFocus()
+        line_edit.selectAll()
+        QTest.keyClicks(line_edit, "beta")
+        QApplication.processEvents()
+
+        completion_model = item_combo.completer().completionModel()
+        assert completion_model.rowCount() == 1
+        item_combo._on_completer_activated(completion_model.index(0, 0))
+
+        assert item_combo.currentData() == target.id
+        assert item_combo.currentData() != keep.id
+    finally:
+        if attachment_dialog is not None:
+            attachment_dialog.deleteLater()
         if dialog is not None:
             dialog.deleteLater()
         database.close()
