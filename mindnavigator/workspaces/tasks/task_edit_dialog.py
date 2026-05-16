@@ -9,6 +9,7 @@ from mindnavigator.ui.dialogs.frameless_patch import (
     prepare_minimizable_task_dialog_for_show,
     show_minimizable_task_dialog,
 )
+from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from .quick_project_create_dialog import QuickProjectCreateDialog
@@ -796,6 +797,7 @@ class TaskEditDialog(QDialog):
         item_view = item_combo.view()
         if item_view is not None:
             item_view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        file_picker_open = {"active": False}
 
         def fill_items(selected_kind: str) -> None:
             item_combo.clear()
@@ -842,7 +844,27 @@ class TaskEditDialog(QDialog):
             item_combo.clear_filter()
             item_combo.setCurrentIndex(0 if item_combo.count() else -1)
 
-        kind_combo.currentIndexChanged.connect(lambda _idx: fill_items(kind_combo.currentData()))
+        def select_file_from_picker() -> None:
+            if file_picker_open["active"]:
+                return
+            file_picker_open["active"] = True
+            try:
+                selected_file_id = self._pick_task_attachment_file()
+            finally:
+                file_picker_open["active"] = False
+            if selected_file_id is None:
+                return
+            selected_index = item_combo.findData(selected_file_id)
+            if selected_index >= 0:
+                item_combo.setCurrentIndex(selected_index)
+
+        def on_kind_changed(_idx: int) -> None:
+            selected_kind = kind_combo.currentData()
+            fill_items(selected_kind)
+            if selected_kind == "file":
+                QTimer.singleShot(0, select_file_from_picker)
+
+        kind_combo.currentIndexChanged.connect(on_kind_changed)
         fill_items(kind_combo.currentData())
 
         form.addRow("Тип", kind_combo)
@@ -881,6 +903,27 @@ class TaskEditDialog(QDialog):
             }}
         """)
         return dialog, kind_combo, item_combo
+
+    def _pick_task_attachment_file(self) -> Optional[int]:
+        dialog = AttachFileSelectNav(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        rel_path = dialog.selected_rel_path()
+        if not rel_path:
+            return None
+        normalized = rel_path.strip().strip("/")
+        matched = next(
+            (
+                file_item.id
+                for file_item in self._cloud_files_by_id.values()
+                if (file_item.rel_path or "").strip().strip("/") == normalized and not file_item.is_image
+            ),
+            None,
+        )
+        if matched is None:
+            QMessageBox.warning(self, "Вложения", "Файл не найден в базе.")
+            return None
+        return matched
 
     def _remove_attachment(self, attachment) -> None:
         self._db.delete_task_attachment(attachment.id)
