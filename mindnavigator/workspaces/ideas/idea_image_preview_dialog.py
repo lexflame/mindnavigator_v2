@@ -24,8 +24,6 @@ class IdeaImagePreviewDialog(QDialog):
 
         self.setObjectName("IdeaImagePreview")
         self.setWindowTitle("Просмотр изображения")
-        self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -72,6 +70,7 @@ class IdeaImagePreviewDialog(QDialog):
         )
 
         self._update_image()
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Left:
@@ -87,6 +86,8 @@ class IdeaImagePreviewDialog(QDialog):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if not hasattr(self, "image_label"):
+            return
         self._update_pixmap()
 
     def _show_previous(self) -> None:

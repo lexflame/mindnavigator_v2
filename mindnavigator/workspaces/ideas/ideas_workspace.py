@@ -335,13 +335,8 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_remove_button.setText("Удалить")
         self.materials_remove_button.setObjectName("IdeasMaterialsRemove")
         self.materials_remove_button.clicked.connect(self._remove_material_image)
-        self.materials_preview_button = QToolButton()
-        self.materials_preview_button.setText("Просмотр")
-        self.materials_preview_button.setObjectName("IdeasMaterialsPreview")
-        self.materials_preview_button.clicked.connect(self._preview_material_image)
         materials_actions.addWidget(self.materials_attach_button)
         materials_actions.addWidget(self.materials_remove_button)
-        materials_actions.addWidget(self.materials_preview_button)
         materials_actions.addStretch(1)
 
         self.materials_hint = QLabel("Прикрепите изображения из режима Файлы.")
@@ -359,13 +354,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_thumbnail_list.setFixedHeight(112)
         self.materials_thumbnail_list.setSpacing(8)
         self.materials_thumbnail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.materials_thumbnail_list.setToolTip("Двойной щелчок открывает изображение в полном размере.")
         self.materials_thumbnail_list.currentRowChanged.connect(self._on_material_thumbnail_selected)
         self.materials_thumbnail_list.itemDoubleClicked.connect(lambda _item: self._preview_material_image())
-
-        self.materials_image_label = QLabel("Нет прикреплённых изображений")
-        self.materials_image_label.setObjectName("IdeasMaterialsPreviewLabel")
-        self.materials_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.materials_image_label.setMinimumHeight(220)
 
         self.materials_caption_input = QPlainTextEdit()
         self.materials_caption_input.setObjectName("IdeasMaterialsCaption")
@@ -379,7 +370,6 @@ class IdeasWorkspace(BaseWorkspace):
         materials_layout.addLayout(materials_actions)
         materials_layout.addWidget(self.materials_hint)
         materials_layout.addWidget(self.materials_thumbnail_list)
-        materials_layout.addWidget(self.materials_image_label)
         materials_layout.addWidget(self.materials_caption_input)
         materials_layout.addWidget(self.materials_save_caption_button, 0, Qt.AlignmentFlag.AlignRight)
         self.inspector_tabs.addTab(materials_tab, "Материалы")
@@ -1126,14 +1116,11 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_attach_button.setEnabled(enabled)
         has_images = bool(self._idea_images)
         self.materials_remove_button.setEnabled(has_images)
-        self.materials_preview_button.setEnabled(has_images)
         self.materials_thumbnail_list.setEnabled(has_images)
         self.materials_caption_input.setEnabled(has_images)
         self.materials_save_caption_button.setEnabled(has_images)
         if not has_images:
             self.materials_hint.setText("Прикрепите изображения из режима Файлы.")
-            self.materials_image_label.setPixmap(QPixmap())
-            self.materials_image_label.setText("Нет прикреплённых изображений")
             self.materials_caption_input.setPlainText("")
             return
 
@@ -1144,20 +1131,6 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_thumbnail_list.blockSignals(True)
         self.materials_thumbnail_list.setCurrentRow(self._current_material_index)
         self.materials_thumbnail_list.blockSignals(False)
-
-        cloud_root = self._cloud_root_path()
-        target_size = self.materials_image_label.size()
-        if not target_size.isValid() or target_size.width() < 10:
-            target_size = QSize(720, 420)
-        pixmap = QPixmap()
-        if cloud_root is not None:
-            pixmap = load_scaled_pixmap(cloud_root / image.rel_path, target_size)
-        if pixmap.isNull():
-            self.materials_image_label.setPixmap(QPixmap())
-            self.materials_image_label.setText("Изображение недоступно")
-            return
-        self.materials_image_label.setPixmap(pixmap)
-        self.materials_image_label.setText("")
 
     def _cloud_root_path(self) -> Optional[Path]:
         cloud_root = self._db.get_setting("cloud_storage_path", default="").strip()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImageReader, QPixmap
 
 
@@ -11,12 +11,17 @@ def load_scaled_pixmap(file_path: Path, size: QSize) -> QPixmap:
         return QPixmap()
     reader = QImageReader(str(file_path))
     reader.setAutoTransform(True)
-    if size.isValid():
-        reader.setScaledSize(size)
     image = reader.read()
     if image.isNull():
         return QPixmap()
-    return QPixmap.fromImage(image)
+    pixmap = QPixmap.fromImage(image)
+    if not size.isValid():
+        return pixmap
+    return pixmap.scaled(
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
 
 __all__ = ["load_scaled_pixmap"]

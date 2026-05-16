@@ -381,6 +381,7 @@ def test_ideas_workspace_materials_attach_and_save_caption(monkeypatch, unique_t
         QApplication.processEvents()
 
         assert workspace.materials_thumbnail_list.count() == 1
+        assert workspace.findChild(type(workspace.materials_hint), "IdeasMaterialsPreviewLabel") is None
         assert database.fetch_idea_images(idea.id)[0].rel_path == "ideas/sample.png"
 
         workspace.materials_caption_input.setPlainText("Главный референс")
@@ -390,6 +391,79 @@ def test_ideas_workspace_materials_attach_and_save_caption(monkeypatch, unique_t
         saved = database.fetch_idea_images(idea.id)
         assert len(saved) == 1
         assert saved[0].caption == "Главный референс"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_materials_fullsize_preview_opens_only_on_thumbnail_double_click(
+    monkeypatch,
+    unique_temp_path,
+) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_materials_preview", ".sqlite3")
+    cloud_root = db_path.parent / "cloud"
+    cloud_root.mkdir(parents=True, exist_ok=True)
+    image_path = cloud_root / "ideas" / "preview.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image = QImage(24, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0xFF4A90E2)
+    assert image.save(str(image_path))
+
+    database = Database(path=db_path)
+    workspace = None
+    preview_calls: list[dict[str, object]] = []
+    try:
+        idea = database.create_idea(title="Idea with preview", status="inbox")
+        database.set_setting("cloud_storage_path", str(cloud_root))
+        database.upsert_cloud_file(
+            rel_path="ideas/preview.png",
+            name="preview.png",
+            description="",
+            checksum="checksum-preview",
+            hash_value="hash-preview",
+            size=image_path.stat().st_size,
+            is_image=True,
+            valid=True,
+        )
+        database.add_idea_image(idea.id, "ideas/preview.png")
+
+        class _FakePreviewDialog:
+            def __init__(self, parent=None, **kwargs) -> None:
+                self._kwargs = kwargs
+
+            def exec(self) -> int:
+                preview_calls.append(self._kwargs)
+                return 0
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "IdeaImagePreviewDialog", _FakePreviewDialog)
+
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.materials_thumbnail_list.count() == 1
+        workspace.materials_thumbnail_list.setCurrentRow(0)
+        QApplication.processEvents()
+        assert preview_calls == []
+
+        item = workspace.materials_thumbnail_list.item(0)
+        assert item is not None
+        workspace.materials_thumbnail_list.itemDoubleClicked.emit(item)
+        QApplication.processEvents()
+
+        assert len(preview_calls) == 1
+        assert preview_calls[0]["idea_id"] == idea.id
+        assert preview_calls[0]["start_index"] == 0
     finally:
         if workspace is not None:
             workspace.deleteLater()
