@@ -1,4 +1,4 @@
-"""Mixed-card delegate for MutaBoard board columns."""
+"""Card delegate for MutaBoard catalog columns."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ from ._shared import (
 
 
 class MutaBoardDelegate(QStyledItemDelegate):
-    """Draws a compact mixed-entity card for the board columns."""
+    """Draws a compact entity card for the board columns."""
 
-    ROW_H = 92
+    ROW_H = 126
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -37,6 +37,9 @@ class MutaBoardDelegate(QStyledItemDelegate):
         self._badge_font.setPointSize(8)
         self._badge_font.setBold(True)
 
+        self._footer_font = QFont()
+        self._footer_font.setPointSize(8)
+
     def sizeHint(self, option: QStyleOptionViewItem, index):  # noqa: N802
         return QSize(option.rect.width(), self.ROW_H)
 
@@ -50,31 +53,35 @@ class MutaBoardDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = option.rect.adjusted(6, 4, -6, -4)
-        radius = 10
-        background = QColor("#21262f" if option.state & QStyle.StateFlag.State_Selected else "#171c24")
+        radius = 14
+        background = QColor("#1f2632" if option.state & QStyle.StateFlag.State_Selected else "#121925")
         border = QColor(card.accent_color)
-        border.setAlpha(200)
+        border.setAlpha(210)
         painter.setBrush(background)
-        painter.setPen(QPen(border, 1.1))
+        painter.setPen(QPen(border, 1.2))
         painter.drawRoundedRect(rect, radius, radius)
 
         accent_rect = rect.adjusted(0, 0, 0, 0)
-        accent_rect.setWidth(5)
+        accent_rect.setHeight(8)
         accent_fill = QColor(card.accent_color)
         painter.setBrush(accent_fill)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(accent_rect, 4, 4)
+        painter.drawRoundedRect(accent_rect, 8, 8)
 
-        x = rect.x() + 14
-        y = rect.y() + 10
-        width = rect.width() - 24
+        inner_rect = rect.adjusted(10, 14, -10, -10)
+        painter.setBrush(QColor(255, 255, 255, 10))
+        painter.drawRoundedRect(inner_rect, 12, 12)
+
+        x = rect.x() + 16
+        y = rect.y() + 18
+        width = rect.width() - 32
 
         badge_text = self._kind_badge_text(card.entity_kind)
-        badge_width = max(48, len(badge_text) * 7 + 18)
-        badge_rect = rect.adjusted(rect.width() - badge_width - 12, 10, -12, -(rect.height() - 28))
+        badge_width = max(58, len(badge_text) * 7 + 22)
+        badge_rect = rect.adjusted(rect.width() - badge_width - 14, 16, -14, -(rect.height() - 38))
         painter.setBrush(accent_fill)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(badge_rect, 9, 9)
+        painter.drawRoundedRect(badge_rect, 11, 11)
         painter.setFont(self._badge_font)
         painter.setPen(QColor("#ffffff"))
         painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
@@ -89,28 +96,36 @@ class MutaBoardDelegate(QStyledItemDelegate):
         painter.setFont(self._meta_font)
         painter.setPen(QColor("#8ea0b8"))
         meta_metrics = QFontMetrics(self._meta_font)
-        meta_text = meta_metrics.elidedText(card.meta_text or card.stage, Qt.TextElideMode.ElideRight, width)
-        painter.drawText(x, y + 34, meta_text)
+        meta_text = meta_metrics.elidedText(card.meta_text or card.entity_kind, Qt.TextElideMode.ElideRight, width)
+        painter.drawText(x, y + 38, meta_text)
 
         painter.setFont(self._subtitle_font)
         painter.setPen(QColor("#c5cfdd"))
         subtitle_metrics = QFontMetrics(self._subtitle_font)
         subtitle = subtitle_metrics.elidedText(card.subtitle or "Без описания", Qt.TextElideMode.ElideRight, width)
-        painter.drawText(x, y + 56, subtitle)
+        painter.drawText(x, y + 64, subtitle)
 
-        footer = []
-        if card.project_title:
-            footer.append(card.project_title)
-        footer.append(card.link_summary)
-        if card.can_mutate:
-            footer.append("Actions")
-        if not card.can_drag:
-            footer.append("Read-only")
-        footer_text = " · ".join(footer)
-        painter.setFont(self._meta_font)
+        footer_y = rect.bottom() - 30
+        painter.setFont(self._footer_font)
         painter.setPen(QColor("#73839a"))
-        footer_text = meta_metrics.elidedText(footer_text, Qt.TextElideMode.ElideRight, width)
-        painter.drawText(x, y + 76, footer_text)
+        project_text = meta_metrics.elidedText(card.project_title or "Без проекта", Qt.TextElideMode.ElideRight, width // 2)
+        painter.drawText(x, footer_y, project_text)
+
+        links_text = meta_metrics.elidedText(card.link_summary, Qt.TextElideMode.ElideRight, 96)
+        links_rect = rect.adjusted(rect.width() - 114, rect.height() - 40, -14, -12)
+        painter.setBrush(QColor(255, 255, 255, 12))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(links_rect, 10, 10)
+        painter.setPen(QColor("#d8e4ff"))
+        painter.drawText(links_rect, Qt.AlignmentFlag.AlignCenter, links_text)
+
+        if getattr(card, "is_attached", False):
+            attached_rect = rect.adjusted(16, rect.height() - 42, -(rect.width() - 100), -14)
+            painter.setBrush(QColor(106, 213, 111, 36))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(attached_rect, 10, 10)
+            painter.setPen(QColor("#bff0c2"))
+            painter.drawText(attached_rect, Qt.AlignmentFlag.AlignCenter, "НА ДОСКЕ")
 
         painter.restore()
 
@@ -119,6 +134,11 @@ class MutaBoardDelegate(QStyledItemDelegate):
         return {
             "task": "TASK",
             "idea": "IDEA",
+            "image": "IMAGE",
+            "map": "MAP",
+            "marker": "MARKER",
+            "note": "NOTE",
+            "project": "PROJECT",
             "object": "OBJECT",
         }.get(entity_kind, entity_kind.upper())
 

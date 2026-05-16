@@ -39,6 +39,9 @@ from .shop_item_property_data import ShopItemPropertyData
 from .shop_source_property_data import ShopSourcePropertyData
 from .wishlist_data import WishlistData
 from .wishlist_item_data import WishlistItemData
+from .mutaboard_data import MutaBoardData
+from .mutaboard_column_data import MutaBoardColumnData
+from .mutaboard_item_data import MutaBoardItemData
 
 DEFERRED_PRIORITY = "Отложенная"
 LEGACY_DEFERRED_PRIORITY = "\u0420\u045b\u0421\u201a\u0420\u00bb\u0420\u0455\u0420\u00b6\u0420\u00b5\u0420\u0405\u0420\u0405\u0420\u00b0\u0421\u040f"
