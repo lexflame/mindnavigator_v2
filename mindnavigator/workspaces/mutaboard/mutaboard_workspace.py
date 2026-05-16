@@ -1,128 +1,85 @@
-"""Workspace UI for the MutaBoard board and inspector."""
+"""Workspace UI for the persistent MutaBoard experience."""
 
 from __future__ import annotations
 
-from datetime import date
+from dataclasses import replace
 
 from ._shared import (
     BaseWorkspace,
     QAbstractItemView,
-    QCheckBox,
     QComboBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
-    QToolButton,
+    QTextEdit,
     Qt,
     QVBoxLayout,
     QWidget,
     get_theme_palette,
 )
-from .mutaboard_card import MUTABOARD_STAGES, MutaBoardCard
+from .mutaboard_card import MutaBoardCard
 from .mutaboard_delegate import MutaBoardDelegate
 from .mutaboard_model import MutaBoardModel, get_database
 from mindnavigator.storage import (
-    BOARD_COLUMN_COMPLETED,
-    BOARD_COLUMN_DEFERRED,
-    BOARD_COLUMN_IN_PROGRESS,
-    BOARD_COLUMN_QUEUE,
+    CloudFileData,
     IdeaData,
+    MapData,
+    MapMarkerData,
+    MutaBoardColumnData,
+    MutaBoardData,
+    NoteData,
+    ObjectData,
+    ProjectData,
     TaskData,
 )
 
-_STAGE_TITLES = {
-    "inbox": "Inbox",
-    "thinking": "Осмысление",
-    "prep": "Подготовка",
-    "active": "В работе",
-    "review": "Проверка",
-    "done": "Готово",
-    "frozen": "Заморожено",
-}
-_KIND_LABELS = {
-    "all": "Все сущности",
+_COLUMN_KIND_LABELS = {
     "task": "Задачи",
     "idea": "Идеи",
+    "image": "Изображения",
+    "map": "Карты",
+    "marker": "Метки",
+    "note": "Заметки",
+    "project": "Проекты",
     "object": "Объекты",
 }
-_LINK_FILTER_LABELS = {
-    "all": "Все связи",
-    "linked": "Только связанные",
-    "unlinked": "Без связей",
-}
-_TASK_STAGE_TO_BOARD_COLUMN = {
-    "prep": BOARD_COLUMN_QUEUE,
-    "active": BOARD_COLUMN_IN_PROGRESS,
-    "done": BOARD_COLUMN_COMPLETED,
-    "frozen": BOARD_COLUMN_DEFERRED,
-}
-_IDEA_STAGE_TO_STATUS = {
-    "inbox": "inbox",
-    "thinking": "ripe",
-    "prep": "work",
-    "done": "done",
-    "frozen": "archived",
-}
+_DEFAULT_COLUMN_KINDS = ("task", "idea", "image")
 
 
 class _MutaBoardColumnListWidget(QListWidget):
-    _drag_card: MutaBoardCard | None = None
-
-    def __init__(self, workspace: "MutaBoardWorkspace", board_stage: str, parent=None) -> None:
+    def __init__(self, workspace: "MutaBoardWorkspace", column_id: int, parent=None) -> None:
         super().__init__(parent)
         self._workspace = workspace
-        self._board_stage = board_stage
+        self._column_id = column_id
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setUniformItemSizes(False)
         self.setSpacing(4)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
-        self.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._open_context_menu)
 
-    def startDrag(self, supported_actions: Qt.DropActions) -> None:  # noqa: N802
-        current_item = self.currentItem()
-        card = current_item.data(Qt.ItemDataRole.UserRole) if current_item is not None else None
-        if card is None or not self._workspace._is_card_draggable(card):
-            type(self)._drag_card = None
+    def _open_context_menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        if item is None:
             return
-        type(self)._drag_card = card
-        super().startDrag(supported_actions)
-
-    def dragEnterEvent(self, event) -> None:  # noqa: N802
-        if self._workspace._can_accept_drop(type(self)._drag_card, self._board_stage):
-            event.acceptProposedAction()
+        card = item.data(Qt.ItemDataRole.UserRole)
+        if card is None:
             return
-        event.ignore()
-
-    def dragMoveEvent(self, event) -> None:  # noqa: N802
-        if self._workspace._can_accept_drop(type(self)._drag_card, self._board_stage):
-            event.acceptProposedAction()
-            return
-        event.ignore()
-
-    def dropEvent(self, event) -> None:  # noqa: N802
-        card = type(self)._drag_card
-        type(self)._drag_card = None
-        if not self._workspace._can_accept_drop(card, self._board_stage):
-            event.ignore()
-            return
-        assert card is not None
-        self._workspace._move_card_to_stage(card, self._board_stage)
-        event.acceptProposedAction()
+        self._workspace._open_card_context_menu(card, self.mapToGlobal(pos))
 
 
 class MutaBoardWorkspace(BaseWorkspace):
-    """Workspace shell for the mixed-entity MutaBoard mode."""
+    """Workspace shell for persistent mutaboards and board-specific columns."""
 
     workspace_id = "mutaboard"
     workspace_title = "Мутаборд"
@@ -132,66 +89,108 @@ class MutaBoardWorkspace(BaseWorkspace):
         self.setObjectName("MutaBoardWorkspace")
         self._base_workspace_stylesheet = self.styleSheet()
         self._db = get_database()
-        self._model = MutaBoardModel()
-        self._column_lists: dict[str, QListWidget] = {}
-        self.board_columns: dict[str, QListWidget] = self._column_lists
+        self._model = MutaBoardModel(db=self._db)
+        self._mutaboards_by_id: dict[int, MutaBoardData] = {}
+        self._column_defs: dict[int, MutaBoardColumnData] = {}
+        self._column_kinds: dict[int, str] = {}
+        self._column_lists: dict[int, QListWidget] = {}
+        self.board_columns: dict[int, QListWidget] = self._column_lists
+        self._column_count_labels: dict[int, QLabel] = {}
         self._selected_card_key: tuple[str, int] | None = None
-        self.search_input.setPlaceholderText("Поиск по мутаборду")
-        self._build_filters()
-        self._build_board_shell()
+        self._attached_card_keys: set[tuple[str, int]] = set()
+        self.search_input.setPlaceholderText("Поиск по элементам мутборда")
+        self._build_shell()
         self.refresh()
 
-    def _build_filters(self) -> None:
-        self.kind_filter = QComboBox(self.filter_row)
-        self.kind_filter.setObjectName("MutaBoardKindFilter")
-        for kind, label in _KIND_LABELS.items():
-            self.kind_filter.addItem(label, kind)
-        self.kind_filter.currentIndexChanged.connect(self._on_kind_filter_changed)
-
-        self.project_filter = QComboBox(self.filter_row)
-        self.project_filter.setObjectName("MutaBoardProjectFilter")
-        self.project_filter.currentIndexChanged.connect(self._on_project_filter_changed)
-
-        self.linked_filter = QComboBox(self.filter_row)
-        self.linked_filter.setObjectName("MutaBoardLinkedFilter")
-        for key, label in _LINK_FILTER_LABELS.items():
-            self.linked_filter.addItem(label, key)
-        self.linked_filter.currentIndexChanged.connect(self._on_linked_filter_changed)
-
-        self.actionable_only_checkbox = QCheckBox("Только actionable", self.filter_row)
-        self.actionable_only_checkbox.setObjectName("MutaBoardActionableOnly")
-        self.actionable_only_checkbox.toggled.connect(self._on_actionable_only_toggled)
-
-        self.filter_bar_layout.insertWidget(self.filter_bar_layout.count() - 1, self.kind_filter)
-        self.filter_bar_layout.insertWidget(self.filter_bar_layout.count() - 1, self.project_filter)
-        self.filter_bar_layout.insertWidget(self.filter_bar_layout.count() - 1, self.linked_filter)
-        self.filter_bar_layout.insertWidget(self.filter_bar_layout.count() - 1, self.actionable_only_checkbox)
-
-    def _build_board_shell(self) -> None:
+    def _build_shell(self) -> None:
         root = QWidget(self)
         root.setObjectName("MutaBoardRoot")
         root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(10)
+        root_layout.setSpacing(16)
 
-        summary = QLabel(
-            "Единое поле для задач, идей и объектов. На этом этапе доска уже собирает mixed-card поток "
-            "и синхронизирует выделение с inspector."
+        top_splitter = QSplitter(Qt.Orientation.Horizontal, root)
+        top_splitter.setObjectName("MutaBoardSplitter")
+        top_splitter.addWidget(self._build_mutaboards_panel(top_splitter))
+        top_splitter.addWidget(self._build_board_panel(top_splitter))
+        top_splitter.addWidget(self._build_focus_panel(top_splitter))
+        top_splitter.setStretchFactor(0, 1)
+        top_splitter.setStretchFactor(1, 4)
+        top_splitter.setStretchFactor(2, 2)
+        root_layout.addWidget(top_splitter, 1)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 0, 0, 0)
+        bottom_row.setSpacing(16)
+        self.structure_panel = self._build_structure_panel(root)
+        self.scenarios_panel = self._build_scenarios_panel(root)
+        bottom_row.addWidget(self.structure_panel, 2)
+        bottom_row.addWidget(self.scenarios_panel, 3)
+        root_layout.addLayout(bottom_row)
+
+        self.set_content(root)
+        self._apply_mutaboard_style()
+
+    def _build_mutaboards_panel(self, parent: QWidget) -> QFrame:
+        panel = QFrame(parent)
+        panel.setObjectName("MutaBoardListPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("MutaBoard")
+        title.setObjectName("MutaBoardListTitle")
+        subtitle = QLabel("Список мутбордов и быстрый выбор активной доски.")
+        subtitle.setObjectName("MutaBoardListSubtitle")
+        subtitle.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+
+        self.mutaboard_list = QListWidget(panel)
+        self.mutaboard_list.setObjectName("MutaBoardList")
+        self.mutaboard_list.itemSelectionChanged.connect(self._on_mutaboard_selection_changed)
+        layout.addWidget(self.mutaboard_list, 1)
+
+        self.add_mutaboard_button = QPushButton("Новый мутборд", panel)
+        self.add_mutaboard_button.setObjectName("MutaBoardPrimaryButton")
+        self.add_mutaboard_button.clicked.connect(self._create_mutaboard)
+        layout.addWidget(self.add_mutaboard_button)
+        return panel
+
+    def _build_board_panel(self, parent: QWidget) -> QFrame:
+        panel = QFrame(parent)
+        panel.setObjectName("MutaBoardBoardWrap")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
+
+        header = QFrame(panel)
+        header.setObjectName("MutaBoardBoardHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
+
+        header_text = QVBoxLayout()
+        header_text.setContentsMargins(0, 0, 0, 0)
+        header_text.setSpacing(4)
+        title = QLabel("Потоки и витрины")
+        title.setObjectName("MutaBoardBoardHeadline")
+        caption = QLabel(
+            "Колонки показывают элементы по типам. Тип колонки можно менять в заголовке, а новые витрины добавлять по кнопке."
         )
-        summary.setObjectName("MutaBoardSummary")
-        summary.setWordWrap(True)
-        root_layout.addWidget(summary)
+        caption.setObjectName("MutaBoardBoardCaption")
+        caption.setWordWrap(True)
+        header_text.addWidget(title)
+        header_text.addWidget(caption)
+        header_layout.addLayout(header_text, 1)
 
-        self.splitter = QSplitter(Qt.Orientation.Horizontal, root)
-        self.splitter.setObjectName("MutaBoardSplitter")
+        self.add_column_button = QPushButton("Добавить столбец", header)
+        self.add_column_button.setObjectName("MutaBoardSecondaryButton")
+        self.add_column_button.clicked.connect(self._add_column)
+        header_layout.addWidget(self.add_column_button, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(header)
 
-        board_wrap = QFrame(self.splitter)
-        board_wrap.setObjectName("MutaBoardBoardWrap")
-        board_wrap_layout = QVBoxLayout(board_wrap)
-        board_wrap_layout.setContentsMargins(0, 0, 0, 0)
-        board_wrap_layout.setSpacing(0)
-
-        self.board_scroll = QScrollArea(board_wrap)
+        self.board_scroll = QScrollArea(panel)
         self.board_scroll.setObjectName("MutaBoardScroll")
         self.board_scroll.setWidgetResizable(True)
         self.board_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -203,99 +202,152 @@ class MutaBoardWorkspace(BaseWorkspace):
         self.board_layout.setContentsMargins(0, 0, 0, 0)
         self.board_layout.setSpacing(10)
 
-        self._column_title_labels: dict[str, QLabel] = {}
-        for stage in MUTABOARD_STAGES:
-            column = QFrame(self.board_inner)
-            column.setObjectName("MutaBoardColumn")
-            column.setProperty("board_stage", stage)
-            column_layout = QVBoxLayout(column)
-            column_layout.setContentsMargins(10, 10, 10, 10)
-            column_layout.setSpacing(8)
-
-            title_label = QLabel(_STAGE_TITLES[stage])
-            title_label.setObjectName("MutaBoardColumnTitle")
-            column_layout.addWidget(title_label)
-            self._column_title_labels[stage] = title_label
-
-            list_widget = _MutaBoardColumnListWidget(self, stage, column)
-            list_widget.setObjectName("MutaBoardColumnList")
-            list_widget.setItemDelegate(MutaBoardDelegate(list_widget))
-            list_widget.itemSelectionChanged.connect(
-                lambda current_stage=stage: self._on_column_selection_changed(current_stage)
-            )
-            column_layout.addWidget(list_widget, 1)
-            self.board_layout.addWidget(column, 1)
-            self._column_lists[stage] = list_widget
-
         self.board_scroll.setWidget(self.board_inner)
-        board_wrap_layout.addWidget(self.board_scroll, 1)
+        layout.addWidget(self.board_scroll, 1)
+        return panel
 
-        self.inspector = QFrame(self.splitter)
-        self.inspector.setObjectName("MutaBoardInspector")
-        self.inspector.setMinimumWidth(280)
-        self.inspector.setMaximumWidth(380)
-        inspector_layout = QVBoxLayout(self.inspector)
-        inspector_layout.setContentsMargins(16, 16, 16, 16)
-        inspector_layout.setSpacing(12)
+    def _build_focus_panel(self, parent: QWidget) -> QFrame:
+        panel = QFrame(parent)
+        panel.setObjectName("MutaBoardFocusPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
-        inspector_title = QLabel("Inspector")
-        inspector_title.setObjectName("MutaBoardInspectorTitle")
-        inspector_layout.addWidget(inspector_title)
+        title = QLabel("Фокус")
+        title.setObjectName("MutaBoardInspectorTitle")
+        layout.addWidget(title)
 
-        self.inspector_empty = QLabel("Выберите карточку на доске.")
-        self.inspector_empty.setObjectName("MutaBoardInspectorEmpty")
-        self.inspector_empty.setWordWrap(True)
-        inspector_layout.addWidget(self.inspector_empty)
-
-        self.inspector_form_host = QWidget(self.inspector)
-        self.inspector_form_host.setObjectName("MutaBoardInspectorFormHost")
-        form = QFormLayout(self.inspector_form_host)
+        form_host = QWidget(panel)
+        form = QFormLayout(form_host)
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
 
-        self.inspector_kind_value = QLabel("—")
-        self.inspector_title_value = QLabel("—")
-        self.inspector_stage_value = QLabel("—")
-        self.inspector_project_value = QLabel("—")
-        self.inspector_meta_value = QLabel("—")
-        self.inspector_links_value = QLabel("—")
-        self.inspector_subtitle_value = QLabel("—")
-        self.inspector_subtitle_value.setWordWrap(True)
+        self.focus_title_input = QLineEdit(form_host)
+        self.focus_title_input.setObjectName("MutaBoardFocusTitle")
+        self.focus_updated_value = QLabel("—")
+        self.focus_attached_value = QLabel("0")
+        self.focus_description_input = QTextEdit(form_host)
+        self.focus_description_input.setObjectName("MutaBoardFocusDescription")
+        self.focus_description_input.setMinimumHeight(160)
+        self.focus_description_input.setPlaceholderText("Описание мутборда")
 
-        form.addRow("Тип", self.inspector_kind_value)
-        form.addRow("Заголовок", self.inspector_title_value)
-        form.addRow("Стадия", self.inspector_stage_value)
-        form.addRow("Проект", self.inspector_project_value)
-        form.addRow("Мета", self.inspector_meta_value)
-        form.addRow("Связи", self.inspector_links_value)
-        form.addRow("Описание", self.inspector_subtitle_value)
-        inspector_layout.addWidget(self.inspector_form_host)
+        form.addRow("Название", self.focus_title_input)
+        form.addRow("Обновлён", self.focus_updated_value)
+        form.addRow("Прикреплено", self.focus_attached_value)
+        form.addRow("Описание", self.focus_description_input)
+        layout.addWidget(form_host, 1)
 
-        self.inspector_footer = QLabel("Выберите карточку, чтобы увидеть связи и доступные мутации.")
-        self.inspector_footer.setObjectName("MutaBoardInspectorFooter")
-        self.inspector_footer.setWordWrap(True)
-        self.inspector_primary_action = QToolButton(self.inspector)
-        self.inspector_primary_action.setObjectName("MutaBoardInspectorAction")
-        self.inspector_primary_action.clicked.connect(self._run_primary_action)
-        inspector_layout.addWidget(self.inspector_primary_action)
+        self.focus_save_button = QPushButton("Сохранить мутборд", panel)
+        self.focus_save_button.setObjectName("MutaBoardPrimaryButton")
+        self.focus_save_button.clicked.connect(self._save_current_mutaboard)
+        layout.addWidget(self.focus_save_button)
+        return panel
 
-        self.inspector_secondary_action = QToolButton(self.inspector)
-        self.inspector_secondary_action.setObjectName("MutaBoardInspectorAction")
-        self.inspector_secondary_action.clicked.connect(self._run_secondary_action)
-        inspector_layout.addWidget(self.inspector_secondary_action)
+    def _build_structure_panel(self, parent: QWidget) -> QFrame:
+        panel = QFrame(parent)
+        panel.setObjectName("MutaBoardInsightPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
-        inspector_layout.addWidget(self.inspector_footer)
-        inspector_layout.addStretch(1)
+        title = QLabel("Связи и структура")
+        title.setObjectName("MutaBoardInsightTitle")
+        self.structure_subtitle = QLabel("Данные этой области берутся из активного элемента, выбранного в потоках и витринах.")
+        self.structure_subtitle.setObjectName("MutaBoardInsightBody")
+        self.structure_subtitle.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(self.structure_subtitle)
 
-        self.splitter.addWidget(board_wrap)
-        self.splitter.addWidget(self.inspector)
-        self.splitter.setStretchFactor(0, 4)
-        self.splitter.setStretchFactor(1, 1)
-        root_layout.addWidget(self.splitter, 1)
+        graph = QFrame(panel)
+        graph.setObjectName("MutaBoardStructureGraph")
+        graph_layout = QHBoxLayout(graph)
+        graph_layout.setContentsMargins(8, 8, 8, 8)
+        graph_layout.setSpacing(12)
 
-        self.set_content(root)
-        self._set_selected_card(None)
-        self._apply_mutaboard_style()
+        left_col = QVBoxLayout()
+        left_col.setSpacing(10)
+        center_col = QVBoxLayout()
+        center_col.setSpacing(10)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(10)
+
+        self.structure_projects_label = self._create_structure_node("MutaBoardNodeMuted", "Проекты · 0")
+        self.structure_objects_label = self._create_structure_node("MutaBoardNodeObject", "Объекты · 0")
+        self.structure_ideas_label = self._create_structure_node("MutaBoardNodeIdea", "Идеи · 0")
+        self.structure_hub_label = self._create_structure_node("MutaBoardNodeHub", "Мутаборд")
+        self.structure_links_label = self._create_structure_node("MutaBoardNodeMuted", "Связи · 0")
+        self.structure_tasks_label = self._create_structure_node("MutaBoardNodeTask", "Задачи · 0")
+        self.structure_other_label = self._create_structure_node("MutaBoardNodeMuted", "Остальное · 0")
+
+        left_col.addWidget(self.structure_projects_label)
+        left_col.addWidget(self.structure_objects_label)
+        left_col.addStretch(1)
+
+        center_col.addWidget(self.structure_ideas_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        center_col.addWidget(self.structure_hub_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        center_col.addWidget(self.structure_links_label, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        right_col.addWidget(self.structure_tasks_label)
+        right_col.addWidget(self.structure_other_label)
+        right_col.addStretch(1)
+
+        graph_layout.addLayout(left_col, 1)
+        graph_layout.addLayout(center_col, 1)
+        graph_layout.addLayout(right_col, 1)
+        layout.addWidget(graph, 1)
+        return panel
+
+    def _build_scenarios_panel(self, parent: QWidget) -> QFrame:
+        panel = QFrame(parent)
+        panel.setObjectName("MutaBoardInsightPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("Сценарии использования")
+        title.setObjectName("MutaBoardInsightTitle")
+        subtitle = QLabel("Графы Захват, Планирование и Связи теперь редактируются как часть текущего мутборда.")
+        subtitle.setObjectName("MutaBoardInsightBody")
+        subtitle.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(10)
+        self._scenario_editors: dict[str, QTextEdit] = {}
+        for key, label_text in (
+            ("capture", "Захват"),
+            ("planning", "Планирование"),
+            ("links", "Связи"),
+        ):
+            card = QFrame(panel)
+            card.setObjectName("MutaBoardScenarioCard")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(12, 12, 12, 12)
+            card_layout.setSpacing(8)
+            card_title = QLabel(label_text)
+            card_title.setObjectName("MutaBoardScenarioTitle")
+            editor = QTextEdit(card)
+            editor.setObjectName("MutaBoardScenarioEditor")
+            editor.setMinimumHeight(128)
+            self._scenario_editors[key] = editor
+            card_layout.addWidget(card_title)
+            card_layout.addWidget(editor, 1)
+            cards_row.addWidget(card, 1)
+        layout.addLayout(cards_row, 1)
+
+        self.scenarios_save_button = QPushButton("Сохранить сценарии", panel)
+        self.scenarios_save_button.setObjectName("MutaBoardSecondaryButton")
+        self.scenarios_save_button.clicked.connect(self._save_current_mutaboard)
+        layout.addWidget(self.scenarios_save_button, 0, Qt.AlignmentFlag.AlignRight)
+        return panel
+
+    def _create_structure_node(self, object_name: str, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName(object_name)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setMinimumHeight(42)
+        return label
 
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
@@ -322,93 +374,233 @@ class MutaBoardWorkspace(BaseWorkspace):
 
     def refresh(self) -> None:
         self._model.reload()
-        self._refresh_project_options()
-        self._populate_board()
+        self._refresh_mutaboards()
         self._refresh_status()
 
     def on_enter(self, context: dict | None = None) -> None:
         super().on_enter(context)
-        self._sync_filter_controls_from_state()
         self._populate_board()
         self._refresh_status()
 
-    def _refresh_project_options(self) -> None:
-        current_project_id = self.project_filter.currentData()
-        project_pairs = sorted(
-            {
-                (card.project_id, card.project_title)
-                for card in self._model.cards()
-                if card.project_id is not None and card.project_title
-            },
-            key=lambda pair: pair[1].casefold(),
-        )
-        self.project_filter.blockSignals(True)
-        self.project_filter.clear()
-        self.project_filter.addItem("Все проекты", None)
-        for project_id, project_title in project_pairs:
-            self.project_filter.addItem(project_title, project_id)
-        restore_index = self.project_filter.findData(current_project_id)
-        self.project_filter.setCurrentIndex(max(0, restore_index))
-        self.project_filter.blockSignals(False)
+    def _refresh_mutaboards(self) -> None:
+        boards = self._db.fetch_mutaboards()
+        if not boards:
+            self._db.create_mutaboard("Мутаборд 1", column_kinds=_DEFAULT_COLUMN_KINDS)
+            boards = self._db.fetch_mutaboards()
+        current_id = self._current_mutaboard_id()
+        self._mutaboards_by_id = {board.id: board for board in boards}
 
-    def _filtered_cards(self) -> list[MutaBoardCard]:
-        project_id = self.project_filter.currentData()
-        return self._model.filtered_cards(
-            query=self.search_input.text(),
-            entity_kind=self.kind_filter.currentData(),
-            project_id=project_id if isinstance(project_id, int) else None,
-            actionable_only=self.actionable_only_checkbox.isChecked(),
-            linked_only=self._linked_filter_value(),
+        self.mutaboard_list.blockSignals(True)
+        self.mutaboard_list.clear()
+        for board in boards:
+            item = QListWidgetItem(board.title)
+            item.setData(Qt.ItemDataRole.UserRole, board.id)
+            item.setToolTip(board.description or board.title)
+            self.mutaboard_list.addItem(item)
+        self.mutaboard_list.blockSignals(False)
+
+        restore_id = current_id if current_id in self._mutaboards_by_id else boards[0].id
+        for index in range(self.mutaboard_list.count()):
+            item = self.mutaboard_list.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) != restore_id:
+                continue
+            self.mutaboard_list.setCurrentItem(item)
+            break
+        self._load_current_mutaboard()
+
+    def _on_mutaboard_selection_changed(self) -> None:
+        self._load_current_mutaboard()
+        self._rebuild_board_columns()
+        self._populate_board()
+        self._refresh_status()
+
+    def _current_mutaboard_id(self) -> int | None:
+        item = self.mutaboard_list.currentItem()
+        board_id = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        return board_id if isinstance(board_id, int) else None
+
+    def _current_mutaboard(self) -> MutaBoardData | None:
+        board_id = self._current_mutaboard_id()
+        if board_id is None:
+            return None
+        return self._mutaboards_by_id.get(board_id)
+
+    def _create_mutaboard(self) -> None:
+        next_index = len(self._mutaboards_by_id) + 1
+        created = self._db.create_mutaboard(f"Мутаборд {next_index}", column_kinds=_DEFAULT_COLUMN_KINDS)
+        self._model.reload()
+        self._refresh_mutaboards()
+        self._select_mutaboard(created.id)
+        self.set_status(f"Мутаборд: создан «{created.title}».")
+
+    def _select_mutaboard(self, mutaboard_id: int) -> None:
+        for index in range(self.mutaboard_list.count()):
+            item = self.mutaboard_list.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) != mutaboard_id:
+                continue
+            self.mutaboard_list.setCurrentItem(item)
+            break
+
+    def _load_current_mutaboard(self) -> None:
+        board = self._current_mutaboard()
+        if board is None:
+            self.focus_title_input.clear()
+            self.focus_updated_value.setText("—")
+            self.focus_attached_value.setText("0")
+            self.focus_description_input.clear()
+            for editor in self._scenario_editors.values():
+                editor.clear()
+            return
+        self.focus_title_input.setText(board.title)
+        self.focus_updated_value.setText(board.updated_at.strftime("%Y-%m-%d %H:%M"))
+        self.focus_description_input.setPlainText(board.description)
+        self._scenario_editors["capture"].setPlainText(board.capture_text)
+        self._scenario_editors["planning"].setPlainText(board.planning_text)
+        self._scenario_editors["links"].setPlainText(board.links_text)
+
+    def _save_current_mutaboard(self) -> None:
+        board = self._current_mutaboard()
+        if board is None:
+            self.set_status("Мутаборд: сначала выберите доску.")
+            return
+        updated = self._db.update_mutaboard(
+            board.id,
+            title=self.focus_title_input.text(),
+            description=self.focus_description_input.toPlainText(),
+            capture_text=self._scenario_editors["capture"].toPlainText(),
+            planning_text=self._scenario_editors["planning"].toPlainText(),
+            links_text=self._scenario_editors["links"].toPlainText(),
         )
+        self._mutaboards_by_id[updated.id] = updated
+        self._refresh_mutaboards()
+        self._select_mutaboard(updated.id)
+        self.set_status(f"Мутаборд: данные «{updated.title}» сохранены.")
+
+    def _rebuild_board_columns(self) -> None:
+        self._column_defs.clear()
+        self._column_kinds.clear()
+        self._column_lists.clear()
+        self._column_count_labels.clear()
+        while self.board_layout.count():
+            item = self.board_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        board_id = self._current_mutaboard_id()
+        if board_id is None:
+            return
+        columns = self._db.fetch_mutaboard_columns(board_id)
+        if not columns:
+            self._db.replace_mutaboard_columns(board_id, [(kind, "") for kind in _DEFAULT_COLUMN_KINDS])
+            columns = self._db.fetch_mutaboard_columns(board_id)
+
+        for column in columns:
+            self._column_defs[column.id] = column
+            self._column_kinds[column.id] = column.kind
+
+            frame = QFrame(self.board_inner)
+            frame.setObjectName("MutaBoardColumn")
+            frame.setMinimumWidth(250)
+            column_layout = QVBoxLayout(frame)
+            column_layout.setContentsMargins(12, 12, 12, 12)
+            column_layout.setSpacing(8)
+
+            header_row = QHBoxLayout()
+            header_row.setContentsMargins(0, 0, 0, 0)
+            header_row.setSpacing(8)
+
+            kind_combo = QComboBox(frame)
+            kind_combo.setObjectName("MutaBoardColumnKindFilter")
+            for kind, label_text in _COLUMN_KIND_LABELS.items():
+                kind_combo.addItem(label_text, kind)
+            kind_combo.setCurrentIndex(max(0, kind_combo.findData(column.kind)))
+            kind_combo.currentIndexChanged.connect(
+                lambda _index, column_id=column.id, combo=kind_combo: self._on_column_kind_changed(
+                    column_id, combo.currentData()
+                )
+            )
+            header_row.addWidget(kind_combo, 1)
+
+            count_label = QLabel("0")
+            count_label.setObjectName("MutaBoardColumnCount")
+            header_row.addWidget(count_label, 0, Qt.AlignmentFlag.AlignRight)
+            self._column_count_labels[column.id] = count_label
+            column_layout.addLayout(header_row)
+
+            list_widget = _MutaBoardColumnListWidget(self, column.id, frame)
+            list_widget.setObjectName("MutaBoardColumnList")
+            list_widget.setItemDelegate(MutaBoardDelegate(list_widget))
+            list_widget.itemSelectionChanged.connect(
+                lambda column_id=column.id: self._on_column_selection_changed(column_id)
+            )
+            column_layout.addWidget(list_widget, 1)
+            self._column_lists[column.id] = list_widget
+            self.board_layout.addWidget(frame, 1)
+        self.board_layout.addStretch(1)
+
+    def _on_column_kind_changed(self, column_id: int, kind: object) -> None:
+        if not isinstance(kind, str):
+            return
+        current = self._column_defs.get(column_id)
+        if current is None or current.kind == kind:
+            return
+        updated = self._db.update_mutaboard_column(column_id, kind=kind, title=current.title, position=current.position)
+        self._column_defs[column_id] = updated
+        self._column_kinds[column_id] = updated.kind
+        self._populate_board()
+        self._refresh_status()
+
+    def _next_column_kind(self) -> str:
+        current_kinds = list(self._column_kinds.values())
+        for kind in _COLUMN_KIND_LABELS:
+            if kind not in current_kinds:
+                return kind
+        return next(iter(_COLUMN_KIND_LABELS))
+
+    def _add_column(self) -> None:
+        board_id = self._current_mutaboard_id()
+        if board_id is None:
+            self.set_status("Мутаборд: сначала выберите доску.")
+            return
+        self._db.add_mutaboard_column(board_id, self._next_column_kind())
+        self._refresh_mutaboards()
+        self._select_mutaboard(board_id)
+        self._rebuild_board_columns()
+        self._populate_board()
+        self._refresh_status()
+
+    def _filtered_cards(self, entity_kind: str | None = None) -> list[MutaBoardCard]:
+        return self._model.filtered_cards(query=self.search_input.text(), entity_kind=entity_kind)
 
     def _populate_board(self) -> None:
-        cards = self._filtered_cards()
-        grouped = self._model.grouped_cards(cards)
+        board_id = self._current_mutaboard_id()
+        if board_id is None:
+            return
+        attached_items = self._db.fetch_mutaboard_items(board_id)
+        self._attached_card_keys = {(item.entity_kind, item.entity_id) for item in attached_items}
+        self.focus_attached_value.setText(str(len(self._attached_card_keys)))
+
         selection_key = self._selected_card_key
-        for stage, list_widget in self._column_lists.items():
+        for column_id, list_widget in self._column_lists.items():
+            kind = self._column_kinds.get(column_id)
+            cards = self._filtered_cards(kind)
             list_widget.blockSignals(True)
             list_widget.clear()
-            stage_cards = grouped.get(stage, [])
-            for card in stage_cards:
-                item = QListWidgetItem(card.title)
-                item.setData(Qt.ItemDataRole.UserRole, card)
-                item.setToolTip(card.meta_text or card.subtitle or card.title)
+            for card in cards:
+                card_key = (card.entity_kind, card.entity_id)
+                payload = replace(card, is_attached=card_key in self._attached_card_keys)
+                item = QListWidgetItem(payload.title)
+                item.setData(Qt.ItemDataRole.UserRole, payload)
+                item.setToolTip(payload.meta_text or payload.subtitle or payload.title)
                 list_widget.addItem(item)
-            self._column_title_labels[stage].setText(f"{_STAGE_TITLES[stage]} · {len(stage_cards)}")
+            count_label = self._column_count_labels.get(column_id)
+            if count_label is not None and kind is not None:
+                count_label.setText(f"{_COLUMN_KIND_LABELS.get(kind, kind)} · {len(cards)}")
             list_widget.blockSignals(False)
         if selection_key is not None and self._restore_selection(selection_key):
             return
         self._set_selected_card(None)
-
-    def _sync_filter_controls_from_state(self) -> None:
-        entity_kind = self.get_filters().get("entity_kind")
-        actionable_only = bool(self.get_filters().get("actionable_only"))
-        project_id = self.get_filters().get("project_id")
-        linked_only = self.get_filters().get("linked_only")
-
-        kind_index = self.kind_filter.findData(entity_kind if isinstance(entity_kind, str) else "all")
-        self.kind_filter.blockSignals(True)
-        self.kind_filter.setCurrentIndex(max(0, kind_index))
-        self.kind_filter.blockSignals(False)
-
-        self.actionable_only_checkbox.blockSignals(True)
-        self.actionable_only_checkbox.setChecked(actionable_only)
-        self.actionable_only_checkbox.blockSignals(False)
-
-        linked_key = "all"
-        if linked_only is True:
-            linked_key = "linked"
-        elif linked_only is False:
-            linked_key = "unlinked"
-        linked_index = self.linked_filter.findData(linked_key)
-        self.linked_filter.blockSignals(True)
-        self.linked_filter.setCurrentIndex(max(0, linked_index))
-        self.linked_filter.blockSignals(False)
-
-        project_index = self.project_filter.findData(project_id if isinstance(project_id, int) else None)
-        self.project_filter.blockSignals(True)
-        self.project_filter.setCurrentIndex(max(0, project_index))
-        self.project_filter.blockSignals(False)
 
     def _restore_selection(self, selection_key: tuple[str, int]) -> bool:
         for list_widget in self._column_lists.values():
@@ -426,15 +618,15 @@ class MutaBoardWorkspace(BaseWorkspace):
                 return True
         return False
 
-    def _on_column_selection_changed(self, stage: str) -> None:
-        current_list = self._column_lists[stage]
+    def _on_column_selection_changed(self, column_id: int) -> None:
+        current_list = self._column_lists[column_id]
         current_item = current_list.currentItem()
         if current_item is None:
             if not any(list_widget.currentItem() is not None for list_widget in self._column_lists.values()):
                 self._set_selected_card(None)
             return
-        for other_stage, list_widget in self._column_lists.items():
-            if other_stage == stage:
+        for other_column_id, list_widget in self._column_lists.items():
+            if other_column_id == column_id:
                 continue
             list_widget.blockSignals(True)
             list_widget.clearSelection()
@@ -443,326 +635,124 @@ class MutaBoardWorkspace(BaseWorkspace):
         self._set_selected_card(current_item.data(Qt.ItemDataRole.UserRole))
 
     def _set_selected_card(self, card: MutaBoardCard | None) -> None:
+        self._selected_card_key = None if card is None else (card.entity_kind, card.entity_id)
+        self._refresh_structure(card)
+
+    def _refresh_structure(self, card: MutaBoardCard | None) -> None:
+        board = self._current_mutaboard()
         if card is None:
-            self._selected_card_key = None
-            self.inspector_empty.show()
-            self.inspector_kind_value.setText("—")
-            self.inspector_title_value.setText("—")
-            self.inspector_stage_value.setText("—")
-            self.inspector_project_value.setText("—")
-            self.inspector_meta_value.setText("—")
-            self.inspector_links_value.setText("—")
-            self.inspector_subtitle_value.setText("—")
-            self.inspector_footer.setText("Выберите карточку, чтобы увидеть связи и доступные мутации.")
-            self._set_action_button(self.inspector_primary_action, None)
-            self._set_action_button(self.inspector_secondary_action, None)
+            self.structure_subtitle.setText(
+                "Данные этой области берутся из активного элемента, выбранного в потоках и витринах."
+            )
+            self.structure_hub_label.setText(board.title if board is not None else "Мутаборд")
+            self.structure_projects_label.setText("Проекты · 0")
+            self.structure_objects_label.setText("Объекты · 0")
+            self.structure_ideas_label.setText("Идеи · 0")
+            self.structure_tasks_label.setText("Задачи · 0")
+            self.structure_other_label.setText("Остальное · 0")
+            self.structure_links_label.setText("Связи · 0")
             return
-        self._selected_card_key = (card.entity_kind, card.entity_id)
-        self.inspector_empty.hide()
-        self.inspector_kind_value.setText(_KIND_LABELS.get(card.entity_kind, card.entity_kind))
-        self.inspector_title_value.setText(card.title or "—")
-        self.inspector_stage_value.setText(_STAGE_TITLES.get(card.stage, card.stage))
-        self.inspector_project_value.setText(card.project_title or "—")
-        self.inspector_meta_value.setText(card.meta_text or "—")
-        self.inspector_links_value.setText(card.link_summary)
-        self.inspector_subtitle_value.setText(card.subtitle or "—")
-        actions = self._actions_for_card(card)
-        self._set_action_button(self.inspector_primary_action, actions[0] if len(actions) > 0 else None)
-        self._set_action_button(self.inspector_secondary_action, actions[1] if len(actions) > 1 else None)
-        self.inspector_footer.setText(self._inspector_footer_text(card, actions))
+        counts = self._structure_counts_for_card(card)
+        self.structure_subtitle.setText(f"Активный элемент: {card.title} ({_COLUMN_KIND_LABELS.get(card.entity_kind, card.entity_kind)}).")
+        self.structure_hub_label.setText(card.title)
+        self.structure_projects_label.setText(f"Проекты · {counts['projects']}")
+        self.structure_objects_label.setText(f"Объекты · {counts['objects']}")
+        self.structure_ideas_label.setText(f"Идеи · {counts['ideas']}")
+        self.structure_tasks_label.setText(f"Задачи · {counts['tasks']}")
+        self.structure_other_label.setText(f"Остальное · {counts['other']}")
+        self.structure_links_label.setText(f"Связи · {counts['links']}")
 
-    @staticmethod
-    def _inspector_footer_text(card: MutaBoardCard, actions: list[tuple[str, str]]) -> str:
-        if actions:
-            action_names = ", ".join(action[0] for action in actions)
-            return f"Связи: {card.link_summary}. Доступно: {action_names}."
-        return f"Связи: {card.link_summary}. Для этой карточки нет inspector actions."
+    def _structure_counts_for_card(self, card: MutaBoardCard) -> dict[str, int]:
+        counts = {"projects": 0, "objects": 0, "ideas": 0, "tasks": 0, "other": 0, "links": card.total_linked_count}
+        payload = card.source_payload
+        if isinstance(payload, TaskData):
+            counts["tasks"] = 1
+            counts["ideas"] = card.linked_idea_count
+            counts["objects"] = card.linked_object_count
+            counts["links"] = card.total_linked_count
+            return counts
+        if isinstance(payload, IdeaData):
+            counts["ideas"] = 1 + card.linked_idea_count
+            counts["tasks"] = card.linked_task_count
+            counts["objects"] = card.linked_object_count
+            counts["links"] = card.total_linked_count
+            return counts
+        if isinstance(payload, ObjectData):
+            counts["objects"] = 1
+            counts["tasks"] = card.linked_task_count
+            counts["ideas"] = card.linked_idea_count
+            counts["links"] = card.total_linked_count
+            return counts
+        if isinstance(payload, ProjectData):
+            counts["projects"] = 1
+            counts["objects"] = 1 if payload.linked_object_id is not None else 0
+            counts["other"] = sum(
+                1 for value in (payload.linked_map_id, payload.linked_note_id) if value is not None
+            )
+            counts["links"] = counts["objects"] + counts["other"]
+            return counts
+        if isinstance(payload, MapMarkerData):
+            counts["projects"] = len(payload.project_ids)
+            counts["objects"] = len(payload.object_ids)
+            counts["tasks"] = len(payload.task_ids)
+            counts["other"] = len(payload.note_ids) + len(payload.file_ids) + len(payload.map_ids) + len(payload.marker_ids)
+            counts["links"] = counts["projects"] + counts["objects"] + counts["tasks"] + counts["other"]
+            return counts
+        if isinstance(payload, MapData):
+            counts["other"] = self._model.map_marker_count(payload.id)
+            counts["links"] = counts["other"]
+            return counts
+        if isinstance(payload, NoteData):
+            counts["other"] = len(payload.tags)
+            counts["links"] = counts["other"]
+            return counts
+        if isinstance(payload, CloudFileData):
+            return counts
+        return counts
 
-    @staticmethod
-    def _set_action_button(button: QToolButton, action_payload: tuple[str, str] | None) -> None:
-        if action_payload is None:
-            button.hide()
-            button.setEnabled(False)
-            button.setText("")
-            button.setProperty("action_key", "")
+    def _open_card_context_menu(self, card: MutaBoardCard, global_pos) -> None:
+        board = self._current_mutaboard()
+        menu = QMenu(self)
+        attach_action = menu.addAction("Прикрепить к мутборду")
+        if board is None or (card.entity_kind, card.entity_id) in self._attached_card_keys:
+            attach_action.setEnabled(board is not None and (card.entity_kind, card.entity_id) not in self._attached_card_keys)
+        chosen = menu.exec(global_pos)
+        if chosen is not attach_action or board is None:
             return
-        button.setText(action_payload[0])
-        button.setProperty("action_key", action_payload[1])
-        button.setEnabled(True)
-        button.show()
-
-    def _actions_for_card(self, card: MutaBoardCard) -> list[tuple[str, str]]:
-        if card.entity_kind == "idea":
-            return [
-                ("Создать задачу", "idea_create_task"),
-                ("Создать объект", "idea_create_object"),
-            ]
-        if card.entity_kind == "object":
-            return [
-                ("Создать задачу", "object_create_task"),
-                ("Создать идею", "object_create_idea"),
-            ]
-        if card.entity_kind == "task":
-            return [
-                ("Создать идею", "task_create_idea"),
-                ("Создать объект", "task_create_object"),
-            ]
-        return []
-
-    def _can_accept_drop(self, card: MutaBoardCard | None, target_stage: str) -> bool:
-        if card is None:
-            return False
-        return self._can_move_card_to_stage(card, target_stage)
-
-    @staticmethod
-    def _is_card_draggable(card: MutaBoardCard) -> bool:
-        return bool(card.can_drag)
-
-    def _can_move_card_to_stage(self, card: MutaBoardCard, target_stage: str) -> bool:
-        if target_stage == card.stage:
-            return False
-        if card.entity_kind == "task":
-            payload = card.source_payload
-            return isinstance(payload, TaskData) and not payload.done and target_stage in _TASK_STAGE_TO_BOARD_COLUMN
-        if card.entity_kind == "idea":
-            return target_stage in _IDEA_STAGE_TO_STATUS
-        return False
-
-    def _move_card_to_stage(self, card: MutaBoardCard, target_stage: str) -> None:
-        if not self._can_move_card_to_stage(card, target_stage):
-            self.set_status("Мутаборд: перенос для этой карточки недоступен.")
-            return
-        if card.entity_kind == "task":
-            board_column = _TASK_STAGE_TO_BOARD_COLUMN.get(target_stage)
-            if board_column is None:
-                self.set_status("Мутаборд: stage не маппится в task board column.")
-                return
-            self._db.set_task_board_column(card.entity_id, board_column)
-            self.refresh()
-            self.set_status(f"Мутаборд: задача перенесена в {_STAGE_TITLES[target_stage].lower()}.")
-            return
-        if card.entity_kind == "idea":
-            payload = card.source_payload
-            if not isinstance(payload, IdeaData):
-                self.set_status("Мутаборд: идея не содержит полного payload.")
-                return
-            self._move_idea_to_stage(payload, target_stage)
-
-    def _move_idea_to_stage(self, idea: IdeaData, target_stage: str) -> None:
-        next_status = _IDEA_STAGE_TO_STATUS.get(target_stage)
-        if next_status is None:
-            self.set_status("Мутаборд: stage не маппится в idea status.")
-            return
-        if idea.archived_at is not None and next_status != "archived":
-            self._db.set_idea_archived(idea.id, False)
-        archived = next_status == "archived"
-        self._db.update_idea(
-            idea_id=idea.id,
-            title=idea.title,
-            summary=idea.summary,
-            body_md=idea.body_md,
-            idea_type=idea.type,
-            status=next_status,
-            value_score=idea.value_score,
-            effort_score=idea.effort_score,
-            project_id=idea.project_id,
-            source=idea.source,
-        )
-        if archived:
-            self._db.set_idea_archived(idea.id, True)
-        self.refresh()
-        self.set_status(f"Мутаборд: идея перенесена в {_STAGE_TITLES[target_stage].lower()}.")
-
-    def _run_primary_action(self) -> None:
-        self._run_inspector_action(self.inspector_primary_action.property("action_key"))
-
-    def _run_secondary_action(self) -> None:
-        self._run_inspector_action(self.inspector_secondary_action.property("action_key"))
-
-    def _run_inspector_action(self, action_key: object) -> None:
-        if not isinstance(action_key, str) or not action_key:
-            return
-        selected_card = self._selected_card()
-        if selected_card is None:
-            self.set_status("Мутаборд: сначала выберите карточку.")
-            return
-        if action_key == "idea_create_task" and isinstance(selected_card.source_payload, IdeaData):
-            self._create_task_from_idea(selected_card.source_payload)
-            return
-        if action_key == "idea_create_object" and isinstance(selected_card.source_payload, IdeaData):
-            self._create_object_from_idea(selected_card.source_payload)
-            return
-        if action_key == "object_create_task":
-            self._create_task_from_object(selected_card)
-            return
-        if action_key == "object_create_idea":
-            self._create_idea_from_object(selected_card)
-            return
-        if action_key == "task_create_idea" and isinstance(selected_card.source_payload, TaskData):
-            self._create_idea_from_task(selected_card.source_payload)
-            return
-        if action_key == "task_create_object" and isinstance(selected_card.source_payload, TaskData):
-            self._create_object_from_task(selected_card.source_payload)
-            return
-        self.set_status("Мутаборд: action пока не поддерживается.")
-
-    def _selected_card(self) -> MutaBoardCard | None:
-        if self._selected_card_key is None:
-            return None
-        for card in self._model.cards():
-            if (card.entity_kind, card.entity_id) == self._selected_card_key:
-                return card
-        return None
-
-    def _create_task_from_idea(self, idea: IdeaData) -> None:
-        task = self._db.create_task(
-            title=idea.title,
-            description=idea.body_md or idea.summary,
-            day=date.today(),
-            time_text="",
-            priority="Medium",
-            project_id=idea.project_id,
-        )
-        self._db.add_idea_relation(idea.id, "task", task.id)
-        if idea.archived_at is not None:
-            self._db.set_idea_archived(idea.id, False)
-        self._db.update_idea(
-            idea_id=idea.id,
-            title=idea.title,
-            summary=idea.summary,
-            body_md=idea.body_md,
-            idea_type=idea.type,
-            status="ripe",
-            value_score=idea.value_score,
-            effort_score=idea.effort_score,
-            project_id=idea.project_id,
-            source=idea.source,
-        )
-        self._selected_card_key = ("task", task.id)
-        self.refresh()
-        self.set_status("Мутаборд: из идеи создана задача.")
-
-    def _create_object_from_idea(self, idea: IdeaData) -> None:
-        obj = self._db.create_object(
-            title=idea.title,
-            catalog=idea.project_title,
-            object_type="",
-            status="",
-            description=idea.body_md or idea.summary,
-        )
-        self._db.add_idea_relation(idea.id, "object", obj.id)
-        if idea.archived_at is not None:
-            self._db.set_idea_archived(idea.id, False)
-        self._db.update_idea(
-            idea_id=idea.id,
-            title=idea.title,
-            summary=idea.summary,
-            body_md=idea.body_md,
-            idea_type=idea.type,
-            status="ripe",
-            value_score=idea.value_score,
-            effort_score=idea.effort_score,
-            project_id=idea.project_id,
-            source=idea.source,
-        )
-        self._selected_card_key = ("object", obj.id)
-        self.refresh()
-        self.set_status("Мутаборд: из идеи создан объект.")
-
-    def _create_task_from_object(self, card: MutaBoardCard) -> None:
-        task = self._db.create_task(
-            title=card.title,
-            description=card.subtitle if card.subtitle != "Без описания" else card.meta_text,
-            day=date.today(),
-            time_text="",
-            priority="Medium",
-        )
-        self._db.add_task_attachment(task.id, "object", card.entity_id)
-        self._selected_card_key = ("task", task.id)
-        self.refresh()
-        self.set_status("Мутаборд: из объекта создана задача.")
-
-    def _create_idea_from_object(self, card: MutaBoardCard) -> None:
-        idea = self._db.create_idea(
-            title=card.title,
-            summary=card.subtitle if card.subtitle != "Без описания" else "",
-            body_md=card.meta_text,
-            idea_type="other",
-            status="inbox",
-            source=card.project_title or card.meta_text,
-        )
-        self._db.add_idea_relation(idea.id, "object", card.entity_id)
-        self._selected_card_key = ("idea", idea.id)
-        self.refresh()
-        self.set_status("Мутаборд: из объекта создана идея.")
-
-    def _create_idea_from_task(self, task: TaskData) -> None:
-        idea = self._db.create_idea(
-            title=task.title,
-            summary=task.description,
-            body_md=task.description,
-            idea_type="other",
-            status="work" if task.board_column == BOARD_COLUMN_IN_PROGRESS else "ripe",
-            project_id=task.project_id,
-            source=f"MN-{task.id}",
-        )
-        self._db.add_idea_relation(idea.id, "task", task.id)
-        self._selected_card_key = ("idea", idea.id)
-        self.refresh()
-        self.set_status("Мутаборд: из задачи создана идея.")
-
-    def _create_object_from_task(self, task: TaskData) -> None:
-        obj = self._db.create_object(
-            title=task.title,
-            catalog=task.project_title,
-            object_type="",
-            status="",
-            description=task.description,
-        )
-        self._db.add_task_attachment(task.id, "object", obj.id)
-        self._selected_card_key = ("object", obj.id)
-        self.refresh()
-        self.set_status("Мутаборд: из задачи создан объект.")
+        self._db.attach_mutaboard_item(board.id, card.entity_kind, card.entity_id)
+        self._populate_board()
+        self._refresh_status()
+        self.set_status(f"Мутаборд: элемент «{card.title}» прикреплён к «{board.title}».")
 
     def _refresh_status(self) -> None:
         total_count = len(self._model.cards())
-        visible_count = len(self._filtered_cards())
-        if self.search_input.text().strip() or self.get_filters():
-            self.set_status(f"Мутаборд: карточек {visible_count} из {total_count}.")
+        visible_count = sum(list_widget.count() for list_widget in self._column_lists.values())
+        attached_count = len(self._attached_card_keys)
+        if self.search_input.text().strip():
+            self.set_status(f"Мутаборд: элементов {visible_count} из {total_count} · прикреплено {attached_count}.")
             return
-        self.set_status(f"Мутаборд: карточек {total_count}.")
-
-    def _linked_filter_value(self) -> bool | None:
-        current = self.linked_filter.currentData()
-        if current == "linked":
-            return True
-        if current == "unlinked":
-            return False
-        return None
+        self.set_status(f"Мутаборд: элементов {total_count} · прикреплено {attached_count}.")
 
     def _apply_mutaboard_style(self) -> None:
         palette = get_theme_palette("dark")
         shell_bg = "#0d1218"
-        shell_panel = "#121922"
-        shell_panel_alt = "#18212c"
-        shell_input = "#141c26"
-        shell_input_hover = "#1a2431"
-        shell_border = "#273140"
-        shell_border_strong = "#3a4658"
-        shell_text = "#eef4ff"
-        shell_dim_text = "#95a3b8"
-        shell_muted = "#71839b"
+        shell_panel = "#111722"
+        shell_panel_alt = "#151d2a"
+        shell_input = "#121b28"
+        shell_input_hover = "#1a2433"
+        shell_border = "#253142"
+        shell_text = "#eef3ff"
+        shell_dim_text = "#9aa8bc"
         self.setStyleSheet(
             self._base_workspace_stylesheet
             + f"""
             QWidget#WorkspaceToolbar,
             QWidget#WorkspaceSearch,
             QWidget#WorkspaceFilters,
-            QWidget#WorkspaceContent,
-            QWidget#MutaBoardRoot {{
+            QWidget#WorkspaceContent {{
                 background: {shell_panel};
                 border: 1px solid {shell_border};
-                border-radius: 12px;
+                border-radius: 14px;
                 padding: 6px;
             }}
             QWidget#WorkspaceContent,
@@ -770,191 +760,140 @@ class MutaBoardWorkspace(BaseWorkspace):
                 border: none;
                 border-radius: 0px;
                 padding: 0px;
-            }}
-            QLineEdit#WorkspaceSearchInput {{
-                background: {shell_input};
-                color: {shell_text};
-                border: 1px solid {shell_border};
-                border-radius: 8px;
-                padding: 6px 8px;
-                selection-background-color: {palette.selection_bg};
-                selection-color: {palette.selection_text};
-            }}
-            QLineEdit#WorkspaceSearchInput:focus {{
-                border: 1px solid {palette.accent};
-            }}
-            QToolButton#WorkspaceSearchClear {{
-                background: {shell_input};
-                color: {shell_text};
-                border: 1px solid {shell_border_strong};
-                border-radius: 8px;
-                padding: 4px 8px;
-            }}
-            QToolButton#WorkspaceSearchClear:hover {{
-                background: {shell_input_hover};
-                color: {palette.selection_text};
-            }}
-            QLabel#WorkspaceStatus {{
-                color: {shell_dim_text};
-            }}
-            QWidget#MutaBoardWorkspace {{
                 background: {shell_bg};
             }}
-            QLabel#MutaBoardSummary {{
-                color: {shell_dim_text};
-                font-size: 12px;
-            }}
+            QFrame#MutaBoardListPanel,
             QFrame#MutaBoardBoardWrap,
-            QFrame#MutaBoardInspector,
+            QFrame#MutaBoardBoardHeader,
+            QFrame#MutaBoardFocusPanel,
+            QFrame#MutaBoardInsightPanel,
+            QFrame#MutaBoardScenarioCard,
             QFrame#MutaBoardColumn {{
-                background: {shell_panel};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {shell_panel}, stop:1 {shell_panel_alt});
                 border: 1px solid {shell_border};
-                border-radius: 14px;
-            }}
-            QFrame#MutaBoardInspector {{
-                background: {shell_panel_alt};
-                border-color: {shell_border_strong};
+                border-radius: 18px;
             }}
             QScrollArea#MutaBoardScroll,
             QWidget#MutaBoardColumnsHost,
-            QWidget#qt_scrollarea_viewport {{
-                background: {shell_bg};
+            QWidget#MutaBoardRoot QSplitter {{
+                background: transparent;
                 border: none;
             }}
             QSplitter#MutaBoardSplitter::handle {{
-                background: {shell_bg};
-                width: 10px;
+                background: rgba(255, 255, 255, 0.04);
+                width: 6px;
+                margin: 10px 0;
+                border-radius: 3px;
             }}
-            QLabel#MutaBoardColumnTitle,
+            QWidget#MutaBoardRoot QLabel {{
+                color: {shell_text};
+                background: transparent;
+            }}
+            QLabel#MutaBoardListTitle,
+            QLabel#MutaBoardInsightTitle,
+            QLabel#MutaBoardBoardHeadline,
             QLabel#MutaBoardInspectorTitle {{
                 color: {shell_text};
-                font-size: 13px;
+                font-size: 19px;
                 font-weight: 700;
             }}
-            QListWidget#MutaBoardColumnList {{
-                background: {shell_panel};
-                color: {shell_text};
-                border: 1px solid {shell_border};
-                border-radius: 10px;
-                outline: none;
+            QLabel#MutaBoardListSubtitle,
+            QLabel#MutaBoardInsightBody,
+            QLabel#MutaBoardBoardCaption,
+            QLabel#MutaBoardColumnCount,
+            QLabel#MutaBoardScenarioTitle,
+            QLabel#MutaBoardNodeMuted,
+            QLabel#MutaBoardNodeTask,
+            QLabel#MutaBoardNodeIdea,
+            QLabel#MutaBoardNodeObject,
+            QLabel#MutaBoardNodeHub {{
+                color: {shell_dim_text};
             }}
-            QListWidget#MutaBoardColumnList::item {{
-                background: transparent;
-                border: none;
-            }}
-            QListWidget#MutaBoardColumnList::item:selected {{
-                background: transparent;
-                color: {shell_text};
-            }}
-            QComboBox#MutaBoardKindFilter,
-            QComboBox#MutaBoardProjectFilter,
-            QComboBox#MutaBoardLinkedFilter {{
+            QListWidget#MutaBoardList,
+            QListWidget#MutaBoardColumnList,
+            QTextEdit#MutaBoardFocusDescription,
+            QTextEdit#MutaBoardScenarioEditor,
+            QLineEdit#MutaBoardFocusTitle,
+            QComboBox#MutaBoardColumnKindFilter {{
                 background: {shell_input};
                 color: {shell_text};
                 border: 1px solid {shell_border};
-                border-radius: 8px;
-                padding: 5px 8px;
-                min-width: 140px;
+                border-radius: 12px;
+                padding: 8px 10px;
             }}
-            QComboBox#MutaBoardKindFilter::drop-down,
-            QComboBox#MutaBoardProjectFilter::drop-down,
-            QComboBox#MutaBoardLinkedFilter::drop-down {{
-                border: none;
+            QListWidget#MutaBoardList::viewport,
+            QListWidget#MutaBoardColumnList::viewport,
+            QTextEdit#MutaBoardFocusDescription,
+            QTextEdit#MutaBoardFocusDescription QWidget,
+            QTextEdit#MutaBoardScenarioEditor,
+            QTextEdit#MutaBoardScenarioEditor QWidget {{
                 background: {shell_input};
-                width: 22px;
+                color: {shell_text};
             }}
-            QComboBox#MutaBoardKindFilter:hover,
-            QComboBox#MutaBoardProjectFilter:hover,
-            QComboBox#MutaBoardLinkedFilter:hover {{
-                background: {shell_input_hover};
-                border-color: {shell_border_strong};
+            QComboBox#MutaBoardColumnKindFilter::drop-down {{
+                border: none;
+                width: 20px;
             }}
-            QComboBox#MutaBoardKindFilter QAbstractItemView,
-            QComboBox#MutaBoardProjectFilter QAbstractItemView,
-            QComboBox#MutaBoardLinkedFilter QAbstractItemView {{
+            QComboBox#MutaBoardColumnKindFilter QAbstractItemView,
+            QMenu {{
                 background: {shell_panel_alt};
                 color: {shell_text};
                 border: 1px solid {shell_border};
-                selection-background-color: {palette.selection_bg};
-                selection-color: {palette.selection_text};
-                outline: none;
+                border-radius: 12px;
+                padding: 6px;
             }}
-            QCheckBox#MutaBoardActionableOnly {{
+            QComboBox#MutaBoardColumnKindFilter QAbstractItemView::item,
+            QMenu::item {{
+                background: transparent;
                 color: {shell_text};
-                spacing: 6px;
-            }}
-            QCheckBox#MutaBoardActionableOnly::indicator {{
-                width: 14px;
-                height: 14px;
-                border-radius: 4px;
-                border: 1px solid {shell_border_strong};
-                background: {shell_input};
-            }}
-            QCheckBox#MutaBoardActionableOnly::indicator:checked {{
-                background: {palette.accent};
-                border-color: {palette.accent_hover};
-            }}
-            QToolButton#MutaBoardInspectorAction {{
-                color: {shell_text};
-                background: {shell_input};
-                border: 1px solid {shell_border_strong};
+                padding: 8px 10px;
                 border-radius: 8px;
-                padding: 7px 10px;
-                min-height: 30px;
-                text-align: left;
             }}
-            QToolButton#MutaBoardInspectorAction:hover {{
-                background: {palette.selection_bg};
-                color: {palette.selection_text};
+            QComboBox#MutaBoardColumnKindFilter QAbstractItemView::item:selected,
+            QMenu::item:selected {{
+                background: rgba(111, 140, 255, 0.18);
             }}
-            QLabel#MutaBoardInspectorEmpty,
-            QLabel#MutaBoardInspectorFooter,
-            QWidget#MutaBoardInspectorFormHost QLabel {{
-                color: {shell_dim_text};
+            QListWidget#MutaBoardList::item:selected,
+            QListWidget#MutaBoardColumnList::item:selected {{
+                background: rgba(111, 140, 255, 0.18);
             }}
-            QWidget#MutaBoardInspectorFormHost {{
-                background: transparent;
+            QPushButton#MutaBoardPrimaryButton,
+            QPushButton#MutaBoardSecondaryButton {{
+                background: {shell_input};
+                color: {shell_text};
+                border: 1px solid {shell_border};
+                border-radius: 12px;
+                padding: 9px 14px;
             }}
-            QWidget#MutaBoardInspectorFormHost QLabel {{
-                background: transparent;
+            QPushButton#MutaBoardPrimaryButton:hover,
+            QPushButton#MutaBoardSecondaryButton:hover,
+            QTextEdit#MutaBoardFocusDescription:hover,
+            QTextEdit#MutaBoardScenarioEditor:hover,
+            QLineEdit#MutaBoardFocusTitle:hover,
+            QComboBox#MutaBoardColumnKindFilter:hover {{
+                background: {shell_input_hover};
             }}
-            QScrollBar:vertical,
-            QScrollBar:horizontal {{
-                background: {shell_panel};
-                border: none;
-                margin: 0px;
+            QFrame#MutaBoardStructureGraph {{
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid {shell_border};
+                border-radius: 16px;
             }}
-            QScrollBar::handle:vertical,
-            QScrollBar::handle:horizontal {{
-                background: {shell_border_strong};
-                border-radius: 6px;
-                min-height: 24px;
-                min-width: 24px;
+            QLabel#MutaBoardNodeHub,
+            QLabel#MutaBoardNodeIdea,
+            QLabel#MutaBoardNodeTask,
+            QLabel#MutaBoardNodeObject,
+            QLabel#MutaBoardNodeMuted {{
+                border: 1px solid {shell_border};
+                border-radius: 16px;
+                padding: 10px 12px;
+                background: rgba(255, 255, 255, 0.04);
             }}
-            QScrollBar::handle:vertical:hover,
-            QScrollBar::handle:horizontal:hover {{
-                background: {shell_muted};
-            }}
-            QScrollBar::add-line,
-            QScrollBar::sub-line,
-            QScrollBar::add-page,
-            QScrollBar::sub-page {{
-                background: transparent;
-                border: none;
+            QLabel#MutaBoardNodeHub {{
+                color: {shell_text};
+                background: rgba(111, 140, 255, 0.18);
             }}
             """
         )
 
-    def _on_kind_filter_changed(self) -> None:
-        current_kind = self.kind_filter.currentData()
-        self.set_filter("entity_kind", None if current_kind == "all" else current_kind)
 
-    def _on_project_filter_changed(self) -> None:
-        current_project = self.project_filter.currentData()
-        self.set_filter("project_id", current_project if isinstance(current_project, int) else None)
-
-    def _on_linked_filter_changed(self) -> None:
-        self.set_filter("linked_only", self._linked_filter_value())
-
-    def _on_actionable_only_toggled(self, checked: bool) -> None:
-        self.set_filter("actionable_only", checked if checked else None)
+__all__ = ["MutaBoardWorkspace"]

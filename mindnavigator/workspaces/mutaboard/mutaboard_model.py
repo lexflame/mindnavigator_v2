@@ -1,4 +1,4 @@
-"""Derived mixed-entity model for the MutaBoard workspace."""
+"""Unified entity model for the MutaBoard workspace."""
 
 from __future__ import annotations
 
@@ -6,55 +6,51 @@ import sys
 from typing import Iterable
 
 from mindnavigator.storage import (
-    BOARD_COLUMN_COMPLETED,
-    BOARD_COLUMN_DEFERRED,
-    BOARD_COLUMN_IN_PROGRESS,
-    DEFERRED_PRIORITY,
+    CloudFileData,
     IdeaData,
     IdeaRelationData,
+    MapData,
+    MapMarkerData,
+    NoteData,
     ObjectData,
-    TaskData,
+    ProjectData,
     TaskAttachmentData,
+    TaskData,
     get_database as _storage_get_database,
 )
 
 from .mutaboard_card import (
     MUTABOARD_KIND_IDEA,
+    MUTABOARD_KIND_IMAGE,
+    MUTABOARD_KIND_MAP,
+    MUTABOARD_KIND_MARKER,
+    MUTABOARD_KIND_NOTE,
     MUTABOARD_KIND_OBJECT,
+    MUTABOARD_KIND_PROJECT,
     MUTABOARD_KIND_TASK,
-    MUTABOARD_STAGE_ACTIVE,
-    MUTABOARD_STAGE_DONE,
-    MUTABOARD_STAGE_FROZEN,
-    MUTABOARD_STAGE_INBOX,
-    MUTABOARD_STAGE_PREP,
-    MUTABOARD_STAGE_REVIEW,
-    MUTABOARD_STAGE_THINKING,
-    MUTABOARD_STAGES,
     MutaBoardCard,
 )
 
-_STAGE_ORDER = {stage: index for index, stage in enumerate(MUTABOARD_STAGES)}
 _KIND_ORDER = {
     MUTABOARD_KIND_TASK: 0,
     MUTABOARD_KIND_IDEA: 1,
-    MUTABOARD_KIND_OBJECT: 2,
+    MUTABOARD_KIND_IMAGE: 2,
+    MUTABOARD_KIND_MAP: 3,
+    MUTABOARD_KIND_MARKER: 4,
+    MUTABOARD_KIND_NOTE: 5,
+    MUTABOARD_KIND_PROJECT: 6,
+    MUTABOARD_KIND_OBJECT: 7,
 }
-_TASK_ACCENT = "#c78118"
-_IDEA_ACCENT = "#c1456d"
-_OBJECT_ACCENT = "#6b8f3d"
-_OBJECT_ACTIVE_TOKENS = {
-    "active",
-    "in_progress",
-    "planned",
-    "ready",
-    "todo",
-    "work",
-    "working",
-    "queued",
-    "queue",
+_ACCENTS = {
+    MUTABOARD_KIND_TASK: "#6f8cff",
+    MUTABOARD_KIND_IDEA: "#6ad56f",
+    MUTABOARD_KIND_IMAGE: "#ffd56a",
+    MUTABOARD_KIND_MAP: "#73d0ff",
+    MUTABOARD_KIND_MARKER: "#f58bff",
+    MUTABOARD_KIND_NOTE: "#ffb56f",
+    MUTABOARD_KIND_PROJECT: "#8da2ff",
+    MUTABOARD_KIND_OBJECT: "#9ad26b",
 }
-_OBJECT_DONE_TOKENS = {"done", "completed", "complete", "finished", "resolved", "closed"}
-_OBJECT_FROZEN_TOKENS = {"archived", "archive", "frozen", "paused", "deferred", "on_hold"}
 
 
 def get_database():
@@ -69,11 +65,14 @@ def get_database():
 
 
 class MutaBoardModel:
-    """Builds unified read-only cards from tasks, ideas, and objects."""
+    """Builds a unified catalog of entities available for mutaboard columns."""
 
     def __init__(self, db=None) -> None:
         self._db = db or get_database()
         self._cards: list[MutaBoardCard] = []
+        self._cards_by_key: dict[tuple[str, int], MutaBoardCard] = {}
+        self._map_titles: dict[int, str] = {}
+        self._markers_by_map_id: dict[int, list[MapMarkerData]] = {}
 
     def reload(self) -> list[MutaBoardCard]:
         tasks = self._db.fetch_tasks()
@@ -81,19 +80,42 @@ class MutaBoardModel:
         archived_ideas = self._db.fetch_ideas(archived=True)
         ideas = [*active_ideas, *archived_ideas]
         objects = self._db.fetch_objects()
+        notes = self._db.fetch_notes()
+        projects = self._db.fetch_projects()
+        maps = self._db.fetch_maps()
+        markers = self._db.fetch_map_markers()
+        images = [item for item in self._db.fetch_cloud_files() if getattr(item, "is_image", False)]
+
         task_attachments = {task.id: self._db.fetch_task_attachments(task.id) for task in tasks}
         idea_relations = {idea.id: self._db.fetch_idea_relations(idea.id) for idea in ideas}
         object_counts = self._collect_object_link_counts(task_attachments, idea_relations)
+        self._map_titles = {item.id: item.title for item in maps}
+        self._markers_by_map_id = {}
+        for marker in markers:
+            self._markers_by_map_id.setdefault(marker.map_id, []).append(marker)
 
         cards: list[MutaBoardCard] = []
         cards.extend(self._build_task_card(task, task_attachments.get(task.id, [])) for task in tasks)
         cards.extend(self._build_idea_card(idea, idea_relations.get(idea.id, [])) for idea in ideas)
         cards.extend(self._build_object_card(obj, object_counts.get(obj.id, {})) for obj in objects)
+        cards.extend(self._build_note_card(note) for note in notes)
+        cards.extend(self._build_project_card(project) for project in projects)
+        cards.extend(self._build_map_card(map_item) for map_item in maps)
+        cards.extend(self._build_marker_card(marker) for marker in markers)
+        cards.extend(self._build_image_card(item) for item in images)
+
         self._cards = sorted(cards, key=self._sort_key)
+        self._cards_by_key = {(card.entity_kind, card.entity_id): card for card in self._cards}
         return self.cards()
 
     def cards(self) -> list[MutaBoardCard]:
         return list(self._cards)
+
+    def get_card(self, entity_kind: str, entity_id: int) -> MutaBoardCard | None:
+        return self._cards_by_key.get((entity_kind, entity_id))
+
+    def map_marker_count(self, map_id: int) -> int:
+        return len(self._markers_by_map_id.get(map_id, []))
 
     def filtered_cards(
         self,
@@ -123,18 +145,20 @@ class MutaBoardModel:
             result.append(card)
         return result
 
-    def grouped_cards(self, cards: Iterable[MutaBoardCard] | None = None) -> dict[str, list[MutaBoardCard]]:
-        grouped = {stage: [] for stage in MUTABOARD_STAGES}
+    def grouped_cards_by_kind(
+        self,
+        column_kinds: Iterable[str],
+        cards: Iterable[MutaBoardCard] | None = None,
+    ) -> dict[str, list[MutaBoardCard]]:
+        grouped = {kind: [] for kind in column_kinds}
         for card in cards if cards is not None else self._cards:
-            grouped.setdefault(card.stage, []).append(card)
+            grouped.setdefault(card.entity_kind, []).append(card)
         return grouped
 
     @staticmethod
     def _normalize_kind(entity_kind: str | None) -> str | None:
         normalized = (entity_kind or "").strip().lower()
-        if not normalized or normalized == "all":
-            return None
-        return normalized
+        return normalized or None
 
     @staticmethod
     def _search_blob(card: MutaBoardCard) -> str:
@@ -146,15 +170,14 @@ class MutaBoardModel:
                 card.project_title,
                 card.meta_text,
                 card.entity_kind,
-                card.stage,
+                card.link_summary,
             )
             if part
         )
 
     @staticmethod
-    def _sort_key(card: MutaBoardCard) -> tuple[int, int, str, str, int]:
+    def _sort_key(card: MutaBoardCard) -> tuple[int, str, str, int]:
         return (
-            _STAGE_ORDER.get(card.stage, len(_STAGE_ORDER)),
             _KIND_ORDER.get(card.entity_kind, len(_KIND_ORDER)),
             (card.project_title or "").casefold(),
             (card.title or "").casefold(),
@@ -162,9 +185,6 @@ class MutaBoardModel:
         )
 
     def _build_task_card(self, task: TaskData, attachments: list[TaskAttachmentData]) -> MutaBoardCard:
-        stage = self._task_stage(task)
-        subtitle = self._trim_excerpt(task.description)
-        meta_parts = [task.project_title, task.day.isoformat(), task.priority]
         linked_task_count = sum(1 for attachment in attachments if attachment.kind == "task")
         linked_idea_count = sum(1 for attachment in attachments if attachment.kind == "idea")
         linked_object_count = sum(1 for attachment in attachments if attachment.kind == "object")
@@ -172,68 +192,157 @@ class MutaBoardModel:
             entity_kind=MUTABOARD_KIND_TASK,
             entity_id=task.id,
             title=task.title,
-            subtitle=subtitle,
-            stage=stage,
+            subtitle=self._trim_excerpt(task.description),
             project_id=task.project_id,
             project_title=task.project_title,
-            accent_color=_TASK_ACCENT,
-            meta_text=self._join_meta(meta_parts),
+            accent_color=_ACCENTS[MUTABOARD_KIND_TASK],
+            meta_text=self._join_meta((task.project_title, task.day.isoformat(), task.priority)),
+            relation_count=linked_task_count + linked_idea_count + linked_object_count,
+            relation_summary=f"Связи · {linked_task_count + linked_idea_count + linked_object_count}",
             linked_task_count=linked_task_count,
             linked_idea_count=linked_idea_count,
             linked_object_count=linked_object_count,
-            can_drag=not task.done,
-            can_mutate=True,
-            is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
+            is_actionable=not task.done,
             source_payload=task,
         )
 
     def _build_idea_card(self, idea: IdeaData, relations: list[IdeaRelationData]) -> MutaBoardCard:
-        stage = self._idea_stage(idea)
-        subtitle = self._trim_excerpt(idea.summary or idea.body_md or idea.source)
-        meta_parts = [idea.project_title, idea.status, idea.type]
         linked_task_count = sum(1 for relation in relations if relation.entity_type == "task")
         linked_idea_count = sum(1 for relation in relations if relation.entity_type == "idea")
         linked_object_count = sum(1 for relation in relations if relation.entity_type == "object")
+        relation_count = len(relations)
         return MutaBoardCard(
             entity_kind=MUTABOARD_KIND_IDEA,
             entity_id=idea.id,
             title=idea.title,
-            subtitle=subtitle,
-            stage=stage,
+            subtitle=self._trim_excerpt(idea.summary or idea.body_md or idea.source),
             project_id=idea.project_id,
             project_title=idea.project_title,
-            accent_color=_IDEA_ACCENT,
-            meta_text=self._join_meta(meta_parts),
+            accent_color=_ACCENTS[MUTABOARD_KIND_IDEA],
+            meta_text=self._join_meta((idea.project_title, idea.status, idea.type)),
+            relation_count=relation_count,
+            relation_summary=f"Связи · {relation_count}",
             linked_task_count=linked_task_count,
             linked_idea_count=linked_idea_count,
             linked_object_count=linked_object_count,
-            can_drag=True,
-            can_mutate=True,
-            is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
+            is_actionable=idea.archived_at is None and idea.status != "done",
             source_payload=idea,
         )
 
     def _build_object_card(self, obj: ObjectData, object_counts: dict[str, int]) -> MutaBoardCard:
-        stage = self._object_stage(obj)
-        subtitle = self._trim_excerpt(obj.description or self._join_meta((obj.catalog, obj.object_type)))
-        meta_parts = [obj.catalog, obj.object_type, obj.status]
+        linked_task_count = max(0, int(object_counts.get("task", 0)))
+        linked_idea_count = max(0, int(object_counts.get("idea", 0)))
+        linked_object_count = max(0, int(object_counts.get("object", 0)))
+        relation_count = linked_task_count + linked_idea_count + linked_object_count
         return MutaBoardCard(
             entity_kind=MUTABOARD_KIND_OBJECT,
             entity_id=obj.id,
             title=obj.title,
-            subtitle=subtitle,
-            stage=stage,
+            subtitle=self._trim_excerpt(obj.description or self._join_meta((obj.catalog, obj.object_type))),
             project_id=None,
             project_title="",
-            accent_color=_OBJECT_ACCENT,
-            meta_text=self._join_meta(meta_parts),
-            linked_task_count=max(0, int(object_counts.get("task", 0))),
-            linked_idea_count=max(0, int(object_counts.get("idea", 0))),
-            linked_object_count=max(0, int(object_counts.get("object", 0))),
-            can_drag=False,
-            can_mutate=True,
-            is_actionable=stage not in {MUTABOARD_STAGE_DONE, MUTABOARD_STAGE_FROZEN},
+            accent_color=_ACCENTS[MUTABOARD_KIND_OBJECT],
+            meta_text=self._join_meta((obj.catalog, obj.object_type, obj.status)),
+            relation_count=relation_count,
+            relation_summary=f"Связи · {relation_count}",
+            linked_task_count=linked_task_count,
+            linked_idea_count=linked_idea_count,
+            linked_object_count=linked_object_count,
+            is_actionable=str(obj.status or "").strip().lower() not in {"archived", "done", "completed"},
             source_payload=obj,
+        )
+
+    def _build_note_card(self, note: NoteData) -> MutaBoardCard:
+        tag_text = f"Теги {len(note.tags)}" if note.tags else ""
+        return MutaBoardCard(
+            entity_kind=MUTABOARD_KIND_NOTE,
+            entity_id=note.id,
+            title=note.title,
+            subtitle=self._trim_excerpt(note.preview),
+            project_id=None,
+            project_title=note.project,
+            accent_color=_ACCENTS[MUTABOARD_KIND_NOTE],
+            meta_text=self._join_meta((note.project, tag_text)),
+            relation_summary="Связи · 0",
+            is_actionable=not note.locked,
+            source_payload=note,
+        )
+
+    def _build_project_card(self, project: ProjectData) -> MutaBoardCard:
+        relation_count = sum(
+            1
+            for value in (project.linked_map_id, project.linked_note_id, project.linked_object_id)
+            if value is not None
+        )
+        return MutaBoardCard(
+            entity_kind=MUTABOARD_KIND_PROJECT,
+            entity_id=project.id,
+            title=project.title,
+            subtitle=self._trim_excerpt(project.area),
+            project_id=project.id,
+            project_title=project.title,
+            accent_color=_ACCENTS[MUTABOARD_KIND_PROJECT],
+            meta_text=self._join_meta((project.area, project.priority)),
+            relation_count=relation_count,
+            relation_summary=f"Связи · {relation_count}",
+            is_actionable=not project.archived,
+            source_payload=project,
+        )
+
+    def _build_map_card(self, map_item: MapData) -> MutaBoardCard:
+        marker_count = self.map_marker_count(map_item.id)
+        return MutaBoardCard(
+            entity_kind=MUTABOARD_KIND_MAP,
+            entity_id=map_item.id,
+            title=map_item.title,
+            subtitle=self._trim_excerpt(map_item.description),
+            project_id=None,
+            project_title=map_item.project,
+            accent_color=_ACCENTS[MUTABOARD_KIND_MAP],
+            meta_text=self._join_meta((map_item.project, f"Метки {marker_count}")),
+            relation_count=marker_count,
+            relation_summary=f"Метки · {marker_count}",
+            source_payload=map_item,
+        )
+
+    def _build_marker_card(self, marker: MapMarkerData) -> MutaBoardCard:
+        relation_count = (
+            len(marker.task_ids)
+            + len(marker.project_ids)
+            + len(marker.note_ids)
+            + len(marker.object_ids)
+            + len(marker.file_ids)
+            + len(marker.map_ids)
+            + len(marker.marker_ids)
+        )
+        return MutaBoardCard(
+            entity_kind=MUTABOARD_KIND_MARKER,
+            entity_id=marker.id,
+            title=marker.name,
+            subtitle=self._trim_excerpt(marker.description or marker.parent_path),
+            project_id=None,
+            project_title=self._map_titles.get(marker.map_id, ""),
+            accent_color=_ACCENTS[MUTABOARD_KIND_MARKER],
+            meta_text=self._join_meta((self._map_titles.get(marker.map_id, ""), marker.type)),
+            relation_count=relation_count,
+            relation_summary=f"Связи · {relation_count}",
+            linked_task_count=len(marker.task_ids),
+            linked_object_count=len(marker.object_ids),
+            source_payload=marker,
+        )
+
+    def _build_image_card(self, cloud_file: CloudFileData) -> MutaBoardCard:
+        return MutaBoardCard(
+            entity_kind=MUTABOARD_KIND_IMAGE,
+            entity_id=cloud_file.id,
+            title=cloud_file.name or cloud_file.rel_path,
+            subtitle=self._trim_excerpt(cloud_file.description or cloud_file.rel_path),
+            project_id=None,
+            project_title="",
+            accent_color=_ACCENTS[MUTABOARD_KIND_IMAGE],
+            meta_text=self._join_meta((cloud_file.rel_path, f"{cloud_file.size} B" if cloud_file.size else "")),
+            relation_summary="Связи · 0",
+            source_payload=cloud_file,
         )
 
     @staticmethod
@@ -257,55 +366,15 @@ class MutaBoardModel:
         return counts
 
     @staticmethod
-    def _task_stage(task: TaskData) -> str:
-        if task.done or task.board_column == BOARD_COLUMN_COMPLETED:
-            return MUTABOARD_STAGE_DONE
-        if task.priority == DEFERRED_PRIORITY or task.board_column == BOARD_COLUMN_DEFERRED:
-            return MUTABOARD_STAGE_FROZEN
-        if task.board_column == BOARD_COLUMN_IN_PROGRESS:
-            return MUTABOARD_STAGE_ACTIVE
-        return MUTABOARD_STAGE_PREP
-
-    @staticmethod
-    def _idea_stage(idea: IdeaData) -> str:
-        status = (idea.status or "").strip().lower()
-        if idea.archived_at is not None or status == "archived":
-            return MUTABOARD_STAGE_FROZEN
-        if status == "done":
-            return MUTABOARD_STAGE_DONE
-        if status == "work":
-            return MUTABOARD_STAGE_PREP
-        if status == "ripe":
-            return MUTABOARD_STAGE_THINKING
-        if status == "inbox":
-            return MUTABOARD_STAGE_INBOX
-        if status == "review":
-            return MUTABOARD_STAGE_REVIEW
-        return MUTABOARD_STAGE_THINKING
-
-    @staticmethod
-    def _object_stage(obj: ObjectData) -> str:
-        status = (obj.status or "").strip().lower().replace("-", "_").replace(" ", "_")
-        if not status:
-            return MUTABOARD_STAGE_THINKING
-        if status in _OBJECT_FROZEN_TOKENS:
-            return MUTABOARD_STAGE_FROZEN
-        if status in _OBJECT_DONE_TOKENS:
-            return MUTABOARD_STAGE_DONE
-        if status in _OBJECT_ACTIVE_TOKENS:
-            return MUTABOARD_STAGE_ACTIVE if status in {"active", "in_progress", "work", "working"} else MUTABOARD_STAGE_PREP
-        return MUTABOARD_STAGE_THINKING
-
-    @staticmethod
     def _join_meta(parts: Iterable[str]) -> str:
-        return " · ".join(part.strip() for part in parts if part and part.strip())
+        return " · ".join(str(part).strip() for part in parts if str(part or "").strip())
 
     @staticmethod
     def _trim_excerpt(text: str, limit: int = 120) -> str:
-        normalized = " ".join((text or "").split())
+        normalized = " ".join(str(text or "").split())
         if len(normalized) <= limit:
             return normalized
-        return normalized[: max(0, limit - 1)].rstrip() + "…"
+        return normalized[: limit - 1].rstrip() + "…"
 
 
 __all__ = ["MutaBoardModel", "get_database"]

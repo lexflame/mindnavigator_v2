@@ -69,6 +69,9 @@ from .shop_item_property_data import ShopItemPropertyData
 from .shop_source_property_data import ShopSourcePropertyData
 from .wishlist_data import WishlistData
 from .wishlist_item_data import WishlistItemData
+from .mutaboard_data import MutaBoardData
+from .mutaboard_column_data import MutaBoardColumnData
+from .mutaboard_item_data import MutaBoardItemData
 from .database import Database
 
 

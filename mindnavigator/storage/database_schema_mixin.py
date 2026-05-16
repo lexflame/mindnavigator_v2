@@ -310,6 +310,47 @@ class DatabaseSchemaMixin:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS mutaboards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    capture_text TEXT NOT NULL DEFAULT '',
+                    planning_text TEXT NOT NULL DEFAULT '',
+                    links_text TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_columns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL
+                        CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                    title TEXT NOT NULL DEFAULT '',
+                    position INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    entity_kind TEXT NOT NULL
+                        CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                    entity_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(mutaboard_id, entity_kind, entity_id)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS map_overlays (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
@@ -550,6 +591,13 @@ class DatabaseSchemaMixin:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_dossier_links_target ON dossier_links(entity_kind, entity_id);"
             )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mutaboards_updated_at ON mutaboards(updated_at);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_columns_board_position ON mutaboard_columns(mutaboard_id, position, id);"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_items_board_kind ON mutaboard_items(mutaboard_id, entity_kind, entity_id);"
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_topic ON collection_items(topic);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_entity_type ON collection_items(entity_type);")
             columns = self._conn.execute("PRAGMA table_info(collection_items);").fetchall()
@@ -582,6 +630,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
+        self._ensure_mutaboard_schema()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
@@ -595,6 +644,7 @@ class DatabaseSchemaMixin:
             MigrationStep(6, "task_plan_schema", self._migration_v6_task_plan_schema),
             MigrationStep(7, "task_execution_schema", self._migration_v7_task_execution_schema),
             MigrationStep(8, "idea_image_schema", self._migration_v8_idea_image_schema),
+            MigrationStep(9, "mutaboard_schema", self._migration_v9_mutaboard_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -609,6 +659,7 @@ class DatabaseSchemaMixin:
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
+        self._ensure_mutaboard_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
 
@@ -662,6 +713,10 @@ class DatabaseSchemaMixin:
     def _migration_v8_idea_image_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds storage for idea images and captions."""
         self._ensure_idea_image_schema()
+
+    def _migration_v9_mutaboard_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds storage for persistent mutaboards, columns, and attached items."""
+        self._ensure_mutaboard_schema()
 
     def _ensure_dossier_schema(self) -> None:
         """Гарантирует наличие таблиц и индексов режима досье."""
@@ -724,6 +779,58 @@ class DatabaseSchemaMixin:
                 """
             )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
+
+    def _ensure_mutaboard_schema(self) -> None:
+        """Ensures persistent mutaboard tables and indexes exist."""
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    capture_text TEXT NOT NULL DEFAULT '',
+                    planning_text TEXT NOT NULL DEFAULT '',
+                    links_text TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_columns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL
+                        CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                    title TEXT NOT NULL DEFAULT '',
+                    position INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    entity_kind TEXT NOT NULL
+                        CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                    entity_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(mutaboard_id, entity_kind, entity_id)
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mutaboards_updated_at ON mutaboards(updated_at);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_columns_board_position ON mutaboard_columns(mutaboard_id, position, id);"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_items_board_kind ON mutaboard_items(mutaboard_id, entity_kind, entity_id);"
+            )
 
     def _ensure_task_project_column(self) -> None:
         """Добавляет колонку project_id, если она отсутствует."""

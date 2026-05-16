@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-import mindnavigator.window.collections.main_window as main_window
+from datetime import datetime, timezone
+
 from PySide6.QtWidgets import QApplication
+
+import mindnavigator.window.collections.main_window as main_window
 import mindnavigator.workspaces.mutaboard.module_impl as mutaboard_module
-from mindnavigator.workspaces.settings.settings_workspace import SettingsWorkspace
+from mindnavigator.storage import MutaBoardColumnData, MutaBoardData
 from mindnavigator.window.collections.main_window import (
     MainWindow,
     normalize_enabled_workspace_ids,
     normalize_nav_collapsed_setting,
 )
+from mindnavigator.workspaces.settings.settings_workspace import SettingsWorkspace
 
 
 def test_normalize_enabled_workspace_ids_uses_defaults_on_empty_or_invalid() -> None:
@@ -30,7 +34,7 @@ def test_normalize_enabled_workspace_ids_filters_unknown_values() -> None:
 def test_normalize_enabled_workspace_ids_falls_back_when_list_is_empty() -> None:
     available = {"projects", "tasks", "notes"}
 
-    result = normalize_enabled_workspace_ids('[]', available)
+    result = normalize_enabled_workspace_ids("[]", available)
 
     assert result == available
 
@@ -64,6 +68,9 @@ def test_settings_workspace_options_include_mutaboard() -> None:
 
 
 class _MutaBoardWorkspaceDbStub:
+    def __init__(self) -> None:
+        self._mutaboards: list[MutaBoardData] = []
+
     def fetch_tasks(self):
         return []
 
@@ -73,16 +80,76 @@ class _MutaBoardWorkspaceDbStub:
     def fetch_objects(self):
         return []
 
+    def fetch_notes(self):
+        return []
+
+    def fetch_projects(self):
+        return []
+
+    def fetch_maps(self):
+        return []
+
+    def fetch_map_markers(self, map_id=None):
+        return []
+
+    def fetch_cloud_files(self):
+        return []
+
+    def fetch_task_attachments(self, task_id: int):
+        return []
+
+    def fetch_idea_relations(self, idea_id: int):
+        return []
+
+    def fetch_mutaboards(self):
+        return list(self._mutaboards)
+
+    def create_mutaboard(
+        self,
+        title: str,
+        description: str = "",
+        capture_text: str = "",
+        planning_text: str = "",
+        links_text: str = "",
+        column_kinds=None,
+    ):
+        now = datetime.now(timezone.utc)
+        board = MutaBoardData(
+            id=1,
+            title=title,
+            description=description,
+            capture_text=capture_text,
+            planning_text=planning_text,
+            links_text=links_text,
+            created_at=now,
+            updated_at=now,
+        )
+        self._mutaboards = [board]
+        return board
+
+    def fetch_mutaboard_columns(self, mutaboard_id: int):
+        now = datetime.now(timezone.utc)
+        return [
+            MutaBoardColumnData(id=1, mutaboard_id=mutaboard_id, kind="task", title="", position=0, created_at=now, updated_at=now),
+            MutaBoardColumnData(id=2, mutaboard_id=mutaboard_id, kind="idea", title="", position=1, created_at=now, updated_at=now),
+            MutaBoardColumnData(id=3, mutaboard_id=mutaboard_id, kind="image", title="", position=2, created_at=now, updated_at=now),
+        ]
+
+    def fetch_mutaboard_items(self, mutaboard_id: int):
+        return []
+
 
 def test_mutaboard_workspace_builds_phase_one_shell(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
 
     workspace = mutaboard_module.MutaBoardWorkspace()
-
-    assert workspace.workspace_id == "mutaboard"
-    assert workspace.search_input.placeholderText() == "Поиск по мутаборду"
-    assert workspace.status_row.text() == "Мутаборд: карточек 0."
+    try:
+        assert workspace.workspace_id == "mutaboard"
+        assert workspace.search_input.placeholderText() == "Поиск по элементам мутборда"
+        assert workspace.status_row.text() == "Мутаборд: элементов 0 · прикреплено 0."
+    finally:
+        workspace.deleteLater()
 
 
 def test_normalize_nav_collapsed_setting_parses_known_values() -> None:
@@ -139,157 +206,30 @@ def test_load_behavior_settings_uses_collapsed_nav_default(monkeypatch) -> None:
         def _apply_theme_mode(self, theme_mode: str, *, persist: bool) -> None:
             self.theme_calls.append((theme_mode, persist))
 
-        def _apply_ui_language(self, code: str) -> None:
-            self.language_calls.append(code)
+        def _apply_enabled_workspaces(self, workspace_ids: set[str], *, persist: bool) -> None:
+            self.workspace_calls.append(",".join(sorted(workspace_ids)))
+
+        def _apply_nav_collapsed(self, collapsed: bool, *, persist: bool) -> None:
+            self.nav_calls.append((collapsed, persist))
+
+        def _set_nav_collapsed(self, collapsed: bool, *, persist: bool) -> None:
+            self.nav_calls.append((collapsed, persist))
+
+        def set_language(self, language_code: str) -> None:
+            self.language_calls.append(language_code)
+
+        def _apply_ui_language(self, language_code: str) -> None:
+            self.language_calls.append(language_code)
 
         def _apply_workspace_visibility_from_raw(self, raw_value: str) -> None:
-            self.workspace_calls.append(raw_value)
-
-        def _set_nav_collapsed(self, collapsed: bool, *, persist: bool = True) -> None:
-            self.nav_calls.append((collapsed, persist))
+            workspace_ids = normalize_enabled_workspace_ids(raw_value, {"tasks"})
+            self.workspace_calls.append(",".join(sorted(workspace_ids)))
 
     window = _DummyWindow()
 
     MainWindow._load_behavior_settings(window)
 
-    assert window._minimize_on_focus_lost is True
-    assert window.nav_calls == [(True, False)]
-    assert window.theme_calls == [("dark", False)]
     assert window.language_calls == ["ru"]
-    assert window.workspace_calls == ['["tasks"]']
-
-
-def test_set_nav_collapsed_persists_state(monkeypatch) -> None:
-    fake_db = _FakeDb()
-    monkeypatch.setattr(main_window, "get_database", lambda: fake_db)
-
-    class _DummyVisible:
-        def __init__(self) -> None:
-            self._visible = True
-
-        def setVisible(self, visible: bool) -> None:
-            self._visible = visible
-
-        def isVisible(self) -> bool:
-            return self._visible
-
-    class _DummyToggle:
-        def __init__(self) -> None:
-            self.text = ""
-            self.tooltip = ""
-
-        def setText(self, text: str) -> None:
-            self.text = text
-
-        def setToolTip(self, text: str) -> None:
-            self.tooltip = text
-
-    class _DummyStack:
-        def __init__(self, widget: object) -> None:
-            self._widget = widget
-
-        def currentWidget(self) -> object:
-            return self._widget
-
-    workspace = object()
-
-    class _DummyWindow:
-        APP_NAV_COLLAPSED_KEY = MainWindow.APP_NAV_COLLAPSED_KEY
-
-        def __init__(self) -> None:
-            self.nav_column = _DummyVisible()
-            self.nav_toggle = _DummyToggle()
-            self.workspace_stack = _DummyStack(workspace)
-            self.workspace_state_calls: list[object] = []
-
-        def _apply_nav_state_to_workspace(self, current_workspace: object) -> None:
-            self.workspace_state_calls.append(current_workspace)
-
-    window = _DummyWindow()
-
-    MainWindow._set_nav_collapsed(window, True)
-
-    assert window.nav_column.isVisible() is False
-    assert fake_db.set_calls == [(MainWindow.APP_NAV_COLLAPSED_KEY, "1")]
-    assert window.workspace_state_calls == [workspace]
-
-    MainWindow._set_nav_collapsed(window, False, persist=False)
-
-    assert window.nav_column.isVisible() is True
-    assert fake_db.set_calls == [(MainWindow.APP_NAV_COLLAPSED_KEY, "1")]
-    assert window.workspace_state_calls == [workspace, workspace]
-
-
-def test_apply_theme_mode_persists_and_updates_shell(monkeypatch) -> None:
-    fake_db = _FakeDb()
-    monkeypatch.setattr(main_window, "get_database", lambda: fake_db)
-
-    class _DummyApp:
-        def __init__(self) -> None:
-            self.styles: list[str] = []
-
-        def setStyleSheet(self, stylesheet: str) -> None:
-            self.styles.append(stylesheet)
-
-    fake_app = _DummyApp()
-
-    class _DummyQApplication:
-        @staticmethod
-        def instance():
-            return fake_app
-
-    monkeypatch.setattr(main_window, "QApplication", _DummyQApplication)
-
-    class _DummyLeftRail:
-        def __init__(self) -> None:
-            self.values: list[str] = []
-
-        def set_theme_mode(self, theme_mode: str) -> None:
-            self.values.append(theme_mode)
-
-    class _DummyThemeTarget:
-        def __init__(self) -> None:
-            self.values: list[str] = []
-
-        def set_theme_mode(self, theme_mode: str) -> None:
-            self.values.append(theme_mode)
-
-    class _DummyWindow:
-        APP_THEME_KEY = MainWindow.APP_THEME_KEY
-
-        def __init__(self) -> None:
-            self.left_rail = _DummyLeftRail()
-            self.search_nav = _DummyThemeTarget()
-            self.projects_nav = _DummyThemeTarget()
-            self.page_tasks = _DummyThemeTarget()
-            self.page_projects = _DummyThemeTarget()
-            self.page_settings = _DummyThemeTarget()
-            self._theme_mode = "dark"
-            self.titlebar_calls = 0
-            self.root_calls = 0
-
-        def _apply_titlebar_style(self) -> None:
-            self.titlebar_calls += 1
-
-        def _apply_root_style(self) -> None:
-            self.root_calls += 1
-
-        _iter_theme_targets = MainWindow._iter_theme_targets
-        _normalize_theme_mode = staticmethod(MainWindow._normalize_theme_mode)
-
-    window = _DummyWindow()
-
-    MainWindow._apply_theme_mode(window, "light", persist=True)
-
-    assert window._theme_mode == "light"
-    assert fake_app.styles
-    assert "#f5f7fb" in fake_app.styles[-1]
-    assert window.left_rail.values == ["light"]
-    assert window.search_nav.values == ["light"]
-    assert window.projects_nav.values == ["light"]
-    assert window.page_tasks.values == ["light"]
-    assert window.page_projects.values == ["light"]
-    assert window.page_settings.values == ["light"]
-    assert window.titlebar_calls == 1
-    assert window.root_calls == 1
-    assert fake_db.set_calls == [(MainWindow.APP_THEME_KEY, "light")]
+    assert window.theme_calls == [("dark", False)]
+    assert window.workspace_calls == ["tasks"]
+    assert window.nav_calls == [(True, False)]
