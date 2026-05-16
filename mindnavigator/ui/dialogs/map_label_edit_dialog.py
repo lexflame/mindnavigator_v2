@@ -911,7 +911,7 @@ class MapLabelEditDialog(QDialog):
                 completer = QCompleter(list(labels.keys()), link_input.search_input)
                 completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
                 completer.setFilterMode(Qt.MatchFlag.MatchContains)
-                completer.textActivated.connect(lambda text, k=key: self._add_link_from_title(k, text))
+                completer.activated[str].connect(lambda text, k=key: self._add_link_from_title(k, text))
                 link_input.search_input.setCompleter(completer)
                 self._register_completer_popup(link_input.search_input, completer)
 

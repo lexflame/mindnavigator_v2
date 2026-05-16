@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication
+
+from mindnavigator.ui.dialogs import map_label_edit_dialog
+from mindnavigator.ui.dialogs.map_label_edit_dialog import MapLabelEditDialog, MapLabelEntitySource
+from mindnavigator.workspaces.maps.marker import Marker
+
+
+class _EntityItem:
+    def __init__(self, item_id: int, title: str) -> None:
+        self.id = item_id
+        self.title = title
+
+
+class _StubDb:
+    pass
+
+
+def test_map_label_edit_dialog_builds_links_section_with_completer(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(map_label_edit_dialog, "get_database", lambda: _StubDb())
+
+    marker = Marker(
+        id=1,
+        name="Marker",
+        x=10.0,
+        y=20.0,
+        color=QColor("#44aa88"),
+        type="poi",
+        size=18.0,
+    )
+    note_item = _EntityItem(7, "Beta reference note")
+    sources = {
+        "note": MapLabelEntitySource(
+            label="Заметки",
+            items=[note_item],
+            label_fn=lambda item: item.title,
+            placeholder="Найти заметку…",
+            icon_name="fa6s.note-sticky",
+            item_prefix="note",
+        )
+    }
+
+    dialog = MapLabelEditDialog(marker, sources, type_suggestions=["poi"])
+    try:
+        link_input = dialog._link_inputs["note"]
+        completer = link_input.search_input.completer()
+
+        assert completer is not None
+        completer.activated[str].emit("Beta reference note")
+
+        items = link_input.items()
+        assert len(items) == 1
+        assert items[0].id == note_item.id
+        assert items[0].title == "Beta reference note"
+        assert items[0].link == "note:7"
+    finally:
+        dialog.deleteLater()
