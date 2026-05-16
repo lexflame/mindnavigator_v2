@@ -533,6 +533,64 @@ def test_task_edit_dialog_attachment_dialog_item_combo_filters_by_substring(monk
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_attachment_dialog_opens_file_picker_for_file_kind(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_attachment_file_picker", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    attachment_dialog = None
+    picker_calls: list[str] = []
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        database.upsert_cloud_file(
+            rel_path="docs/spec.pdf",
+            name="spec.pdf",
+            description="",
+            checksum="checksum-task-file",
+            hash_value="hash-task-file",
+            size=128,
+            is_image=False,
+            valid=True,
+        )
+
+        class _FakeAttachDialog:
+            def __init__(self, parent=None) -> None:
+                picker_calls.append(type(parent).__name__)
+
+            def exec(self) -> int:
+                return int(task_edit_dialog.QDialog.DialogCode.Accepted)
+
+            def selected_rel_path(self) -> str:
+                return "docs/spec.pdf"
+
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(task_edit_dialog, "AttachFileSelectNav", _FakeAttachDialog)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        attachment_dialog, kind_combo, item_combo = dialog._create_attachment_dialog()
+
+        kind_combo.setCurrentIndex(kind_combo.findData("file"))
+        QApplication.processEvents()
+
+        assert picker_calls == ["TaskEditDialog"]
+        assert item_combo.currentData() is not None
+        selected = database.fetch_cloud_files()[0]
+        assert item_combo.currentData() == selected.id
+    finally:
+        if attachment_dialog is not None:
+            attachment_dialog.deleteLater()
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_project_suggest", ".sqlite3")
