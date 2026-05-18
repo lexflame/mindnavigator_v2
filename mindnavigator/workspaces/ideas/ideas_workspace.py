@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from PySide6.QtCore import QTimer
 from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
@@ -437,15 +438,13 @@ class IdeasWorkspace(BaseWorkspace):
         self.transform_marker_btn.setObjectName("IdeasTransformMarker")
         self.transform_marker_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_marker_btn.clicked.connect(lambda: self._transform_idea("marker"))
-        transform_action_buttons = [
+        self._transform_action_buttons = [
             self.transform_task_btn,
             self.transform_note_btn,
             self.transform_object_btn,
             self.transform_marker_btn,
         ]
-        transform_button_width = max(button.sizeHint().width() for button in transform_action_buttons)
-        for button in transform_action_buttons:
-            button.setMinimumWidth(transform_button_width)
+        self._transform_action_min_width = max(button.sizeHint().width() for button in self._transform_action_buttons)
         self.transform_actions_host = QWidget()
         self.transform_actions_host.setObjectName("IdeasTransformActionsHost")
         transform_actions_row = QHBoxLayout(self.transform_actions_host)
@@ -481,6 +480,32 @@ class IdeasWorkspace(BaseWorkspace):
         self._update_material_view()
 
         self.set_theme_mode("dark")
+        QTimer.singleShot(0, self._sync_transform_action_widths)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        QTimer.singleShot(0, self._sync_transform_action_widths)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self._sync_transform_action_widths()
+
+    def _sync_transform_action_widths(self) -> None:
+        if not hasattr(self, "transform_actions_host"):
+            return
+        layout = self.transform_actions_host.layout()
+        if layout is None:
+            return
+        count = len(getattr(self, "_transform_action_buttons", []))
+        if count == 0:
+            return
+        available_width = self.transform_actions_host.width()
+        if available_width <= 0:
+            return
+        spacing_total = layout.spacing() * (count - 1)
+        target_width = max(self._transform_action_min_width, max(1, (available_width - spacing_total) // count))
+        for button in self._transform_action_buttons:
+            button.setFixedWidth(target_width)
 
     def set_theme_mode(self, theme_mode: str) -> None:
         self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"

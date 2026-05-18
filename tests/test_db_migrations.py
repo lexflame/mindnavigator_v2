@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
+CURRENT_SCHEMA_VERSION = 10
+
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
     applied: list[str] = []
@@ -111,7 +113,7 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert dossier_tables == {"dossiers", "dossier_links"}
 
         user_version = database._conn.execute("PRAGMA user_version;").fetchone()[0]
-        assert user_version == 9
+        assert user_version == CURRENT_SCHEMA_VERSION
 
         board_rows = database._conn.execute(
             "SELECT title, board_column FROM tasks WHERE title = 'Legacy task';"
@@ -140,8 +142,8 @@ def test_apply_schema_updates_is_safe_for_repeated_calls(unique_temp_path) -> No
     try:
         with database._conn:
             database._conn.execute("PRAGMA user_version = 1;")
-        assert database.apply_schema_updates() == 9
-        assert database.apply_schema_updates() == 9
+        assert database.apply_schema_updates() == CURRENT_SCHEMA_VERSION
+        assert database.apply_schema_updates() == CURRENT_SCHEMA_VERSION
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -156,7 +158,7 @@ def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_curr
             database._conn.execute("DROP TABLE dossiers;")
             database._conn.execute("PRAGMA user_version = 5;")
 
-        assert database.apply_schema_updates() == 9
+        assert database.apply_schema_updates() == CURRENT_SCHEMA_VERSION
 
         dossier_tables = {
             row["name"]
@@ -709,7 +711,7 @@ def test_database_backfills_task_execution_columns_when_migrating_from_v6(unique
         assert "started_at" in task_columns
         assert "finished_at" in task_columns
         assert "actual_minutes" in task_columns
-        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == 9
+        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION
 
         row = database._conn.execute(
             "SELECT started_at, finished_at, actual_minutes FROM tasks WHERE title = ?;",
