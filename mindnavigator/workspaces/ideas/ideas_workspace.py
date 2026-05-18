@@ -445,7 +445,7 @@ class IdeasWorkspace(BaseWorkspace):
         ]
         transform_button_width = max(button.sizeHint().width() for button in transform_action_buttons)
         for button in transform_action_buttons:
-            button.setMinimumWidth(transform_button_width)
+            button.setFixedWidth(transform_button_width)
         self.transform_actions_host = QWidget()
         self.transform_actions_host.setObjectName("IdeasTransformActionsHost")
         transform_actions_row = QHBoxLayout(self.transform_actions_host)
