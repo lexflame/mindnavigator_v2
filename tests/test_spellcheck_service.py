@@ -116,6 +116,25 @@ def test_spellcheck_service_can_ignore_word_for_session() -> None:
     assert controller.issues == []
 
 
+def test_spellcheck_refresh_is_safe_after_line_edit_deletion() -> None:
+    _app = QApplication.instance() or QApplication([])
+    backend = _FakeSpellBackend()
+    service = GlobalSpellCheckService(_app, backend=backend, check_delay_ms=0)
+
+    line_edit = QLineEdit()
+    service.attach_widget_tree(line_edit)
+    line_edit.setText("teh")
+    _app.processEvents()
+
+    controller = service._controller_for_widget(line_edit)
+    assert controller is not None
+
+    controller._on_widget_destroyed()
+
+    controller.refresh_now()
+    assert controller.issues == []
+
+
 def test_spellcheck_service_builds_spelling_submenu() -> None:
     _app = QApplication.instance() or QApplication([])
     backend = _FakeSpellBackend()
