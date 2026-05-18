@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
-from .idea_category_edit_dialog import IdeaCategoryEditDialog
+from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
 from .idea_image_preview_dialog import IdeaImagePreviewDialog
@@ -736,25 +736,16 @@ class IdeasWorkspace(BaseWorkspace):
     def _rename_idea_category(self) -> None:
         if self._dirty and not self._maybe_save_changes():
             return
-        category_code = self._choose_category_code(
-            dialog_title="Категории идей",
-            prompt_text="Категория:",
-            include_system=True,
-        )
-        if category_code is None:
+        categories = [(category.code, category.title) for category in self._idea_categories]
+        if not categories:
+            QMessageBox.information(self, "Категории идей", "Нет доступных категорий.")
             return
+        dialog = IdeaCategoryRenameDialog(categories=categories, parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        category_code = dialog.category_code()
         category = self._idea_categories_by_code.get(category_code)
         if category is None:
-            return
-        dialog = IdeaCategoryEditDialog(
-            title="Категории идей",
-            heading="Переименование категории",
-            field_label="Новое название",
-            initial_value=category.title,
-            submit_text="Сохранить",
-            parent=self,
-        )
-        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
         title = dialog.title_value()
         if not title:

@@ -57,23 +57,20 @@ def test_ideas_workspace_category_actions_refresh_controls(monkeypatch, unique_t
         assert "Backlog" in _combo_labels(workspace.status_filter)
         assert "Backlog" in _combo_labels(workspace.status_input)
 
-        monkeypatch.setattr(
-            ideas_workspace_module.QInputDialog,
-            "getItem",
-            lambda *args, **kwargs: ("Backlog", True),
-        )
-
-        class _FakeIdeaCategoryEditDialog(QDialog):
+        class _FakeIdeaCategoryRenameDialog(QDialog):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(kwargs.get("parent"))
+
+            def category_code(self) -> str:
+                return custom_category.code
 
             def title_value(self) -> str:
                 return "Pipeline"
 
         monkeypatch.setattr(
             ideas_workspace_module,
-            "IdeaCategoryEditDialog",
-            _FakeIdeaCategoryEditDialog,
+            "IdeaCategoryRenameDialog",
+            _FakeIdeaCategoryRenameDialog,
         )
         monkeypatch.setattr(
             ideas_workspace_module,
