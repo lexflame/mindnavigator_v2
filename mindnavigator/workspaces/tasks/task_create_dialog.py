@@ -27,6 +27,8 @@ class TaskCreateDialog(TaskEditDialog):
         self.setProperty("task_dialog_id", 0)
         self.setProperty("task_dialog_kind", "create")
         self.setWindowTitle("Создание задачи")
+        self.header_bar.set_title("Создание задачи")
+        self.header_bar.set_minimize_visible(False)
         title_labels = self.findChildren(QLabel, "DialogTitle")
         if title_labels:
             title_labels[0].setText("Создание задачи")

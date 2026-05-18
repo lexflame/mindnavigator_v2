@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialogButtonBox, QLabel, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -678,6 +678,104 @@ def test_task_edit_dialog_attachment_dialog_opens_file_picker_for_file_kind(monk
     finally:
         if attachment_dialog is not None:
             attachment_dialog.deleteLater()
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_redesign", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="Description",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        attachments_title = dialog.findChild(QLabel, "TaskAttachmentsTitle")
+        buttons = dialog.findChild(QDialogButtonBox)
+        assert attachments_title is not None
+        assert buttons is not None
+        assert dialog.minimumWidth() == 640
+        assert dialog.minimumHeight() == 520
+        assert dialog.width() == 680
+        assert dialog.height() == 560
+        assert dialog.header_bar.title_label.text() == "Задача"
+        assert dialog.plan_task_edit.text() == "План"
+        assert dialog.time_toggle.text() == ""
+        assert attachments_title.text() == "Связи"
+        assert dialog.attachments_add_btn.text() == "+ Добавить"
+        assert buttons.button(QDialogButtonBox.StandardButton.Save).text() == "Сохранить"
+        assert buttons.button(QDialogButtonBox.StandardButton.Cancel).text() == "Отмена"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_marks_empty_title_error_locally(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_title_error", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.title_edit.setText("   ")
+
+        dialog._on_accept()
+
+        assert dialog.result() == 0
+        assert dialog.title_edit.property("error") is True
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_marks_time_error_locally(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_time_error", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(task_edit_dialog, "validate_time_text", lambda _value: (_ for _ in ()).throw(ValueError("Некорректное время.")))
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.time_toggle.setChecked(True)
+
+        dialog._on_accept()
+
+        assert dialog.result() == 0
+        assert dialog.time_edit.property("error") is True
+    finally:
         if dialog is not None:
             dialog.deleteLater()
         database.close()
@@ -1848,12 +1946,14 @@ def test_task_edit_dialog_shows_plan_checkbox_and_disables_it_for_plan_items(mon
         root_dialog = task_edit_dialog.TaskEditDialog(model.task_by_id(root.id))
         child_dialog = task_edit_dialog.TaskEditDialog(model.task_by_id(child.id))
         try:
+            assert root_dialog.plan_task_edit.text() == "План"
             assert root_dialog.plan_task_edit.isEnabled() is True
             assert root_dialog.plan_task_edit.isChecked() is True
             assert child_dialog.plan_task_edit.isEnabled() is False
             assert child_dialog.project_edit.isEnabled() is False
             assert child_dialog.project_create_btn.isEnabled() is False
             assert child_dialog.priority_edit.isEnabled() is False
+            assert child_dialog.project_edit.toolTip() == "Наследуется от родительского плана"
             assert child_dialog.values()["is_plan_task"] is False
         finally:
             root_dialog.deleteLater()
