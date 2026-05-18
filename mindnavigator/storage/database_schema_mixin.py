@@ -129,7 +129,7 @@ class DatabaseSchemaMixin:
                     summary TEXT NOT NULL DEFAULT '',
                     body_md TEXT NOT NULL DEFAULT '',
                     type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('feature', 'story', 'art', 'research', 'tech', 'other')),
-                    status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'work', 'ripe', 'done', 'archived')),
+                    status TEXT NOT NULL DEFAULT 'inbox',
                     value_score INTEGER NOT NULL DEFAULT 3 CHECK (value_score BETWEEN 1 AND 5),
                     effort_score INTEGER NOT NULL DEFAULT 3 CHECK (effort_score BETWEEN 1 AND 5),
                     source TEXT NOT NULL DEFAULT '',
@@ -630,6 +630,8 @@ class DatabaseSchemaMixin:
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
+        self._ensure_idea_category_schema()
+        self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
         self._seed_defaults()
 
@@ -645,6 +647,7 @@ class DatabaseSchemaMixin:
             MigrationStep(7, "task_execution_schema", self._migration_v7_task_execution_schema),
             MigrationStep(8, "idea_image_schema", self._migration_v8_idea_image_schema),
             MigrationStep(9, "mutaboard_schema", self._migration_v9_mutaboard_schema),
+            MigrationStep(10, "idea_category_schema", self._migration_v10_idea_category_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -659,6 +662,8 @@ class DatabaseSchemaMixin:
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
+        self._ensure_idea_category_schema()
+        self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
@@ -717,6 +722,12 @@ class DatabaseSchemaMixin:
     def _migration_v9_mutaboard_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds storage for persistent mutaboards, columns, and attached items."""
         self._ensure_mutaboard_schema()
+
+    def _migration_v10_idea_category_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds editable idea categories and removes the fixed status CHECK."""
+        self._ensure_idea_category_schema()
+        self._seed_default_idea_categories()
+        self._rebuild_ideas_table()
 
     def _ensure_dossier_schema(self) -> None:
         """Гарантирует наличие таблиц и индексов режима досье."""
@@ -779,6 +790,24 @@ class DatabaseSchemaMixin:
                 """
             )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
+
+    def _ensure_idea_category_schema(self) -> None:
+        """Ensures storage for editable idea categories exists."""
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idea_categories (
+                    code TEXT PRIMARY KEY,
+                    title TEXT NOT NULL COLLATE NOCASE,
+                    is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+                    sort_index INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(title)
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_categories_sort ON idea_categories(sort_index, title);")
 
     def _ensure_mutaboard_schema(self) -> None:
         """Ensures persistent mutaboard tables and indexes exist."""
@@ -1225,6 +1254,30 @@ class DatabaseSchemaMixin:
                     "ALTER TABLE collection_item ADD COLUMN is_missing INTEGER NOT NULL DEFAULT 0 CHECK (is_missing IN (0, 1));"
                 )
 
+    def _seed_default_idea_categories(self) -> None:
+        """Ensures built-in idea categories exist."""
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        defaults = [
+            ("inbox", "Inbox", 1),
+            ("work", "Work", 2),
+            ("ripe", "Ripe", 3),
+            ("done", "Done", 4),
+            ("archived", "Archived", 5),
+        ]
+        with self._conn:
+            for code, title, sort_index in defaults:
+                self._conn.execute(
+                    """
+                    INSERT INTO idea_categories (code, title, is_system, sort_index, created_at, updated_at)
+                    VALUES (?, ?, 1, ?, ?, ?)
+                    ON CONFLICT(code) DO UPDATE SET
+                        is_system = 1,
+                        sort_index = excluded.sort_index,
+                        updated_at = excluded.updated_at;
+                    """,
+                    (code, title, sort_index, now, now),
+                )
+
     def _rebuild_map_markers_table(self) -> None:
         columns = self._conn.execute("PRAGMA table_info(map_markers);").fetchall()
         names = {row["name"] for row in columns}
@@ -1465,6 +1518,7 @@ class DatabaseSchemaMixin:
 
     def _rebuild_ideas_table(self) -> None:
         self._recover_rebuild_source_table("ideas")
+        self._conn.execute("PRAGMA foreign_keys=OFF;")
         self._conn.execute("ALTER TABLE ideas RENAME TO ideas_old;")
         idea_columns = self._conn.execute("PRAGMA table_info(ideas_old);").fetchall()
         idea_column_names = {row["name"] for row in idea_columns}
@@ -1481,7 +1535,7 @@ class DatabaseSchemaMixin:
                 summary TEXT NOT NULL DEFAULT '',
                 body_md TEXT NOT NULL DEFAULT '',
                 type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('feature', 'story', 'art', 'research', 'tech', 'other')),
-                status TEXT NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'work', 'ripe', 'done', 'archived')),
+                status TEXT NOT NULL DEFAULT 'inbox',
                 value_score INTEGER NOT NULL DEFAULT 3 CHECK (value_score BETWEEN 1 AND 5),
                 effort_score INTEGER NOT NULL DEFAULT 3 CHECK (effort_score BETWEEN 1 AND 5),
                 source TEXT NOT NULL DEFAULT '',
@@ -1515,6 +1569,150 @@ class DatabaseSchemaMixin:
             """
         )
         self._conn.execute("DROP TABLE ideas_old;")
+        self._rebuild_idea_links_table()
+        self._rebuild_idea_tags_table()
+        self._rebuild_idea_relations_table()
+        self._rebuild_idea_images_table()
+        self._conn.execute("PRAGMA foreign_keys=ON;")
+
+    def _rebuild_idea_links_table(self) -> None:
+        if not self._recover_rebuild_source_table("idea_links", require_current=False):
+            return
+        columns = self._conn.execute("PRAGMA table_info(idea_links);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE idea_links RENAME TO idea_links_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE idea_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(idea_id, url)
+            );
+            """
+        )
+        rows = self._conn.execute("SELECT id, idea_id, url, title, created_at FROM idea_links_old;").fetchall()
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO idea_links (id, idea_id, url, title, created_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (row["id"], row["idea_id"], row["url"], row["title"], row["created_at"]),
+            )
+        self._conn.execute("DROP TABLE idea_links_old;")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_links_idea_id ON idea_links(idea_id);")
+
+    def _rebuild_idea_tags_table(self) -> None:
+        if not self._recover_rebuild_source_table("idea_tags", require_current=False):
+            return
+        columns = self._conn.execute("PRAGMA table_info(idea_tags);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE idea_tags RENAME TO idea_tags_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE idea_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                tag_text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(idea_id, tag_text)
+            );
+            """
+        )
+        rows = self._conn.execute("SELECT id, idea_id, tag_text, created_at FROM idea_tags_old;").fetchall()
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO idea_tags (id, idea_id, tag_text, created_at)
+                VALUES (?, ?, ?, ?);
+                """,
+                (row["id"], row["idea_id"], row["tag_text"], row["created_at"]),
+            )
+        self._conn.execute("DROP TABLE idea_tags_old;")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_tags_idea_id ON idea_tags(idea_id);")
+
+    def _rebuild_idea_relations_table(self) -> None:
+        if not self._recover_rebuild_source_table("idea_relations", require_current=False):
+            return
+        columns = self._conn.execute("PRAGMA table_info(idea_relations);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE idea_relations RENAME TO idea_relations_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE idea_relations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                entity_type TEXT NOT NULL,
+                entity_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(idea_id, entity_type, entity_id)
+            );
+            """
+        )
+        rows = self._conn.execute(
+            "SELECT id, idea_id, entity_type, entity_id, created_at FROM idea_relations_old;"
+        ).fetchall()
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO idea_relations (id, idea_id, entity_type, entity_id, created_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (row["id"], row["idea_id"], row["entity_type"], row["entity_id"], row["created_at"]),
+            )
+        self._conn.execute("DROP TABLE idea_relations_old;")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")
+
+    def _rebuild_idea_images_table(self) -> None:
+        if not self._recover_rebuild_source_table("idea_images", require_current=False):
+            return
+        columns = self._conn.execute("PRAGMA table_info(idea_images);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            return
+        self._conn.execute("ALTER TABLE idea_images RENAME TO idea_images_old;")
+        self._conn.execute(
+            """
+            CREATE TABLE idea_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                rel_path TEXT NOT NULL,
+                caption TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(idea_id, rel_path)
+            );
+            """
+        )
+        rows = self._conn.execute(
+            "SELECT id, idea_id, rel_path, caption, created_at, updated_at FROM idea_images_old;"
+        ).fetchall()
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO idea_images (id, idea_id, rel_path, caption, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    row["id"],
+                    row["idea_id"],
+                    row["rel_path"],
+                    row["caption"],
+                    row["created_at"],
+                    row["updated_at"],
+                ),
+            )
+        self._conn.execute("DROP TABLE idea_images_old;")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
 
     def _rebuild_projects_table(self) -> None:
         self._recover_rebuild_source_table("projects")

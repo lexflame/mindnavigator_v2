@@ -137,6 +137,166 @@ class DatabaseNotesIdeasMixin:
         ).fetchone()
         return row["title"] if row else ""
 
+    @staticmethod
+    def _normalize_idea_status_code(status: Optional[str]) -> str:
+        return (status or "inbox").strip() or "inbox"
+
+    @staticmethod
+    def _default_idea_category_title(code: str) -> str:
+        cleaned = " ".join(str(code or "").replace("_", " ").replace("-", " ").split())
+        if not cleaned:
+            return "Без категории"
+        return cleaned[:1].upper() + cleaned[1:]
+
+    def _ensure_idea_category_exists(
+        self,
+        code: str,
+        *,
+        title: Optional[str] = None,
+        is_system: bool = False,
+    ) -> None:
+        normalized_code = self._normalize_idea_status_code(code)
+        row = self._conn.execute(
+            "SELECT code FROM idea_categories WHERE code = ?;",
+            (normalized_code,),
+        ).fetchone()
+        if row is not None:
+            return
+        max_row = self._conn.execute("SELECT COALESCE(MAX(sort_index), 0) AS max_sort FROM idea_categories;").fetchone()
+        sort_index = int(max_row["max_sort"] or 0) + 10
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self._conn.execute(
+            """
+            INSERT INTO idea_categories (code, title, is_system, sort_index, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """,
+            (
+                normalized_code,
+                (title or self._default_idea_category_title(normalized_code)).strip() or self._default_idea_category_title(normalized_code),
+                int(bool(is_system)),
+                sort_index,
+                now,
+                now,
+            ),
+        )
+
+    def list_idea_categories(self) -> List[IdeaCategoryData]:
+        rows = self._conn.execute(
+            """
+            SELECT code, title, is_system, sort_index, created_at, updated_at
+            FROM idea_categories
+            ORDER BY sort_index, title COLLATE NOCASE, code;
+            """
+        ).fetchall()
+        return [
+            IdeaCategoryData(
+                code=row["code"],
+                title=row["title"],
+                is_system=bool(row["is_system"]),
+                sort_index=int(row["sort_index"] or 0),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def get_idea_category(self, code: str) -> Optional[IdeaCategoryData]:
+        normalized_code = self._normalize_idea_status_code(code)
+        row = self._conn.execute(
+            """
+            SELECT code, title, is_system, sort_index, created_at, updated_at
+            FROM idea_categories
+            WHERE code = ?;
+            """,
+            (normalized_code,),
+        ).fetchone()
+        if row is None:
+            return None
+        return IdeaCategoryData(
+            code=row["code"],
+            title=row["title"],
+            is_system=bool(row["is_system"]),
+            sort_index=int(row["sort_index"] or 0),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def create_idea_category(self, title: str) -> IdeaCategoryData:
+        normalized_title = " ".join((title or "").split())
+        if not normalized_title:
+            raise ValueError("Название категории не может быть пустым.")
+        existing = self._conn.execute(
+            "SELECT code FROM idea_categories WHERE lower(title) = lower(?);",
+            (normalized_title,),
+        ).fetchone()
+        if existing is not None:
+            raise ValueError("Категория с таким названием уже существует.")
+        code = f"custom_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+        max_row = self._conn.execute("SELECT COALESCE(MAX(sort_index), 0) AS max_sort FROM idea_categories;").fetchone()
+        sort_index = int(max_row["max_sort"] or 0) + 10
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO idea_categories (code, title, is_system, sort_index, created_at, updated_at)
+                VALUES (?, ?, 0, ?, ?, ?);
+                """,
+                (code, normalized_title, sort_index, now, now),
+            )
+        category = self.get_idea_category(code)
+        if category is None:
+            raise ValueError("Не удалось создать категорию идеи.")
+        return category
+
+    def update_idea_category_title(self, code: str, title: str) -> IdeaCategoryData:
+        normalized_code = self._normalize_idea_status_code(code)
+        normalized_title = " ".join((title or "").split())
+        if not normalized_title:
+            raise ValueError("Название категории не может быть пустым.")
+        row = self._conn.execute(
+            "SELECT code FROM idea_categories WHERE code = ?;",
+            (normalized_code,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Категория идеи не найдена.")
+        duplicate = self._conn.execute(
+            "SELECT code FROM idea_categories WHERE lower(title) = lower(?) AND code <> ?;",
+            (normalized_title, normalized_code),
+        ).fetchone()
+        if duplicate is not None:
+            raise ValueError("Категория с таким названием уже существует.")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE idea_categories
+                SET title = ?, updated_at = ?
+                WHERE code = ?;
+                """,
+                (normalized_title, now, normalized_code),
+            )
+        category = self.get_idea_category(normalized_code)
+        if category is None:
+            raise ValueError("Категория идеи не найдена.")
+        return category
+
+    def delete_idea_category(self, code: str, move_ideas_to: str = "inbox") -> None:
+        normalized_code = self._normalize_idea_status_code(code)
+        target_code = self._normalize_idea_status_code(move_ideas_to)
+        category = self.get_idea_category(normalized_code)
+        if category is None:
+            raise ValueError("Категория идеи не найдена.")
+        if category.is_system:
+            raise ValueError("Системную категорию идеи нельзя удалить.")
+        self._ensure_idea_category_exists(target_code, is_system=(target_code in {"inbox", "work", "ripe", "done", "archived"}))
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE ideas SET status = ?, updated_at = ? WHERE status = ?;",
+                (target_code, now, normalized_code),
+            )
+            self._conn.execute("DELETE FROM idea_categories WHERE code = ?;", (normalized_code,))
+
     def fetch_ideas(
         self,
         project_id: Optional[int] = None,
@@ -285,12 +445,13 @@ class DatabaseNotesIdeasMixin:
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
-        status = (status or "inbox").strip() or "inbox"
+        status = self._normalize_idea_status_code(status)
         value_score = int(value_score or 3)
         effort_score = int(effort_score or 3)
         source = (source or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
+            self._ensure_idea_category_exists(status)
             cur = self._conn.execute(
                 """
                 INSERT INTO ideas (
@@ -348,12 +509,13 @@ class DatabaseNotesIdeasMixin:
         summary = (summary or "").strip()
         body_md = (body_md or "").strip()
         idea_type = (idea_type or "other").strip() or "other"
-        status = (status or "inbox").strip() or "inbox"
+        status = self._normalize_idea_status_code(status)
         value_score = int(value_score or 3)
         effort_score = int(effort_score or 3)
         source = (source or "").strip()
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
+            self._ensure_idea_category_exists(status)
             self._conn.execute(
                 """
                 UPDATE ideas

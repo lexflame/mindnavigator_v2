@@ -469,3 +469,46 @@ def test_ideas_workspace_materials_fullsize_preview_opens_only_on_thumbnail_doub
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_transform_buttons_share_row_and_width(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_transform_buttons", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea for transform layout", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.resize(1400, 900)
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        workspace.inspector_tabs.setCurrentWidget(workspace.transform_tab)
+        QApplication.processEvents()
+
+        buttons = [
+            workspace.transform_task_btn,
+            workspace.transform_note_btn,
+            workspace.transform_object_btn,
+            workspace.transform_marker_btn,
+        ]
+        row_host = workspace.transform_actions_host
+        y_positions = {button.geometry().y() for button in buttons}
+        widths = {button.width() for button in buttons}
+        spacing = row_host.layout().spacing()
+        total_button_width = sum(button.width() for button in buttons) + spacing * (len(buttons) - 1)
+
+        assert len(y_positions) == 1
+        assert len(widths) == 1
+        assert abs(total_button_width - row_host.width()) <= 4
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
