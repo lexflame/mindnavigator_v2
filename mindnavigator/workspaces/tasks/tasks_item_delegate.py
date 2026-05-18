@@ -465,10 +465,40 @@ class TasksItemDelegate(QStyledItemDelegate):
         cb_rect = layout["checkbox"]
         self._draw_done_checkbox(painter, cb_rect, done, self.C_BORDER)
 
+        tasks_model = self._tasks_model(index.model())
+        task_id = int(task_id_value) if isinstance(task_id_value, int) else None
+        can_move_plan_up = bool(
+            is_plan_item and task_id is not None and tasks_model is not None
+            and tasks_model.can_step_plan_item_order(task_id, -1)
+        )
+        can_move_plan_down = bool(
+            is_plan_item and task_id is not None and tasks_model is not None
+            and tasks_model.can_step_plan_item_order(task_id, +1)
+        )
+
         painter.setFont(self._font_small)
         painter.setPen(self.C_OVERDUE if overdue else self.C_DIM)
         time_rect = layout["date"]
-        painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, time_text)
+        time_controls = self._time_control_rects(time_rect, show_plan_controls=is_plan_item)
+        painter.drawText(time_controls["text"], Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, time_text)
+        if not time_controls["plan_arrows"].isNull():
+            painter.setPen(self.C_PRIORITY_DIVIDER)
+            painter.drawLine(
+                time_controls["plan_arrows"].left(),
+                time_controls["plan_arrows"].top() + 3,
+                time_controls["plan_arrows"].left(),
+                time_controls["plan_arrows"].bottom() - 3,
+            )
+            painter.drawLine(
+                time_controls["plan_arrows"].left() + 2,
+                time_controls["plan_up"].bottom(),
+                time_controls["plan_arrows"].right() - 2,
+                time_controls["plan_up"].bottom(),
+            )
+            painter.setPen(self.C_PRIORITY_ARROW if can_move_plan_up else self.C_DIM)
+            painter.drawText(time_controls["plan_up"], Qt.AlignmentFlag.AlignCenter, "▲")
+            painter.setPen(self.C_PRIORITY_ARROW if can_move_plan_down else self.C_DIM)
+            painter.drawText(time_controls["plan_down"], Qt.AlignmentFlag.AlignCenter, "▼")
 
         tomorrow_rect = layout["tomorrow"]
         painter.setPen(self.C_BORDER)
@@ -768,6 +798,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             cb_rect = layout.get("checkbox_hit", layout["checkbox"])
             tomorrow_rect = layout["tomorrow"]
             menu_rect = layout["menu"]
+            time_controls = self._time_control_rects(layout["date"], show_plan_controls=is_plan_item)
             priority_rect = layout["priority"]
             priority_controls = self._priority_control_rects(priority_rect.adjusted(2, 6, -2, -6))
             toggle_rect = layout.get("subtask_toggle")
@@ -821,6 +852,12 @@ class TasksItemDelegate(QStyledItemDelegate):
 
             if menu_rect.contains(pos):
                 self._show_row_menu(index)
+                return True
+            if time_controls["plan_up"].contains(pos):
+                tasks_model.step_plan_item_order_by_row(index.row(), -1)
+                return True
+            if time_controls["plan_down"].contains(pos):
+                tasks_model.step_plan_item_order_by_row(index.row(), +1)
                 return True
             if priority_controls["priority_up"].contains(pos):
                 if is_plan_item:
@@ -1284,6 +1321,38 @@ class TasksItemDelegate(QStyledItemDelegate):
         else:
             y = title_rect.center().y() - (button_height // 2)
         return QRect(x, y, button_width, button_height)
+
+    @staticmethod
+    def _time_control_rects(time_rect: QRect, show_plan_controls: bool = False) -> dict[str, QRect]:
+        if not show_plan_controls:
+            return {
+                "text": time_rect,
+                "plan_arrows": QRect(),
+                "plan_up": QRect(),
+                "plan_down": QRect(),
+            }
+        arrows_w = 18
+        arrows_rect = QRect(
+            time_rect.right() - arrows_w,
+            time_rect.top() + 1,
+            arrows_w,
+            max(10, time_rect.height() - 2),
+        )
+        half_h = arrows_rect.height() // 2
+        up_rect = QRect(arrows_rect.left(), arrows_rect.top(), arrows_rect.width(), half_h)
+        down_rect = QRect(arrows_rect.left(), arrows_rect.top() + half_h, arrows_rect.width(), arrows_rect.height() - half_h)
+        text_rect = QRect(
+            time_rect.left(),
+            time_rect.top(),
+            max(16, arrows_rect.left() - time_rect.left() - 4),
+            time_rect.height(),
+        )
+        return {
+            "text": text_rect,
+            "plan_arrows": arrows_rect,
+            "plan_up": up_rect,
+            "plan_down": down_rect,
+        }
 
     @staticmethod
     def _priority_control_rects(priority_chip_rect: QRect, stage_only: bool = False) -> dict[str, QRect]:

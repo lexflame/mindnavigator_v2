@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from PySide6.QtCore import QItemSelectionModel, QModelIndex, QRect
-from PySide6.QtGui import QImage, QPainter, QPalette
+from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
+from PySide6.QtGui import QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox
+from PySide6.QtWidgets import QApplication, QComboBox, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -355,12 +355,105 @@ def test_tasks_model_steps_board_stage_up_and_down_without_wrap(monkeypatch, uni
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_model_steps_plan_item_order_up_and_down_without_wrap(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_order_step", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        first = database.create_task(
+            title="First step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title="Second step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        third = database.create_task(
+            title="Third step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:30",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("РџР»Р°РЅ")
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        second_row = _find_task_row(model, second.id)
+        assert second_row >= 0
+        assert model.can_step_plan_item_order(second.id, -1) is True
+        assert model.can_step_plan_item_order(second.id, +1) is True
+
+        model.step_plan_item_order_by_row(second_row, -1)
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        assert model.index(_find_task_row(model, second.id), 0).data(TaskRoles.PlanNumber) == "1."
+        assert model.index(_find_task_row(model, first.id), 0).data(TaskRoles.PlanNumber) == "2."
+        assert model.index(_find_task_row(model, third.id), 0).data(TaskRoles.PlanNumber) == "3."
+
+        moved_row = _find_task_row(model, second.id)
+        assert moved_row >= 0
+        assert model.can_step_plan_item_order(second.id, -1) is False
+        model.step_plan_item_order_by_row(moved_row, -1)
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        assert model.index(_find_task_row(model, second.id), 0).data(TaskRoles.PlanNumber) == "1."
+
+        moved_row = _find_task_row(model, second.id)
+        model.step_plan_item_order_by_row(moved_row, +1)
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        assert model.index(_find_task_row(model, first.id), 0).data(TaskRoles.PlanNumber) == "1."
+        assert model.index(_find_task_row(model, second.id), 0).data(TaskRoles.PlanNumber) == "2."
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_delegate_priority_block_orders_icon_controls_and_stage_text() -> None:
     delegate = tasks_workspace.TasksItemDelegate()
     rects = delegate._priority_control_rects(tasks_workspace.QRect(0, 0, 220, 30))
     assert rects["icon"].left() < rects["priority_arrows"].left()
     assert rects["priority_arrows"].right() < rects["value"].left()
     assert rects["value"].right() < rects["stage_arrows"].left()
+
+
+def test_tasks_delegate_plan_time_controls_place_arrows_right_of_time_text() -> None:
+    delegate = tasks_workspace.TasksItemDelegate()
+    controls = delegate._time_control_rects(tasks_workspace.QRect(0, 0, delegate.TIME_W, 30), show_plan_controls=True)
+    assert controls["text"].left() == 0
+    assert controls["text"].right() < controls["plan_arrows"].left()
+    assert not controls["plan_up"].isNull()
+    assert not controls["plan_down"].isNull()
+
+    no_controls = delegate._time_control_rects(tasks_workspace.QRect(0, 0, delegate.TIME_W, 30), show_plan_controls=False)
+    assert no_controls["plan_arrows"].isNull()
+    assert no_controls["plan_up"].isNull()
+    assert no_controls["plan_down"].isNull()
 
 
 def test_task_priority_pickers_use_high_medium_low_deferred_order(monkeypatch, unique_temp_path) -> None:
@@ -1921,6 +2014,77 @@ def test_plan_item_stage_only_controls_center_stage_text() -> None:
     assert controls["priority_up"].isNull()
     assert controls["priority_down"].isNull()
     assert abs(controls["value"].center().x() - chip_rect.center().x()) <= 12
+
+
+def test_tasks_delegate_plan_time_up_arrow_reorders_sibling(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_arrow_click", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="High",
+            is_plan_task=True,
+        )
+        first = database.create_task(
+            title="First step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title="Second step",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("РџР»Р°РЅ")
+        delegate = tasks_workspace.TasksItemDelegate()
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        second_row = _find_task_row(model, second.id)
+        assert second_row >= 0
+        index = model.index(second_row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 1200, delegate.ROW_H)
+        layout = delegate.row_layout(
+            option.rect,
+            depth=int(index.data(TaskRoles.SubtaskDepth) or 0),
+            has_subtasks=bool(index.data(TaskRoles.HasSubtasks)),
+        )
+        controls = delegate._time_control_rects(layout["date"], show_plan_controls=True)
+        click_point = controls["plan_up"].center()
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        assert delegate.editorEvent(event, model, option, index) is True
+
+        root_row = _find_task_row(model, root.id)
+        model.expand_subtasks_tree_by_row(root_row)
+        assert model.index(_find_task_row(model, second.id), 0).data(TaskRoles.PlanNumber) == "1."
+        assert model.index(_find_task_row(model, first.id), 0).data(TaskRoles.PlanNumber) == "2."
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
 
 
 def test_tasks_delegate_does_not_mark_deferred_tasks_overdue() -> None:
