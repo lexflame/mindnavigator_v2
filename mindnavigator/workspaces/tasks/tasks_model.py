@@ -587,6 +587,37 @@ class TasksModel(QAbstractListModel):
             marker_theme=task.marker_theme,
         )
 
+    def can_step_plan_item_order(self, task_id: int, direction: int) -> bool:
+        task = self.task_by_id(task_id)
+        if task is None or not self._task_is_plan_item.get(task.id, False):
+            return False
+        siblings = self._plan_sibling_rows(task.parent_id)
+        sibling_ids = [sibling.id for sibling in siblings]
+        try:
+            current_index = sibling_ids.index(task.id)
+        except ValueError:
+            return False
+        next_index = current_index + int(direction)
+        return 0 <= next_index < len(sibling_ids)
+
+    def step_plan_item_order_by_row(self, row_idx: int, direction: int) -> None:
+        task = self.task_at_row(row_idx)
+        if task is None or not self._task_is_plan_item.get(task.id, False):
+            return
+        siblings = self._plan_sibling_rows(task.parent_id)
+        sibling_ids = [sibling.id for sibling in siblings]
+        try:
+            current_index = sibling_ids.index(task.id)
+        except ValueError:
+            return
+        next_index = current_index + int(direction)
+        if next_index < 0 or next_index >= len(sibling_ids):
+            return
+        sibling_ids[current_index], sibling_ids[next_index] = sibling_ids[next_index], sibling_ids[current_index]
+        self._db.reorder_task_siblings(task.parent_id, sibling_ids)
+        self._reload_from_db()
+        self.task_moved.emit(task.id)
+
     def step_board_column_by_row(self, row_idx: int, direction: int) -> None:
         """Сдвигает стадию BOARD вперед или назад без циклического перехода."""
         task = self.task_at_row(row_idx)
