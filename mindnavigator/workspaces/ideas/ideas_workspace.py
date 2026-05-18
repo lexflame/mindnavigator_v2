@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from .idea_category_edit_dialog import IdeaCategoryEditDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
 from .idea_image_preview_dialog import IdeaImagePreviewDialog
@@ -711,10 +712,16 @@ class IdeasWorkspace(BaseWorkspace):
     def _create_idea_category(self) -> None:
         if self._dirty and not self._maybe_save_changes():
             return
-        title, accepted = QInputDialog.getText(self, "Категории идей", "Название категории:")
-        if not accepted:
+        dialog = IdeaCategoryEditDialog(
+            title="Категории идей",
+            heading="Создание категории",
+            field_label="Название",
+            submit_text="Создать",
+            parent=self,
+        )
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
-        title = (title or "").strip()
+        title = dialog.title_value()
         if not title:
             return
         try:
@@ -739,15 +746,17 @@ class IdeasWorkspace(BaseWorkspace):
         category = self._idea_categories_by_code.get(category_code)
         if category is None:
             return
-        title, accepted = QInputDialog.getText(
-            self,
-            "Категории идей",
-            "Новое название:",
-            text=category.title,
+        dialog = IdeaCategoryEditDialog(
+            title="Категории идей",
+            heading="Переименование категории",
+            field_label="Новое название",
+            initial_value=category.title,
+            submit_text="Сохранить",
+            parent=self,
         )
-        if not accepted:
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
             return
-        title = (title or "").strip()
+        title = dialog.title_value()
         if not title:
             return
         try:
