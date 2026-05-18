@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import ideas as ideas_workspace
@@ -57,15 +57,25 @@ def test_ideas_workspace_category_actions_refresh_controls(monkeypatch, unique_t
         assert "Backlog" in _combo_labels(workspace.status_filter)
         assert "Backlog" in _combo_labels(workspace.status_input)
 
+        class _FakeIdeaCategoryRenameDialog(QDialog):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(kwargs.get("parent"))
+
+            def category_code(self) -> str:
+                return custom_category.code
+
+            def title_value(self) -> str:
+                return "Pipeline"
+
         monkeypatch.setattr(
-            ideas_workspace_module.QInputDialog,
-            "getItem",
-            lambda *args, **kwargs: ("Backlog", True),
+            ideas_workspace_module,
+            "IdeaCategoryRenameDialog",
+            _FakeIdeaCategoryRenameDialog,
         )
         monkeypatch.setattr(
-            ideas_workspace_module.QInputDialog,
-            "getText",
-            lambda *args, **kwargs: ("Pipeline", True),
+            ideas_workspace_module,
+            "exec_with_overlay",
+            lambda dialog, parent=None: QDialog.DialogCode.Accepted,
         )
         workspace._rename_idea_category()
         QApplication.processEvents()
