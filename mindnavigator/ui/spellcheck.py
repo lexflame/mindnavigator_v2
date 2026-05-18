@@ -10,6 +10,7 @@ from typing import Protocol, Sequence, cast
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QPainter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication, QLineEdit, QMenu, QPlainTextEdit, QTextEdit, QWidget
+from shiboken6 import isValid
 
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё]+(?:[-'][A-Za-zА-Яа-яЁё]+)*")
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
@@ -431,20 +432,32 @@ class _LineEditSpellOverlay(QWidget):
 class _BaseSpellController(QObject):
     def __init__(self, widget: QWidget, backend: _SpellCheckBackend, delay_ms: int) -> None:
         super().__init__(widget)
-        self.widget = widget
+        self.widget: QWidget | None = widget
         self._backend = backend
         self.issues: list[SpellCheckIssue] = []
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(max(0, delay_ms))
         self._timer.timeout.connect(self.refresh_now)
+        widget.destroyed.connect(self._on_widget_destroyed)
+
+    def _on_widget_destroyed(self, *_args) -> None:
+        self._timer.stop()
+        self.widget = None
+
+    def _widget_alive(self) -> bool:
+        return self.widget is not None and isValid(self.widget)
 
     def schedule_refresh(self) -> None:
-        if not self._backend.enabled:
+        if not self._backend.enabled or not self._widget_alive():
             return
         self._timer.start()
 
     def refresh_now(self) -> None:
+        if not self._widget_alive():
+            self._timer.stop()
+            self.issues = []
+            return
         text = self.current_text()
         self.issues = self._backend.analyze_text(text)
         self.apply_issues(self.issues)
@@ -484,7 +497,7 @@ class _LineEditSpellController(_BaseSpellController):
         self.schedule_refresh()
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self.widget and event.type() in {
+        if self._widget_alive() and obj is self.widget and event.type() in {
             QEvent.Type.Resize,
             QEvent.Type.Move,
             QEvent.Type.Show,
@@ -496,20 +509,31 @@ class _LineEditSpellController(_BaseSpellController):
         return super().eventFilter(obj, event)
 
     def current_text(self) -> str:
-        return self.widget.text()
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return ""
+        return cast(QLineEdit, widget).text()
 
     def apply_issues(self, issues: Sequence[SpellCheckIssue]) -> None:
-        self._overlay.set_issues(issues)
+        if isValid(self._overlay):
+            self._overlay.set_issues(issues)
 
     def replace_issue(self, issue: SpellCheckIssue, replacement: str) -> None:
-        text = self.widget.text()
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return
+        line_edit = cast(QLineEdit, widget)
+        text = line_edit.text()
         updated = text[: issue.start] + replacement + text[issue.start + issue.length :]
-        self.widget.setText(updated)
-        self.widget.setCursorPosition(issue.start + len(replacement))
+        line_edit.setText(updated)
+        line_edit.setCursorPosition(issue.start + len(replacement))
         self.refresh_now()
 
     def position_from_point(self, point: QPoint) -> int | None:
-        return self.widget.cursorPositionAt(point)
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return None
+        return cast(QLineEdit, widget).cursorPositionAt(point)
 
 
 class _TextEditSpellController(_BaseSpellController):
@@ -520,12 +544,19 @@ class _TextEditSpellController(_BaseSpellController):
         self.schedule_refresh()
 
     def current_text(self) -> str:
-        return self.widget.toPlainText()
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return ""
+        return cast(QPlainTextEdit | QTextEdit, widget).toPlainText()
 
     def apply_issues(self, issues: Sequence[SpellCheckIssue]) -> None:
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return
+        text_widget = cast(QPlainTextEdit | QTextEdit, widget)
         selections = []
         for issue in issues:
-            cursor = self.widget.textCursor()
+            cursor = text_widget.textCursor()
             cursor.setPosition(issue.start)
             cursor.setPosition(issue.start + issue.length, QTextCursor.MoveMode.KeepAnchor)
             selection = QTextEdit.ExtraSelection()
@@ -533,18 +564,25 @@ class _TextEditSpellController(_BaseSpellController):
             selection.format.setUnderlineColor(_SPELLCHECK_COLOR)
             selection.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SpellCheckUnderline)
             selections.append(selection)
-        self.widget.setExtraSelections(selections)
+        text_widget.setExtraSelections(selections)
 
     def replace_issue(self, issue: SpellCheckIssue, replacement: str) -> None:
-        cursor = self.widget.textCursor()
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return
+        text_widget = cast(QPlainTextEdit | QTextEdit, widget)
+        cursor = text_widget.textCursor()
         cursor.setPosition(issue.start)
         cursor.setPosition(issue.start + issue.length, QTextCursor.MoveMode.KeepAnchor)
         cursor.insertText(replacement)
-        self.widget.setTextCursor(cursor)
+        text_widget.setTextCursor(cursor)
         self.refresh_now()
 
     def position_from_point(self, point: QPoint) -> int | None:
-        return self.widget.cursorForPosition(point).position()
+        widget = self.widget
+        if widget is None or not isValid(widget):
+            return None
+        return cast(QPlainTextEdit | QTextEdit, widget).cursorForPosition(point).position()
 
 
 class GlobalSpellCheckService(QObject):
