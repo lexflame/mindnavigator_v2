@@ -252,6 +252,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_tabs.setObjectName("IdeasInspectorTabs")
 
         content_tab = QWidget()
+        content_tab.setObjectName("IdeasContentTab")
         content_layout = QFormLayout(content_tab)
         content_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         content_layout.setFormAlignment(Qt.AlignmentFlag.AlignTop)
@@ -301,6 +302,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_tabs.addTab(content_tab, "Содержание")
 
         relations_tab = QWidget()
+        relations_tab.setObjectName("IdeasRelationsTab")
         relations_layout = QVBoxLayout(relations_tab)
         relations_layout.setContentsMargins(12, 12, 12, 12)
         relations_layout.setSpacing(8)
@@ -323,6 +325,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_tabs.addTab(relations_tab, "Связи")
 
         materials_tab = QWidget()
+        materials_tab.setObjectName("IdeasMaterialsTab")
         materials_layout = QVBoxLayout(materials_tab)
         materials_layout.setContentsMargins(12, 12, 12, 12)
         materials_layout.setSpacing(8)
@@ -375,6 +378,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_tabs.addTab(materials_tab, "Материалы")
 
         transform_tab = QWidget()
+        transform_tab.setObjectName("IdeasTransformTab")
         self.transform_tab = transform_tab
         transform_layout = QVBoxLayout(transform_tab)
         transform_layout.setContentsMargins(12, 12, 12, 12)
@@ -539,6 +543,13 @@ class IdeasWorkspace(BaseWorkspace):
                 background: {palette.panel_bg};
                 border-radius: 10px;
                 padding: 6px;
+            }}
+
+            QWidget#IdeasContentTab,
+            QWidget#IdeasRelationsTab,
+            QWidget#IdeasMaterialsTab,
+            QWidget#IdeasTransformTab {{
+                background: transparent;
             }}
 
             QTabWidget#IdeasInspectorTabs QTabBar::tab {{
