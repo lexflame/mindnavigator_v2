@@ -12,6 +12,7 @@ from mindnavigator.ui.dialogs.frameless_patch import (
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
+from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, get_theme_palette
 from .quick_project_create_dialog import QuickProjectCreateDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
@@ -342,33 +343,34 @@ class TaskEditDialog(QDialog):
         self._setup_error_reset_handlers()
         self._apply_plan_child_restrictions()
         self.header_bar.set_minimize_visible(bool(self.property("task_dialog_minimizable")))
+        palette = get_theme_palette("dark")
 
         self.setStyleSheet(f"""
             QDialog#TaskEditDialog {{
-                background: #151821;
-                border: 1px solid #2b3040;
+                {MATH_PHYS_BACKGROUND}
+                border: 1px solid #25272c;
                 border-radius: 12px;
             }}
 
             QDialog#TaskEditDialog QLabel {{
-                color: #e7eaf3;
+                color: {palette.text};
             }}
 
             QDialog#TaskEditDialog QFrame#TaskDialogHeader {{
-                background: #1d212b;
-                border-bottom: 1px solid #2b3040;
+                {TITLEBAR_BACKGROUND}
+                border-bottom: 1px solid {palette.border};
                 border-top-left-radius: 12px;
                 border-top-right-radius: 12px;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskDialogHeaderMarker {{
-                color: #6d5dff;
+                color: {palette.accent};
                 font-size: 18px;
                 font-weight: 600;
             }}
 
             QDialog#TaskEditDialog QLabel#DialogTitle {{
-                color: #e7eaf3;
+                color: #eef1ff;
                 font-size: 18px;
                 font-weight: 600;
             }}
@@ -378,7 +380,7 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QLabel#TaskFormLabel {{
-                color: #e7eaf3;
+                color: {palette.text};
                 font-size: 13px;
             }}
 
@@ -387,9 +389,9 @@ class TaskEditDialog(QDialog):
             QDialog#TaskEditDialog QComboBox,
             QDialog#TaskEditDialog QDateEdit,
             QDialog#TaskEditDialog QTimeEdit {{
-                background: #20242d;
-                color: #e7eaf3;
-                border: 1px solid #2b3040;
+                background: {palette.input_bg};
+                color: #e6e6e6;
+                border: 1px solid {palette.border};
                 padding: 8px 10px;
                 border-radius: 8px;
                 min-height: 36px;
@@ -404,7 +406,7 @@ class TaskEditDialog(QDialog):
             QDialog#TaskEditDialog QComboBox:focus,
             QDialog#TaskEditDialog QDateEdit:focus,
             QDialog#TaskEditDialog QTimeEdit:focus {{
-                border: 1px solid #5865f2;
+                border: 1px solid {palette.accent};
             }}
 
             QDialog#TaskEditDialog QLineEdit:disabled,
@@ -414,15 +416,15 @@ class TaskEditDialog(QDialog):
             QDialog#TaskEditDialog QTimeEdit:disabled,
             QDialog#TaskEditDialog QToolButton:disabled,
             QDialog#TaskEditDialog QCheckBox:disabled {{
-                color: #778198;
-                background: #1a1e26;
-                border-color: #262b36;
+                color: {palette.dim_text};
+                background: {palette.input_alt_bg};
+                border-color: {palette.border};
             }}
 
             QDialog#TaskEditDialog QLineEdit[error="true"],
             QDialog#TaskEditDialog QComboBox[error="true"],
             QDialog#TaskEditDialog QTimeEdit[error="true"] {{
-                border: 1px solid #ff6b6b;
+                border: 1px solid {palette.danger};
             }}
 
             QDialog#TaskEditDialog QFrame#TaskDateTimeBlock {{
@@ -436,7 +438,7 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QFrame#TaskDateTimeBlock QCheckBox {{
-                color: #9aa3b8;
+                color: {palette.dim_text};
                 padding: 0;
             }}
 
@@ -446,11 +448,11 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QComboBox QAbstractItemView {{
-                background: #20242d;
-                color: #e7eaf3;
-                border: 1px solid #2b3040;
-                selection-background-color: #2f3650;
-                selection-color: #f2f2f2;
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
                 outline: none;
             }}
 
@@ -459,66 +461,66 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QComboBox QAbstractItemView::item:selected {{
-                background: #2f3650;
-                color: #f2f2f2;
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
             }}
 
             QDialog#TaskEditDialog QCheckBox {{
-                color: #e7eaf3;
+                color: {palette.text};
                 padding: 4px 0;
             }}
 
             QDialog#TaskEditDialog QCheckBox::indicator {{
                 width: 18px;
                 height: 18px;
-                border: 1px solid #3a4154;
+                border: 1px solid {palette.border_strong};
                 border-radius: 5px;
-                background: #1c2130;
+                background: {palette.panel_bg};
             }}
 
             QDialog#TaskEditDialog QCheckBox::indicator:checked {{
-                background: #6d5dff;
-                border-color: #6d5dff;
+                background: {palette.accent};
+                border-color: {palette.accent};
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton {{
                 padding: 10px 18px;
                 border-radius: 8px;
                 min-width: 120px;
-                border: 1px solid #2b3040;
+                border: 1px solid {palette.border_strong};
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton:hover {{
-                border-color: #5865f2;
+                border-color: {palette.accent};
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton#PrimaryAction {{
-                background: #6d5dff;
+                background: #3b4a7a;
                 color: #f5f7ff;
-                border-color: #7d71ff;
+                border-color: #4b5c90;
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton#PrimaryAction:hover {{
-                background: #7a6cff;
-                border-color: #8a7eff;
+                background: #475a91;
+                border-color: #5b6ea5;
             }}
 
             QDialog#TaskEditDialog QDialogButtonBox QPushButton#SecondaryAction {{
-                background: #272c38;
-                color: #e7eaf3;
+                background: #2a2b2f;
+                color: #e6e6e6;
             }}
 
             QDialog#TaskEditDialog QToolButton {{
-                background: #272c38;
-                color: #e7eaf3;
-                border: 1px solid #343b4b;
+                background: #2a2b2f;
+                color: #e6e6e6;
+                border: 1px solid #3a3b40;
                 padding: 8px 12px;
                 border-radius: 8px;
             }}
 
             QDialog#TaskEditDialog QToolButton:hover {{
-                background: #2f3545;
-                border-color: #5865f2;
+                background: #34363b;
+                border-color: {palette.border_strong};
             }}
 
             QDialog#TaskEditDialog QToolButton#TaskDialogHeaderButton,
@@ -533,22 +535,22 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QToolButton#TaskDialogHeaderButton:hover {{
-                background: #2b3140;
+                background: #2a2b2f;
             }}
 
             QDialog#TaskEditDialog QToolButton#TaskDialogCloseButton:hover {{
-                background: #a93f4c;
+                background: #b23b3b;
                 color: #ffffff;
             }}
 
             QDialog#TaskEditDialog QFrame#TaskAttachments {{
-                background: #171c26;
-                border: 1px solid #2b3040;
+                background: #1c1d22;
+                border: 1px solid {palette.border};
                 border-radius: 10px;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskAttachmentsTitle {{
-                color: #e7eaf3;
+                color: #f2f2f2;
                 font-weight: 600;
             }}
 
@@ -558,21 +560,21 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QFrame#TaskAttachmentRow {{
-                background: #1d2230;
-                border: 1px solid #2b3040;
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskAttachmentKind {{
-                color: #9aa3b8;
-                background: #222838;
-                border: 1px solid #343b4b;
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
                 border-radius: 6px;
                 padding: 4px 8px;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskAttachmentLink {{
-                color: #e7eaf3;
+                color: #6ab7ff;
             }}
 
             QDialog#TaskEditDialog QToolButton#TaskAttachmentRemove {{
