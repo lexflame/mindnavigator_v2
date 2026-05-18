@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QFrame
 
 from mindnavigator.storage import Database
 from mindnavigator.ui.workspaces import base_workspace as base_workspace_module
@@ -379,5 +379,38 @@ def test_dossier_workspace_restores_tag_and_group_filters(monkeypatch, unique_te
             workspace.deleteLater()
         if restored_workspace is not None:
             restored_workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_dark_theme_covers_preview_and_popups(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("dossier_workspace_dark_theme", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_dossier(
+            kind="book",
+            title="Always Coming Home",
+            summary="Notes from a future anthropology.",
+            description="",
+            status="planned",
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+
+        preview_card = workspace.findChild(QFrame, "DossierPreviewCard")
+        assert preview_card is not None
+
+        stylesheet = workspace.styleSheet()
+        assert "QFrame#DossierPreviewCard" in stylesheet
+        assert "QComboBox QAbstractItemView" in stylesheet
+        assert "QMenu {" in stylesheet
+        assert "QSplitter::handle" in stylesheet
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)

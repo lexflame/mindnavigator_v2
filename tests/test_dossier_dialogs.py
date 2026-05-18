@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QLineEdit, QPlainTextEdit, QSpinBox
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QLineEdit, QPlainTextEdit, QScrollArea, QSpinBox
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import dossier as dossier_workspace
+from mindnavigator.workspaces.dossier import dossier_workspace as dossier_workspace_module
 
 
 def _set_combo_to_data(combo, value) -> None:
@@ -133,5 +134,53 @@ def test_dossier_details_dialog_renders_metadata_and_links(monkeypatch, unique_t
     finally:
         if dialog is not None:
             dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_dialogs_use_dark_theme_surfaces_and_popups(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("dossier_dialog_dark_theme", ".sqlite3")
+    database = Database(path=db_path)
+    create_dialog = None
+    details_dialog = None
+    link_dialog = None
+    try:
+        dossier = database.create_dossier(
+            kind="book",
+            title="The Dispossessed",
+            summary="Twin worlds and competing systems.",
+            description="An ansible, an exile, and a political thought experiment.",
+            status="active",
+            metadata={"author_display": "Ursula K. Le Guin"},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+
+        create_dialog = dossier_workspace.DossierCreateDialog(seed_kind="book", seed_title="The Dispossessed")
+        details_dialog = dossier_workspace.DossierDetailsDialog(dossier)
+        link_dialog = dossier_workspace_module.DossierLinkDialog(database)
+
+        assert create_dialog.findChild(QScrollArea, "DossierEditorScroll") is not None
+        assert details_dialog.findChild(QScrollArea, "DossierDetailsScroll") is not None
+
+        create_stylesheet = create_dialog.styleSheet()
+        assert "QScrollArea#DossierEditorScroll" in create_stylesheet
+        assert "QComboBox QAbstractItemView" in create_stylesheet
+
+        details_stylesheet = details_dialog.styleSheet()
+        assert "QScrollArea#DossierDetailsScroll" in details_stylesheet
+        assert "QListWidget::item:selected" in details_stylesheet
+
+        link_stylesheet = link_dialog.styleSheet()
+        assert "QDialog#DossierLinkDialog" in link_stylesheet
+        assert "QComboBox QAbstractItemView" in link_stylesheet
+    finally:
+        if create_dialog is not None:
+            create_dialog.deleteLater()
+        if details_dialog is not None:
+            details_dialog.deleteLater()
+        if link_dialog is not None:
+            link_dialog.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)

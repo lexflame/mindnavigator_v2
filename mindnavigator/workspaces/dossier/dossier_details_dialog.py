@@ -10,6 +10,7 @@ class DossierDetailsDialog(QDialog):
         super().__init__(parent)
         self._db = get_database()
         self._dossier = dossier
+        self._theme_mode = resolve_theme_mode(parent)
         self.setWindowTitle("Подробности досье")
         self.setObjectName("DossierDetailsDialog")
         self.setMinimumWidth(760)
@@ -31,11 +32,13 @@ class DossierDetailsDialog(QDialog):
         layout.addLayout(header)
 
         scroll = QScrollArea()
+        scroll.setObjectName("DossierDetailsScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         layout.addWidget(scroll, 1)
 
         content = QWidget()
+        content.setObjectName("DossierDetailsContent")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(12)
@@ -53,50 +56,69 @@ class DossierDetailsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
 
+        palette = get_theme_palette(self._theme_mode)
+        scrollbar_qss = build_scrollbar_stylesheet(
+            get_scrollbar_tokens(self._theme_mode),
+            scope="QDialog#DossierDetailsDialog",
+        )
         self.setStyleSheet(
-            """
-            QDialog#DossierDetailsDialog {
-                background: #171a20;
-                color: #e6e6e6;
-            }
-            QDialog#DossierDetailsDialog QLabel {
-                color: #d9dde4;
-            }
-            QLabel#DossierDetailsTitle {
-                color: #f3f5f8;
+            f"""
+            QDialog#DossierDetailsDialog {{
+                background: {palette.window_bg};
+                color: {palette.text};
+            }}
+            QDialog#DossierDetailsDialog QLabel {{
+                color: {palette.text};
+            }}
+            QLabel#DossierDetailsTitle {{
+                color: {palette.selection_text};
                 font-size: 22px;
                 font-weight: 700;
-            }
-            QLabel#DossierDetailsMeta {
-                background: #232831;
-                border: 1px solid #313844;
+            }}
+            QLabel#DossierDetailsMeta {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
                 border-radius: 12px;
                 padding: 6px 12px;
-            }
-            QFrame#DossierDetailsCard {
-                background: #1d2027;
-                border: 1px solid #2e323b;
+            }}
+            QDialog#DossierDetailsDialog QScrollArea#DossierDetailsScroll,
+            QDialog#DossierDetailsDialog QWidget#DossierDetailsContent {{
+                background: transparent;
+                border: none;
+            }}
+            QFrame#DossierDetailsCard {{
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 10px;
-            }
-            QLabel#DossierDetailsSectionTitle {
-                color: #f3f5f8;
+            }}
+            QLabel#DossierDetailsSectionTitle {{
+                color: {palette.selection_text};
                 font-weight: 600;
-            }
+            }}
             QDialog#DossierDetailsDialog QPlainTextEdit,
-            QDialog#DossierDetailsDialog QListWidget {
-                background: #20242c;
-                color: #e6e6e6;
-                border: 1px solid #343944;
+            QDialog#DossierDetailsDialog QListWidget {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
                 border-radius: 6px;
                 padding: 6px 8px;
-            }
-            QDialog#DossierDetailsDialog QDialogButtonBox QPushButton {
-                background: #2b313b;
-                color: #e6e6e6;
-                border: 1px solid #3b4351;
+            }}
+            QDialog#DossierDetailsDialog QListWidget::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QDialog#DossierDetailsDialog QDialogButtonBox QPushButton {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
                 border-radius: 8px;
                 padding: 8px 14px;
-            }
+            }}
+            QDialog#DossierDetailsDialog QDialogButtonBox QPushButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            {scrollbar_qss}
             """
         )
 
