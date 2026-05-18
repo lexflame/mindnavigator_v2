@@ -36,6 +36,13 @@ from PySide6.QtWidgets import (
 
 from mindnavigator.storage import DossierData, DossierLinkData, get_database
 from mindnavigator.ui.modals import ConfirmDialog, exec_with_overlay, show_dialog_standard
+from mindnavigator.ui.styles import (
+    build_popup_menu_stylesheet,
+    build_scrollbar_stylesheet,
+    get_scrollbar_tokens,
+    get_theme_palette,
+    normalize_theme_mode,
+)
 from mindnavigator.ui.workspaces.base_workspace import BaseWorkspace
 
 _storage_get_database = get_database
@@ -208,6 +215,10 @@ def render_list_value(value: object) -> str:
     return str(value or "")
 
 
+def resolve_theme_mode(widget: QWidget | None) -> str:
+    return normalize_theme_mode(str(getattr(widget, "_theme_mode", "dark")))
+
+
 __all__ = [
     "Any",
     "BaseWorkspace",
@@ -267,8 +278,14 @@ __all__ = [
     "dossier_tags_text",
     "elided_text",
     "exec_with_overlay",
+    "build_popup_menu_stylesheet",
+    "build_scrollbar_stylesheet",
     "get_database",
+    "get_scrollbar_tokens",
+    "get_theme_palette",
     "parse_tag_list",
+    "resolve_theme_mode",
     "render_list_value",
     "show_dialog_standard",
+    "normalize_theme_mode",
 ]

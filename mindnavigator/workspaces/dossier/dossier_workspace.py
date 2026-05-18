@@ -8,7 +8,6 @@ from .dossier_editor_dialog import DossierCreateDialog, DossierEditDialog
 from .dossier_item_delegate import DossierItemDelegate
 from .dossier_list_model import DossierListModel
 from .dossier_roles import DossierRoles
-from mindnavigator.ui.styles import get_theme_palette
 
 LINK_ID_ROLE = int(Qt.ItemDataRole.UserRole)
 LINK_ENTITY_KIND_ROLE = LINK_ID_ROLE + 1
@@ -19,7 +18,11 @@ class DossierLinkDialog(QDialog):
     def __init__(self, database, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._db = database
+        self._theme_mode = resolve_theme_mode(parent)
+        self.setObjectName("DossierLinkDialog")
         self.setWindowTitle("Добавить связь")
+
+        self.setMinimumWidth(480)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -50,6 +53,50 @@ class DossierLinkDialog(QDialog):
         self.kind_combo.currentIndexChanged.connect(self._fill_entities)
         self.search_edit.textChanged.connect(self._fill_entities)
         self._fill_entities()
+
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QDialog#DossierLinkDialog {{
+                background: {palette.window_bg};
+                color: {palette.text};
+            }}
+            QDialog#DossierLinkDialog QLabel {{
+                color: {palette.text};
+            }}
+            QDialog#DossierLinkDialog QLineEdit,
+            QDialog#DossierLinkDialog QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 6px 8px;
+            }}
+            QDialog#DossierLinkDialog QLineEdit:focus,
+            QDialog#DossierLinkDialog QComboBox:focus {{
+                border: 1px solid {palette.accent};
+            }}
+            QDialog#DossierLinkDialog QComboBox QAbstractItemView {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+                outline: none;
+            }}
+            QDialog#DossierLinkDialog QDialogButtonBox QPushButton {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 8px;
+                padding: 8px 14px;
+            }}
+            QDialog#DossierLinkDialog QDialogButtonBox QPushButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            """
+        )
 
     def _fill_entities(self) -> None:
         self.entity_combo.clear()
@@ -182,7 +229,8 @@ class DossierWorkspace(BaseWorkspace):
         preview_splitter = QSplitter(Qt.Orientation.Vertical)
         preview_splitter.setChildrenCollapsible(False)
 
-        preview_host = QWidget()
+        preview_host = QFrame()
+        preview_host.setObjectName("DossierPreviewCard")
         preview_layout = QVBoxLayout(preview_host)
         preview_layout.setContentsMargins(14, 12, 14, 12)
         preview_layout.setSpacing(10)
@@ -297,6 +345,7 @@ class DossierWorkspace(BaseWorkspace):
             QWidget#DossierWorkspace QWidget#WorkspaceSearch,
             QWidget#DossierWorkspace QWidget#WorkspaceFilters,
             QWidget#DossierWorkspace QFrame#DossierSummaryCard,
+            QWidget#DossierWorkspace QFrame#DossierPreviewCard,
             QWidget#DossierWorkspace QFrame#DossierLinksCard {{
                 background: {palette.panel_bg};
                 border: 1px solid {palette.border};
@@ -314,6 +363,23 @@ class DossierWorkspace(BaseWorkspace):
                 border: 1px solid {palette.border};
                 border-radius: 8px;
                 padding: 6px 8px;
+            }}
+            QWidget#DossierWorkspace QComboBox QAbstractItemView {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+                outline: none;
+            }}
+            QWidget#DossierWorkspace QListWidget::item:selected,
+            QWidget#DossierWorkspace QListView::item:selected {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+            QWidget#DossierWorkspace QSplitter::handle {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
             }}
             QWidget#DossierWorkspace QToolButton:hover {{
                 background: {palette.selection_bg};
@@ -335,6 +401,8 @@ class DossierWorkspace(BaseWorkspace):
             QLabel#DossierSummaryLabel {{
                 color: {palette.text};
             }}
+            {build_popup_menu_stylesheet(self._theme_mode)}
+            {build_scrollbar_stylesheet(get_scrollbar_tokens(self._theme_mode), scope="QWidget#DossierWorkspace")}
             """
         )
 
@@ -508,6 +576,7 @@ class DossierWorkspace(BaseWorkspace):
     def _show_context_menu(self, pos) -> None:
         index = self.list_view.indexAt(pos)
         menu = QMenu(self)
+        menu.setStyleSheet(build_popup_menu_stylesheet(self._theme_mode))
         action_new = menu.addAction("Создать")
         action_edit = None
         action_details = None
