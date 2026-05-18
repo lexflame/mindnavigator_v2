@@ -15,6 +15,7 @@ from mindnavigator.ui.dialogs.frameless_patch import (
 from mindnavigator.ui.titlebar import TitleBar
 from mindnavigator.window.collections.main_window import MainWindow
 from mindnavigator.workspaces.tasks import tasks_item_delegate
+from mindnavigator.workspaces.tasks import task_details_dialog
 from mindnavigator.workspaces.tasks import task_edit_dialog
 from mindnavigator.workspaces.tasks.tasks_model import TasksModel
 from mindnavigator.workspaces.tasks.task_row import TaskRow
@@ -75,6 +76,19 @@ class _TaskDialogDb:
 
     def fetch_notes(self):
         return []
+
+    def fetch_tasks(self):
+        return [
+            TaskRow(
+                id=91,
+                day=__import__("datetime").date(2026, 3, 6),
+                time_text="09:00",
+                title="Task",
+                description="",
+                priority="Medium",
+                done=False,
+            )
+        ]
 
     def fetch_ideas(self, **_kwargs):
         return []
@@ -401,6 +415,57 @@ def test_task_edit_dialog_exec_routes_through_minimizable_runner(monkeypatch) ->
     finally:
         dialog.deleteLater()
         window.deleteLater()
+
+
+def test_task_details_dialog_uses_larger_non_minimizable_geometry(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    window = _MinimizeWindow()
+    monkeypatch.setattr(task_details_dialog, "get_database", lambda: _TaskDialogDb())
+    dialog = task_details_dialog.TaskDetailsDialog(
+        TaskRow(
+            id=91,
+            day=__import__("datetime").date(2026, 3, 6),
+            time_text="09:00",
+            title="Details task",
+            description="",
+            priority="Medium",
+            done=False,
+        ),
+        parent=window,
+    )
+    try:
+        dialog.show()
+        QApplication.processEvents()
+        assert dialog.property("task_dialog_minimizable") is False
+        assert dialog.minimumWidth() == 1100
+        assert dialog.minimumHeight() == 700
+        assert dialog.width() == 1260
+        assert dialog.height() == 840
+        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
+        assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
+    finally:
+        dialog.deleteLater()
+        window.deleteLater()
+
+def test_task_details_dialog_is_not_routed_through_minimizable_runner(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(task_details_dialog, "get_database", lambda: _TaskDialogDb())
+    dialog = task_details_dialog.TaskDetailsDialog(
+        TaskRow(
+            id=92,
+            day=__import__("datetime").date(2026, 3, 6),
+            time_text="09:00",
+            title="Details task",
+            description="",
+            priority="Medium",
+            done=False,
+        )
+    )
+    try:
+        assert dialog.property("task_dialog_minimizable") is False
+        assert not hasattr(dialog, "_schedule_auto_minimize_on_deactivate")
+    finally:
+        dialog.deleteLater()
 
 
 def test_restore_minimizable_task_dialog_raises_dialog_after_overlay(monkeypatch) -> None:
