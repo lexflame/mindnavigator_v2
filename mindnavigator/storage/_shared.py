@@ -21,6 +21,7 @@ from .dossier_link_data import DossierLinkData
 from .cloud_file_data import CloudFileData
 from .note_data import NoteData
 from .idea_data import IdeaData
+from .idea_category_data import IdeaCategoryData
 from .idea_image_data import IdeaImageData
 from .idea_relation_data import IdeaRelationData
 from .object_data import ObjectData

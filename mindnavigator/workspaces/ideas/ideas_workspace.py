@@ -160,6 +160,8 @@ class IdeasWorkspace(BaseWorkspace):
         self._dirty = False
         self._triage_mode = False
         self._theme_mode = "dark"
+        self._idea_categories = []
+        self._idea_categories_by_code: Dict[str, Any] = {}
         self._idea_images: List[IdeaImageData] = []
         self._current_material_index = 0
         super().__init__(parent)
@@ -178,9 +180,11 @@ class IdeasWorkspace(BaseWorkspace):
         super()._build_ui()
 
         self.status_filter = QComboBox()
-        for label, value in IDEA_STATUSES:
-            self.status_filter.addItem(label, value)
         self.status_filter.currentIndexChanged.connect(self._on_status_filter_changed)
+        self.manage_categories_btn = QToolButton()
+        self.manage_categories_btn.setText("Категории")
+        self.manage_categories_btn.setObjectName("IdeasManageCategories")
+        self.manage_categories_btn.clicked.connect(self._open_manage_categories_menu)
 
         self.type_filter = QComboBox()
         for label, value in IDEA_TYPES:
@@ -192,6 +196,7 @@ class IdeasWorkspace(BaseWorkspace):
 
         self.filter_layout.addWidget(QLabel("Статус"))
         self.filter_layout.addWidget(self.status_filter)
+        self.filter_layout.addWidget(self.manage_categories_btn)
         self.filter_layout.addWidget(QLabel("Тип"))
         self.filter_layout.addWidget(self.type_filter)
         self.filter_layout.addWidget(self.archived_only)
@@ -268,8 +273,7 @@ class IdeasWorkspace(BaseWorkspace):
         for label, value in IDEA_TYPES[1:]:
             self.type_input.addItem(label, value)
         self.status_input = QComboBox()
-        for label, value in IDEA_STATUSES[1:]:
-            self.status_input.addItem(label, value)
+        self._reload_idea_categories()
 
         self.value_input = QSpinBox()
         self.value_input.setRange(1, 5)
@@ -415,23 +419,42 @@ class IdeasWorkspace(BaseWorkspace):
         self.transform_task_btn = QToolButton()
         self.transform_task_btn.setText("✅ Создать задачу")
         self.transform_task_btn.setObjectName("IdeasTransformTask")
+        self.transform_task_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_task_btn.clicked.connect(lambda: self._triage_transform("task"))
         self.transform_note_btn = QToolButton()
         self.transform_note_btn.setText("📝 Создать заметку")
         self.transform_note_btn.setObjectName("IdeasTransformNote")
+        self.transform_note_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_note_btn.clicked.connect(lambda: self._transform_idea("note"))
         self.transform_object_btn = QToolButton()
         self.transform_object_btn.setText("🧱 Создать объект")
         self.transform_object_btn.setObjectName("IdeasTransformObject")
+        self.transform_object_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_object_btn.clicked.connect(lambda: self._transform_idea("object"))
         self.transform_marker_btn = QToolButton()
         self.transform_marker_btn.setText("🗺️ Создать метку")
         self.transform_marker_btn.setObjectName("IdeasTransformMarker")
+        self.transform_marker_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_marker_btn.clicked.connect(lambda: self._transform_idea("marker"))
-        transform_layout.addWidget(self.transform_task_btn)
-        transform_layout.addWidget(self.transform_note_btn)
-        transform_layout.addWidget(self.transform_object_btn)
-        transform_layout.addWidget(self.transform_marker_btn)
+        transform_action_buttons = [
+            self.transform_task_btn,
+            self.transform_note_btn,
+            self.transform_object_btn,
+            self.transform_marker_btn,
+        ]
+        transform_button_width = max(button.sizeHint().width() for button in transform_action_buttons)
+        for button in transform_action_buttons:
+            button.setMinimumWidth(transform_button_width)
+        self.transform_actions_host = QWidget()
+        self.transform_actions_host.setObjectName("IdeasTransformActionsHost")
+        transform_actions_row = QHBoxLayout(self.transform_actions_host)
+        transform_actions_row.setContentsMargins(0, 0, 0, 0)
+        transform_actions_row.setSpacing(6)
+        transform_actions_row.addWidget(self.transform_task_btn, 1)
+        transform_actions_row.addWidget(self.transform_note_btn, 1)
+        transform_actions_row.addWidget(self.transform_object_btn, 1)
+        transform_actions_row.addWidget(self.transform_marker_btn, 1)
+        transform_layout.addWidget(self.transform_actions_host)
         transform_layout.addStretch(1)
         self.inspector_tabs.addTab(transform_tab, "Решение")
 
@@ -617,6 +640,167 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _set_status(self, text: str) -> None:
         self.status_row.setText(text)
+
+    def _category_titles(self) -> Dict[str, str]:
+        return {category.code: category.title for category in self._idea_categories}
+
+    def _category_order_map(self) -> Dict[str, int]:
+        return {category.code: index for index, category in enumerate(self._idea_categories)}
+
+    def _category_title(self, status: Optional[str]) -> str:
+        normalized = (status or "").strip().lower()
+        return normalize_idea_category(normalized, self._category_titles())
+
+    def _reload_idea_categories(
+        self,
+        *,
+        filter_value: Optional[str] = None,
+        editor_value: Optional[str] = None,
+    ) -> None:
+        if filter_value is None and hasattr(self, "status_filter") and self.status_filter.count():
+            current_filter = self.status_filter.currentData()
+            filter_value = current_filter if isinstance(current_filter, str) else None
+        if editor_value is None and hasattr(self, "status_input") and self.status_input.count():
+            current_editor = self.status_input.currentData()
+            editor_value = current_editor if isinstance(current_editor, str) else None
+
+        self._idea_categories = self._db.list_idea_categories()
+        self._idea_categories_by_code = {category.code: category for category in self._idea_categories}
+
+        self.status_filter.blockSignals(True)
+        self.status_filter.clear()
+        self.status_filter.addItem("Все", None)
+        for category in self._idea_categories:
+            self.status_filter.addItem(category.title, category.code)
+        filter_index = self.status_filter.findData(filter_value)
+        self.status_filter.setCurrentIndex(filter_index if filter_index >= 0 else 0)
+        self.status_filter.blockSignals(False)
+
+        self.status_input.blockSignals(True)
+        self.status_input.clear()
+        for category in self._idea_categories:
+            self.status_input.addItem(category.title, category.code)
+        target_editor = editor_value or "inbox"
+        editor_index = self.status_input.findData(target_editor)
+        self.status_input.setCurrentIndex(editor_index if editor_index >= 0 else 0)
+        self.status_input.blockSignals(False)
+
+        selected_filter = self.status_filter.currentData()
+        self._set_quick_status(selected_filter if isinstance(selected_filter, str) else None)
+
+    def _choose_category_code(
+        self,
+        *,
+        dialog_title: str,
+        prompt_text: str,
+        include_system: bool,
+    ) -> Optional[str]:
+        categories = [category for category in self._idea_categories if include_system or not category.is_system]
+        if not categories:
+            QMessageBox.information(self, dialog_title, "Нет доступных категорий.")
+            return None
+        labels = [category.title for category in categories]
+        selected_label, accepted = QInputDialog.getItem(self, dialog_title, prompt_text, labels, 0, False)
+        if not accepted:
+            return None
+        for category in categories:
+            if category.title == selected_label:
+                return category.code
+        return None
+
+    def _create_idea_category(self) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        title, accepted = QInputDialog.getText(self, "Категории идей", "Название категории:")
+        if not accepted:
+            return
+        title = (title or "").strip()
+        if not title:
+            return
+        try:
+            category = self._db.create_idea_category(title)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Категории идей", str(exc))
+            return
+        self._reload_idea_categories()
+        self.refresh()
+        self._set_status(f"Категория «{category.title}» добавлена")
+
+    def _rename_idea_category(self) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        category_code = self._choose_category_code(
+            dialog_title="Категории идей",
+            prompt_text="Категория:",
+            include_system=True,
+        )
+        if category_code is None:
+            return
+        category = self._idea_categories_by_code.get(category_code)
+        if category is None:
+            return
+        title, accepted = QInputDialog.getText(
+            self,
+            "Категории идей",
+            "Новое название:",
+            text=category.title,
+        )
+        if not accepted:
+            return
+        title = (title or "").strip()
+        if not title:
+            return
+        try:
+            updated = self._db.update_idea_category_title(category_code, title)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Категории идей", str(exc))
+            return
+        self._reload_idea_categories(filter_value=category_code, editor_value=category_code)
+        self.refresh()
+        self._set_status(f"Категория «{updated.title}» переименована")
+
+    def _delete_idea_category(self) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        category_code = self._choose_category_code(
+            dialog_title="Категории идей",
+            prompt_text="Удалить категорию:",
+            include_system=False,
+        )
+        if category_code is None:
+            return
+        category = self._idea_categories_by_code.get(category_code)
+        if category is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Удалить категорию",
+            f"Удалить категорию «{category.title}»? Идеи будут перенесены в Inbox.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._db.delete_idea_category(category_code)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Категории идей", str(exc))
+            return
+        self._reload_idea_categories(editor_value="inbox")
+        self.refresh()
+        self._set_status(f"Категория «{category.title}» удалена")
+
+    def _open_manage_categories_menu(self, *_args: object) -> None:
+        menu = QMenu(self)
+        create_action = menu.addAction("Создать категорию")
+        rename_action = menu.addAction("Переименовать категорию")
+        delete_action = menu.addAction("Удалить категорию")
+        chosen = menu.exec(self.manage_categories_btn.mapToGlobal(self.manage_categories_btn.rect().bottomLeft()))
+        if chosen == create_action:
+            self._create_idea_category()
+        elif chosen == rename_action:
+            self._rename_idea_category()
+        elif chosen == delete_action:
+            self._delete_idea_category()
 
     def _mark_dirty(self, *_args: object) -> None:
         self._dirty = True
@@ -843,7 +1027,11 @@ class IdeasWorkspace(BaseWorkspace):
         ]
         model = self.list_view.model()
         if isinstance(model, IdeasListModel):
-            model.set_items(items)
+            model.set_items(
+                items,
+                status_titles=self._category_titles(),
+                status_order=self._category_order_map(),
+            )
             quick_status = self.quick_status_label.property("quick_status")
             if isinstance(quick_status, str) and quick_status not in model.statuses():
                 self._set_quick_status(None)
@@ -981,7 +1169,7 @@ class IdeasWorkspace(BaseWorkspace):
             self.quick_status_label.setText("Все категории")
             self.quick_status_label.setProperty("quick_status", None)
             return
-        self.quick_status_label.setText(normalize_idea_category(normalized))
+        self.quick_status_label.setText(self._category_title(normalized))
         self.quick_status_label.setProperty("quick_status", normalized)
 
     def _open_quick_status_menu(self, *_args: object) -> None:
@@ -989,10 +1177,9 @@ class IdeasWorkspace(BaseWorkspace):
         action_all = menu.addAction("Все категории")
         menu.addSeparator()
         status_actions: Dict[Any, str] = {}
-        for label, value in IDEA_STATUSES[1:]:
-            if value:
-                action = menu.addAction(label)
-                status_actions[action] = value
+        for category in self._idea_categories:
+            action = menu.addAction(category.title)
+            status_actions[action] = category.code
         chosen = menu.exec(self.quick_status_btn.mapToGlobal(self.quick_status_btn.rect().bottomLeft()))
         if chosen is None:
             return
@@ -1353,7 +1540,7 @@ class IdeasWorkspace(BaseWorkspace):
                 project_id=idea.project_id,
                 source=idea.source,
             )
-        self._advance_inbox_triage(f"Идея переведена в {normalize_idea_category(status)}.")
+        self._advance_inbox_triage(f"Идея переведена в {self._category_title(status)}.")
 
     def _triage_archive_current(self) -> None:
         if self._current_idea_id is None:

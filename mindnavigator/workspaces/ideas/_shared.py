@@ -35,12 +35,14 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QToolButton,
     QCheckBox,
+    QSizePolicy,
     QMenu,
     QStackedWidget,
     QListWidget,
     QListWidgetItem,
     QDialog,
     QFileDialog,
+    QInputDialog,
     QMessageBox,
 )
 
@@ -83,15 +85,6 @@ IDEA_TYPES = [
     ("Other", "other"),
 ]
 
-IDEA_STATUSES = [
-    ("Все", None),
-    ("Inbox", "inbox"),
-    ("Work", "work"),
-    ("Ripe", "ripe"),
-    ("Done", "done"),
-    ("Archived", "archived"),
-]
-
 STATUS_LABELS = {
     "inbox": "Inbox",
     "work": "Work",
@@ -117,22 +110,25 @@ TYPE_LABELS = {
 IdeaRow = Union[IdeaItem, IdeaCategoryRow]
 
 
-
-
-def normalize_idea_category(status: str) -> str:
+def normalize_idea_category(status: str, labels: Optional[Dict[str, str]] = None) -> str:
     value = (status or "").strip().lower()
-    return STATUS_LABELS.get(value, value.capitalize() if value else "Без статуса")
+    effective_labels = labels or STATUS_LABELS
+    return effective_labels.get(value, value.capitalize() if value else "Без статуса")
 
 
-def group_ideas_by_category(items: List[IdeaItem]) -> List[IdeaRow]:
-    order = ["Inbox", "Work", "Ripe", "Done", "Archived", "Без статуса"]
+def group_ideas_by_category(
+    items: List[IdeaItem],
+    labels: Optional[Dict[str, str]] = None,
+    order: Optional[Dict[str, int]] = None,
+) -> List[IdeaRow]:
     groups: Dict[str, List[IdeaItem]] = {}
     for item in items:
-        groups.setdefault(normalize_idea_category(item.status), []).append(item)
+        groups.setdefault(normalize_idea_category(item.status, labels), []).append(item)
+    display_order = order or {}
     rows: List[IdeaRow] = []
     for category in sorted(
         groups.keys(),
-        key=lambda value: (order.index(value) if value in order else len(order), value.lower()),
+        key=lambda value: (display_order.get(value, 999), value.lower()),
     ):
         rows.append(IdeaCategoryRow(category))
         rows.extend(groups[category])

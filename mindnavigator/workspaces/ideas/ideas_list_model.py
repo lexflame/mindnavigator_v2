@@ -9,6 +9,8 @@ class IdeasListModel(QAbstractListModel):
         super().__init__(parent)
         self._ideas: list[IdeaItem] = []
         self._rows: list[IdeaRow] = []
+        self._status_titles: dict[str, str] = {}
+        self._status_order: dict[str, int] = {}
 
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
@@ -62,10 +64,22 @@ class IdeasListModel(QAbstractListModel):
         flags |= Qt.ItemFlag.ItemIsSelectable
         return flags
 
-    def set_items(self, items: list[IdeaItem]) -> None:
+    def set_items(
+        self,
+        items: list[IdeaItem],
+        *,
+        status_titles: Optional[dict[str, str]] = None,
+        status_order: Optional[dict[str, int]] = None,
+    ) -> None:
         self.beginResetModel()
         self._ideas = items
-        self._rows = group_ideas_by_category(items)
+        self._status_titles = dict(status_titles or {})
+        self._status_order = dict(status_order or {})
+        display_order = {
+            title: self._status_order.get(code, 999)
+            for code, title in self._status_titles.items()
+        }
+        self._rows = group_ideas_by_category(items, self._status_titles, display_order)
         self.endResetModel()
 
     def item_at(self, row: int) -> Optional[IdeaItem]:
@@ -110,9 +124,7 @@ class IdeasListModel(QAbstractListModel):
         return sorted(
             {(item.status or "").strip().lower() for item in self._ideas if (item.status or "").strip()},
             key=lambda value: (
-                ["inbox", "work", "ripe", "done", "archived"].index(value)
-                if value in {"inbox", "work", "ripe", "done", "archived"}
-                else 99,
+                self._status_order.get(value, 999),
                 value,
             ),
         )
