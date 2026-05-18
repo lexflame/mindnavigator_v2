@@ -184,12 +184,14 @@ class _WindowsSpellCheckBackend:
             if checker is None:
                 continue
             attempted = True
-            result = self._suggest_word(checker, word)
-            if result is None:
+            is_correct = self._check_word(checker, word)
+            if is_correct is None:
                 continue
-            is_correct, suggestions = result
             if is_correct:
                 return True, tuple()
+            suggestions = self._suggest_word(checker, word)
+            if suggestions is None:
+                continue
             if not miss_suggestions:
                 miss_suggestions = suggestions
         if not attempted:
@@ -211,7 +213,27 @@ class _WindowsSpellCheckBackend:
         self._checkers[language_tag] = checker
         return checker
 
-    def _suggest_word(self, checker: ctypes.c_void_p, word: str) -> tuple[bool, tuple[str, ...]] | None:
+    def _check_word(self, checker: ctypes.c_void_p, word: str) -> bool | None:
+        check = self._com_method(checker, 4, ctypes.c_long, ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_void_p))
+        error_enum = ctypes.c_void_p()
+        hr = int(check(checker, word, ctypes.byref(error_enum)))
+        if hr < 0:
+            return None
+        if not error_enum.value:
+            return True
+        next_error = self._com_method(error_enum, 3, ctypes.c_long, ctypes.POINTER(ctypes.c_void_p))
+        spelling_error = ctypes.c_void_p()
+        try:
+            hr_next = int(next_error(error_enum, ctypes.byref(spelling_error)))
+            if hr_next < 0:
+                return None
+            return not bool(spelling_error.value)
+        finally:
+            if spelling_error.value:
+                self._release(spelling_error)
+            self._release(error_enum)
+
+    def _suggest_word(self, checker: ctypes.c_void_p, word: str) -> tuple[str, ...] | None:
         suggest = self._com_method(checker, 5, ctypes.c_long, ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_void_p))
         suggestions_enum = ctypes.c_void_p()
         hr = int(suggest(checker, word, ctypes.byref(suggestions_enum)))
@@ -219,8 +241,8 @@ class _WindowsSpellCheckBackend:
             return None
         suggestions = tuple(_normalize_suggestions(self._read_enum_strings(suggestions_enum), word))
         if hr == _S_FALSE:
-            return True, tuple()
-        return False, suggestions
+            return tuple()
+        return suggestions
 
     def _read_enum_strings(self, enum_interface: ctypes.c_void_p) -> list[str]:
         if not enum_interface.value:
@@ -306,10 +328,22 @@ def _normalize_suggestions(suggestions: Sequence[str], word: str) -> list[str]:
     return normalized
 
 
+def _looks_like_identifier_word(word: str) -> bool:
+    if len(word) < 4:
+        return False
+    has_upper = any(ch.isupper() for ch in word)
+    has_lower = any(ch.islower() for ch in word)
+    if not has_upper or not has_lower:
+        return False
+    return any(ch.isupper() for ch in word[1:])
+
+
 def _should_check_word(word: str) -> bool:
     if len(word) < 3:
         return False
     if word.isupper() and len(word) <= 5:
+        return False
+    if _looks_like_identifier_word(word):
         return False
     if word.casefold().startswith(("http", "www")):
         return False

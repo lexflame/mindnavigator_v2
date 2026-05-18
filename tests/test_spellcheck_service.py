@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication, QLineEdit, QMenu, QPlainTextEdit, QTextEdit, QVBoxLayout, QWidget
 
+from mindnavigator.ui import spellcheck as spellcheck_module
 from mindnavigator.ui.spellcheck import GlobalSpellCheckService, SpellCheckIssue, iter_spellcheck_tokens
 
 
@@ -139,3 +140,37 @@ def test_spellcheck_service_builds_spelling_submenu() -> None:
         "ten",
         "Игнорировать слово",
     ]
+
+
+def test_should_check_word_skips_mixed_case_identifiers() -> None:
+    assert not spellcheck_module._should_check_word("MindNavigator")
+    assert not spellcheck_module._should_check_word("PyInstaller")
+    assert spellcheck_module._should_check_word("navigator")
+
+
+def test_windows_backend_uses_check_for_correctness_before_suggestions() -> None:
+    backend = spellcheck_module._WindowsSpellCheckBackend.__new__(spellcheck_module._WindowsSpellCheckBackend)
+    backend._checkers = {}
+    backend._cache = {}
+    backend._ignored_words = set()
+    backend._enabled = True
+
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_ensure_checker(language_tag: str):
+        return language_tag
+
+    def fake_check_word(checker: str, word: str) -> bool | None:
+        calls.append(("check", checker, word))
+        return True
+
+    def fake_suggest_word(checker: str, word: str):
+        calls.append(("suggest", checker, word))
+        return ("placeholder",)
+
+    backend._ensure_checker = fake_ensure_checker  # type: ignore[method-assign]
+    backend._check_word = fake_check_word  # type: ignore[method-assign]
+    backend._suggest_word = fake_suggest_word  # type: ignore[method-assign]
+
+    assert backend._analyze_word("hello") == (True, tuple())
+    assert calls == [("check", "en-US", "hello")]
