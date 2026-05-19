@@ -508,6 +508,50 @@ def test_mutaboard_workspace_shows_empty_state_for_missing_column_kind(monkeypat
         workspace.deleteLater()
 
 
+def test_mutaboard_workspace_accepts_version_into_solution(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "version")
+        QApplication.processEvents()
+
+        version_column = workspace.board_columns[first_column_id]
+        version_column.setCurrentRow(0)
+        QApplication.processEvents()
+        workspace.focus_card_primary_button.click()
+        QApplication.processEvents()
+
+        capture_text = workspace._scenario_editors["capture"].toPlainText()
+        assert "Capture start" in capture_text
+        assert "Описание доски" in capture_text
+        assert workspace.board_tabs.currentWidget() is workspace.scenarios_panel
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_creates_next_task_from_focus_card(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        idea_column = _column_widget_by_kind(workspace, "idea")
+        idea_column.setCurrentRow(0)
+        QApplication.processEvents()
+        workspace.focus_card_secondary_button.click()
+        QApplication.processEvents()
+
+        assert "Проверить: Idea board item" in workspace._scenario_editors["links"].toPlainText()
+        assert workspace.board_tabs.currentWidget() is workspace.scenarios_panel
+    finally:
+        workspace.deleteLater()
+
+
 def test_mutaboard_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     stub = _MutaBoardWorkspaceDbStub()

@@ -126,6 +126,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._column_count_labels: dict[int, QLabel] = {}
         self._column_title_labels: dict[int, QLabel] = {}
         self._selected_card_key: tuple[str, int] | None = None
+        self._focused_card: ConceptBoardCard | None = None
         self._attached_card_keys: set[tuple[str, int]] = set()
         self.search_input.setPlaceholderText("Поиск по концептборду...")
         self._build_shell()
@@ -391,6 +392,9 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.focus_card_primary_button = QPushButton("Связать", self.focus_card_panel)
         self.focus_card_secondary_button = QPushButton("Создать задачу", self.focus_card_panel)
         self.focus_card_tertiary_button = QPushButton("Открыть итог", self.focus_card_panel)
+        self.focus_card_primary_button.clicked.connect(self._on_focus_primary_action)
+        self.focus_card_secondary_button.clicked.connect(self._on_focus_secondary_action)
+        self.focus_card_tertiary_button.clicked.connect(self._on_focus_tertiary_action)
         card_actions = QHBoxLayout()
         card_actions.setContentsMargins(0, 0, 0, 0)
         card_actions.setSpacing(8)
@@ -549,7 +553,9 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _refresh_board_context(self, board: MutaBoardData | None) -> None:
         title = board.title if board is not None and board.title.strip() else "Без названия"
         self.board_title_label.setText(title)
-        self.board_status_badge.setText("Исследование")
+        status_text = self._board_status_text(board)
+        self.board_status_badge.setText(status_text)
+        self.focus_status_value.setText(status_text)
         goal_text = (board.description or "").strip() if board is not None else ""
         if goal_text:
             self.goal_body_label.setText(goal_text)
@@ -557,6 +563,18 @@ class ConceptBoardWorkspace(BaseWorkspace):
         else:
             self.goal_body_label.setText("Цель не задана")
             self.goal_hint_label.setText("Добавьте цель, чтобы концептборд не превратился в склад материалов.")
+
+    @staticmethod
+    def _board_status_text(board: MutaBoardData | None) -> str:
+        if board is None:
+            return "Черновик"
+        if (board.capture_text or "").strip():
+            return "Решение принято" if (board.links_text or "").strip() else "На проверке"
+        if (board.planning_text or "").strip():
+            return "Проверка версии"
+        if (board.description or "").strip():
+            return "Исследование"
+        return "Черновик"
 
     def _refresh_outcome_summary(self) -> None:
         capture_text = self._scenario_editors["capture"].toPlainText().strip()
@@ -568,6 +586,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
 
     def _refresh_focus(self, card: ConceptBoardCard | None) -> None:
         board = self._current_mutaboard()
+        self._focused_card = card
         if card is None:
             self.focus_heading_label.setText("Фокус: Концептборд")
             self.focus_caption_label.setText("Редактируйте цель, описание и общий контекст активной доски.")
@@ -795,6 +814,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
             button.setText(text)
             button.setEnabled(False)
             button.setToolTip(_DISABLED_ACTION_TOOLTIP)
+        self.focus_card_secondary_button.setEnabled(True)
+        self.focus_card_secondary_button.setToolTip("Добавить этот элемент в список следующих задач.")
+        self.focus_card_tertiary_button.setEnabled(True)
+        self.focus_card_tertiary_button.setToolTip("Открыть вкладку «Итог» для фиксации решения.")
+        if card.entity_kind in {"version", "solution"}:
+            self.focus_card_primary_button.setEnabled(True)
+            self.focus_card_primary_button.setToolTip("Перенести текущую версию в итоговое решение.")
 
     @staticmethod
     def _split_board_lines(text: str) -> list[str]:
@@ -804,6 +830,18 @@ class ConceptBoardWorkspace(BaseWorkspace):
             if line:
                 result.append(line)
         return result
+
+    @staticmethod
+    def _append_unique_line(text: str, line: str) -> str:
+        normalized_line = line.strip()
+        if not normalized_line:
+            return text
+        lines = [item.strip() for item in str(text or "").splitlines()]
+        if normalized_line in lines:
+            return text
+        lines = [item for item in lines if item]
+        lines.append(normalized_line)
+        return "\n".join(lines)
 
     @staticmethod
     def _default_column_specs() -> list[tuple[str, str]]:
@@ -898,6 +936,36 @@ class ConceptBoardWorkspace(BaseWorkspace):
             "link": ("Нет ссылок", "Свяжите внешний источник, если он влияет на решение."),
         }.get(kind, ("Нет элементов", "Добавьте материалы или измените тип колонки."))
 
+    def _on_focus_primary_action(self) -> None:
+        card = self._focused_card
+        if card is None or card.entity_kind not in {"version", "solution"}:
+            return
+        payload = card.source_payload if isinstance(card.source_payload, dict) else {}
+        proposal = str(payload.get("why_yes") or card.subtitle or card.title).strip()
+        current_text = self._scenario_editors["capture"].toPlainText().strip()
+        if not current_text:
+            self._scenario_editors["capture"].setPlainText(proposal)
+        else:
+            self._scenario_editors["capture"].setPlainText(self._append_unique_line(current_text, proposal))
+        self.board_tabs.setCurrentWidget(self.scenarios_panel)
+        self._refresh_outcome_summary()
+        self.set_status(f"Концептборд: решение обновлено из «{card.title}».")
+
+    def _on_focus_secondary_action(self) -> None:
+        card = self._focused_card
+        if card is None:
+            return
+        next_task = f"Проверить: {card.title}"
+        updated_text = self._append_unique_line(self._scenario_editors["links"].toPlainText(), next_task)
+        self._scenario_editors["links"].setPlainText(updated_text)
+        self.board_tabs.setCurrentWidget(self.scenarios_panel)
+        self._refresh_outcome_summary()
+        self.set_status(f"Концептборд: задача добавлена из «{card.title}».")
+
+    def _on_focus_tertiary_action(self) -> None:
+        self.board_tabs.setCurrentWidget(self.scenarios_panel)
+        self.set_status("Концептборд: открыт итог и следующие шаги.")
+
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
         self._base_workspace_stylesheet = self.styleSheet()
@@ -952,7 +1020,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
                     part
                     for part in (
                         board.title,
-                        "Статус: Исследование",
+                        f"Статус: {self._board_status_text(board)}",
                         f"Связанных элементов: {attached_count}",
                         f"Обновлено: {updated_text}",
                         board.description.strip() if board.description.strip() else "",
