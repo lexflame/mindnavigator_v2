@@ -552,6 +552,44 @@ def test_mutaboard_workspace_creates_next_task_from_focus_card(monkeypatch) -> N
         workspace.deleteLater()
 
 
+def test_mutaboard_workspace_quick_actions_seed_concept_flow(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.quick_add_idea_button.click()
+        workspace.quick_add_version_button.click()
+        workspace.quick_add_task_button.click()
+        QApplication.processEvents()
+
+        assert "Идея:" in workspace.focus_description_input.toPlainText()
+        assert "Проверить версию:" in workspace._scenario_editors["planning"].toPlainText()
+        assert "Следующая задача:" in workspace._scenario_editors["links"].toPlainText()
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_creates_tasks_from_solution_summary(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace._scenario_editors["capture"].setPlainText("Собрать концептборд вокруг решения")
+        QApplication.processEvents()
+        workspace.create_tasks_button.click()
+        QApplication.processEvents()
+
+        links_text = workspace._scenario_editors["links"].toPlainText()
+        assert "Подготовить реализацию: Собрать концептборд вокруг решения" in links_text
+        assert "Проверить риски: Собрать концептборд вокруг решения" in links_text
+    finally:
+        workspace.deleteLater()
+
+
 def test_mutaboard_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     stub = _MutaBoardWorkspaceDbStub()

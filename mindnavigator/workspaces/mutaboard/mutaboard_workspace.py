@@ -222,9 +222,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
             self.quick_add_task_button,
         ):
             button.setObjectName("MutaBoardSecondaryButton")
-            button.setEnabled(False)
-            button.setToolTip(_DISABLED_ACTION_TOOLTIP)
             actions_row.addWidget(button)
+        self.quick_add_idea_button.clicked.connect(self._on_quick_add_idea)
+        self.quick_add_version_button.clicked.connect(self._on_quick_add_version)
+        self.quick_add_task_button.clicked.connect(self._on_quick_add_task)
+        self.quick_add_idea_button.setToolTip("Добавить черновик идеи в цель и описание доски.")
+        self.quick_add_version_button.setToolTip("Добавить пункт проверки версии в итог.")
+        self.quick_add_task_button.setToolTip("Добавить следующую задачу в итог.")
         overview_layout.addLayout(actions_row)
         layout.addWidget(overview)
 
@@ -325,11 +329,27 @@ class ConceptBoardWorkspace(BaseWorkspace):
         open_summary_button = QPushButton("Открыть итог", summary)
         open_summary_button.setObjectName("MutaBoardSecondaryButton")
         open_summary_button.clicked.connect(lambda: self.board_tabs.setCurrentWidget(self.scenarios_panel))
+        self.accept_solution_button = QPushButton("Принять решение", summary)
+        self.accept_solution_button.setObjectName("MutaBoardSecondaryButton")
+        self.accept_solution_button.clicked.connect(self._accept_current_solution)
+        self.review_solution_button = QPushButton("Отправить на проверку", summary)
+        self.review_solution_button.setObjectName("MutaBoardSecondaryButton")
+        self.review_solution_button.clicked.connect(self._send_current_solution_to_review)
+        self.create_tasks_button = QPushButton("Создать задачи из решения", summary)
+        self.create_tasks_button.setObjectName("MutaBoardSecondaryButton")
+        self.create_tasks_button.clicked.connect(self._create_tasks_from_solution)
+        summary_actions = QHBoxLayout()
+        summary_actions.setContentsMargins(0, 0, 0, 0)
+        summary_actions.setSpacing(8)
+        summary_actions.addWidget(open_summary_button)
+        summary_actions.addWidget(self.accept_solution_button)
+        summary_actions.addWidget(self.review_solution_button)
+        summary_actions.addWidget(self.create_tasks_button)
         summary_layout.addWidget(summary_title)
         summary_layout.addWidget(self.summary_solution_label)
         summary_layout.addWidget(self.summary_checks_label)
         summary_layout.addWidget(self.summary_tasks_label)
-        summary_layout.addWidget(open_summary_button, 0, Qt.AlignmentFlag.AlignLeft)
+        summary_layout.addLayout(summary_actions)
         layout.addWidget(summary)
         return panel
 
@@ -568,11 +588,20 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _board_status_text(board: MutaBoardData | None) -> str:
         if board is None:
             return "Черновик"
-        if (board.capture_text or "").strip():
-            return "Решение принято" if (board.links_text or "").strip() else "На проверке"
-        if (board.planning_text or "").strip():
+        return ConceptBoardWorkspace._board_status_text_from_values(
+            board.description,
+            board.capture_text,
+            board.planning_text,
+            board.links_text,
+        )
+
+    @staticmethod
+    def _board_status_text_from_values(description: str, capture_text: str, planning_text: str, links_text: str) -> str:
+        if (capture_text or "").strip():
+            return "Решение принято" if (links_text or "").strip() else "На проверке"
+        if (planning_text or "").strip():
             return "Проверка версии"
-        if (board.description or "").strip():
+        if (description or "").strip():
             return "Исследование"
         return "Черновик"
 
@@ -583,6 +612,11 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.summary_solution_label.setText(capture_text or "Текущее решение ещё не зафиксировано.")
         self.summary_checks_label.setText(planning_text or "Что проверить появится после заполнения вкладки «Итог».")
         self.summary_tasks_label.setText(links_text or "Следующие задачи пока не заданы.")
+        board = self._current_mutaboard()
+        description = board.description if board is not None else ""
+        status_text = self._board_status_text_from_values(description, capture_text, planning_text, links_text)
+        self.board_status_badge.setText(status_text)
+        self.focus_status_value.setText(status_text)
 
     def _refresh_focus(self, card: ConceptBoardCard | None) -> None:
         board = self._current_mutaboard()
@@ -843,6 +877,29 @@ class ConceptBoardWorkspace(BaseWorkspace):
         lines.append(normalized_line)
         return "\n".join(lines)
 
+    def _on_quick_add_idea(self) -> None:
+        self._clear_card_selection()
+        updated = self._append_unique_line(self.focus_description_input.toPlainText(), "Идея: ")
+        self.focus_description_input.setPlainText(updated)
+        self.focus_description_input.setFocus()
+        self.set_status("Концептборд: добавлен черновик идеи.")
+
+    def _on_quick_add_version(self) -> None:
+        self.board_tabs.setCurrentWidget(self.scenarios_panel)
+        updated = self._append_unique_line(self._scenario_editors["planning"].toPlainText(), "Проверить версию: ")
+        self._scenario_editors["planning"].setPlainText(updated)
+        self._scenario_editors["planning"].setFocus()
+        self._refresh_outcome_summary()
+        self.set_status("Концептборд: добавлен черновик версии.")
+
+    def _on_quick_add_task(self) -> None:
+        self.board_tabs.setCurrentWidget(self.scenarios_panel)
+        updated = self._append_unique_line(self._scenario_editors["links"].toPlainText(), "Следующая задача: ")
+        self._scenario_editors["links"].setPlainText(updated)
+        self._scenario_editors["links"].setFocus()
+        self._refresh_outcome_summary()
+        self.set_status("Концептборд: добавлена следующая задача.")
+
     @staticmethod
     def _default_column_specs() -> list[tuple[str, str]]:
         return list(_DEFAULT_COLUMN_SPECS)
@@ -965,6 +1022,40 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _on_focus_tertiary_action(self) -> None:
         self.board_tabs.setCurrentWidget(self.scenarios_panel)
         self.set_status("Концептборд: открыт итог и следующие шаги.")
+
+    def _accept_current_solution(self) -> None:
+        capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if not capture_text:
+            self.set_status("Концептборд: сначала сформулируйте текущее решение.")
+            return
+        updated = self._append_unique_line(self._scenario_editors["links"].toPlainText(), "Подготовить реализацию решения")
+        self._scenario_editors["links"].setPlainText(updated)
+        self._refresh_outcome_summary()
+        self.set_status("Концептборд: решение помечено как принятое.")
+
+    def _send_current_solution_to_review(self) -> None:
+        capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if not capture_text:
+            self.set_status("Концептборд: сначала сформулируйте решение для проверки.")
+            return
+        updated = self._append_unique_line(self._scenario_editors["planning"].toPlainText(), "Проверить понятность решения")
+        self._scenario_editors["planning"].setPlainText(updated)
+        self._refresh_outcome_summary()
+        self.set_status("Концептборд: решение отправлено на проверку.")
+
+    def _create_tasks_from_solution(self) -> None:
+        capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if not capture_text:
+            self.set_status("Концептборд: сначала зафиксируйте решение.")
+            return
+        lines = self._split_board_lines(capture_text)
+        seed = lines[0] if lines else "решение"
+        updated = self._scenario_editors["links"].toPlainText()
+        updated = self._append_unique_line(updated, f"Подготовить реализацию: {seed}")
+        updated = self._append_unique_line(updated, f"Проверить риски: {seed}")
+        self._scenario_editors["links"].setPlainText(updated)
+        self._refresh_outcome_summary()
+        self.set_status("Концептборд: следующие задачи собраны из решения.")
 
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
