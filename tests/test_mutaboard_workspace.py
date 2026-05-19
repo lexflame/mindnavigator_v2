@@ -12,9 +12,12 @@ from mindnavigator.storage import (
     IdeaRelationData,
     MapData,
     MapMarkerData,
+    MutaBoardLinkData,
     MutaBoardColumnData,
     MutaBoardData,
     MutaBoardItemData,
+    MutaBoardSolutionData,
+    MutaBoardVersionData,
     NoteData,
     ObjectData,
     ProjectData,
@@ -170,11 +173,17 @@ class _MutaBoardWorkspaceDbStub:
             ]
         }
         self._items = {1: []}
+        self._versions = {1: []}
+        self._solutions = {1: []}
+        self._links = {1: []}
         self.updated_mutaboards: list[tuple[int, str, str, str, str, str]] = []
         self.attached_items: list[tuple[int, str, int]] = []
         self._next_board_id = 2
         self._next_column_id = 4
         self._next_item_id = 1000
+        self._next_version_id = 1100
+        self._next_solution_id = 1200
+        self._next_link_id = 1300
 
     def fetch_tasks(self):
         return list(self._tasks)
@@ -240,6 +249,9 @@ class _MutaBoardWorkspaceDbStub:
         self._next_column_id += len(columns)
         self._columns[created.id] = columns
         self._items[created.id] = []
+        self._versions[created.id] = []
+        self._solutions[created.id] = []
+        self._links[created.id] = []
         self._next_board_id += 1
         return created
 
@@ -325,6 +337,135 @@ class _MutaBoardWorkspaceDbStub:
         self._next_item_id += 1
         self._items.setdefault(mutaboard_id, []).append(item)
         self.attached_items.append((mutaboard_id, entity_kind, entity_id))
+        return item
+
+    def fetch_mutaboard_versions(self, mutaboard_id: int):
+        return list(self._versions.get(mutaboard_id, []))
+
+    def create_mutaboard_version(self, mutaboard_id: int, *, title: str, description: str = "", why_yes: str = "", why_no: str = "", checks_text: str = "", status: str = "draft"):
+        item = MutaBoardVersionData(
+            id=self._next_version_id,
+            mutaboard_id=mutaboard_id,
+            title=title,
+            description=description,
+            why_yes=why_yes,
+            why_no=why_no,
+            checks_text=checks_text,
+            status=status,
+            created_at=self._now,
+            updated_at=self._now,
+        )
+        self._next_version_id += 1
+        self._versions.setdefault(mutaboard_id, []).insert(0, item)
+        return item
+
+    def update_mutaboard_version(self, version_id: int, *, title: str, description: str, why_yes: str, why_no: str, checks_text: str, status: str):
+        for mutaboard_id, items in self._versions.items():
+            for index, item in enumerate(items):
+                if item.id != version_id:
+                    continue
+                updated = MutaBoardVersionData(
+                    id=item.id,
+                    mutaboard_id=mutaboard_id,
+                    title=title,
+                    description=description,
+                    why_yes=why_yes,
+                    why_no=why_no,
+                    checks_text=checks_text,
+                    status=status,
+                    created_at=item.created_at,
+                    updated_at=self._now,
+                )
+                items[index] = updated
+                return updated
+        raise AssertionError("version not found")
+
+    def fetch_mutaboard_solutions(self, mutaboard_id: int):
+        return list(self._solutions.get(mutaboard_id, []))
+
+    def create_mutaboard_solution(self, mutaboard_id: int, *, title: str, summary: str = "", why_selected: str = "", rejected_text: str = "", next_steps_text: str = "", status: str = "draft", selected_version_id=None, decided_at: str = ""):
+        item = MutaBoardSolutionData(
+            id=self._next_solution_id,
+            mutaboard_id=mutaboard_id,
+            title=title,
+            summary=summary,
+            why_selected=why_selected,
+            rejected_text=rejected_text,
+            next_steps_text=next_steps_text,
+            status=status,
+            selected_version_id=selected_version_id,
+            decided_at=decided_at,
+            created_at=self._now,
+            updated_at=self._now,
+        )
+        self._next_solution_id += 1
+        self._solutions.setdefault(mutaboard_id, []).insert(0, item)
+        return item
+
+    def update_mutaboard_solution(self, solution_id: int, *, title: str, summary: str, why_selected: str, rejected_text: str, next_steps_text: str, status: str, selected_version_id=None, decided_at: str = ""):
+        for mutaboard_id, items in self._solutions.items():
+            for index, item in enumerate(items):
+                if item.id != solution_id:
+                    continue
+                updated = MutaBoardSolutionData(
+                    id=item.id,
+                    mutaboard_id=mutaboard_id,
+                    title=title,
+                    summary=summary,
+                    why_selected=why_selected,
+                    rejected_text=rejected_text,
+                    next_steps_text=next_steps_text,
+                    status=status,
+                    selected_version_id=selected_version_id,
+                    decided_at=decided_at,
+                    created_at=item.created_at,
+                    updated_at=self._now,
+                )
+                items[index] = updated
+                return updated
+        raise AssertionError("solution not found")
+
+    def fetch_mutaboard_links(self, mutaboard_id: int, *, source_kind=None, source_id=None, target_kind=None, target_id=None):
+        result = list(self._links.get(mutaboard_id, []))
+        if source_kind is not None:
+            result = [item for item in result if item.source_kind == source_kind]
+        if source_id is not None:
+            result = [item for item in result if item.source_id == source_id]
+        if target_kind is not None:
+            result = [item for item in result if item.target_kind == target_kind]
+        if target_id is not None:
+            result = [item for item in result if item.target_id == target_id]
+        return result
+
+    def add_mutaboard_link(self, mutaboard_id: int, *, source_kind: str, source_id: int, target_kind: str, target_id: int, link_type: str = "relates_to"):
+        item = MutaBoardLinkData(
+            id=self._next_link_id,
+            mutaboard_id=mutaboard_id,
+            source_kind=source_kind,
+            source_id=source_id,
+            target_kind=target_kind,
+            target_id=target_id,
+            link_type=link_type,
+            created_at=self._now,
+        )
+        self._next_link_id += 1
+        bucket = self._links.setdefault(mutaboard_id, [])
+        for existing in bucket:
+            if (
+                existing.source_kind,
+                existing.source_id,
+                existing.target_kind,
+                existing.target_id,
+                existing.link_type,
+            ) == (
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                link_type,
+            ):
+                return existing
+        bucket.insert(0, item)
         return item
 
 
@@ -798,5 +939,79 @@ def test_mutaboard_workspace_relation_click_focuses_version_from_idea(monkeypatc
 
         assert workspace._selected_card_key == ("version", -11)
         assert "Версия" in workspace.focus_card_kind_label.text()
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_quick_add_version_persists_storage_version(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.quick_add_version_button.click()
+        QApplication.processEvents()
+
+        assert stub._versions[1]
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_creates_persisted_version_from_idea(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        idea_column = _column_widget_by_kind(workspace, "idea")
+        idea_column.setCurrentRow(0)
+        QApplication.processEvents()
+
+        workspace.focus_card_primary_button.click()
+        QApplication.processEvents()
+
+        assert stub._versions[1]
+        created = stub._versions[1][0]
+        assert created.title == "Idea board item"
+        assert any(
+            link.link_type == "develops" and link.target_kind == "version" and link.target_id == created.id
+            for link in stub._links[1]
+        )
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_promotes_persisted_version_to_solution(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    version = stub.create_mutaboard_version(1, title="Version from storage", why_yes="Ship the board")
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "version")
+        QApplication.processEvents()
+
+        version_column = workspace.board_columns[first_column_id]
+        version_column.setCurrentRow(0)
+        QApplication.processEvents()
+
+        workspace.focus_card_primary_button.click()
+        QApplication.processEvents()
+
+        assert stub._solutions[1]
+        solution = stub._solutions[1][0]
+        assert solution.selected_version_id == version.id
+        assert any(
+            link.source_kind == "version"
+            and link.source_id == version.id
+            and link.target_kind == "solution"
+            and link.target_id == solution.id
+            and link.link_type == "transforms_to"
+            for link in stub._links[1]
+        )
     finally:
         workspace.deleteLater()

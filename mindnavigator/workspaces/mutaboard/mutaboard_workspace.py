@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 
 from ._shared import (
     BaseWorkspace,
@@ -35,8 +36,11 @@ from mindnavigator.storage import (
     IdeaData,
     MapData,
     MapMarkerData,
+    MutaBoardLinkData,
     MutaBoardColumnData,
     MutaBoardData,
+    MutaBoardSolutionData,
+    MutaBoardVersionData,
     NoteData,
     ObjectData,
     ProjectData,
@@ -81,6 +85,21 @@ _DEFAULT_COLUMN_SPECS = (
     ("solution", "Решение"),
 )
 _DISABLED_ACTION_TOOLTIP = "Действие будет доступно на следующем этапе ремастеринга."
+
+
+_CONCEPT_STATUS_TITLES = {
+    "draft": "Р§РµСЂРЅРѕРІРёРє",
+    "review": "РќР° РїСЂРѕРІРµСЂРєРµ",
+    "accepted": "РџСЂРёРЅСЏС‚Рѕ",
+    "rejected": "РћС‚РєР»РѕРЅРµРЅРѕ",
+}
+_LINK_TYPE_TITLES = {
+    "relates_to": "РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє",
+    "inspires": "РІРґРѕС…РЅРѕРІР»СЏРµС‚",
+    "develops": "СЂР°Р·РІРёРІР°РµС‚",
+    "transforms_to": "РїСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ",
+    "contradicts": "РїСЂРѕС‚РёРІРѕСЂРµС‡РёС‚",
+}
 
 
 class _MutaBoardColumnListWidget(QListWidget):
@@ -658,6 +677,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
 
     def _refresh_outcome_summary(self) -> None:
         capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if capture_text:
+            solution = self._persist_solution_from_current_state(status="review")
+        if capture_text:
+            solution = self._persist_solution_from_current_state(status="accepted")
         planning_text = self._scenario_editors["planning"].toPlainText().strip()
         links_text = self._scenario_editors["links"].toPlainText().strip()
         self.summary_solution_label.setText(capture_text or "Текущее решение ещё не зафиксировано.")
@@ -710,6 +733,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
         payload = card.source_payload
         if isinstance(payload, dict):
             return self._synthetic_focus_details(card, payload, board)
+        if isinstance(payload, MutaBoardVersionData):
+            return self._version_focus_details(payload, board)
+        if isinstance(payload, MutaBoardSolutionData):
+            return self._solution_focus_details(payload, board)
         if isinstance(payload, TaskData):
             return self._task_focus_details(payload, card, board)
         if isinstance(payload, IdeaData):
@@ -769,6 +796,42 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if board is not None:
             lines.extend(("", f"Концептборд: {board.title}"))
         return "\n".join(line for line in lines if line is not None).strip()
+
+    def _version_focus_details(self, version: MutaBoardVersionData, board: MutaBoardData | None) -> str:
+        lines = [version.title]
+        if version.description:
+            lines.extend(("", version.description))
+        lines.append(f"Статус: {self._concept_status_title(version.status)}")
+        if version.why_yes:
+            lines.extend(("", f"Почему да: {version.why_yes}"))
+        if version.why_no:
+            lines.append(f"Почему нет: {version.why_no}")
+        checks = self._split_board_lines(version.checks_text)
+        if checks:
+            lines.extend(("", "Что проверить:"))
+            lines.extend(f"• {item}" for item in checks)
+        if board is not None:
+            lines.extend(("", f"Концептборд: {board.title}"))
+        return "\n".join(lines)
+
+    def _solution_focus_details(self, solution: MutaBoardSolutionData, board: MutaBoardData | None) -> str:
+        lines = [solution.title]
+        if solution.summary:
+            lines.extend(("", solution.summary))
+        lines.append(f"Статус: {self._concept_status_title(solution.status)}")
+        if solution.why_selected:
+            lines.extend(("", f"Почему выбрано: {solution.why_selected}"))
+        if solution.rejected_text:
+            lines.append(f"Что отвергнуто: {solution.rejected_text}")
+        next_steps = self._split_board_lines(solution.next_steps_text)
+        if next_steps:
+            lines.extend(("", "Следующие задачи:"))
+            lines.extend(f"• {item}" for item in next_steps)
+        if solution.decided_at:
+            lines.append(f"Дата принятия: {solution.decided_at}")
+        if board is not None:
+            lines.extend(("", f"Концептборд: {board.title}"))
+        return "\n".join(lines)
 
     def _task_focus_details(self, task: TaskData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
         lines = [
@@ -916,7 +979,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.focus_card_secondary_button.setToolTip("Добавить этот элемент в список следующих задач.")
         self.focus_card_tertiary_button.setEnabled(True)
         self.focus_card_tertiary_button.setToolTip("Открыть вкладку «Итог» для фиксации решения.")
-        if card.entity_kind in {"version", "solution"}:
+        if card.entity_kind in {"idea", "version", "solution"}:
             self.focus_card_primary_button.setEnabled(True)
             self.focus_card_primary_button.setToolTip("Перенести текущую версию в итоговое решение.")
 
@@ -928,6 +991,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
             if line:
                 result.append(line)
         return result
+
+    @staticmethod
+    def _concept_status_title(status: str) -> str:
+        normalized = (status or "").strip().lower()
+        if not normalized:
+            return _CONCEPT_STATUS_TITLES["draft"]
+        return _CONCEPT_STATUS_TITLES.get(normalized, normalized.replace("_", " ").title())
 
     @staticmethod
     def _append_unique_line(text: str, line: str) -> str:
@@ -955,6 +1025,26 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.set_status("Концептборд: добавлен черновик идеи.")
 
     def _on_quick_add_version(self) -> None:
+        board = self._current_mutaboard()
+        if board is not None:
+            checks_text = self._scenario_editors["planning"].toPlainText().strip()
+            default_title = self._split_board_lines(checks_text)
+            version = self._db.create_mutaboard_version(
+                board.id,
+                title=default_title[0] if default_title else f"Р’РµСЂСЃРёСЏ {len(self._db.fetch_mutaboard_versions(board.id)) + 1}",
+                description=self.focus_description_input.toPlainText().strip(),
+                why_yes=self.focus_description_input.toPlainText().strip(),
+                checks_text=checks_text,
+                status="draft",
+            )
+            self._selected_card_key = ("version", version.id)
+            self.board_tabs.setCurrentWidget(self.scenarios_panel)
+            self._set_editor_text_and_focus("planning", "РџСЂРѕРІРµСЂРёС‚СЊ РІРµСЂСЃРёСЋ:")
+            self._set_editor_text_and_focus("planning", "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0432\u0435\u0440\u0441\u0438\u044e:")
+            self._populate_board()
+            self._refresh_outcome_summary()
+            self.set_status(f"РљРѕРЅС†РµРїС‚Р±РѕСЂРґ: РґРѕР±Р°РІР»РµРЅР° РІРµСЂСЃРёСЏ В«{version.title}В».")
+            return
         self.board_tabs.setCurrentWidget(self.scenarios_panel)
         self._set_editor_text_and_focus("planning", "Проверить версию:")
         self._refresh_outcome_summary()
@@ -990,6 +1080,14 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _synthetic_cards_for_kind(self, board: MutaBoardData | None, kind: str) -> list[ConceptBoardCard]:
         if board is None:
             return []
+        if kind == "version":
+            version_cards = [self._build_version_card(item, board) for item in self._db.fetch_mutaboard_versions(board.id)]
+            if version_cards:
+                return version_cards
+        if kind == "solution":
+            solution_cards = [self._build_solution_card(item, board) for item in self._db.fetch_mutaboard_solutions(board.id)]
+            if solution_cards:
+                return solution_cards
         check_lines = self._split_board_lines(board.planning_text)
         next_steps = self._split_board_lines(board.links_text)
         if kind == "version":
@@ -1049,6 +1147,50 @@ class ConceptBoardWorkspace(BaseWorkspace):
             ]
         return []
 
+    def _build_version_card(self, version: MutaBoardVersionData, board: MutaBoardData) -> ConceptBoardCard:
+        checks = self._split_board_lines(version.checks_text)
+        relation_count = len(self._db.fetch_mutaboard_links(board.id, source_kind="version", source_id=version.id))
+        relation_count += len(self._db.fetch_mutaboard_links(board.id, target_kind="version", target_id=version.id))
+        if relation_count <= 0:
+            relation_count = len(checks)
+        return ConceptBoardCard(
+            entity_kind="version",
+            entity_id=version.id,
+            title=version.title,
+            subtitle=(version.description or version.why_yes or "").strip(),
+            project_id=None,
+            project_title=board.title,
+            accent_color="#a88cff",
+            meta_text=f"{self._concept_status_title(version.status)} В· РџСЂРѕРІРµСЂРѕРє {len(checks)}",
+            relation_count=relation_count,
+            relation_summary=f"РЎРІСЏР·Рё В· {relation_count}",
+            stage=(version.status or "draft").strip().lower(),
+            is_actionable=(version.status or "draft").strip().lower() != "accepted",
+            source_payload=version,
+        )
+
+    def _build_solution_card(self, solution: MutaBoardSolutionData, board: MutaBoardData) -> ConceptBoardCard:
+        next_steps = self._split_board_lines(solution.next_steps_text)
+        relation_count = len(self._db.fetch_mutaboard_links(board.id, source_kind="solution", source_id=solution.id))
+        relation_count += len(self._db.fetch_mutaboard_links(board.id, target_kind="solution", target_id=solution.id))
+        if relation_count <= 0:
+            relation_count = len(next_steps)
+        return ConceptBoardCard(
+            entity_kind="solution",
+            entity_id=solution.id,
+            title=solution.title,
+            subtitle=(solution.summary or solution.why_selected or "").strip(),
+            project_id=None,
+            project_title=board.title,
+            accent_color="#49c36b",
+            meta_text=f"{self._concept_status_title(solution.status)} В· РЎР»РµРґСѓСЋС‰РёС… Р·Р°РґР°С‡ {len(next_steps)}",
+            relation_count=relation_count,
+            relation_summary=f"РЎРІСЏР·Рё В· {relation_count}",
+            stage=(solution.status or "draft").strip().lower(),
+            is_actionable=(solution.status or "draft").strip().lower() != "accepted",
+            source_payload=solution,
+        )
+
     @staticmethod
     def _empty_state_text(kind: str) -> tuple[str, str]:
         return {
@@ -1068,7 +1210,59 @@ class ConceptBoardWorkspace(BaseWorkspace):
 
     def _on_focus_primary_action(self) -> None:
         card = self._focused_card
-        if card is None or card.entity_kind not in {"version", "solution"}:
+        board = self._current_mutaboard()
+        if card is None or board is None:
+            return
+        if isinstance(card.source_payload, IdeaData):
+            version = self._db.create_mutaboard_version(
+                board.id,
+                title=card.title,
+                description=card.subtitle,
+                why_yes=card.subtitle or card.title,
+                checks_text=self._scenario_editors["planning"].toPlainText().strip(),
+                status="review",
+            )
+            self._db.add_mutaboard_link(
+                board.id,
+                source_kind="idea",
+                source_id=card.entity_id,
+                target_kind="version",
+                target_id=version.id,
+                link_type="develops",
+            )
+            self._selected_card_key = ("version", version.id)
+            self._populate_board()
+            self.set_status(f"РљРѕРЅС†РµРїС‚Р±РѕСЂРґ: РёРґРµСЏ В«{card.title}В» РїРµСЂРµРІРµРґРµРЅР° РІ РІРµСЂСЃРёСЋ.")
+            return
+        if isinstance(card.source_payload, MutaBoardVersionData):
+            proposal = str(card.subtitle or card.title).strip()
+            current_text = self._scenario_editors["capture"].toPlainText().strip()
+            if proposal:
+                if not current_text:
+                    self._scenario_editors["capture"].setPlainText(proposal)
+                else:
+                    self._scenario_editors["capture"].setPlainText(self._append_unique_line(current_text, proposal))
+            solution = self._persist_solution_from_current_state(status="accepted", selected_version_id=card.source_payload.id)
+            self._db.add_mutaboard_link(
+                board.id,
+                source_kind="version",
+                source_id=card.source_payload.id,
+                target_kind="solution",
+                target_id=solution.id,
+                link_type="transforms_to",
+            )
+            self._selected_card_key = ("solution", solution.id)
+            self._populate_board()
+            self.board_tabs.setCurrentWidget(self.scenarios_panel)
+            self._refresh_outcome_summary()
+            self.set_status(f"РљРѕРЅС†РµРїС‚Р±РѕСЂРґ: РІРµСЂСЃРёСЏ В«{card.title}В» РїСЂРёРЅСЏС‚Р° РєР°Рє СЂРµС€РµРЅРёРµ.")
+            return
+        if isinstance(card.source_payload, MutaBoardSolutionData):
+            self.board_tabs.setCurrentWidget(self.scenarios_panel)
+            self._scenario_editors["capture"].setFocus()
+            self.set_status(f"РљРѕРЅС†РµРїС‚Р±РѕСЂРґ: РѕС‚РєСЂС‹С‚ РёС‚РѕРі РґР»СЏ В«{card.title}В».")
+            return
+        if card.entity_kind not in {"version", "solution"}:
             return
         payload = card.source_payload if isinstance(card.source_payload, dict) else {}
         proposal = str(payload.get("why_yes") or card.subtitle or card.title).strip()
@@ -1097,7 +1291,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.set_status("Концептборд: открыт итог и следующие шаги.")
 
     def _accept_current_solution(self) -> None:
+        solution: MutaBoardSolutionData | None = None
         capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if capture_text:
+            solution = self._persist_solution_from_current_state(status="accepted")
         if not capture_text:
             self.set_status("Концептборд: сначала сформулируйте текущее решение.")
             return
@@ -1106,7 +1303,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.set_status("Концептборд: решение помечено как принятое.")
 
     def _send_current_solution_to_review(self) -> None:
+        solution: MutaBoardSolutionData | None = None
         capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        if capture_text:
+            solution = self._persist_solution_from_current_state(status="review")
         if not capture_text:
             self.set_status("Концептборд: сначала сформулируйте решение для проверки.")
             return
@@ -1128,6 +1328,54 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._scenario_editors["links"].setFocus()
         self._refresh_outcome_summary()
         self.set_status("Концептборд: следующие задачи собраны из решения.")
+
+    def _persist_solution_from_current_state(
+        self,
+        *,
+        status: str,
+        selected_version_id: int | None = None,
+    ) -> MutaBoardSolutionData:
+        board = self._current_mutaboard()
+        if board is None:
+            raise RuntimeError("concept board is not selected")
+        capture_text = self._scenario_editors["capture"].toPlainText().strip()
+        planning_text = self._scenario_editors["planning"].toPlainText().strip()
+        links_text = self._scenario_editors["links"].toPlainText().strip()
+        title_lines = self._split_board_lines(capture_text)
+        title = title_lines[0] if title_lines else board.title
+        if selected_version_id is None and isinstance(getattr(self._focused_card, "source_payload", None), MutaBoardVersionData):
+            selected_version_id = self._focused_card.source_payload.id
+        if selected_version_id is None:
+            versions = self._db.fetch_mutaboard_versions(board.id)
+            selected_version_id = versions[0].id if versions else None
+        existing = self._db.fetch_mutaboard_solutions(board.id)
+        decided_at = datetime.now(timezone.utc).date().isoformat() if status == "accepted" else ""
+        if existing:
+            current = existing[0]
+            if not decided_at:
+                decided_at = current.decided_at
+            return self._db.update_mutaboard_solution(
+                current.id,
+                title=title,
+                summary=capture_text,
+                why_selected=capture_text,
+                rejected_text=planning_text,
+                next_steps_text=links_text,
+                status=status,
+                selected_version_id=selected_version_id,
+                decided_at=decided_at,
+            )
+        return self._db.create_mutaboard_solution(
+            board.id,
+            title=title,
+            summary=capture_text,
+            why_selected=capture_text,
+            rejected_text=planning_text,
+            next_steps_text=links_text,
+            status=status,
+            selected_version_id=selected_version_id,
+            decided_at=decided_at,
+        )
 
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
@@ -1304,7 +1552,8 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._select_mutaboard(updated.id)
         self._refresh_board_context(updated)
         self._refresh_outcome_summary()
-        self._refresh_focus(None if self._selected_card_key is None else self._model.get_card(*self._selected_card_key))
+        self._populate_board()
+        self._refresh_focus(None if self._selected_card_key is None else self._card_by_key(*self._selected_card_key))
         self.set_status(f"Концептборд: данные «{updated.title}» сохранены.")
 
     def _rebuild_board_columns(self) -> None:
@@ -1562,6 +1811,28 @@ class ConceptBoardWorkspace(BaseWorkspace):
             lines.append(f"Следующий шаг: {next_steps[0]}")
         return "\n".join(lines)
 
+    def _persisted_structure_relations(
+        self,
+        board: MutaBoardData,
+        card: ConceptBoardCard | None = None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        links = self._db.fetch_mutaboard_links(board.id)
+        current_key = self._structure_card_key(card) if card is not None else None
+        for link in links:
+            source_key = self._entity_relation_target_key(link.source_kind, link.source_id)
+            target_key = self._entity_relation_target_key(link.target_kind, link.target_id)
+            if current_key is not None and current_key not in {source_key, target_key}:
+                continue
+            source_label = self._entity_relation_label(link.source_kind, link.source_id)
+            target_label = self._entity_relation_label(link.target_kind, link.target_id)
+            verb = _LINK_TYPE_TITLES.get(link.link_type, _LINK_TYPE_TITLES["relates_to"])
+            jump_target = target_key
+            if current_key is not None and current_key == target_key:
+                jump_target = source_key
+            relations.append((f"{source_label} {verb} {target_label}", jump_target))
+        return self._dedupe_relations(relations)
+
     def _structure_overview_relations(self, board: MutaBoardData | None) -> list[tuple[str, tuple[str, int] | None]]:
         if board is None:
             return []
@@ -1630,25 +1901,30 @@ class ConceptBoardWorkspace(BaseWorkspace):
         card: ConceptBoardCard,
         board: MutaBoardData | None,
     ) -> list[tuple[str, tuple[str, int] | None]]:
+        persisted_relations = [] if board is None else self._persisted_structure_relations(board, card)
         payload = card.source_payload
         if isinstance(payload, dict):
-            return self._structure_relations_for_synthetic_card(card, payload, board)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_synthetic_card(card, payload, board)])
+        if isinstance(payload, MutaBoardVersionData):
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_version_card(card, payload, board)])
+        if isinstance(payload, MutaBoardSolutionData):
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_solution_card(card, payload, board)])
         if isinstance(payload, TaskData):
-            return self._structure_relations_for_task_card(card, payload)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_task_card(card, payload)])
         if isinstance(payload, IdeaData):
-            return self._structure_relations_for_idea_card(card, payload, board)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_idea_card(card, payload, board)])
         if isinstance(payload, ProjectData):
-            return self._structure_relations_for_project_card(card, payload)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_project_card(card, payload)])
         if isinstance(payload, MapMarkerData):
-            return self._structure_relations_for_marker_card(card, payload)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_marker_card(card, payload)])
         if isinstance(payload, MapData):
-            return self._structure_relations_for_map_card(card, payload)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_map_card(card, payload)])
         if isinstance(payload, CloudFileData):
-            return self._structure_relations_for_image_card(card, board)
+            return self._dedupe_relations([*persisted_relations, *self._structure_relations_for_image_card(card, board)])
         if isinstance(payload, NoteData):
             tags = [(f"{self._structure_card_label(card)} относится к тегу «{tag}»", None) for tag in payload.tags[:3]]
-            return self._dedupe_relations(tags)
-        return []
+            return self._dedupe_relations([*persisted_relations, *tags])
+        return persisted_relations
 
     def _structure_relations_for_synthetic_card(
         self,
@@ -1691,6 +1967,41 @@ class ConceptBoardWorkspace(BaseWorkspace):
                 relations.append((f"{self._structure_card_label(card)} превращается в Задача «{step}»", None))
             if checks:
                 relations.append((f"{self._structure_card_label(card)} относится к проверке «{checks[0]}»", None))
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_version_card(
+        self,
+        card: ConceptBoardCard,
+        payload: MutaBoardVersionData,
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        checks = self._split_board_lines(payload.checks_text)
+        solution_card = self._first_synthetic_card(board, "solution")
+        if solution_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} РїСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ {self._structure_card_label(solution_card)}",
+                    self._structure_card_key(solution_card),
+                )
+            )
+        if checks:
+            relations.append((f"{self._structure_card_label(card)} РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє РїСЂРѕРІРµСЂРєРµ В«{checks[0]}В»", None))
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_solution_card(
+        self,
+        card: ConceptBoardCard,
+        payload: MutaBoardSolutionData,
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        for step in self._split_board_lines(payload.next_steps_text)[:3]:
+            relations.append((f"{self._structure_card_label(card)} РїСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ Р—Р°РґР°С‡Р° В«{step}В»", None))
+        if payload.selected_version_id is not None:
+            version_key = self._entity_relation_target_key("version", payload.selected_version_id)
+            version_label = self._entity_relation_label("version", payload.selected_version_id)
+            relations.append((f"{version_label} РїСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ {self._structure_card_label(card)}", version_key))
         return self._dedupe_relations(relations)
 
     def _structure_relations_for_task_card(
@@ -1919,6 +2230,19 @@ class ConceptBoardWorkspace(BaseWorkspace):
         cards = self._synthetic_cards_for_kind(board, kind)
         return cards[0] if cards else None
 
+    def _card_by_key(self, entity_kind: str, entity_id: int) -> ConceptBoardCard | None:
+        card = self._model.get_card(entity_kind, entity_id)
+        if card is not None:
+            return card
+        board = self._current_mutaboard()
+        if board is None:
+            return None
+        for kind in ("version", "solution"):
+            for current in self._synthetic_cards_for_kind(board, kind):
+                if (current.entity_kind, current.entity_id) == (entity_kind, entity_id):
+                    return current
+        return None
+
     @staticmethod
     def _structure_card_key(card: ConceptBoardCard) -> tuple[str, int]:
         return (card.entity_kind, card.entity_id)
@@ -1928,13 +2252,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
         return f"{kind_title} «{card.title}»"
 
     def _entity_relation_target_key(self, entity_kind: str, entity_id: int) -> tuple[str, int] | None:
-        card = self._model.get_card(entity_kind, entity_id)
+        card = self._card_by_key(entity_kind, entity_id)
         if card is None:
             return None
         return self._structure_card_key(card)
 
     def _entity_relation_label(self, entity_kind: str, entity_id: int) -> str:
-        card = self._model.get_card(entity_kind, entity_id)
+        card = self._card_by_key(entity_kind, entity_id)
         if card is not None:
             return self._structure_card_label(card)
         kind_title = _CARD_KIND_TITLES.get(entity_kind, entity_kind.title())

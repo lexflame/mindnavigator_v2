@@ -73,9 +73,15 @@ from .wishlist_item_data import WishlistItemData
 from .mutaboard_data import MutaBoardData
 from .mutaboard_column_data import MutaBoardColumnData
 from .mutaboard_item_data import MutaBoardItemData
+from .mutaboard_version_data import MutaBoardVersionData
+from .mutaboard_solution_data import MutaBoardSolutionData
+from .mutaboard_link_data import MutaBoardLinkData
 from .concept_board_data import ConceptBoardData
 from .concept_board_column_data import ConceptBoardColumnData
 from .concept_board_item_data import ConceptBoardItemData
+from .concept_board_version_data import ConceptBoardVersionData
+from .concept_board_solution_data import ConceptBoardSolutionData
+from .concept_board_link_data import ConceptBoardLinkData
 from .database import Database
 
 
