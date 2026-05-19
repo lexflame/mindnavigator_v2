@@ -14,7 +14,8 @@ SUPPORTED_LANGUAGES: dict[str, str] = {
 
 MODE_PROJECTS = "\u041f\u0440\u043e\u0435\u043a\u0442\u044b"
 MODE_TASKS = "\u0417\u0430\u0434\u0430\u0447\u0438"
-MODE_MUTABOARD = "\u041c\u0443\u0442\u0430\u0431\u043e\u0440\u0434"
+MODE_CONCEPTBOARD = "\u041a\u043e\u043d\u0446\u0435\u043f\u0442\u0431\u043e\u0440\u0434"
+MODE_MUTABOARD = MODE_CONCEPTBOARD
 MODE_PURCHASES = "\u041f\u043e\u043a\u0443\u043f\u043a\u0438"
 MODE_IDEAS = "\u0418\u0434\u0435\u0438"
 MODE_DOSSIER = "\u0414\u043e\u0441\u044c\u0435"
@@ -31,7 +32,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
     "ru": {
         MODE_PROJECTS: MODE_PROJECTS,
         MODE_TASKS: MODE_TASKS,
-        MODE_MUTABOARD: MODE_MUTABOARD,
+        MODE_CONCEPTBOARD: MODE_CONCEPTBOARD,
         MODE_PURCHASES: MODE_PURCHASES,
         MODE_IDEAS: MODE_IDEAS,
         MODE_DOSSIER: MODE_DOSSIER,
@@ -47,7 +48,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
     "en": {
         MODE_PROJECTS: "Projects",
         MODE_TASKS: "Tasks",
-        MODE_MUTABOARD: "MutaBoard",
+        MODE_CONCEPTBOARD: "ConceptBoard",
         MODE_PURCHASES: "Purchases",
         MODE_IDEAS: "Ideas",
         MODE_DOSSIER: "Dossier",
@@ -63,7 +64,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
     "de": {
         MODE_PROJECTS: "Projekte",
         MODE_TASKS: "Aufgaben",
-        MODE_MUTABOARD: "MutaBoard",
+        MODE_CONCEPTBOARD: "ConceptBoard",
         MODE_PURCHASES: "Einkäufe",
         MODE_IDEAS: "Ideen",
         MODE_DOSSIER: "Dossier",
@@ -79,7 +80,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
     "fr": {
         MODE_PROJECTS: "Projets",
         MODE_TASKS: "Tâches",
-        MODE_MUTABOARD: "MutaBoard",
+        MODE_CONCEPTBOARD: "ConceptBoard",
         MODE_PURCHASES: "Achats",
         MODE_IDEAS: "Idées",
         MODE_DOSSIER: "Dossier",
@@ -95,7 +96,7 @@ _MODE_LABELS: dict[str, dict[str, str]] = {
     "zh": {
         MODE_PROJECTS: "\u9879\u76ee",
         MODE_TASKS: "\u4efb\u52a1",
-        MODE_MUTABOARD: "MutaBoard",
+        MODE_CONCEPTBOARD: "ConceptBoard",
         MODE_PURCHASES: "\u8d2d\u7269",
         MODE_IDEAS: "\u60f3\u6cd5",
         MODE_DOSSIER: "\u6848\u5377",

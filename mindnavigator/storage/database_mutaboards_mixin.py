@@ -5,7 +5,20 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 
 _DEFAULT_MUTABOARD_COLUMN_KINDS = ("task", "idea", "image")
-_MUTABOARD_COLUMN_KINDS = ("task", "idea", "image", "map", "marker", "note", "project", "object")
+_MUTABOARD_COLUMN_KINDS = (
+    "task",
+    "idea",
+    "image",
+    "map",
+    "marker",
+    "note",
+    "project",
+    "object",
+    "version",
+    "solution",
+    "file",
+    "link",
+)
 _MUTABOARD_ENTITY_KINDS = _MUTABOARD_COLUMN_KINDS
 
 

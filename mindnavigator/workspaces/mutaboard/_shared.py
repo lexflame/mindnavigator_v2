@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,

@@ -342,14 +342,14 @@ def test_mutaboard_workspace_builds_board_list_and_default_columns(monkeypatch) 
 
     workspace = mutaboard_module.MutaBoardWorkspace()
     try:
-        assert workspace.objectName() == "MutaBoardWorkspace"
+        assert workspace.objectName() == "ConceptBoardWorkspace"
         assert workspace.mutaboard_list.count() == 1
         assert workspace.focus_title_input.text() == "Основной мутборд"
         assert list(workspace._column_kinds.values()) == ["task", "idea", "image"]
         assert _column_widget_by_kind(workspace, "task").count() == 1
         assert _column_widget_by_kind(workspace, "idea").count() == 1
         assert _column_widget_by_kind(workspace, "image").count() == 1
-        assert "прикреплено 0" in workspace.status_row.text().lower()
+        assert "связано 0" in workspace.status_row.text().lower()
     finally:
         workspace.deleteLater()
 

@@ -43,6 +43,7 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
     class _DummyWindow:
         MODE_PROJECTS = MainWindow.MODE_PROJECTS
         MODE_TASKS = MainWindow.MODE_TASKS
+        MODE_CONCEPTBOARD = MainWindow.MODE_CONCEPTBOARD
         MODE_MUTABOARD = MainWindow.MODE_MUTABOARD
         MODE_PURCHASES = MainWindow.MODE_PURCHASES
         MODE_IDEAS = MainWindow.MODE_IDEAS
@@ -59,12 +60,13 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
 
     assert mapping["dossier"] == MainWindow.MODE_DOSSIER
     assert mapping["mutaboard"] == MainWindow.MODE_MUTABOARD
+    assert mapping["concept_board"] == MainWindow.MODE_CONCEPTBOARD
     assert mapping["characters"] == MainWindow.MODE_CHARACTERS
     assert mapping["minddraw"] == MainWindow.MODE_MINDDRAW
 
 
-def test_settings_workspace_options_include_mutaboard() -> None:
-    assert ("mutaboard", "Мутаборд") in SettingsWorkspace.WORKSPACE_OPTIONS
+def test_settings_workspace_options_include_concept_board() -> None:
+    assert ("concept_board", "Концептборд") in SettingsWorkspace.WORKSPACE_OPTIONS
 
 
 class _MutaBoardWorkspaceDbStub:
@@ -145,9 +147,9 @@ def test_mutaboard_workspace_builds_phase_one_shell(monkeypatch) -> None:
 
     workspace = mutaboard_module.MutaBoardWorkspace()
     try:
-        assert workspace.workspace_id == "mutaboard"
-        assert workspace.search_input.placeholderText() == "Поиск по элементам мутборда"
-        assert workspace.status_row.text() == "Мутаборд: элементов 0 · прикреплено 0."
+        assert workspace.workspace_id == "concept_board"
+        assert workspace.search_input.placeholderText() == "Поиск по концептборду..."
+        assert workspace.status_row.text() == "Концептборд: элементов 0 · связано 0."
     finally:
         workspace.deleteLater()
 

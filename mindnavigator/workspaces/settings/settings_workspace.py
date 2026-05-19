@@ -101,7 +101,7 @@ class SettingsWorkspace(QWidget):
     WORKSPACE_OPTIONS = [
         ("projects", "Проекты"),
         ("tasks", "Задачи"),
-        ("mutaboard", "Мутаборд"),
+        ("concept_board", "Концептборд"),
         ("purchases", "Покупки"),
         ("ideas", "Идеи"),
         ("dossier", "Досье"),

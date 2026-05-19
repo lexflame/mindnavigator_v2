@@ -13,6 +13,10 @@ MUTABOARD_KIND_MARKER = "marker"
 MUTABOARD_KIND_NOTE = "note"
 MUTABOARD_KIND_PROJECT = "project"
 MUTABOARD_KIND_OBJECT = "object"
+CONCEPT_BOARD_KIND_VERSION = "version"
+CONCEPT_BOARD_KIND_SOLUTION = "solution"
+CONCEPT_BOARD_KIND_FILE = "file"
+CONCEPT_BOARD_KIND_LINK = "link"
 MUTABOARD_KINDS = (
     MUTABOARD_KIND_TASK,
     MUTABOARD_KIND_IDEA,
@@ -22,11 +26,15 @@ MUTABOARD_KINDS = (
     MUTABOARD_KIND_NOTE,
     MUTABOARD_KIND_PROJECT,
     MUTABOARD_KIND_OBJECT,
+    CONCEPT_BOARD_KIND_VERSION,
+    CONCEPT_BOARD_KIND_SOLUTION,
+    CONCEPT_BOARD_KIND_FILE,
+    CONCEPT_BOARD_KIND_LINK,
 )
 
 
 @dataclass(frozen=True)
-class MutaBoardCard:
+class ConceptBoardCard:
     entity_kind: str
     entity_id: int
     title: str
@@ -58,7 +66,10 @@ class MutaBoardCard:
         return f"T{self.linked_task_count} · I{self.linked_idea_count} · O{self.linked_object_count}"
 
 
+MutaBoardCard = ConceptBoardCard
+
 __all__ = [
+    "ConceptBoardCard",
     "MutaBoardCard",
     "MUTABOARD_KIND_TASK",
     "MUTABOARD_KIND_IDEA",
@@ -68,5 +79,9 @@ __all__ = [
     "MUTABOARD_KIND_NOTE",
     "MUTABOARD_KIND_PROJECT",
     "MUTABOARD_KIND_OBJECT",
+    "CONCEPT_BOARD_KIND_VERSION",
+    "CONCEPT_BOARD_KIND_SOLUTION",
+    "CONCEPT_BOARD_KIND_FILE",
+    "CONCEPT_BOARD_KIND_LINK",
     "MUTABOARD_KINDS",
 ]
