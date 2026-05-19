@@ -543,6 +543,10 @@ def test_mutaboard_workspace_creates_next_task_from_focus_card(monkeypatch) -> N
 
     workspace = mutaboard_module.MutaBoardWorkspace()
     try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "version")
+        QApplication.processEvents()
+
         idea_column = _column_widget_by_kind(workspace, "idea")
         idea_column.setCurrentRow(0)
         QApplication.processEvents()
@@ -605,8 +609,34 @@ def test_mutaboard_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
         assert "QFrame#MutaBoardScenarioCard" in stylesheet
         assert "QScrollArea#MutaBoardScroll" in stylesheet
         assert "QComboBox#MutaBoardColumnKindFilter QAbstractItemView" in stylesheet
+        assert "QComboBox#MutaBoardFilterCombo QAbstractItemView" in stylesheet
+        assert "QLineEdit#WorkspaceSearchInput" in stylesheet
+        assert "QToolButton#WorkspaceSearchClear" in stylesheet
+        assert workspace.link_scope_filter.objectName() == "MutaBoardFilterCombo"
+        assert workspace.action_scope_filter.objectName() == "MutaBoardFilterCombo"
         assert "QMenu {" in stylesheet
         assert "QListWidget#MutaBoardColumnList::viewport" in stylesheet
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_places_filters_before_search(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        search_layout = workspace.search_row.layout()
+        widgets = [search_layout.itemAt(index).widget() for index in range(search_layout.count())]
+
+        assert workspace.toolbar_row.isHidden()
+        assert workspace.filter_row.isHidden()
+        assert widgets[0] is workspace.link_scope_label
+        assert widgets[1] is workspace.link_scope_filter
+        assert widgets[2] is workspace.action_scope_label
+        assert widgets[3] is workspace.action_scope_filter
+        assert widgets[4] is workspace.search_input
     finally:
         workspace.deleteLater()
 
@@ -629,5 +659,144 @@ def test_mutaboard_workspace_columns_use_resizable_splitter(monkeypatch) -> None
         assert len(sizes) == workspace.columns_splitter.count()
         assert max(sizes) >= 280
         assert min(sizes) >= 200
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_builds_semantic_overview_relations(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        relations = [workspace.structure_relations_list.item(index).text() for index in range(workspace.structure_relations_list.count())]
+
+        assert any("вдохновляет" in relation for relation in relations)
+        assert any("превращается в" in relation for relation in relations)
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_builds_semantic_relations_for_selected_idea(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "version")
+        QApplication.processEvents()
+
+        idea_column = _column_widget_by_kind(workspace, "idea")
+        idea_column.setCurrentRow(0)
+        QApplication.processEvents()
+
+        relations = [workspace.structure_relations_list.item(index).text() for index in range(workspace.structure_relations_list.count())]
+        assert any("относится к" in relation for relation in relations)
+        assert any("развивает" in relation for relation in relations)
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_filters_only_linked_items(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.link_scope_filter.setCurrentIndex(workspace.link_scope_filter.findData("linked"))
+        QApplication.processEvents()
+
+        image_column = _column_widget_by_kind(workspace, "image")
+        first_item = image_column.item(0)
+        assert first_item.data(Qt.ItemDataRole.UserRole) is None
+        assert "из" in workspace.status_row.text().lower()
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_filters_only_actionable_items(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    stub._tasks.append(
+        TaskData(
+            id=102,
+            day=date(2026, 5, 17),
+            time_text="10:30",
+            title="Completed task",
+            description="Already done",
+            priority="Low",
+            done=True,
+            board_column="queue",
+            project_id=5,
+            project_title="Workspace Project",
+        )
+    )
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        task_column = _column_widget_by_kind(workspace, "task")
+        assert task_column.count() == 2
+
+        workspace.action_scope_filter.setCurrentIndex(workspace.action_scope_filter.findData("actionable"))
+        QApplication.processEvents()
+
+        visible_titles = [
+            task_column.item(index).data(Qt.ItemDataRole.UserRole).title
+            for index in range(task_column.count())
+            if task_column.item(index).data(Qt.ItemDataRole.UserRole) is not None
+        ]
+        assert visible_titles == ["Task board item"]
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_relation_click_focuses_idea_from_overview(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_relation = workspace.structure_relations_list.item(0)
+
+        workspace._on_structure_relation_clicked(first_relation)
+        QApplication.processEvents()
+
+        assert workspace._selected_card_key == ("idea", 202)
+        assert workspace.structure_hub_label.text() == "Idea board item"
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_relation_click_focuses_version_from_idea(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "version")
+        QApplication.processEvents()
+
+        idea_column = _column_widget_by_kind(workspace, "idea")
+        idea_column.setCurrentRow(0)
+        QApplication.processEvents()
+
+        relation_item = next(
+            workspace.structure_relations_list.item(index)
+            for index in range(workspace.structure_relations_list.count())
+            if workspace.structure_relations_list.item(index).data(Qt.ItemDataRole.UserRole) == ("version", -11)
+        )
+        workspace._on_structure_relation_clicked(relation_item)
+        QApplication.processEvents()
+
+        assert workspace._selected_card_key == ("version", -11)
+        assert "Версия" in workspace.focus_card_kind_label.text()
     finally:
         workspace.deleteLater()

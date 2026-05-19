@@ -112,6 +112,39 @@ class ConceptBoardWorkspace(BaseWorkspace):
     workspace_id = "concept_board"
     workspace_title = "Концептборд"
 
+    def _build_ui(self) -> None:
+        super()._build_ui()
+        self.toolbar_row.setVisible(False)
+        self.link_scope_filter = QComboBox()
+        self.link_scope_filter.setObjectName("MutaBoardFilterCombo")
+        self.link_scope_filter.addItem("Все элементы", "all")
+        self.link_scope_filter.addItem("Только связанные", "linked")
+        self.link_scope_filter.addItem("Без связей", "unlinked")
+        self.link_scope_filter.currentIndexChanged.connect(self._on_link_scope_filter_changed)
+
+        self.action_scope_filter = QComboBox()
+        self.action_scope_filter.setObjectName("MutaBoardFilterCombo")
+        self.action_scope_filter.addItem("Все состояния", "all")
+        self.action_scope_filter.addItem("Только требующие действия", "actionable")
+        self.action_scope_filter.currentIndexChanged.connect(self._on_action_scope_filter_changed)
+
+        self.filter_layout.addWidget(QLabel("Связи"))
+        self.filter_layout.addWidget(self.link_scope_filter)
+        self.filter_layout.addWidget(QLabel("Режим"))
+        self.filter_layout.addWidget(self.action_scope_filter)
+        self.filter_layout.addStretch(1)
+
+        search_layout = self.search_row.layout()
+        self.link_scope_label = QLabel("РЎРІСЏР·Рё")
+        self.action_scope_label = QLabel("Р РµР¶РёРј")
+        search_layout.insertWidget(0, self.link_scope_label)
+        search_layout.insertWidget(1, self.link_scope_filter)
+        search_layout.insertWidget(2, self.action_scope_label)
+        search_layout.insertWidget(3, self.action_scope_filter)
+        self.link_scope_label.setText("Связи")
+        self.action_scope_label.setText("Режим")
+        self.filter_row.setVisible(False)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ConceptBoardWorkspace")
@@ -504,6 +537,19 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.structure_details_label.setObjectName("MutaBoardBoardCaption")
         self.structure_details_label.setWordWrap(True)
         layout.addWidget(self.structure_details_label)
+
+        relations_title = QLabel("Путь к решению")
+        relations_title.setObjectName("MutaBoardScenarioTitle")
+        layout.addWidget(relations_title)
+
+        self.structure_relations_list = QListWidget(panel)
+        self.structure_relations_list.setObjectName("MutaBoardRelationList")
+        self.structure_relations_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.structure_relations_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.structure_relations_list.setSpacing(4)
+        self.structure_relations_list.setMinimumHeight(148)
+        self.structure_relations_list.itemClicked.connect(self._on_structure_relation_clicked)
+        layout.addWidget(self.structure_relations_list)
         return panel
 
     def _build_scenarios_panel(self, parent: QWidget) -> QFrame:
@@ -1098,11 +1144,37 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._base_workspace_stylesheet = self.styleSheet()
         self._apply_mutaboard_style()
 
+    def restore_state(self) -> None:
+        super().restore_state()
+        filters = self.get_filters()
+        self._sync_filter_widgets(filters)
+
+    def _sync_filter_widgets(self, filters: dict[str, object]) -> None:
+        self.link_scope_filter.blockSignals(True)
+        self.action_scope_filter.blockSignals(True)
+        try:
+            self.link_scope_filter.setCurrentIndex(
+                max(0, self.link_scope_filter.findData(str(filters.get("link_scope") or "all")))
+            )
+            self.action_scope_filter.setCurrentIndex(
+                max(0, self.action_scope_filter.findData(str(filters.get("action_scope") or "all")))
+            )
+        finally:
+            self.link_scope_filter.blockSignals(False)
+            self.action_scope_filter.blockSignals(False)
+
+    def _on_link_scope_filter_changed(self) -> None:
+        self.set_filter("link_scope", self.link_scope_filter.currentData())
+
+    def _on_action_scope_filter_changed(self) -> None:
+        self.set_filter("action_scope", self.action_scope_filter.currentData())
+
     def apply_query(self, query: str) -> None:
         self._populate_board()
         self._refresh_status()
 
     def apply_filters(self, filters: dict[str, object]) -> None:
+        self._sync_filter_widgets(filters)
         self._populate_board()
         self._refresh_status()
 
@@ -1348,7 +1420,16 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._refresh_status()
 
     def _filtered_cards(self, entity_kind: str | None = None) -> list[ConceptBoardCard]:
-        return self._model.filtered_cards(query=self.search_input.text(), entity_kind=entity_kind)
+        filters = self.get_filters()
+        link_scope = str(filters.get("link_scope") or "all")
+        linked_only = True if link_scope == "linked" else False if link_scope == "unlinked" else None
+        actionable_only = str(filters.get("action_scope") or "all") == "actionable"
+        return self._model.filtered_cards(
+            query=self.search_input.text(),
+            entity_kind=entity_kind,
+            actionable_only=actionable_only,
+            linked_only=linked_only,
+        )
 
     def _populate_board(self) -> None:
         board_id = self._current_mutaboard_id()
@@ -1430,6 +1511,15 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._refresh_structure(card)
         self._refresh_focus(card)
 
+    def _on_structure_relation_clicked(self, item: QListWidgetItem) -> None:
+        target_key = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(target_key, tuple) or len(target_key) != 2:
+            return
+        self.board_tabs.setCurrentWidget(self.structure_panel)
+        if self._restore_selection((str(target_key[0]), int(target_key[1]))):
+            return
+        self.set_status("Концептборд: связанный элемент сейчас недоступен в потоках.")
+
     def _refresh_structure(self, card: ConceptBoardCard | None) -> None:
         board = self._current_mutaboard()
         if card is None:
@@ -1444,6 +1534,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
             self.structure_other_label.setText("Остальное · 0")
             self.structure_links_label.setText("Связи · 0")
             self.structure_details_label.setText(self._structure_overview_text(board))
+            self._set_structure_relations(self._structure_overview_relations(board))
             return
         counts = self._structure_counts_for_card(card)
         self.structure_subtitle.setText(
@@ -1457,6 +1548,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.structure_other_label.setText(f"Остальное · {counts['other']}")
         self.structure_links_label.setText(f"Связи · {counts['links']}")
         self.structure_details_label.setText(self._structure_detail_text(card, board))
+        self._set_structure_relations(self._structure_relations_for_card(card, board))
 
     def _structure_overview_text(self, board: MutaBoardData | None) -> str:
         if board is None:
@@ -1469,6 +1561,45 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if next_steps:
             lines.append(f"Следующий шаг: {next_steps[0]}")
         return "\n".join(lines)
+
+    def _structure_overview_relations(self, board: MutaBoardData | None) -> list[tuple[str, tuple[str, int] | None]]:
+        if board is None:
+            return []
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        material_card = self._first_card_for_structure(("image", "map", "marker", "note"))
+        idea_card = self._first_card_for_structure(("idea",))
+        task_card = self._first_card_for_structure(("task",))
+        version_card = self._first_synthetic_card(board, "version")
+        solution_card = self._first_synthetic_card(board, "solution")
+        if material_card is not None and idea_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(material_card)} вдохновляет {self._structure_card_label(idea_card)}",
+                    self._structure_card_key(idea_card),
+                )
+            )
+        if idea_card is not None and version_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(idea_card)} развивает {self._structure_card_label(version_card)}",
+                    self._structure_card_key(version_card),
+                )
+            )
+        if version_card is not None and solution_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(version_card)} превращается в {self._structure_card_label(solution_card)}",
+                    self._structure_card_key(solution_card),
+                )
+            )
+        if solution_card is not None and task_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(solution_card)} превращается в {self._structure_card_label(task_card)}",
+                    self._structure_card_key(task_card),
+                )
+            )
+        return self._dedupe_relations(relations)
 
     def _structure_detail_text(self, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
         payload = card.source_payload
@@ -1493,6 +1624,335 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if board is not None and board.capture_text.strip():
             lines.append(f"Ведёт к решению: {self._split_board_lines(board.capture_text)[0]}")
         return "\n".join(lines)
+
+    def _structure_relations_for_card(
+        self,
+        card: ConceptBoardCard,
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        payload = card.source_payload
+        if isinstance(payload, dict):
+            return self._structure_relations_for_synthetic_card(card, payload, board)
+        if isinstance(payload, TaskData):
+            return self._structure_relations_for_task_card(card, payload)
+        if isinstance(payload, IdeaData):
+            return self._structure_relations_for_idea_card(card, payload, board)
+        if isinstance(payload, ProjectData):
+            return self._structure_relations_for_project_card(card, payload)
+        if isinstance(payload, MapMarkerData):
+            return self._structure_relations_for_marker_card(card, payload)
+        if isinstance(payload, MapData):
+            return self._structure_relations_for_map_card(card, payload)
+        if isinstance(payload, CloudFileData):
+            return self._structure_relations_for_image_card(card, board)
+        if isinstance(payload, NoteData):
+            tags = [(f"{self._structure_card_label(card)} относится к тегу «{tag}»", None) for tag in payload.tags[:3]]
+            return self._dedupe_relations(tags)
+        return []
+
+    def _structure_relations_for_synthetic_card(
+        self,
+        card: ConceptBoardCard,
+        payload: dict[str, object],
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        checks = [str(item).strip() for item in payload.get("checks") or [] if str(item).strip()]
+        next_steps = [str(item).strip() for item in payload.get("next_steps") or [] if str(item).strip()]
+        if card.entity_kind == "version":
+            idea_card = self._first_card_for_structure(("idea",))
+            if idea_card is not None:
+                relations.append(
+                    (
+                        f"{self._structure_card_label(idea_card)} развивает {self._structure_card_label(card)}",
+                        self._structure_card_key(card),
+                    )
+                )
+            solution_card = self._first_synthetic_card(board, "solution")
+            if solution_card is not None:
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} превращается в {self._structure_card_label(solution_card)}",
+                        self._structure_card_key(solution_card),
+                    )
+                )
+            if checks:
+                relations.append((f"{self._structure_card_label(card)} относится к проверке «{checks[0]}»", None))
+        elif card.entity_kind == "solution":
+            version_card = self._first_synthetic_card(board, "version")
+            if version_card is not None:
+                relations.append(
+                    (
+                        f"{self._structure_card_label(version_card)} превращается в {self._structure_card_label(card)}",
+                        self._structure_card_key(card),
+                    )
+                )
+            for step in next_steps[:3]:
+                relations.append((f"{self._structure_card_label(card)} превращается в Задача «{step}»", None))
+            if checks:
+                relations.append((f"{self._structure_card_label(card)} относится к проверке «{checks[0]}»", None))
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_task_card(
+        self,
+        card: ConceptBoardCard,
+        payload: TaskData,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        for attachment in self._db.fetch_task_attachments(payload.id):
+            if attachment.kind == "idea":
+                relations.append(
+                    (
+                        f"{self._entity_relation_label('idea', attachment.ref_id)} превращается в {self._structure_card_label(card)}",
+                        self._structure_card_key(card),
+                    )
+                )
+            elif attachment.kind == "object":
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} относится к {self._entity_relation_label('object', attachment.ref_id)}",
+                        self._entity_relation_target_key("object", attachment.ref_id),
+                    )
+                )
+            elif attachment.kind == "task":
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} развивает {self._entity_relation_label('task', attachment.ref_id)}",
+                        self._entity_relation_target_key("task", attachment.ref_id),
+                    )
+                )
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_idea_card(
+        self,
+        card: ConceptBoardCard,
+        payload: IdeaData,
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        for relation in self._db.fetch_idea_relations(payload.id):
+            if relation.entity_type == "idea":
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} развивает {self._entity_relation_label('idea', relation.entity_id)}",
+                        self._entity_relation_target_key("idea", relation.entity_id),
+                    )
+                )
+            elif relation.entity_type == "task":
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} превращается в {self._entity_relation_label('task', relation.entity_id)}",
+                        self._entity_relation_target_key("task", relation.entity_id),
+                    )
+                )
+            elif relation.entity_type == "object":
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} относится к {self._entity_relation_label('object', relation.entity_id)}",
+                        self._entity_relation_target_key("object", relation.entity_id),
+                    )
+                )
+            else:
+                relations.append(
+                    (
+                        f"{self._structure_card_label(card)} относится к {self._entity_relation_label(relation.entity_type, relation.entity_id)}",
+                        self._entity_relation_target_key(relation.entity_type, relation.entity_id),
+                    )
+                )
+        version_card = self._first_synthetic_card(board, "version")
+        if version_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} развивает {self._structure_card_label(version_card)}",
+                    self._structure_card_key(version_card),
+                )
+            )
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_project_card(
+        self,
+        card: ConceptBoardCard,
+        payload: ProjectData,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        if payload.linked_object_id is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('object', payload.linked_object_id)}",
+                    self._entity_relation_target_key("object", payload.linked_object_id),
+                )
+            )
+        if payload.linked_map_id is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('map', payload.linked_map_id)}",
+                    self._entity_relation_target_key("map", payload.linked_map_id),
+                )
+            )
+        if payload.linked_note_id is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('note', payload.linked_note_id)}",
+                    self._entity_relation_target_key("note", payload.linked_note_id),
+                )
+            )
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_marker_card(
+        self,
+        card: ConceptBoardCard,
+        payload: MapMarkerData,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        for project_id in payload.project_ids[:2]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('project', project_id)}",
+                    self._entity_relation_target_key("project", project_id),
+                )
+            )
+        for object_id in payload.object_ids[:2]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('object', object_id)}",
+                    self._entity_relation_target_key("object", object_id),
+                )
+            )
+        for task_id in payload.task_ids[:2]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} превращается в {self._entity_relation_label('task', task_id)}",
+                    self._entity_relation_target_key("task", task_id),
+                )
+            )
+        for note_id in payload.note_ids[:1]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('note', note_id)}",
+                    self._entity_relation_target_key("note", note_id),
+                )
+            )
+        for map_id in payload.map_ids[:1]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('map', map_id)}",
+                    self._entity_relation_target_key("map", map_id),
+                )
+            )
+        for marker_id in payload.marker_ids[:1]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('marker', marker_id)}",
+                    self._entity_relation_target_key("marker", marker_id),
+                )
+            )
+        for file_id in payload.file_ids[:1]:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} относится к {self._entity_relation_label('file', file_id)}",
+                    self._entity_relation_target_key("file", file_id),
+                )
+            )
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_map_card(
+        self,
+        card: ConceptBoardCard,
+        payload: MapData,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations = [
+            (
+                f"{self._structure_card_label(card)} относится к {self._entity_relation_label('marker', marker.id)}",
+                self._entity_relation_target_key("marker", marker.id),
+            )
+            for marker in self._db.fetch_map_markers(map_id=payload.id)[:3]
+        ]
+        return self._dedupe_relations(relations)
+
+    def _structure_relations_for_image_card(
+        self,
+        card: ConceptBoardCard,
+        board: MutaBoardData | None,
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        relations: list[tuple[str, tuple[str, int] | None]] = []
+        idea_card = self._first_card_for_structure(("idea",))
+        if idea_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} вдохновляет {self._structure_card_label(idea_card)}",
+                    self._structure_card_key(idea_card),
+                )
+            )
+        version_card = self._first_synthetic_card(board, "version")
+        if version_card is not None:
+            relations.append(
+                (
+                    f"{self._structure_card_label(card)} вдохновляет {self._structure_card_label(version_card)}",
+                    self._structure_card_key(version_card),
+                )
+            )
+        return self._dedupe_relations(relations)
+
+    def _set_structure_relations(self, relations: list[tuple[str, tuple[str, int] | None]]) -> None:
+        self.structure_relations_list.clear()
+        if relations:
+            for relation, target_key in relations[:8]:
+                item = QListWidgetItem(relation)
+                item.setData(Qt.ItemDataRole.UserRole, target_key)
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.structure_relations_list.addItem(item)
+            return
+        item = QListWidgetItem("Нет явных смысловых связей")
+        item.setToolTip("Добавьте идеи, материалы, версию или итог, чтобы карта связей стала содержательной.")
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.structure_relations_list.addItem(item)
+
+    def _first_card_for_structure(self, entity_kinds: tuple[str, ...]) -> ConceptBoardCard | None:
+        for card in self._model.cards():
+            if card.entity_kind in entity_kinds:
+                return card
+        return None
+
+    def _first_synthetic_card(self, board: MutaBoardData | None, kind: str) -> ConceptBoardCard | None:
+        if board is None:
+            return None
+        cards = self._synthetic_cards_for_kind(board, kind)
+        return cards[0] if cards else None
+
+    @staticmethod
+    def _structure_card_key(card: ConceptBoardCard) -> tuple[str, int]:
+        return (card.entity_kind, card.entity_id)
+
+    def _structure_card_label(self, card: ConceptBoardCard) -> str:
+        kind_title = _CARD_KIND_TITLES.get(card.entity_kind, card.entity_kind.title())
+        return f"{kind_title} «{card.title}»"
+
+    def _entity_relation_target_key(self, entity_kind: str, entity_id: int) -> tuple[str, int] | None:
+        card = self._model.get_card(entity_kind, entity_id)
+        if card is None:
+            return None
+        return self._structure_card_key(card)
+
+    def _entity_relation_label(self, entity_kind: str, entity_id: int) -> str:
+        card = self._model.get_card(entity_kind, entity_id)
+        if card is not None:
+            return self._structure_card_label(card)
+        kind_title = _CARD_KIND_TITLES.get(entity_kind, entity_kind.title())
+        return f"{kind_title} #{entity_id}"
+
+    @staticmethod
+    def _dedupe_relations(
+        relations: list[tuple[str, tuple[str, int] | None]],
+    ) -> list[tuple[str, tuple[str, int] | None]]:
+        result: list[tuple[str, tuple[str, int] | None]] = []
+        seen: set[str] = set()
+        for relation, target_key in relations:
+            normalized = relation.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            result.append((normalized, target_key))
+        return result
 
     def _structure_counts_for_card(self, card: ConceptBoardCard) -> dict[str, int]:
         counts = {"projects": 0, "objects": 0, "ideas": 0, "tasks": 0, "other": 0, "links": card.total_linked_count}
@@ -1558,12 +2018,31 @@ class ConceptBoardWorkspace(BaseWorkspace):
 
     def _refresh_status(self) -> None:
         total_count = len(self._model.cards())
-        visible_count = sum(list_widget.count() for list_widget in self._column_lists.values())
+        visible_count = sum(
+            1
+            for list_widget in self._column_lists.values()
+            for index in range(list_widget.count())
+            if list_widget.item(index).data(Qt.ItemDataRole.UserRole) is not None
+        )
         attached_count = len(self._attached_card_keys)
-        if self.search_input.text().strip():
+        filter_summary = self._active_filter_summary()
+        if self.search_input.text().strip() or filter_summary:
             self.set_status(f"Концептборд: элементов {visible_count} из {total_count} · связано {attached_count}.")
             return
         self.set_status(f"Концептборд: элементов {total_count} · связано {attached_count}.")
+
+    def _active_filter_summary(self) -> str:
+        filters = self.get_filters()
+        parts: list[str] = []
+        link_scope = str(filters.get("link_scope") or "all")
+        action_scope = str(filters.get("action_scope") or "all")
+        if link_scope == "linked":
+            parts.append("только связанные")
+        elif link_scope == "unlinked":
+            parts.append("без связей")
+        if action_scope == "actionable":
+            parts.append("требуют действия")
+        return " · ".join(parts)
 
     def _apply_mutaboard_style(self) -> None:
         palette = get_theme_palette("dark")
@@ -1666,8 +2145,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
             QLabel#MutaBoardNodeHub {{
                 color: {shell_dim_text};
             }}
+            QLineEdit#WorkspaceSearchInput,
+            QToolButton#WorkspaceSearchClear,
+            QWidget#WorkspaceToolbar QToolButton,
+            QComboBox#MutaBoardFilterCombo,
             QListWidget#MutaBoardList,
             QListWidget#MutaBoardColumnList,
+            QListWidget#MutaBoardRelationList,
             QTextEdit#MutaBoardFocusDescription,
             QTextEdit#MutaBoardScenarioEditor,
             QLineEdit#MutaBoardFocusTitle,
@@ -1680,6 +2164,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
             }}
             QListWidget#MutaBoardList::viewport,
             QListWidget#MutaBoardColumnList::viewport,
+            QListWidget#MutaBoardRelationList::viewport,
             QTextEdit#MutaBoardFocusDescription,
             QTextEdit#MutaBoardFocusDescription QWidget,
             QTextEdit#MutaBoardScenarioEditor,
@@ -1691,7 +2176,12 @@ class ConceptBoardWorkspace(BaseWorkspace):
                 border: none;
                 width: 20px;
             }}
+            QComboBox#MutaBoardFilterCombo::drop-down {{
+                border: none;
+                width: 20px;
+            }}
             QComboBox#MutaBoardColumnKindFilter QAbstractItemView,
+            QComboBox#MutaBoardFilterCombo QAbstractItemView,
             QMenu {{
                 background: {shell_panel_alt};
                 color: {shell_text};
@@ -1700,6 +2190,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
                 padding: 6px;
             }}
             QComboBox#MutaBoardColumnKindFilter QAbstractItemView::item,
+            QComboBox#MutaBoardFilterCombo QAbstractItemView::item,
             QMenu::item {{
                 background: transparent;
                 color: {shell_text};
@@ -1707,11 +2198,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
                 border-radius: 8px;
             }}
             QComboBox#MutaBoardColumnKindFilter QAbstractItemView::item:selected,
+            QComboBox#MutaBoardFilterCombo QAbstractItemView::item:selected,
             QMenu::item:selected {{
                 background: rgba(111, 140, 255, 0.18);
             }}
             QListWidget#MutaBoardList::item:selected,
-            QListWidget#MutaBoardColumnList::item:selected {{
+            QListWidget#MutaBoardColumnList::item:selected,
+            QListWidget#MutaBoardRelationList::item:selected {{
                 background: rgba(111, 140, 255, 0.18);
             }}
             QPushButton#MutaBoardPrimaryButton,
@@ -1726,6 +2219,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
             QPushButton#MutaBoardSecondaryButton:hover,
             QTextEdit#MutaBoardFocusDescription:hover,
             QTextEdit#MutaBoardScenarioEditor:hover,
+            QLineEdit#WorkspaceSearchInput:hover,
+            QToolButton#WorkspaceSearchClear:hover,
+            QWidget#WorkspaceToolbar QToolButton:hover,
+            QComboBox#MutaBoardFilterCombo:hover,
             QLineEdit#MutaBoardFocusTitle:hover,
             QComboBox#MutaBoardColumnKindFilter:hover {{
                 background: {shell_input_hover};
