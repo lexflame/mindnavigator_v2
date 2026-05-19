@@ -606,3 +606,25 @@ def test_mutaboard_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
         assert "QListWidget#MutaBoardColumnList::viewport" in stylesheet
     finally:
         workspace.deleteLater()
+
+
+def test_mutaboard_workspace_columns_use_resizable_splitter(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.resize(1600, 900)
+        workspace.show()
+        QApplication.processEvents()
+        assert workspace.columns_splitter.count() == len(workspace.board_columns)
+        workspace.columns_splitter.setSizes([320, 260, 280])
+        QApplication.processEvents()
+
+        sizes = workspace.columns_splitter.sizes()
+        assert len(sizes) == workspace.columns_splitter.count()
+        assert max(sizes) >= 280
+        assert min(sizes) >= 200
+    finally:
+        workspace.deleteLater()

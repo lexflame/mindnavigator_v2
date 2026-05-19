@@ -297,9 +297,14 @@ class ConceptBoardWorkspace(BaseWorkspace):
 
         self.board_inner = QWidget()
         self.board_inner.setObjectName("MutaBoardColumnsHost")
-        self.board_layout = QHBoxLayout(self.board_inner)
-        self.board_layout.setContentsMargins(0, 0, 0, 0)
-        self.board_layout.setSpacing(10)
+        self.board_inner_layout = QVBoxLayout(self.board_inner)
+        self.board_inner_layout.setContentsMargins(0, 0, 0, 0)
+        self.board_inner_layout.setSpacing(0)
+        self.columns_splitter = QSplitter(Qt.Orientation.Horizontal, self.board_inner)
+        self.columns_splitter.setObjectName("MutaBoardColumnsSplitter")
+        self.columns_splitter.setChildrenCollapsible(False)
+        self.columns_splitter.setHandleWidth(8)
+        self.board_inner_layout.addWidget(self.columns_splitter)
 
         self.board_scroll.setWidget(self.board_inner)
         flows_layout.addWidget(self.board_scroll, 1)
@@ -877,26 +882,28 @@ class ConceptBoardWorkspace(BaseWorkspace):
         lines.append(normalized_line)
         return "\n".join(lines)
 
+    def _set_editor_text_and_focus(self, editor_key: str, line: str) -> None:
+        editor = self._scenario_editors[editor_key]
+        updated = self._append_unique_line(editor.toPlainText(), line)
+        editor.setPlainText(updated)
+        editor.setFocus()
+
     def _on_quick_add_idea(self) -> None:
         self._clear_card_selection()
-        updated = self._append_unique_line(self.focus_description_input.toPlainText(), "Идея: ")
+        updated = self._append_unique_line(self.focus_description_input.toPlainText(), "Идея:")
         self.focus_description_input.setPlainText(updated)
         self.focus_description_input.setFocus()
         self.set_status("Концептборд: добавлен черновик идеи.")
 
     def _on_quick_add_version(self) -> None:
         self.board_tabs.setCurrentWidget(self.scenarios_panel)
-        updated = self._append_unique_line(self._scenario_editors["planning"].toPlainText(), "Проверить версию: ")
-        self._scenario_editors["planning"].setPlainText(updated)
-        self._scenario_editors["planning"].setFocus()
+        self._set_editor_text_and_focus("planning", "Проверить версию:")
         self._refresh_outcome_summary()
         self.set_status("Концептборд: добавлен черновик версии.")
 
     def _on_quick_add_task(self) -> None:
         self.board_tabs.setCurrentWidget(self.scenarios_panel)
-        updated = self._append_unique_line(self._scenario_editors["links"].toPlainText(), "Следующая задача: ")
-        self._scenario_editors["links"].setPlainText(updated)
-        self._scenario_editors["links"].setFocus()
+        self._set_editor_text_and_focus("links", "Следующая задача:")
         self._refresh_outcome_summary()
         self.set_status("Концептборд: добавлена следующая задача.")
 
@@ -1028,8 +1035,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if not capture_text:
             self.set_status("Концептборд: сначала сформулируйте текущее решение.")
             return
-        updated = self._append_unique_line(self._scenario_editors["links"].toPlainText(), "Подготовить реализацию решения")
-        self._scenario_editors["links"].setPlainText(updated)
+        self._set_editor_text_and_focus("links", "Подготовить реализацию решения")
         self._refresh_outcome_summary()
         self.set_status("Концептборд: решение помечено как принятое.")
 
@@ -1038,8 +1044,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if not capture_text:
             self.set_status("Концептборд: сначала сформулируйте решение для проверки.")
             return
-        updated = self._append_unique_line(self._scenario_editors["planning"].toPlainText(), "Проверить понятность решения")
-        self._scenario_editors["planning"].setPlainText(updated)
+        self._set_editor_text_and_focus("planning", "Проверить понятность решения")
         self._refresh_outcome_summary()
         self.set_status("Концептборд: решение отправлено на проверку.")
 
@@ -1054,6 +1059,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         updated = self._append_unique_line(updated, f"Подготовить реализацию: {seed}")
         updated = self._append_unique_line(updated, f"Проверить риски: {seed}")
         self._scenario_editors["links"].setPlainText(updated)
+        self._scenario_editors["links"].setFocus()
         self._refresh_outcome_summary()
         self.set_status("Концептборд: следующие задачи собраны из решения.")
 
@@ -1215,9 +1221,9 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._column_lists.clear()
         self._column_count_labels.clear()
         self._column_title_labels.clear()
-        while self.board_layout.count():
-            item = self.board_layout.takeAt(0)
-            widget = item.widget()
+        while self.columns_splitter.count():
+            widget = self.columns_splitter.widget(0)
+            self.columns_splitter.widget(0).setParent(None)
             if widget is not None:
                 widget.deleteLater()
 
@@ -1232,9 +1238,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
             self._column_defs[column.id] = column
             self._column_kinds[column.id] = column.kind
 
-            frame = QFrame(self.board_inner)
+            frame = QFrame(self.columns_splitter)
             frame.setObjectName("MutaBoardColumn")
             frame.setMinimumWidth(250)
+            frame.setMaximumWidth(640)
             column_layout = QVBoxLayout(frame)
             column_layout.setContentsMargins(12, 12, 12, 12)
             column_layout.setSpacing(8)
@@ -1286,8 +1293,8 @@ class ConceptBoardWorkspace(BaseWorkspace):
             add_button.setToolTip(_DISABLED_ACTION_TOOLTIP)
             column_layout.addWidget(add_button, 0, Qt.AlignmentFlag.AlignLeft)
             self._column_lists[column.id] = list_widget
-            self.board_layout.addWidget(frame, 1)
-        self.board_layout.addStretch(1)
+            self.columns_splitter.addWidget(frame)
+            self.columns_splitter.setStretchFactor(self.columns_splitter.count() - 1, 1)
 
     def _on_column_kind_changed(self, column_id: int, kind: object) -> None:
         if not isinstance(kind, str):
@@ -1583,6 +1590,15 @@ class ConceptBoardWorkspace(BaseWorkspace):
             QWidget#MutaBoardRoot QSplitter {{
                 background: transparent;
                 border: none;
+            }}
+            QSplitter#MutaBoardColumnsSplitter::handle {{
+                background: rgba(255, 255, 255, 0.05);
+                width: 8px;
+                margin: 18px 2px;
+                border-radius: 4px;
+            }}
+            QSplitter#MutaBoardColumnsSplitter::handle:hover {{
+                background: rgba(111, 140, 255, 0.22);
             }}
             QTabWidget#MutaBoardTabs::pane {{
                 border: none;
