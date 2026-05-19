@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpacerItem,
     QDoubleSpinBox,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -535,7 +536,7 @@ class ImageDropLabel(QLabel):
         self.setObjectName("ImageDrop")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._has_image = False
-        self._placeholder = "Перетащите изображение\\nили выберите файл"
+        self._placeholder = "Перетащите изображение сюда\\nили выберите файл"
         self.setText(self._placeholder)
 
     def has_image(self) -> bool:
@@ -599,11 +600,14 @@ class MapLabelEditDialog(QDialog):
         self._link_title_maps: dict[str, dict[str, int]] = {}
         self._popup_syncs: list[CompleterPopupSync] = []
         self._loading = True
+        self._dialog_mode = mode
+        self._name_error_text = "Название обязательно"
+        self._link_state_widgets: dict[str, tuple[QWidget, EntityLinksInput]] = {}
 
         # Настройки окна.
         self.setWindowTitle("Метка на карте")
-        self.resize(1100, 760)
-        self.setMinimumSize(840, 520)
+        self.resize(1512, 838)
+        self.setMinimumSize(780, 500)
 
         # Корневая компоновка.
         root_layout = QVBoxLayout(self)
@@ -631,8 +635,6 @@ class MapLabelEditDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         # При показе разворачиваем и вписываем диалог в экран.
         super().showEvent(event)
-        if not self.isMaximized():
-            self.showMaximized()
         self._fit_to_screen()
 
     def result_marker(self):
@@ -659,15 +661,15 @@ class MapLabelEditDialog(QDialog):
         header_layout.setContentsMargins(12, 10, 12, 10)
         header_layout.setSpacing(12)
 
-        title = QLabel("Метка на карте" if mode == "edit" else "Новая метка")
-        title.setObjectName("MapLabelTitle")
+        self.header_title = QLabel("Метка на карте" if mode == "edit" else "Новая метка")
+        self.header_title.setObjectName("MapLabelTitle")
 
-        self.dirty_indicator = QLabel("●")
+        self.dirty_indicator = QLabel("•")
         self.dirty_indicator.setObjectName("MapLabelDirty")
         self.dirty_indicator.setVisible(False)
         self.dirty_indicator.setToolTip("Есть несохранённые изменения")
 
-        header_layout.addWidget(title)
+        header_layout.addWidget(self.header_title)
         header_layout.addWidget(self.dirty_indicator)
         header_layout.addItem(
             QSpacerItem(20, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -680,69 +682,80 @@ class MapLabelEditDialog(QDialog):
         self.cancel_button = QPushButton("Отмена")
         self.cancel_button.clicked.connect(self.reject)
 
-        close_button = QToolButton()
-        close_button.setObjectName("MapLabelClose")
-        close_button.setText("✕")
-        close_button.clicked.connect(self.reject)
+        self.close_button = QToolButton()
+        self.close_button.setObjectName("MapLabelClose")
+        self.close_button.setText("×")
+        self.close_button.clicked.connect(self.reject)
 
         header_layout.addWidget(self.save_button)
         header_layout.addWidget(self.cancel_button)
-        header_layout.addWidget(close_button)
+        header_layout.addWidget(self.close_button)
 
         return header
 
     def _build_body(self, type_suggestions: list[str]) -> QWidget:
-        # Основной контейнер с левой и правой панелями.
-        body = QFrame()
-        body.setObjectName("MapLabelBody")
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(14)
-
-        left = self._build_left_panel()
-        right = self._build_right_panel(type_suggestions)
         self.form_scroll = QScrollArea()
         self.form_scroll.setObjectName("MapLabelFormScroll")
         self.form_scroll.setWidgetResizable(True)
         self.form_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.form_scroll.setWidget(right)
 
-        body_layout.addWidget(left, 0)
-        body_layout.addWidget(self.form_scroll, 1)
-        return body
+        body = QWidget()
+        body.setObjectName("MapLabelBody")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(14)
+
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(14)
+        top_row.setAlignment(Qt.AlignmentFlag.AlignTop)
+        top_row.addWidget(self._build_left_panel(), 0, Qt.AlignmentFlag.AlignTop)
+        top_row.addWidget(self._build_section_main(type_suggestions), 1, Qt.AlignmentFlag.AlignTop)
+
+        body_layout.addLayout(top_row)
+        body_layout.addWidget(self._build_section_links())
+        body_layout.addWidget(self._build_section_text())
+        body_layout.addWidget(self._build_section_additional_properties())
+        body_layout.addStretch(1)
+
+        self.form_scroll.setWidget(body)
+        return self.form_scroll
 
     def _build_left_panel(self) -> QWidget:
-        # Левая панель с превью изображения и выбором типа маркера.
+        # Левая карточка с внешним видом маркера.
         panel = QFrame()
         panel.setObjectName("MapLabelCard")
-        panel.setFixedWidth(300)
+        panel.setMinimumWidth(320)
+        panel.setMaximumWidth(360)
+        panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(12, 12, 12, 12)
-        panel_layout.setSpacing(10)
+        panel_layout.setContentsMargins(16, 16, 16, 16)
+        panel_layout.setSpacing(12)
 
-        preview_label = QLabel("Превью")
-        preview_label.setObjectName("MapLabelSectionTitle")
+        title = QLabel("Внешний вид")
+        title.setObjectName("MapLabelSectionTitle")
 
         self.preview = ImageDropLabel()
-        self.preview.setFixedHeight(168)
+        self.preview.setMinimumHeight(188)
         self.preview.imageDropped.connect(self._on_image_drop)
 
         preview_btn_row = QHBoxLayout()
+        preview_btn_row.setSpacing(8)
         self.choose_image_btn = QToolButton()
-        self.choose_image_btn.setText("Выбрать изображение…")
+        self.choose_image_btn.setText("Выбрать изображение")
         self.choose_image_btn.clicked.connect(self._choose_image)
         self.clear_image_btn = QToolButton()
         self.clear_image_btn.setText("Очистить")
         self.clear_image_btn.clicked.connect(self._clear_image)
-        preview_btn_row.addWidget(self.choose_image_btn)
-        preview_btn_row.addWidget(self.clear_image_btn)
+        preview_btn_row.addWidget(self.choose_image_btn, 1)
+        preview_btn_row.addWidget(self.clear_image_btn, 0)
 
         self.image_hint = QLabel("Нет изображения")
         self.image_hint.setObjectName("MapLabelHint")
 
         marker_type_label = QLabel("Тип метки")
-        marker_type_label.setObjectName("MapLabelSectionTitle")
+        marker_type_label.setObjectName("MapLabelFieldLabel")
         self.marker_type_preview = QLabel()
         self.marker_type_preview.setObjectName("MapLabelMarkerPreview")
         self.marker_type_preview.setFixedSize(36, 36)
@@ -758,50 +771,55 @@ class MapLabelEditDialog(QDialog):
         marker_type_row.addWidget(self.marker_type_preview)
         marker_type_row.addWidget(self.marker_type_combo, 1)
 
-        panel_layout.addWidget(preview_label)
+        divider = QFrame()
+        divider.setObjectName("MapLabelDivider")
+        divider.setFrameShape(QFrame.Shape.HLine)
+
+        self.marker_type_summary = QLabel()
+        self.marker_type_summary.setObjectName("MapLabelHint")
+        self.marker_type_summary.setWordWrap(True)
+
+        panel_layout.addWidget(title)
         panel_layout.addWidget(self.preview)
         panel_layout.addLayout(preview_btn_row)
         panel_layout.addWidget(self.image_hint)
-        panel_layout.addSpacing(6)
+        panel_layout.addWidget(divider)
         panel_layout.addWidget(marker_type_label)
         panel_layout.addLayout(marker_type_row)
+        panel_layout.addWidget(self.marker_type_summary)
         panel_layout.addStretch(1)
         return panel
-
-    def _build_right_panel(self, type_suggestions: list[str]) -> QWidget:
-        # Правая панель с секциями формы.
-        container = QFrame()
-        container.setObjectName("MapLabelFormContainer")
-        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        form_layout = QVBoxLayout(container)
-        form_layout.setContentsMargins(0, 0, 8, 0)
-        form_layout.setSpacing(16)
-
-        form_layout.addWidget(self._build_section_main(type_suggestions))
-        form_layout.addWidget(self._build_section_links())
-        form_layout.addWidget(self._build_section_text())
-        form_layout.addStretch(1)
-        return container
 
     def _build_section_main(self, type_suggestions: list[str]) -> QWidget:
         # Секция основных параметров метки.
         section = QFrame()
         section.setObjectName("MapLabelSection")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         title = QLabel("Основное")
         title.setObjectName("MapLabelSectionTitle")
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setSpacing(10)
+        form.setSpacing(12)
+        form.setHorizontalSpacing(14)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Название метки")
+        self.name_edit.setPlaceholderText("Название маркера")
+        self.name_error_label = QLabel(self._name_error_text)
+        self.name_error_label.setObjectName("MapLabelError")
+        self.name_error_label.setVisible(False)
+        name_wrap = QWidget()
+        name_layout = QVBoxLayout(name_wrap)
+        name_layout.setContentsMargins(0, 0, 0, 0)
+        name_layout.setSpacing(4)
+        name_layout.addWidget(self.name_edit)
+        name_layout.addWidget(self.name_error_label)
 
         self.type_combo = QComboBox()
         self.type_combo.setEditable(True)
@@ -827,7 +845,8 @@ class MapLabelEditDialog(QDialog):
         size_row.addWidget(self.size_hint)
         size_row.addStretch(1)
         self.resize_btn = QToolButton()
-        self.resize_btn.setText("Изменить размер…")
+        self.resize_btn.setText("Изменить на карте")
+        self.resize_btn.setToolTip("Закрыть форму и перейти к интерактивному изменению размера на карте")
         self.resize_btn.clicked.connect(self._request_resize)
         size_row.addWidget(self.resize_btn)
         size_widget = QWidget()
@@ -838,24 +857,29 @@ class MapLabelEditDialog(QDialog):
         self.parent_path_edit.setPlaceholderText("Каталог не выбран")
         self.parent_path_edit.setToolTip("Каталог не выбран")
         self.parent_btn = QToolButton()
-        self.parent_btn.setText("Выбрать…")
+        self.parent_btn.setText("Выбрать")
         self.parent_btn.clicked.connect(self._pick_parent_folder)
+        self.parent_clear_btn = QToolButton()
+        self.parent_clear_btn.setText("Очистить")
+        self.parent_clear_btn.clicked.connect(self._clear_parent_path)
         parent_row = QHBoxLayout()
+        parent_row.setSpacing(8)
         parent_row.addWidget(self.parent_path_edit)
         parent_row.addWidget(self.parent_btn)
+        parent_row.addWidget(self.parent_clear_btn)
         parent_widget = QWidget()
         parent_widget.setLayout(parent_row)
 
-        name_label = QLabel("Название")
+        name_label = QLabel("Название *")
         name_label.setObjectName("MapLabelFormLabel")
-        type_label = QLabel("Тип")
+        type_label = QLabel("Тип объекта")
         type_label.setObjectName("MapLabelFormLabel")
-        size_label = QLabel("Размер")
+        size_label = QLabel("Размер на карте")
         size_label.setObjectName("MapLabelFormLabel")
         parent_label = QLabel("Родительский каталог")
         parent_label.setObjectName("MapLabelFormLabel")
 
-        form.addRow(name_label, self.name_edit)
+        form.addRow(name_label, name_wrap)
         form.addRow(type_label, self.type_combo)
         form.addRow(size_label, size_widget)
         form.addRow(parent_label, parent_widget)
@@ -864,48 +888,76 @@ class MapLabelEditDialog(QDialog):
         return section
 
     def _build_section_links(self) -> QWidget:
-        # Секция привязанных сущностей.
+        # Секция связей с вкладками по типам сущностей.
         section = QFrame()
         section.setObjectName("MapLabelSection")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
-        title = QLabel("Привязки")
+        title = QLabel("Связи")
         title.setObjectName("MapLabelSectionTitle")
         layout.addWidget(title)
 
-        form = QFormLayout()
-        form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.links_tabs = QTabWidget()
+        self.links_tabs.setObjectName("MapLabelLinksTabs")
+        self.links_tabs.setDocumentMode(True)
 
         for key, source in self._entity_sources.items():
-            # Создаем поле привязки для каждой сущности.
-            link_input = EntityLinksInput(source.placeholder, source.icon_name)
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(10)
+
+            toolbar = QHBoxLayout()
+            toolbar.setContentsMargins(0, 0, 0, 0)
+            toolbar.setSpacing(8)
+            helper = QLabel(f"Связанные {source.label.lower()}")
+            helper.setObjectName("MapLabelHint")
+            add_button = QToolButton()
+            add_button.setObjectName("MapLabelInlineAdd")
+            add_button.setText("+ Добавить")
+            add_button.clicked.connect(lambda _checked=False, k=key: self._open_picker(k))
+            toolbar.addWidget(helper)
+            toolbar.addStretch(1)
+            toolbar.addWidget(add_button)
+
+            empty_state = QFrame()
+            empty_state.setObjectName("MapLabelEmptyState")
+            empty_layout = QVBoxLayout(empty_state)
+            empty_layout.setContentsMargins(16, 14, 16, 14)
+            empty_layout.setSpacing(4)
+            empty_title, empty_body = self._link_empty_text(source.label)
+            empty_title_label = QLabel(empty_title)
+            empty_title_label.setObjectName("MapLabelEmptyTitle")
+            empty_body_label = QLabel(empty_body)
+            empty_body_label.setObjectName("MapLabelHint")
+            empty_body_label.setWordWrap(True)
+            empty_layout.addWidget(empty_title_label)
+            empty_layout.addWidget(empty_body_label)
+
+            link_input = EntityLinksInput(self._link_search_placeholder(source.label), source.icon_name)
             link_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            link_input.itemsChanged.connect(lambda _items, k=key: self._mark_dirty())
+            link_input.add_button.hide()
+            link_input.itemsChanged.connect(lambda _items, k=key: self._on_links_changed(k))
             link_input.clearRequested.connect(lambda k=key: self._clear_links(k))
-            link_input.addRequested.connect(lambda k=key: self._open_picker(k))
             link_input.linkActivated.connect(self._open_link)
             link_input.search_input.returnPressed.connect(
                 lambda k=key, field=link_input: self._open_picker(k, field.search_input.text())
             )
 
             if key == "file":
-                # Для файлов открываем отдельный пикер.
                 link_input.search_input.setReadOnly(True)
-                link_input.search_input.setPlaceholderText("Выбрать файл…")
+                link_input.search_input.setPlaceholderText("Выбрать файл")
                 link_input.search_input.setCursor(Qt.CursorShape.PointingHandCursor)
 
                 def _open_file_dialog(event, k=key, field=link_input.search_input):
-                    # Обработчик клика для открытия файла.
                     if event.button() == Qt.MouseButton.LeftButton:
                         self._open_picker(k)
                     QLineEdit.mousePressEvent(field, event)
 
                 link_input.search_input.mousePressEvent = _open_file_dialog
             else:
-                # Для остальных сущностей используем автодополнение.
                 labels = {source.label_fn(item): item.id for item in source.items}
                 self._link_title_maps[key] = labels
                 completer = QCompleter(list(labels.keys()), link_input.search_input)
@@ -915,21 +967,22 @@ class MapLabelEditDialog(QDialog):
                 link_input.search_input.setCompleter(completer)
                 self._register_completer_popup(link_input.search_input, completer)
 
-                def _open_picker_on_empty_click(event, field=link_input.search_input, button=link_input.add_button):
-                    # Открываем пикер кликом по пустому полю.
+                def _open_picker_on_empty_click(event, field=link_input.search_input, opener=add_button):
                     if event.button() == Qt.MouseButton.LeftButton and not field.text().strip():
-                        button.click()
+                        opener.click()
                         return
                     QLineEdit.mousePressEvent(field, event)
 
                 link_input.search_input.mousePressEvent = _open_picker_on_empty_click
 
+            page_layout.addLayout(toolbar)
+            page_layout.addWidget(empty_state)
+            page_layout.addWidget(link_input)
+            self.links_tabs.addTab(page, source.label)
             self._link_inputs[key] = link_input
-            chips_label = QLabel(source.label)
-            chips_label.setObjectName("MapLabelFormLabel")
-            form.addRow(chips_label, link_input)
+            self._link_state_widgets[key] = (empty_state, link_input)
 
-        layout.addLayout(form)
+        layout.addWidget(self.links_tabs)
         return section
 
     def _build_section_text(self) -> QWidget:
@@ -937,75 +990,86 @@ class MapLabelEditDialog(QDialog):
         section = QFrame()
         section.setObjectName("MapLabelSection")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
-        title = QLabel("Текст")
+        title = QLabel("Описание и заметки")
         title.setObjectName("MapLabelSectionTitle")
         layout.addWidget(title)
 
+        fields_row = QHBoxLayout()
+        fields_row.setContentsMargins(0, 0, 0, 0)
+        fields_row.setSpacing(12)
+
+        desc_wrap = QFrame()
+        desc_wrap.setObjectName("MapLabelInnerPanel")
+        desc_layout = QVBoxLayout(desc_wrap)
+        desc_layout.setContentsMargins(12, 12, 12, 12)
+        desc_layout.setSpacing(8)
         desc_label = QLabel("Описание")
         desc_label.setObjectName("MapLabelFieldLabel")
         self.desc_edit = QPlainTextEdit()
-        self.desc_edit.setPlaceholderText("Описание метки…")
+        self.desc_edit.setPlaceholderText("Описание объекта на карте...")
         self.desc_counter = QLabel("0")
         self.desc_counter.setObjectName("MapLabelHint")
-
-        layout.addWidget(desc_label)
-        layout.addWidget(self.desc_edit)
-        layout.addWidget(self.desc_counter)
+        desc_layout.addWidget(desc_label)
+        desc_layout.addWidget(self.desc_edit)
+        desc_layout.addWidget(self.desc_counter)
 
         important_wrap = QFrame()
-        important_wrap.setObjectName("MapLabelImportant")
+        important_wrap.setObjectName("MapLabelInnerPanel")
         important_layout = QVBoxLayout(important_wrap)
-        important_layout.setContentsMargins(10, 8, 10, 8)
-        important_layout.setSpacing(6)
-
-        important_header = QHBoxLayout()
-        important_icon = QLabel("⚑")
-        important_icon.setObjectName("MapLabelImportantIcon")
+        important_layout.setContentsMargins(12, 12, 12, 12)
+        important_layout.setSpacing(8)
         important_label = QLabel("Важные пометки")
         important_label.setObjectName("MapLabelFieldLabel")
-        important_header.addWidget(important_icon)
-        important_header.addWidget(important_label)
-        important_header.addStretch(1)
-
         self.important_edit = QPlainTextEdit()
-        self.important_edit.setPlaceholderText("Ключевые пометки, инструкции, теги…")
+        self.important_edit.setPlaceholderText("Критичные сведения, предупреждения, сюжетные детали...")
         self.important_counter = QLabel("0")
         self.important_counter.setObjectName("MapLabelHint")
-
-        important_layout.addLayout(important_header)
+        important_layout.addWidget(important_label)
         important_layout.addWidget(self.important_edit)
         important_layout.addWidget(self.important_counter)
 
-        layout.addWidget(important_wrap)
+        fields_row.addWidget(desc_wrap, 1)
+        fields_row.addWidget(important_wrap, 1)
+        layout.addLayout(fields_row)
+        return section
+
+    def _build_section_additional_properties(self) -> QWidget:
+        section = QFrame()
+        section.setObjectName("MapLabelSection")
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        title = QLabel("Дополнительные свойства")
+        title.setObjectName("MapLabelSectionTitle")
+        self.custom_add_btn = QToolButton()
+        self.custom_add_btn.setText("+ Добавить поле")
+        self.custom_add_btn.clicked.connect(lambda: self._add_custom_field_row(mark_dirty=True))
+        header.addWidget(title)
+        header.addStretch(1)
+        header.addWidget(self.custom_add_btn)
 
         custom_wrap = QFrame()
-        custom_wrap.setObjectName("MapLabelCustomFields")
+        custom_wrap.setObjectName("MapLabelInnerPanel")
         custom_layout = QVBoxLayout(custom_wrap)
-        custom_layout.setContentsMargins(10, 8, 10, 8)
+        custom_layout.setContentsMargins(12, 12, 12, 12)
         custom_layout.setSpacing(8)
-
-        custom_header = QHBoxLayout()
-        custom_title = QLabel("Произвольные поля")
-        custom_title.setObjectName("MapLabelFieldLabel")
-        self.custom_add_btn = QToolButton()
-        self.custom_add_btn.setText("Добавить поле")
-        self.custom_add_btn.clicked.connect(lambda: self._add_custom_field_row(mark_dirty=True))
-        custom_header.addWidget(custom_title)
-        custom_header.addStretch(1)
-        custom_header.addWidget(self.custom_add_btn)
 
         self.custom_fields_layout = QVBoxLayout()
         self.custom_fields_layout.setSpacing(6)
-        self.custom_fields_placeholder = QLabel("Нет дополнительных полей")
+        self.custom_fields_placeholder = QLabel("Нет дополнительных свойств")
         self.custom_fields_placeholder.setObjectName("MapLabelHint")
         self.custom_fields_layout.addWidget(self.custom_fields_placeholder)
         self._custom_field_rows: list[tuple[QWidget, QLineEdit, QLineEdit]] = []
 
-        custom_layout.addLayout(custom_header)
         custom_layout.addLayout(self.custom_fields_layout)
+        layout.addLayout(header)
         layout.addWidget(custom_wrap)
         return section
 
@@ -1017,7 +1081,7 @@ class MapLabelEditDialog(QDialog):
         row_layout.setSpacing(6)
 
         name_edit = QLineEdit(name)
-        name_edit.setPlaceholderText("Название поля")
+        name_edit.setPlaceholderText("Ключ")
         value_edit = QLineEdit(value)
         value_edit.setPlaceholderText("Значение")
         remove_btn = QToolButton()
@@ -1067,6 +1131,42 @@ class MapLabelEditDialog(QDialog):
             fields.append((name, value))
         return fields
 
+    @staticmethod
+    def _link_empty_text(label: str) -> tuple[str, str]:
+        singular_map = {
+            "Задачи": "задач",
+            "Проекты": "проектов",
+            "Заметки": "заметок",
+            "Объекты": "объектов",
+            "Файлы": "файлов",
+            "Карты": "карт",
+            "Метки": "меток",
+        }
+        hint_map = {
+            "Задачи": "Свяжите задачу, чтобы быстро переходить к нужной работе.",
+            "Проекты": "Свяжите проект, чтобы видеть, к чему относится маркер.",
+            "Заметки": "Свяжите заметку, чтобы держать контекст рядом с картой.",
+            "Объекты": "Свяжите объект, чтобы сохранить связь с базой сущностей.",
+            "Файлы": "Добавьте файл, если к маркеру нужен референс или вложение.",
+            "Карты": "Свяжите другую карту для быстрых переходов по локациям.",
+            "Метки": "Свяжите другие метки, чтобы зафиксировать отношения на карте.",
+        }
+        normalized = singular_map.get(label, label.lower())
+        return (f"Нет связанных {normalized}", hint_map.get(label, "Нет связанных элементов"))
+
+    @staticmethod
+    def _link_search_placeholder(label: str) -> str:
+        placeholder_map = {
+            "Задачи": "Найти или выбрать задачу",
+            "Проекты": "Найти или выбрать проект",
+            "Заметки": "Найти или выбрать заметку",
+            "Объекты": "Найти или выбрать объект",
+            "Файлы": "Выбрать файл",
+            "Карты": "Найти или выбрать карту",
+            "Метки": "Найти или выбрать метку",
+        }
+        return placeholder_map.get(label, "Найти или выбрать элемент")
+
     def _apply_styles(self) -> None:
         # Устанавливаем стили для диалога.
         self.setStyleSheet(
@@ -1106,9 +1206,17 @@ class MapLabelEditDialog(QDialog):
             QLabel#MapLabelFormLabel {{
                 color: #b9bcc4;
             }}
+            QLabel#MapLabelError {{
+                color: #e07a7a;
+                font-size: 11px;
+            }}
             QLabel#MapLabelHint {{
                 color: #8e919a;
                 font-size: 11px;
+            }}
+            QLabel#MapLabelEmptyTitle {{
+                color: #e5e7ec;
+                font-weight: 600;
             }}
             QToolButton, QPushButton {{
                 background: #2a2b2f;
@@ -1145,24 +1253,31 @@ class MapLabelEditDialog(QDialog):
                 border: 1px solid #2a2b2f;
                 border-radius: 6px;
             }}
+            QFrame#MapLabelDivider {{
+                color: #2a2b2f;
+            }}
             QLabel#ImageDrop {{
                 border: 1px dashed #3a3b40;
                 border-radius: 8px;
                 color: #8e919a;
                 background: #1b1d24;
             }}
-            QFrame#MapLabelImportant {{
-                border-left: 3px solid #d59d35;
-                background: rgba(29, 31, 39, 0.85);
+            QFrame#MapLabelInnerPanel {{
+                background: rgba(25, 27, 35, 0.88);
+                border: 1px solid #2a2b2f;
                 border-radius: 8px;
             }}
-            QFrame#MapLabelCustomFields {{
-                border-left: 3px solid #3f8bd6;
-                background: rgba(25, 31, 44, 0.85);
+            QFrame#MapLabelEmptyState {{
+                background: rgba(25, 27, 35, 0.88);
+                border: 1px solid #2f3340;
                 border-radius: 8px;
             }}
             QWidget#MapLabelCustomRow QLineEdit {{
                 min-height: 24px;
+            }}
+            QLineEdit[invalid="true"] {{
+                border: 1px solid #e07a7a;
+                background: rgba(82, 33, 33, 0.35);
             }}
             QWidget#ChipFlow {{
                 background: #202127;
@@ -1248,6 +1363,22 @@ class MapLabelEditDialog(QDialog):
                 background: transparent;
                 border: none;
                 padding: 2px;
+            }}
+            QTabWidget#MapLabelLinksTabs::pane {{
+                border: none;
+                background: transparent;
+            }}
+            QTabBar::tab {{
+                background: rgba(31, 33, 40, 0.95);
+                color: #c9ced7;
+                border: 1px solid #2f333d;
+                padding: 8px 14px;
+                min-width: 110px;
+            }}
+            QTabBar::tab:selected {{
+                background: #3b4a7a;
+                color: #f2f4ff;
+                border-color: #4b5c90;
             }}
             QAbstractItemView#CompleterPopup {{
                 background: #1f2026;
@@ -1339,9 +1470,14 @@ class MapLabelEditDialog(QDialog):
 
         self._update_counters()
         self._load_image_preview(self._marker.image_path)
+        for key in self._link_inputs:
+            self._update_link_state(key)
+        self._set_name_error(None)
+        self._set_dirty(False)
+        self._refresh_header_title()
 
     def _set_links(self, key: str, selected_ids: list[int]) -> None:
-        # Заполняем привязки для указанной сущности.
+        # Заполняем связи для указанной сущности.
         source = self._entity_sources.get(key)
         link_input = self._link_inputs.get(key)
         if not source or not link_input:
@@ -1353,9 +1489,21 @@ class MapLabelEditDialog(QDialog):
         ]
         link_input.set_items(items)
 
+    def _on_links_changed(self, key: str) -> None:
+        self._update_link_state(key)
+        self._mark_dirty()
+
+    def _update_link_state(self, key: str) -> None:
+        widgets = self._link_state_widgets.get(key)
+        if not widgets:
+            return
+        empty_state, link_input = widgets
+        has_items = bool(link_input.items())
+        empty_state.setVisible(not has_items)
+
     def _wire_dirty_tracking(self) -> None:
         # Подключаем обработчики изменения полей.
-        self.name_edit.textChanged.connect(self._mark_dirty)
+        self.name_edit.textChanged.connect(self._on_name_changed)
         self.type_combo.currentTextChanged.connect(self._mark_dirty)
         self.size_spin.valueChanged.connect(self._mark_dirty)
         self.parent_path_edit.textChanged.connect(self._mark_dirty)
@@ -1372,20 +1520,51 @@ class MapLabelEditDialog(QDialog):
         self.desc_counter.setText(f"{len(self.desc_edit.toPlainText())} символов")
         self.important_counter.setText(f"{len(self.important_edit.toPlainText())} символов")
 
+    def _on_name_changed(self, text: str) -> None:
+        self._refresh_header_title()
+        if text.strip():
+            self._set_name_error(None)
+        self._mark_dirty()
+
+    def _refresh_header_title(self) -> None:
+        marker_name = self.name_edit.text().strip() if hasattr(self, "name_edit") else ""
+        marker_name = marker_name or "Без названия"
+        base = "Метка на карте" if self._dialog_mode == "edit" else "Новая метка"
+        suffix = " *" if self._dirty else ""
+        title = f"{base} • {marker_name}{suffix}"
+        if hasattr(self, "header_title"):
+            self.header_title.setText(title)
+        self.setWindowTitle(title)
+
+    def _set_name_error(self, message: str | None) -> None:
+        invalid = bool(message)
+        self.name_edit.setProperty("invalid", invalid)
+        self.name_edit.style().unpolish(self.name_edit)
+        self.name_edit.style().polish(self.name_edit)
+        self.name_error_label.setVisible(invalid)
+        self.name_error_label.setText(message or self._name_error_text)
+
+    def _set_dirty(self, dirty: bool) -> None:
+        self._dirty = dirty
+        self.dirty_indicator.setVisible(dirty)
+        self._refresh_header_title()
+
     def _mark_dirty(self) -> None:
         # Фиксируем наличие несохраненных изменений.
         if self._loading:
             return
         if not self._dirty:
-            self._dirty = True
-            self.dirty_indicator.setVisible(True)
+            self._set_dirty(True)
 
     def _on_save(self) -> None:
         # Валидируем данные и сохраняем новый объект метки.
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Проверка", "Название метки не может быть пустым.")
+            self._set_name_error(self._name_error_text)
+            self.name_edit.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.name_edit.selectAll()
             return
+        self._set_name_error(None)
         marker = self._marker
 
         def chip_ids(key: str) -> list[int]:
@@ -1416,7 +1595,7 @@ class MapLabelEditDialog(QDialog):
             self._parent_path,
             self._image_path,
         )
-        self._dirty = False
+        self._set_dirty(False)
         self.accept()
 
     def _on_marker_type_changed(self, _index: int) -> None:
@@ -1435,6 +1614,8 @@ class MapLabelEditDialog(QDialog):
             self.marker_type_preview.setPixmap(QPixmap())
             self.marker_type_preview.setText(option.label)
         self.marker_type_preview.setToolTip(option.label)
+        if hasattr(self, "marker_type_summary"):
+            self.marker_type_summary.setText(f"Иконка и цвет на карте определяются типом: {option.label}.")
         if mark_dirty:
             self._mark_dirty()
 
@@ -1576,17 +1757,25 @@ class MapLabelEditDialog(QDialog):
             self._set_parent_path(path)
             self._mark_dirty()
 
+    def _clear_parent_path(self) -> None:
+        if not self._parent_path:
+            return
+        self._set_parent_path("")
+        self._mark_dirty()
+
     def _set_parent_path(self, path: str) -> None:
         # Обновляем отображение пути родительского каталога.
         cleaned = (path or "").strip()
         self._parent_path = cleaned
+        if hasattr(self, "parent_clear_btn"):
+            self.parent_clear_btn.setEnabled(bool(cleaned))
         if cleaned:
             display = self._elide_path(cleaned)
             self.parent_path_edit.setText(display)
             self.parent_path_edit.setToolTip(cleaned)
         else:
             self.parent_path_edit.setText("")
-            self.parent_path_edit.setToolTip("")
+            self.parent_path_edit.setToolTip("Каталог не выбран")
 
     def _elide_path(self, path: str) -> str:
         # Обрезаем длинный путь с помощью эллипсиса.
