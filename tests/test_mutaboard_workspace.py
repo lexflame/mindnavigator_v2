@@ -344,7 +344,10 @@ def test_mutaboard_workspace_builds_board_list_and_default_columns(monkeypatch) 
     try:
         assert workspace.objectName() == "ConceptBoardWorkspace"
         assert workspace.mutaboard_list.count() == 1
+        assert workspace.mutaboard_list.item(0).text().startswith("Основной мутборд\n")
+        assert "Решение принято" in workspace.mutaboard_list.item(0).text()
         assert workspace.focus_title_input.text() == "Основной мутборд"
+        assert "Статус: Решение принято" in workspace.focus_caption_label.text()
         assert list(workspace._column_kinds.values()) == ["task", "idea", "image"]
         assert _column_widget_by_kind(workspace, "task").count() == 1
         assert _column_widget_by_kind(workspace, "idea").count() == 1
@@ -392,7 +395,7 @@ def test_mutaboard_workspace_saves_focus_and_scenarios(monkeypatch) -> None:
         assert stub.updated_mutaboards == [
             (1, "Переименованный мутборд", "Новое описание", "Новый захват", "Новое планирование", "Новые связи")
         ]
-        assert workspace.mutaboard_list.item(0).text() == "Переименованный мутборд"
+        assert workspace.mutaboard_list.item(0).text().startswith("Переименованный мутборд\n")
     finally:
         workspace.deleteLater()
 

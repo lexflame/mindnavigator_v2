@@ -628,7 +628,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._focused_card = card
         if card is None:
             self.focus_heading_label.setText("Фокус: Концептборд")
-            self.focus_caption_label.setText("Редактируйте цель, описание и общий контекст активной доски.")
+            self.focus_caption_label.setText(self._board_focus_caption(board))
             self.focus_card_panel.hide()
             self.focus_save_button.show()
             self.focus_title_input.parentWidget().show()
@@ -646,6 +646,19 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.focus_card_links_label.setText(f"Связей: {card.total_linked_count}")
         self.focus_card_details.setPlainText(self._focus_details_text(card, board))
         self._configure_focus_actions(card)
+
+    def _board_focus_caption(self, board: MutaBoardData | None) -> str:
+        if board is None:
+            return "Редактируйте цель, описание и общий контекст активной доски."
+        attached_count = len(self._attached_card_keys)
+        updated_text = board.updated_at.strftime("%d.%m.%Y %H:%M")
+        goal_text = (board.description or "").strip() or "цель не задана"
+        return (
+            f"Статус: {self._board_status_text(board)} · "
+            f"Связанных элементов: {attached_count} · "
+            f"Обновлено: {updated_text}\n"
+            f"Цель: {goal_text}"
+        )
 
     def _focus_details_text(self, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
         payload = card.source_payload
@@ -921,6 +934,13 @@ class ConceptBoardWorkspace(BaseWorkspace):
             return title
         return _COLUMN_KIND_LABELS.get(column.kind, column.kind)
 
+    def _board_list_item_text(self, board: MutaBoardData, attached_count: int) -> str:
+        updated_text = board.updated_at.strftime("%d.%m.%Y")
+        return (
+            f"{board.title}\n"
+            f"{self._board_status_text(board)} · {attached_count} элементов · {updated_text}"
+        )
+
     def _synthetic_cards_for_kind(self, board: MutaBoardData | None, kind: str) -> list[ConceptBoardCard]:
         if board is None:
             return []
@@ -1110,7 +1130,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         for board in boards:
             attached_count = len(self._db.fetch_mutaboard_items(board.id))
             updated_text = board.updated_at.strftime("%d.%m.%Y")
-            item = QListWidgetItem(board.title)
+            item = QListWidgetItem(self._board_list_item_text(board, attached_count))
             item.setData(Qt.ItemDataRole.UserRole, board.id)
             item.setToolTip(
                 "\n".join(
