@@ -137,6 +137,21 @@ class _MutaBoardWorkspaceDbStub:
             MutaBoardColumnData(id=3, mutaboard_id=mutaboard_id, kind="image", title="", position=2, created_at=now, updated_at=now),
         ]
 
+    def replace_mutaboard_columns(self, mutaboard_id: int, columns):
+        now = datetime.now(timezone.utc)
+        return [
+            MutaBoardColumnData(
+                id=index + 1,
+                mutaboard_id=mutaboard_id,
+                kind=kind,
+                title=title,
+                position=index,
+                created_at=now,
+                updated_at=now,
+            )
+            for index, (kind, title) in enumerate(columns)
+        ]
+
     def fetch_mutaboard_items(self, mutaboard_id: int):
         return []
 

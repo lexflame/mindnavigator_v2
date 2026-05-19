@@ -72,6 +72,14 @@ _CARD_KIND_TITLES = {
     "link": "Ссылка",
 }
 _DEFAULT_COLUMN_KINDS = ("task", "idea", "image", "version", "solution")
+_DEFAULT_COLUMN_SPECS = (
+    ("task", "Входящие"),
+    ("idea", "Идеи"),
+    ("image", "Материалы"),
+    ("version", "Версии"),
+    ("task", "Задачи"),
+    ("solution", "Решение"),
+)
 _DISABLED_ACTION_TOOLTIP = "Действие будет доступно на следующем этапе ремастеринга."
 
 
@@ -116,6 +124,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._column_lists: dict[int, QListWidget] = {}
         self.board_columns: dict[int, QListWidget] = self._column_lists
         self._column_count_labels: dict[int, QLabel] = {}
+        self._column_title_labels: dict[int, QLabel] = {}
         self._selected_card_key: tuple[str, int] | None = None
         self._attached_card_keys: set[tuple[str, int]] = set()
         self.search_input.setPlaceholderText("Поиск по концептборду...")
@@ -461,6 +470,11 @@ class ConceptBoardWorkspace(BaseWorkspace):
         graph_layout.addLayout(center_col, 1)
         graph_layout.addLayout(right_col, 1)
         layout.addWidget(graph, 1)
+
+        self.structure_details_label = QLabel("Выберите элемент или решение, чтобы увидеть смысловые связи и следующий шаг.")
+        self.structure_details_label.setObjectName("MutaBoardBoardCaption")
+        self.structure_details_label.setWordWrap(True)
+        layout.addWidget(self.structure_details_label)
         return panel
 
     def _build_scenarios_panel(self, parent: QWidget) -> QFrame:
@@ -576,6 +590,25 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._configure_focus_actions(card)
 
     def _focus_details_text(self, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        payload = card.source_payload
+        if isinstance(payload, dict):
+            return self._synthetic_focus_details(card, payload, board)
+        if isinstance(payload, TaskData):
+            return self._task_focus_details(payload, card, board)
+        if isinstance(payload, IdeaData):
+            return self._idea_focus_details(payload, card, board)
+        if isinstance(payload, CloudFileData):
+            return self._image_focus_details(payload, card, board)
+        if isinstance(payload, ProjectData):
+            return self._project_focus_details(payload, card, board)
+        if isinstance(payload, MapMarkerData):
+            return self._marker_focus_details(payload, card, board)
+        if isinstance(payload, ObjectData):
+            return self._object_focus_details(payload, card, board)
+        if isinstance(payload, NoteData):
+            return self._note_focus_details(payload, card, board)
+        if isinstance(payload, MapData):
+            return self._map_focus_details(payload, card, board)
         lines = [card.title]
         if card.subtitle:
             lines.append("")
@@ -589,6 +622,158 @@ class ConceptBoardWorkspace(BaseWorkspace):
         if board is not None:
             lines.append(f"Концептборд: {board.title}")
         return "\n".join(lines).strip()
+
+    def _synthetic_focus_details(
+        self,
+        card: ConceptBoardCard,
+        payload: dict[str, object],
+        board: MutaBoardData | None,
+    ) -> str:
+        lines = [card.title]
+        if card.subtitle:
+            lines.extend(("", card.subtitle))
+        status = str(payload.get("status") or "").strip()
+        if status:
+            lines.append(f"Статус: {status}")
+        why_yes = str(payload.get("why_yes") or "").strip()
+        if why_yes:
+            lines.extend(("", f"Почему да: {why_yes}"))
+        why_not = str(payload.get("why_not") or "").strip()
+        if why_not:
+            lines.append(f"Почему нет: {why_not}")
+        checks = payload.get("checks") or []
+        if isinstance(checks, list) and checks:
+            lines.extend(("", "Что проверить:"))
+            lines.extend(f"• {item}" for item in checks)
+        next_steps = payload.get("next_steps") or []
+        if isinstance(next_steps, list) and next_steps:
+            lines.extend(("", "Следующие задачи:"))
+            lines.extend(f"• {item}" for item in next_steps)
+        if board is not None:
+            lines.extend(("", f"Концептборд: {board.title}"))
+        return "\n".join(line for line in lines if line is not None).strip()
+
+    def _task_focus_details(self, task: TaskData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            task.title,
+            "",
+            f"Статус: {'Готово' if task.done else 'В работе'}",
+            f"Приоритет: {task.priority or 'Не задан'}",
+            f"Дата: {task.day.isoformat()}",
+        ]
+        if task.project_title:
+            lines.append(f"Проект: {task.project_title}")
+        if task.description:
+            lines.extend(("", task.description))
+        lines.append("")
+        lines.append(f"Связанные идеи: {card.linked_idea_count}")
+        lines.append(f"Связанные объекты: {card.linked_object_count}")
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _idea_focus_details(self, idea: IdeaData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            idea.title,
+            "",
+            f"Статус: {idea.status or 'Не задан'}",
+            f"Тип: {idea.type or 'Не задан'}",
+            f"Ценность / усилие: {idea.value_score} / {idea.effort_score}",
+        ]
+        if idea.project_title:
+            lines.append(f"Проект: {idea.project_title}")
+        excerpt = idea.summary or idea.body_md or idea.source
+        if excerpt:
+            lines.extend(("", excerpt))
+        lines.append("")
+        lines.append(f"Связанные задачи: {card.linked_task_count}")
+        lines.append(f"Связанные объекты: {card.linked_object_count}")
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _image_focus_details(self, cloud_file: CloudFileData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            cloud_file.name or cloud_file.rel_path,
+            "",
+            f"Источник: {cloud_file.rel_path}",
+            f"Размер: {cloud_file.size} B" if cloud_file.size else "Размер: не указан",
+            f"Связей: {card.total_linked_count}",
+        ]
+        if cloud_file.description:
+            lines.extend(("", cloud_file.description))
+        if board is not None:
+            lines.extend(("", f"Концептборд: {board.title}"))
+        return "\n".join(lines)
+
+    def _project_focus_details(self, project: ProjectData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            project.title,
+            "",
+            f"Область: {project.area or 'Не задана'}",
+            f"Приоритет: {project.priority or 'Не задан'}",
+            f"Связей: {card.total_linked_count}",
+        ]
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _marker_focus_details(self, marker: MapMarkerData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            marker.name,
+            "",
+            f"Тип метки: {marker.type or 'Не задан'}",
+            f"Размер: {marker.size}",
+            f"Задачи: {len(marker.task_ids)}",
+            f"Проекты: {len(marker.project_ids)}",
+            f"Объекты: {len(marker.object_ids)}",
+        ]
+        if marker.description:
+            lines.extend(("", marker.description))
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _object_focus_details(self, obj: ObjectData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            obj.title,
+            "",
+            f"Каталог: {obj.catalog or 'Не задан'}",
+            f"Тип объекта: {obj.object_type or 'Не задан'}",
+            f"Статус: {obj.status or 'Не задан'}",
+            f"Связей: {card.total_linked_count}",
+        ]
+        if obj.description:
+            lines.extend(("", obj.description))
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _note_focus_details(self, note: NoteData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [note.title]
+        if note.project:
+            lines.extend(("", f"Проект: {note.project}"))
+        if note.preview:
+            lines.extend(("", note.preview))
+        if note.tags:
+            lines.extend(("", f"Теги: {', '.join(note.tags)}"))
+        lines.append(f"Связей: {card.total_linked_count}")
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
+
+    def _map_focus_details(self, map_item: MapData, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        lines = [
+            map_item.title,
+            "",
+            f"Проект: {map_item.project or 'Не задан'}",
+            f"Метки: {card.total_linked_count}",
+        ]
+        if map_item.description:
+            lines.extend(("", map_item.description))
+        if board is not None:
+            lines.append(f"Концептборд: {board.title}")
+        return "\n".join(lines)
 
     def _configure_focus_actions(self, card: ConceptBoardCard) -> None:
         action_map = {
@@ -610,6 +795,108 @@ class ConceptBoardWorkspace(BaseWorkspace):
             button.setText(text)
             button.setEnabled(False)
             button.setToolTip(_DISABLED_ACTION_TOOLTIP)
+
+    @staticmethod
+    def _split_board_lines(text: str) -> list[str]:
+        result: list[str] = []
+        for raw_line in str(text or "").splitlines():
+            line = raw_line.strip().lstrip("-• ").strip()
+            if line:
+                result.append(line)
+        return result
+
+    @staticmethod
+    def _default_column_specs() -> list[tuple[str, str]]:
+        return list(_DEFAULT_COLUMN_SPECS)
+
+    def _ensure_default_columns(self, board_id: int) -> list[MutaBoardColumnData]:
+        return self._db.replace_mutaboard_columns(board_id, self._default_column_specs())
+
+    @staticmethod
+    def _display_column_title(column: MutaBoardColumnData) -> str:
+        title = str(column.title or "").strip()
+        if title:
+            return title
+        return _COLUMN_KIND_LABELS.get(column.kind, column.kind)
+
+    def _synthetic_cards_for_kind(self, board: MutaBoardData | None, kind: str) -> list[ConceptBoardCard]:
+        if board is None:
+            return []
+        check_lines = self._split_board_lines(board.planning_text)
+        next_steps = self._split_board_lines(board.links_text)
+        if kind == "version":
+            version_summary = (board.description or "").strip() or (check_lines[0] if check_lines else "")
+            if not version_summary:
+                return []
+            return [
+                ConceptBoardCard(
+                    entity_kind="version",
+                    entity_id=-(board.id * 10 + 1),
+                    title=f"Версия: {board.title}",
+                    subtitle=version_summary,
+                    project_id=None,
+                    project_title=board.title,
+                    accent_color="#a88cff",
+                    meta_text="Черновик · Проверяется",
+                    relation_count=len(check_lines) + len(next_steps),
+                    relation_summary=f"Проверки · {len(check_lines)}",
+                    stage="draft",
+                    is_actionable=True,
+                    source_payload={
+                        "concept_kind": "version",
+                        "status": "Проверяется" if check_lines else "Черновик",
+                        "why_yes": version_summary,
+                        "checks": check_lines,
+                        "next_steps": next_steps,
+                    },
+                )
+            ]
+        if kind == "solution":
+            solution_text = (board.capture_text or "").strip()
+            if not solution_text:
+                return []
+            solution_title = self._split_board_lines(solution_text)
+            return [
+                ConceptBoardCard(
+                    entity_kind="solution",
+                    entity_id=-(board.id * 10 + 2),
+                    title=solution_title[0] if solution_title else f"Решение: {board.title}",
+                    subtitle=solution_text,
+                    project_id=None,
+                    project_title=board.title,
+                    accent_color="#49c36b",
+                    meta_text="Черновик решения",
+                    relation_count=len(next_steps),
+                    relation_summary=f"Следующие задачи · {len(next_steps)}",
+                    stage="draft",
+                    is_actionable=True,
+                    source_payload={
+                        "concept_kind": "solution",
+                        "status": "Черновик",
+                        "why_yes": solution_text,
+                        "checks": check_lines,
+                        "next_steps": next_steps,
+                    },
+                )
+            ]
+        return []
+
+    @staticmethod
+    def _empty_state_text(kind: str) -> tuple[str, str]:
+        return {
+            "task": ("Нет связанных задач", "Превратите решение в конкретные действия."),
+            "idea": ("Нет идей", "Добавьте идеи, чтобы собрать варианты решения."),
+            "image": ("Нет материалов", "Добавьте изображения, файлы и карты как опорные материалы."),
+            "version": ("Нет версий", "Сформулируйте рабочую версию направления через цель и фокус."),
+            "solution": ("Нет решения", "Зафиксируйте текущее решение во вкладке «Итог»."),
+            "project": ("Нет проектов", "Свяжите проект, чтобы у решения появился контекст."),
+            "object": ("Нет объектов", "Добавьте объекты, чтобы приземлить идею на сущности."),
+            "note": ("Нет заметок", "Заметки помогут собрать объяснение решения."),
+            "map": ("Нет карт", "Добавьте карту, если решение опирается на пространство."),
+            "marker": ("Нет меток", "Свяжите метки, если решение живёт на карте."),
+            "file": ("Нет файлов", "Добавьте референсы и документы для проверки версии."),
+            "link": ("Нет ссылок", "Свяжите внешний источник, если он влияет на решение."),
+        }.get(kind, ("Нет элементов", "Добавьте материалы или измените тип колонки."))
 
     def set_theme_mode(self, theme_mode: str) -> None:
         super().set_theme_mode(theme_mode)
@@ -647,7 +934,8 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _refresh_mutaboards(self) -> None:
         boards = self._db.fetch_mutaboards()
         if not boards:
-            self._db.create_mutaboard("Концептборд 1", column_kinds=_DEFAULT_COLUMN_KINDS)
+            created = self._db.create_mutaboard("Концептборд 1", column_kinds=_DEFAULT_COLUMN_KINDS)
+            self._ensure_default_columns(created.id)
             boards = self._db.fetch_mutaboards()
         current_id = self._current_mutaboard_id()
         self._mutaboards_by_id = {board.id: board for board in boards}
@@ -655,9 +943,23 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.mutaboard_list.blockSignals(True)
         self.mutaboard_list.clear()
         for board in boards:
+            attached_count = len(self._db.fetch_mutaboard_items(board.id))
+            updated_text = board.updated_at.strftime("%d.%m.%Y")
             item = QListWidgetItem(board.title)
             item.setData(Qt.ItemDataRole.UserRole, board.id)
-            item.setToolTip(board.description or board.title)
+            item.setToolTip(
+                "\n".join(
+                    part
+                    for part in (
+                        board.title,
+                        "Статус: Исследование",
+                        f"Связанных элементов: {attached_count}",
+                        f"Обновлено: {updated_text}",
+                        board.description.strip() if board.description.strip() else "",
+                    )
+                    if part
+                )
+            )
             self.mutaboard_list.addItem(item)
         self.mutaboard_list.blockSignals(False)
 
@@ -690,6 +992,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
     def _create_mutaboard(self) -> None:
         next_index = len(self._mutaboards_by_id) + 1
         created = self._db.create_mutaboard(f"Концептборд {next_index}", column_kinds=_DEFAULT_COLUMN_KINDS)
+        self._ensure_default_columns(created.id)
         self._model.reload()
         self._refresh_mutaboards()
         self._select_mutaboard(created.id)
@@ -752,6 +1055,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self._column_kinds.clear()
         self._column_lists.clear()
         self._column_count_labels.clear()
+        self._column_title_labels.clear()
         while self.board_layout.count():
             item = self.board_layout.takeAt(0)
             widget = item.widget()
@@ -763,8 +1067,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
             return
         columns = self._db.fetch_mutaboard_columns(board_id)
         if not columns:
-            self._db.replace_mutaboard_columns(board_id, [(kind, "") for kind in _DEFAULT_COLUMN_KINDS])
-            columns = self._db.fetch_mutaboard_columns(board_id)
+            columns = self._ensure_default_columns(board_id)
 
         for column in columns:
             self._column_defs[column.id] = column
@@ -781,23 +1084,34 @@ class ConceptBoardWorkspace(BaseWorkspace):
             header_row.setContentsMargins(0, 0, 0, 0)
             header_row.setSpacing(8)
 
-            kind_combo = QComboBox(frame)
-            kind_combo.setObjectName("MutaBoardColumnKindFilter")
-            for kind, label_text in _COLUMN_KIND_LABELS.items():
-                kind_combo.addItem(label_text, kind)
-            kind_combo.setCurrentIndex(max(0, kind_combo.findData(column.kind)))
-            kind_combo.currentIndexChanged.connect(
-                lambda _index, column_id=column.id, combo=kind_combo: self._on_column_kind_changed(
-                    column_id, combo.currentData()
-                )
-            )
-            header_row.addWidget(kind_combo, 1)
+            title_label = QLabel(self._display_column_title(column))
+            title_label.setObjectName("MutaBoardScenarioTitle")
+            header_row.addWidget(title_label, 1)
+            self._column_title_labels[column.id] = title_label
 
             count_label = QLabel("0")
             count_label.setObjectName("MutaBoardColumnCount")
             header_row.addWidget(count_label, 0, Qt.AlignmentFlag.AlignRight)
             self._column_count_labels[column.id] = count_label
             column_layout.addLayout(header_row)
+
+            kind_row = QHBoxLayout()
+            kind_row.setContentsMargins(0, 0, 0, 0)
+            kind_row.setSpacing(8)
+
+            kind_combo = QComboBox(frame)
+            kind_combo.setObjectName("MutaBoardColumnKindFilter")
+            for kind, label_text in _COLUMN_KIND_LABELS.items():
+                kind_combo.addItem(label_text, kind)
+            kind_combo.setCurrentIndex(max(0, kind_combo.findData(column.kind)))
+            kind_combo.setToolTip(self._display_column_title(column))
+            kind_combo.currentIndexChanged.connect(
+                lambda _index, column_id=column.id, combo=kind_combo: self._on_column_kind_changed(
+                    column_id, combo.currentData()
+                )
+            )
+            kind_row.addWidget(kind_combo, 1)
+            column_layout.addLayout(kind_row)
 
             list_widget = _MutaBoardColumnListWidget(self, column.id, frame)
             list_widget.setObjectName("MutaBoardColumnList")
@@ -806,6 +1120,12 @@ class ConceptBoardWorkspace(BaseWorkspace):
                 lambda column_id=column.id: self._on_column_selection_changed(column_id)
             )
             column_layout.addWidget(list_widget, 1)
+
+            add_button = QPushButton("+ Добавить", frame)
+            add_button.setObjectName("MutaBoardSecondaryButton")
+            add_button.setEnabled(False)
+            add_button.setToolTip(_DISABLED_ACTION_TOOLTIP)
+            column_layout.addWidget(add_button, 0, Qt.AlignmentFlag.AlignLeft)
             self._column_lists[column.id] = list_widget
             self.board_layout.addWidget(frame, 1)
         self.board_layout.addStretch(1)
@@ -848,6 +1168,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
         board_id = self._current_mutaboard_id()
         if board_id is None:
             return
+        board = self._current_mutaboard()
         attached_items = self._db.fetch_mutaboard_items(board_id)
         self._attached_card_keys = {(item.entity_kind, item.entity_id) for item in attached_items}
         self.focus_attached_value.setText(str(len(self._attached_card_keys)))
@@ -856,18 +1177,31 @@ class ConceptBoardWorkspace(BaseWorkspace):
         for column_id, list_widget in self._column_lists.items():
             kind = self._column_kinds.get(column_id)
             cards = self._filtered_cards(kind)
+            if kind in {"version", "solution"}:
+                cards = [*cards, *self._synthetic_cards_for_kind(board, kind)]
             list_widget.blockSignals(True)
             list_widget.clear()
-            for card in cards:
-                card_key = (card.entity_kind, card.entity_id)
-                payload = replace(card, is_attached=card_key in self._attached_card_keys)
-                item = QListWidgetItem(payload.title)
-                item.setData(Qt.ItemDataRole.UserRole, payload)
-                item.setToolTip(payload.meta_text or payload.subtitle or payload.title)
+            if cards:
+                for card in cards:
+                    card_key = (card.entity_kind, card.entity_id)
+                    payload = replace(card, is_attached=card_key in self._attached_card_keys)
+                    item = QListWidgetItem(payload.title)
+                    item.setData(Qt.ItemDataRole.UserRole, payload)
+                    item.setToolTip(payload.meta_text or payload.subtitle or payload.title)
+                    list_widget.addItem(item)
+            else:
+                title, hint = self._empty_state_text(kind or "")
+                item = QListWidgetItem(title)
+                item.setToolTip(hint)
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
                 list_widget.addItem(item)
             count_label = self._column_count_labels.get(column_id)
             if count_label is not None and kind is not None:
-                count_label.setText(f"{_COLUMN_KIND_LABELS.get(kind, kind)} · {len(cards)}")
+                count_label.setText(f"{len(cards)}")
+            title_label = self._column_title_labels.get(column_id)
+            column_def = self._column_defs.get(column_id)
+            if title_label is not None and column_def is not None:
+                title_label.setText(self._display_column_title(column_def))
             list_widget.blockSignals(False)
         if selection_key is not None and self._restore_selection(selection_key):
             return
@@ -923,6 +1257,7 @@ class ConceptBoardWorkspace(BaseWorkspace):
             self.structure_tasks_label.setText("Задачи · 0")
             self.structure_other_label.setText("Остальное · 0")
             self.structure_links_label.setText("Связи · 0")
+            self.structure_details_label.setText(self._structure_overview_text(board))
             return
         counts = self._structure_counts_for_card(card)
         self.structure_subtitle.setText(
@@ -935,6 +1270,43 @@ class ConceptBoardWorkspace(BaseWorkspace):
         self.structure_tasks_label.setText(f"Задачи · {counts['tasks']}")
         self.structure_other_label.setText(f"Остальное · {counts['other']}")
         self.structure_links_label.setText(f"Связи · {counts['links']}")
+        self.structure_details_label.setText(self._structure_detail_text(card, board))
+
+    def _structure_overview_text(self, board: MutaBoardData | None) -> str:
+        if board is None:
+            return "Карта связей станет активной после выбора концептборда."
+        checks = self._split_board_lines(board.planning_text)
+        next_steps = self._split_board_lines(board.links_text)
+        lines = [f"Цель: {board.description.strip() or 'не задана'}"]
+        if checks:
+            lines.append(f"Что проверить: {checks[0]}")
+        if next_steps:
+            lines.append(f"Следующий шаг: {next_steps[0]}")
+        return "\n".join(lines)
+
+    def _structure_detail_text(self, card: ConceptBoardCard, board: MutaBoardData | None) -> str:
+        payload = card.source_payload
+        if isinstance(payload, dict):
+            checks = payload.get("checks") or []
+            next_steps = payload.get("next_steps") or []
+            lines = [f"Узел: {card.title}"]
+            if checks:
+                lines.append(f"Проверка: {checks[0]}")
+            if next_steps:
+                lines.append(f"Следующее действие: {next_steps[0]}")
+            return "\n".join(lines)
+        lines = [f"Узел: {card.title}", f"Связей: {card.total_linked_count}"]
+        if card.project_title:
+            lines.append(f"Контекст: {card.project_title}")
+        if card.linked_idea_count:
+            lines.append(f"Идей: {card.linked_idea_count}")
+        if card.linked_task_count:
+            lines.append(f"Задач: {card.linked_task_count}")
+        if card.linked_object_count:
+            lines.append(f"Объектов: {card.linked_object_count}")
+        if board is not None and board.capture_text.strip():
+            lines.append(f"Ведёт к решению: {self._split_board_lines(board.capture_text)[0]}")
+        return "\n".join(lines)
 
     def _structure_counts_for_card(self, card: ConceptBoardCard) -> dict[str, int]:
         counts = {"projects": 0, "objects": 0, "ideas": 0, "tasks": 0, "other": 0, "links": card.total_linked_count}

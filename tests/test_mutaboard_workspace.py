@@ -420,6 +420,30 @@ def test_mutaboard_workspace_adds_columns_and_attaches_items(monkeypatch) -> Non
         workspace.deleteLater()
 
 
+def test_mutaboard_workspace_creates_new_board_with_solution_flow_columns(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        workspace.add_mutaboard_button.click()
+        QApplication.processEvents()
+
+        assert workspace.mutaboard_list.count() == 2
+        assert len(workspace.board_columns) == 6
+        assert [label.text() for label in workspace._column_title_labels.values()] == [
+            "Входящие",
+            "Идеи",
+            "Материалы",
+            "Версии",
+            "Задачи",
+            "Решение",
+        ]
+    finally:
+        workspace.deleteLater()
+
+
 def test_mutaboard_workspace_column_kind_filter_switches_catalog(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     stub = _MutaBoardWorkspaceDbStub()
@@ -435,6 +459,51 @@ def test_mutaboard_workspace_column_kind_filter_switches_catalog(monkeypatch) ->
         assert workspace.board_columns[first_column_id].count() == 1
         note_card = workspace.board_columns[first_column_id].item(0).data(Qt.ItemDataRole.UserRole)
         assert note_card.title == "Note board item"
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_builds_synthetic_version_and_solution_cards(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        second_column_id = list(workspace._column_kinds)[1]
+
+        workspace._on_column_kind_changed(first_column_id, "version")
+        workspace._on_column_kind_changed(second_column_id, "solution")
+        QApplication.processEvents()
+
+        version_card = workspace.board_columns[first_column_id].item(0).data(Qt.ItemDataRole.UserRole)
+        solution_card = workspace.board_columns[second_column_id].item(0).data(Qt.ItemDataRole.UserRole)
+
+        assert version_card is not None
+        assert version_card.entity_kind == "version"
+        assert version_card.title.startswith("Версия:")
+        assert solution_card is not None
+        assert solution_card.entity_kind == "solution"
+        assert solution_card.title == "Capture start"
+    finally:
+        workspace.deleteLater()
+
+
+def test_mutaboard_workspace_shows_empty_state_for_missing_column_kind(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    stub = _MutaBoardWorkspaceDbStub()
+    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+
+    workspace = mutaboard_module.MutaBoardWorkspace()
+    try:
+        first_column_id = next(iter(workspace._column_kinds))
+        workspace._on_column_kind_changed(first_column_id, "file")
+        QApplication.processEvents()
+
+        empty_item = workspace.board_columns[first_column_id].item(0)
+        assert empty_item.text() == "Нет файлов"
+        assert empty_item.data(Qt.ItemDataRole.UserRole) is None
     finally:
         workspace.deleteLater()
 
