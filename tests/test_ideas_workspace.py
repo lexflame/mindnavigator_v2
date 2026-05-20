@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import ideas as ideas_workspace
 from mindnavigator.workspaces.ideas import ideas_workspace as ideas_workspace_module
+
+
+def test_ideas_workspace_format_relative_time_accepts_naive_and_aware_datetimes() -> None:
+    aware_value = datetime.now(timezone.utc)
+    naive_value = datetime.now()
+
+    aware_result = ideas_workspace_module.IdeasWorkspace._format_relative_time(aware_value)
+    naive_result = ideas_workspace_module.IdeasWorkspace._format_relative_time(naive_value)
+
+    assert isinstance(aware_result, str)
+    assert isinstance(naive_result, str)
 
 
 def test_ideas_workspace_toolbar_create_and_edit_round_trip(monkeypatch, unique_temp_path) -> None:
@@ -398,6 +411,68 @@ def test_ideas_workspace_triage_advances_after_note_and_object_transform(
         assert workspace.get_selection() == remaining_inbox_id
         assert workspace.triage_progress_label.text() == "Разбор идеи 2 из 2"
         assert created_status in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_adds_current_idea_to_concept_board(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_concept_board", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea to board", status="inbox")
+
+        class _FakeConceptBoardPage:
+            def __init__(self) -> None:
+                self.selected_ids: list[int] = []
+
+            def select_concept_board(self, concept_board_id: int) -> None:
+                self.selected_ids.append(concept_board_id)
+
+        class _FakeMainWindow(QWidget):
+            MODE_CONCEPTBOARD = "Концептборд"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.mode_calls: list[str] = []
+                self.page_concept_board = _FakeConceptBoardPage()
+
+            def set_mode(self, mode_name: str) -> None:
+                self.mode_calls.append(mode_name)
+
+        main_window = _FakeMainWindow()
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace(parent=main_window)
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        workspace.inspector_tabs.setCurrentWidget(workspace.transform_tab)
+        QApplication.processEvents()
+
+        QTest.mouseClick(workspace.transform_concept_board_btn, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        boards = database.fetch_concept_boards()
+        assert len(boards) == 1
+        board = boards[0]
+        board_items = database.fetch_concept_board_items(board.id)
+        assert [(item.entity_kind, item.entity_id) for item in board_items] == [("idea", idea.id)]
+        idea_relations = database.fetch_idea_relations(idea.id)
+        assert ("concept_board", board.id) in {(item.entity_type, item.entity_id) for item in idea_relations}
+        updated = database.get_idea(idea.id)
+        assert updated is not None
+        assert updated.status == "ripe"
+        assert main_window.mode_calls == [main_window.MODE_CONCEPTBOARD]
+        assert main_window.page_concept_board.selected_ids == [board.id]
+        assert "Выход: концептборд" == workspace.output_summary_label.text()
     finally:
         if workspace is not None:
             workspace.deleteLater()

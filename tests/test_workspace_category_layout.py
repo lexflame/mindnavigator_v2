@@ -42,7 +42,7 @@ def test_group_ideas_by_category_uses_status_headers() -> None:
     )
 
     categories = [row.category for row in rows if isinstance(row, IdeaCategoryRow)]
-    assert categories == ["Inbox", "Work", "Без статуса"]
+    assert categories == ["Без статуса", "В работе", "Входящие"]
 
 
 def test_group_objects_by_category_uses_catalog_root() -> None:

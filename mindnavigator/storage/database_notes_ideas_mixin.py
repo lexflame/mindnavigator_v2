@@ -5,6 +5,16 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 
 class DatabaseNotesIdeasMixin:
+    @staticmethod
+    def _parse_idea_timestamp(value: Optional[str]) -> datetime:
+        if value:
+            parsed = datetime.fromisoformat(value)
+        else:
+            parsed = datetime.now(timezone.utc)
+        if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
     def fetch_notes(self) -> List[NoteData]:
         """Возвращает список всех заметок."""
         rows = self._conn.execute(
@@ -381,9 +391,9 @@ class DatabaseNotesIdeasMixin:
                     value_score=row["value_score"],
                     effort_score=row["effort_score"],
                     source=row["source"] or "",
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                    archived_at=datetime.fromisoformat(row["archived_at"])
+                    created_at=self._parse_idea_timestamp(row["created_at"]),
+                    updated_at=self._parse_idea_timestamp(row["updated_at"]),
+                    archived_at=self._parse_idea_timestamp(row["archived_at"])
                     if row["archived_at"]
                     else None,
                     project_title=row["project_title"] or "",
@@ -429,9 +439,9 @@ class DatabaseNotesIdeasMixin:
             value_score=row["value_score"],
             effort_score=row["effort_score"],
             source=row["source"] or "",
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-            archived_at=datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None,
+            created_at=self._parse_idea_timestamp(row["created_at"]),
+            updated_at=self._parse_idea_timestamp(row["updated_at"]),
+            archived_at=self._parse_idea_timestamp(row["archived_at"]) if row["archived_at"] else None,
             project_title=row["project_title"] or "",
         )
 
@@ -492,8 +502,8 @@ class DatabaseNotesIdeasMixin:
             value_score=value_score,
             effort_score=effort_score,
             source=source,
-            created_at=datetime.fromisoformat(now),
-            updated_at=datetime.fromisoformat(now),
+            created_at=self._parse_idea_timestamp(now),
+            updated_at=self._parse_idea_timestamp(now),
             archived_at=None,
             project_title=self._fetch_project_title(project_id),
         )
@@ -549,12 +559,12 @@ class DatabaseNotesIdeasMixin:
             (idea_id,),
         ).fetchone()
         created_at = (
-            datetime.fromisoformat(meta_row["created_at"])
+            self._parse_idea_timestamp(meta_row["created_at"])
             if meta_row and meta_row["created_at"]
-            else datetime.fromisoformat(now)
+            else self._parse_idea_timestamp(now)
         )
         archived_at = (
-            datetime.fromisoformat(meta_row["archived_at"])
+            self._parse_idea_timestamp(meta_row["archived_at"])
             if meta_row and meta_row["archived_at"]
             else None
         )
@@ -570,7 +580,7 @@ class DatabaseNotesIdeasMixin:
             effort_score=effort_score,
             source=source,
             created_at=created_at,
-            updated_at=datetime.fromisoformat(now),
+            updated_at=self._parse_idea_timestamp(now),
             archived_at=archived_at,
             project_title=self._fetch_project_title(project_id),
         )

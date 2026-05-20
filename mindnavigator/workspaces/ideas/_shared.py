@@ -86,11 +86,11 @@ IDEA_TYPES = [
 ]
 
 STATUS_LABELS = {
-    "inbox": "Inbox",
-    "work": "Work",
-    "ripe": "Ripe",
-    "done": "Done",
-    "archived": "Archived",
+    "inbox": "Входящие",
+    "work": "В работе",
+    "ripe": "Созрела",
+    "done": "Готово",
+    "archived": "Архив",
 }
 
 TYPE_LABELS = {

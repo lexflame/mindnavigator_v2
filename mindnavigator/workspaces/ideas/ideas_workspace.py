@@ -31,8 +31,9 @@ IDEA_OUTPUT_LABELS = {
     "marker": "метка карты",
     "map": "карта",
     "idea": "идея",
+    "concept_board": "концептборд",
 }
-IDEA_OUTPUT_PRIORITY = ("task", "note", "object", "marker", "map", "idea")
+IDEA_OUTPUT_PRIORITY = ("task", "note", "object", "concept_board", "marker", "map", "idea")
 IDEA_DEVELOPMENT_TEMPLATE = (
     "## Почему это важно\n"
     "\n"
@@ -523,6 +524,11 @@ class IdeasWorkspace(BaseWorkspace):
         transform_actions_row.addWidget(self.transform_object_btn, 1)
         transform_actions_row.addWidget(self.transform_marker_btn, 1)
         transform_layout.addWidget(self.transform_actions_host)
+        self.transform_concept_board_btn = QToolButton()
+        self.transform_concept_board_btn.setText("Добавить в концептборд")
+        self.transform_concept_board_btn.setObjectName("IdeasTransformConceptBoard")
+        self.transform_concept_board_btn.clicked.connect(self._attach_current_idea_to_concept_board)
+        transform_layout.addWidget(self.transform_concept_board_btn, 0, Qt.AlignmentFlag.AlignLeft)
         transform_layout.addStretch(1)
         self.output_tab_index = self.inspector_tabs.addTab(transform_tab, "Выход")
 
@@ -799,6 +805,8 @@ class IdeasWorkspace(BaseWorkspace):
 
     @staticmethod
     def _format_relative_time(value: datetime) -> str:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value = value.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         delta = max(0, int((now - value).total_seconds()))
         if delta < 60:
@@ -1011,7 +1019,7 @@ class IdeasWorkspace(BaseWorkspace):
         confirm = QMessageBox.question(
             self,
             "Удалить категорию",
-            f"Удалить категорию «{category.title}»? Идеи будут перенесены в Inbox.",
+            f"Удалить категорию «{category.title}»? Идеи будут перенесены во Входящие.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm != QMessageBox.StandardButton.Yes:
@@ -1185,7 +1193,67 @@ class IdeasWorkspace(BaseWorkspace):
                     map_title = map_titles.get(marker.map_id, "")
                     suffix = f"{marker.name} · {map_title}" if map_title else marker.name
                     return f"{label_prefix} · {suffix}"
+        elif entity_type == "concept_board":
+            board = next((item for item in self._db.fetch_concept_boards() if item.id == entity_id), None)
+            if board is not None:
+                return f"Концептборд · {board.title}"
         return f"{label_prefix} #{entity_id}"
+
+    def _find_main_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode") and hasattr(parent, "MODE_CONCEPTBOARD"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _ensure_concept_board_target(self):
+        boards = self._db.fetch_concept_boards()
+        if boards:
+            return boards[0]
+        return self._db.create_concept_board("Концептборд 1")
+
+    def _open_concept_board(self, concept_board_id: int) -> None:
+        main_window = self._find_main_window()
+        if main_window is None:
+            return
+        try:
+            main_window.set_mode(main_window.MODE_CONCEPTBOARD)
+        except Exception:
+            return
+        page = getattr(main_window, "page_concept_board", None)
+        if page is not None and hasattr(page, "select_concept_board"):
+            try:
+                page.select_concept_board(concept_board_id)
+            except Exception:
+                return
+
+    def _attach_current_idea_to_concept_board(self) -> None:
+        if self._current_idea_id is None:
+            return
+        idea = self._db.get_idea(self._current_idea_id)
+        if idea is None:
+            return
+        board = self._ensure_concept_board_target()
+        self._db.attach_concept_board_item(board.id, "idea", idea.id)
+        self._db.add_idea_relation(idea.id, "concept_board", board.id)
+        self._db.update_idea(
+            idea_id=idea.id,
+            title=idea.title,
+            summary=idea.summary,
+            body_md=idea.body_md,
+            idea_type=idea.type,
+            status="ripe",
+            value_score=idea.value_score,
+            effort_score=idea.effort_score,
+            project_id=idea.project_id,
+            source=idea.source,
+        )
+        self.refresh()
+        self._current_idea_id = idea.id
+        self._sync_selection()
+        self._open_concept_board(board.id)
+        self._set_status(f"Идея добавлена в концептборд «{board.title}».")
 
     def _add_relation(self) -> None:
         if self._current_idea_id is None:
@@ -1527,6 +1595,7 @@ class IdeasWorkspace(BaseWorkspace):
         transform_task = menu.addAction("Создать задачу")
         transform_note = menu.addAction("Создать заметку")
         transform_object = menu.addAction("Создать объект")
+        transform_concept_board = menu.addAction("Добавить в концептборд")
         transform_marker = menu.addAction("Создать метку карты")
         menu.addSeparator()
         status_work = menu.addAction("В работу")
@@ -1561,6 +1630,9 @@ class IdeasWorkspace(BaseWorkspace):
         elif action == transform_object:
             self._current_idea_id = idea_id
             self._transform_idea("object")
+        elif action == transform_concept_board:
+            self._current_idea_id = idea_id
+            self._attach_current_idea_to_concept_board()
         elif action == transform_marker:
             self._current_idea_id = idea_id
             self._transform_idea("marker")
