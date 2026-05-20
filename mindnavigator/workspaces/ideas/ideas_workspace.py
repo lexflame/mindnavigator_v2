@@ -195,6 +195,7 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_material_index = 0
         self._status_message = ""
         self._stats_text = ""
+        self._visible_idea_items: List[IdeaItem] = []
         super().__init__(parent)
         triage_action = self.actions.get("triage")
         if triage_action is not None:
@@ -262,6 +263,22 @@ class IdeasWorkspace(BaseWorkspace):
         quick_layout.addWidget(self.quick_create_btn)
         list_layout.addWidget(quick_row)
 
+        view_mode_row = QWidget()
+        view_mode_layout = QHBoxLayout(view_mode_row)
+        view_mode_layout.setContentsMargins(0, 0, 0, 0)
+        view_mode_layout.setSpacing(6)
+        self.view_mode_label = QLabel("Режим")
+        self.view_mode_combo = QComboBox()
+        self.view_mode_combo.addItem("Список", "list")
+        self.view_mode_combo.addItem("Воронка", "funnel")
+        self.view_mode_combo.addItem("Матрица", "matrix")
+        self.view_mode_combo.addItem("Связи", "links")
+        self.view_mode_combo.currentIndexChanged.connect(self._on_view_mode_changed)
+        view_mode_layout.addWidget(self.view_mode_label)
+        view_mode_layout.addWidget(self.view_mode_combo)
+        view_mode_layout.addStretch(1)
+        list_layout.addWidget(view_mode_row)
+
         self.list_view = QListView()
         self.list_view.setObjectName("IdeasList")
         self.list_view.setModel(IdeasListModel(self.list_view))
@@ -273,8 +290,26 @@ class IdeasWorkspace(BaseWorkspace):
         self.list_view.doubleClicked.connect(self._open_selected)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.customContextMenuRequested.connect(self._show_context_menu)
+        self.funnel_view = QListWidget()
+        self.funnel_view.setObjectName("IdeasFunnelView")
+        self.funnel_view.itemActivated.connect(self._on_alt_view_item_activated)
+        self.funnel_view.itemClicked.connect(self._on_alt_view_item_activated)
+        self.matrix_view = QListWidget()
+        self.matrix_view.setObjectName("IdeasMatrixView")
+        self.matrix_view.itemActivated.connect(self._on_alt_view_item_activated)
+        self.matrix_view.itemClicked.connect(self._on_alt_view_item_activated)
+        self.links_view = QListWidget()
+        self.links_view.setObjectName("IdeasLinksView")
+        self.links_view.itemActivated.connect(self._on_alt_view_item_activated)
+        self.links_view.itemClicked.connect(self._on_alt_view_item_activated)
+        self.list_mode_stack = QStackedWidget()
+        self.list_mode_stack.setObjectName("IdeasListModeStack")
+        self.list_mode_stack.addWidget(self.list_view)
+        self.list_mode_stack.addWidget(self.funnel_view)
+        self.list_mode_stack.addWidget(self.matrix_view)
+        self.list_mode_stack.addWidget(self.links_view)
 
-        list_layout.addWidget(self.list_view, 1)
+        list_layout.addWidget(self.list_mode_stack, 1)
         splitter.addWidget(list_host)
 
         self.inspector_stack = QStackedWidget()
@@ -877,6 +912,138 @@ class IdeasWorkspace(BaseWorkspace):
             return
         self.inspector_tabs.setTabText(tab_index, f"{title} ({count})")
 
+    @staticmethod
+    def _quadrant_label(item: IdeaItem) -> str:
+        if item.value_score >= 4 and item.effort_score <= 2:
+            return "Сделать первым"
+        if item.value_score >= 4:
+            return "Запланировать"
+        if item.effort_score <= 2:
+            return "Быстро закрыть"
+        return "В архив / позже"
+
+    def _add_alt_view_header(self, widget: QListWidget, text: str) -> None:
+        item = QListWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        widget.addItem(item)
+
+    def _add_alt_view_idea(self, widget: QListWidget, item: IdeaItem, *, prefix: str = "") -> None:
+        line = (
+            f"{prefix}{item.title} · {self._category_title(item.status)}"
+            f" · Value {item.value_score} / Effort {item.effort_score}"
+            f" · Выход: {item.output_label}"
+        )
+        row = QListWidgetItem(line)
+        row.setData(Qt.ItemDataRole.UserRole, item.id)
+        widget.addItem(row)
+
+    def _populate_funnel_view(self) -> None:
+        self.funnel_view.clear()
+        order = [
+            ("inbox", "Входящие"),
+            ("work", "В работе"),
+            ("ripe", "Созрели"),
+            ("archived", "Архив"),
+        ]
+        grouped: Dict[str, List[IdeaItem]] = {key: [] for key, _label in order}
+        for item in self._visible_idea_items:
+            status = (item.status or "").strip().lower()
+            grouped["archived" if item.archived else status].append(item)
+        for key, label in order:
+            bucket = grouped.get(key, [])
+            self._add_alt_view_header(self.funnel_view, f"{label} · {len(bucket)}")
+            if not bucket:
+                self._add_alt_view_header(self.funnel_view, "  Нет идей")
+                continue
+            for item in bucket:
+                self._add_alt_view_idea(self.funnel_view, item, prefix="  ")
+
+    def _populate_matrix_view(self) -> None:
+        self.matrix_view.clear()
+        groups: Dict[str, List[IdeaItem]] = {
+            "Сделать первым": [],
+            "Запланировать": [],
+            "Быстро закрыть": [],
+            "В архив / позже": [],
+        }
+        for item in self._visible_idea_items:
+            groups[self._quadrant_label(item)].append(item)
+        for label, bucket in groups.items():
+            self._add_alt_view_header(self.matrix_view, f"{label} · {len(bucket)}")
+            if not bucket:
+                self._add_alt_view_header(self.matrix_view, "  Нет идей")
+                continue
+            bucket.sort(key=lambda idea: (-idea.value_score, idea.effort_score, idea.title.casefold(), idea.id))
+            for item in bucket:
+                self._add_alt_view_idea(self.matrix_view, item, prefix="  ")
+
+    def _populate_links_view(self) -> None:
+        self.links_view.clear()
+        if self._current_idea_id is None:
+            self._add_alt_view_header(self.links_view, "Выберите идею, чтобы увидеть её связи.")
+            return
+        idea = next((item for item in self._visible_idea_items if item.id == self._current_idea_id), None)
+        if idea is None:
+            current = self._db.get_idea(self._current_idea_id)
+            if current is not None:
+                self._add_alt_view_header(self.links_view, f"{current.title}")
+            else:
+                self._add_alt_view_header(self.links_view, "Связи недоступны.")
+                return
+        else:
+            self._add_alt_view_header(self.links_view, f"{idea.title}")
+        relations = self._db.fetch_idea_relations(self._current_idea_id)
+        if not relations:
+            self._add_alt_view_header(self.links_view, "Связей пока нет")
+            self._add_alt_view_header(
+                self.links_view,
+                "Свяжите идею с задачей, заметкой, объектом или картой, чтобы она стала частью рабочего контекста.",
+            )
+            return
+        grouped: Dict[str, List[object]] = {}
+        for relation in relations:
+            grouped.setdefault(relation.entity_type, []).append(relation)
+        for entity_type in sorted(grouped.keys()):
+            title = IDEA_RELATION_KIND_LABELS.get(entity_type, entity_type.capitalize())
+            self._add_alt_view_header(self.links_view, f"{title} · {len(grouped[entity_type])}")
+            for relation in grouped[entity_type]:
+                label = self._relation_display_label(relation.entity_type, relation.entity_id)
+                row = QListWidgetItem(f"  {label}")
+                if relation.entity_type == "idea":
+                    row.setData(Qt.ItemDataRole.UserRole, relation.entity_id)
+                self.links_view.addItem(row)
+
+    def _populate_mode_views(self) -> None:
+        if not hasattr(self, "funnel_view"):
+            return
+        self._populate_funnel_view()
+        self._populate_matrix_view()
+        self._populate_links_view()
+
+    def _on_view_mode_changed(self, *_args: object) -> None:
+        mode = self.view_mode_combo.currentData()
+        page_index = {
+            "list": 0,
+            "funnel": 1,
+            "matrix": 2,
+            "links": 3,
+        }.get(mode, 0)
+        self.list_mode_stack.setCurrentIndex(page_index)
+        self._populate_mode_views()
+
+    def _on_alt_view_item_activated(self, item: QListWidgetItem) -> None:
+        idea_id = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(idea_id, int):
+            return
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return
+        index = model.index_for_id(idea_id)
+        if not index.isValid():
+            return
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+
     def _reset_tab_titles(self) -> None:
         self._set_counted_tab_title(self.content_tab_index, "Суть")
         self._set_counted_tab_title(self.development_tab_index, "Развитие")
@@ -1386,6 +1553,7 @@ class IdeasWorkspace(BaseWorkspace):
                     updated_label=self._format_relative_time(idea.updated_at),
                 )
             )
+        self._visible_idea_items = items
         model = self.list_view.model()
         if isinstance(model, IdeasListModel):
             model.set_items(
@@ -1398,6 +1566,7 @@ class IdeasWorkspace(BaseWorkspace):
                 self._set_quick_status(None)
         self._update_empty_state(items)
         self._sync_selection()
+        self._populate_mode_views()
         self._refresh_status_bar()
 
     def _sync_selection(self) -> None:
@@ -1435,12 +1604,14 @@ class IdeasWorkspace(BaseWorkspace):
             self._current_idea_id = None
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._populate_links_view()
             self._update_relations_actions()
             self.update_action_states()
             return
         self._current_idea_id = index.data(IdeaRoles.IdeaId)
         self._load_idea(self._current_idea_id)
         self.inspector_stack.setCurrentWidget(self.inspector_tabs)
+        self._populate_links_view()
         self.update_action_states()
 
     def _open_selected(self, *_args: object) -> None:

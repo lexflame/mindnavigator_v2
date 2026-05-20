@@ -132,6 +132,98 @@ def test_ideas_workspace_remaster_tabs_and_source_field(monkeypatch, unique_temp
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_view_modes", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_idea = database.create_idea(
+            title="Capture idea",
+            summary="Quick win",
+            status="inbox",
+            value_score=5,
+            effort_score=1,
+        )
+        second_idea = database.create_idea(
+            title="Heavy idea",
+            summary="Need more research",
+            status="work",
+            value_score=4,
+            effort_score=4,
+        )
+        database.add_idea_relation(first_idea.id, "idea", second_idea.id)
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert [workspace.view_mode_combo.itemData(index) for index in range(workspace.view_mode_combo.count())] == [
+            "list",
+            "funnel",
+            "matrix",
+            "links",
+        ]
+
+        model = workspace.list_view.model()
+        assert model is not None
+        first_index = model.index_for_id(first_idea.id)
+        workspace.list_view.setCurrentIndex(first_index)
+        QApplication.processEvents()
+
+        funnel_index = workspace.view_mode_combo.findData("funnel")
+        assert funnel_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(funnel_index)
+        QApplication.processEvents()
+
+        assert workspace.list_mode_stack.currentWidget() is workspace.funnel_view
+        funnel_rows = [workspace.funnel_view.item(row).text() for row in range(workspace.funnel_view.count())]
+        assert any("Capture idea" in row for row in funnel_rows)
+        assert any("Heavy idea" in row for row in funnel_rows)
+
+        funnel_idea_item = next(
+            workspace.funnel_view.item(row)
+            for row in range(workspace.funnel_view.count())
+            if isinstance(workspace.funnel_view.item(row).data(Qt.ItemDataRole.UserRole), int)
+        )
+        workspace.funnel_view.itemClicked.emit(funnel_idea_item)
+        QApplication.processEvents()
+        assert workspace.get_selection() == funnel_idea_item.data(Qt.ItemDataRole.UserRole)
+
+        matrix_index = workspace.view_mode_combo.findData("matrix")
+        assert matrix_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(matrix_index)
+        QApplication.processEvents()
+
+        matrix_rows = [workspace.matrix_view.item(row).text() for row in range(workspace.matrix_view.count())]
+        assert any("Capture idea" in row for row in matrix_rows)
+        assert any("Heavy idea" in row for row in matrix_rows)
+
+        links_index = workspace.view_mode_combo.findData("links")
+        assert links_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(links_index)
+        QApplication.processEvents()
+
+        link_rows = [workspace.links_view.item(row).text() for row in range(workspace.links_view.count())]
+        assert any("Capture idea" in row for row in link_rows)
+        assert any("Heavy idea" in row for row in link_rows)
+
+        second_index = model.index_for_id(second_idea.id)
+        workspace.list_view.setCurrentIndex(second_index)
+        QApplication.processEvents()
+
+        updated_link_rows = [workspace.links_view.item(row).text() for row in range(workspace.links_view.count())]
+        assert any("Heavy idea" == row for row in updated_link_rows)
+        assert not any("Capture idea" in row for row in updated_link_rows)
+        assert len(updated_link_rows) >= 2
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_save_button_persists_project_change(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_change_project", ".sqlite3")
