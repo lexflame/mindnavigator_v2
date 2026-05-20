@@ -5,19 +5,19 @@ from datetime import date, datetime, timezone
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-import mindnavigator.workspaces.mutaboard.module_impl as mutaboard_module
+import mindnavigator.workspaces.concept_board.module_impl as concept_board_module
 from mindnavigator.storage import (
     CloudFileData,
     IdeaData,
     IdeaRelationData,
     MapData,
     MapMarkerData,
-    MutaBoardLinkData,
-    MutaBoardColumnData,
-    MutaBoardData,
-    MutaBoardItemData,
-    MutaBoardSolutionData,
-    MutaBoardVersionData,
+    ConceptBoardLinkData,
+    ConceptBoardColumnData,
+    ConceptBoardData,
+    ConceptBoardItemData,
+    ConceptBoardSolutionData,
+    ConceptBoardVersionData,
     NoteData,
     ObjectData,
     ProjectData,
@@ -26,7 +26,7 @@ from mindnavigator.storage import (
 )
 
 
-class _MutaBoardWorkspaceDbStub:
+class _ConceptBoardWorkspaceDbStub:
     def __init__(self) -> None:
         self._now = datetime(2026, 5, 17, 12, 0, tzinfo=timezone.utc)
         self._tasks = [
@@ -153,8 +153,8 @@ class _MutaBoardWorkspaceDbStub:
         self._idea_relations = {
             202: [IdeaRelationData(id=901, idea_id=202, entity_type="object", entity_id=303, created_at=self._now)]
         }
-        self._mutaboards = {
-            1: MutaBoardData(
+        self._concept_boards = {
+            1: ConceptBoardData(
                 id=1,
                 title="Основной мутборд",
                 description="Описание доски",
@@ -167,16 +167,16 @@ class _MutaBoardWorkspaceDbStub:
         }
         self._columns = {
             1: [
-                MutaBoardColumnData(id=1, mutaboard_id=1, kind="task", title="", position=0, created_at=self._now, updated_at=self._now),
-                MutaBoardColumnData(id=2, mutaboard_id=1, kind="idea", title="", position=1, created_at=self._now, updated_at=self._now),
-                MutaBoardColumnData(id=3, mutaboard_id=1, kind="image", title="", position=2, created_at=self._now, updated_at=self._now),
+                ConceptBoardColumnData(id=1, concept_board_id=1, kind="task", title="", position=0, created_at=self._now, updated_at=self._now),
+                ConceptBoardColumnData(id=2, concept_board_id=1, kind="idea", title="", position=1, created_at=self._now, updated_at=self._now),
+                ConceptBoardColumnData(id=3, concept_board_id=1, kind="image", title="", position=2, created_at=self._now, updated_at=self._now),
             ]
         }
         self._items = {1: []}
         self._versions = {1: []}
         self._solutions = {1: []}
         self._links = {1: []}
-        self.updated_mutaboards: list[tuple[int, str, str, str, str, str]] = []
+        self.updated_concept_boards: list[tuple[int, str, str, str, str, str]] = []
         self.attached_items: list[tuple[int, str, int]] = []
         self._next_board_id = 2
         self._next_column_id = 4
@@ -217,11 +217,11 @@ class _MutaBoardWorkspaceDbStub:
     def fetch_idea_relations(self, idea_id: int):
         return list(self._idea_relations.get(idea_id, []))
 
-    def fetch_mutaboards(self):
-        return sorted(self._mutaboards.values(), key=lambda item: item.id)
+    def fetch_concept_boards(self):
+        return sorted(self._concept_boards.values(), key=lambda item: item.id)
 
-    def create_mutaboard(self, title: str, description: str = "", capture_text: str = "", planning_text: str = "", links_text: str = "", column_kinds=None):
-        created = MutaBoardData(
+    def create_concept_board(self, title: str, description: str = "", capture_text: str = "", planning_text: str = "", links_text: str = "", column_kinds=None):
+        created = ConceptBoardData(
             id=self._next_board_id,
             title=title,
             description=description,
@@ -231,14 +231,14 @@ class _MutaBoardWorkspaceDbStub:
             created_at=self._now,
             updated_at=self._now,
         )
-        self._mutaboards[created.id] = created
+        self._concept_boards[created.id] = created
         kinds = list(column_kinds or ("task", "idea", "image"))
         columns = []
         for position, kind in enumerate(kinds):
             columns.append(
-                MutaBoardColumnData(
+                ConceptBoardColumnData(
                     id=self._next_column_id + position,
-                    mutaboard_id=created.id,
+                    concept_board_id=created.id,
                     kind=kind,
                     title="",
                     position=position,
@@ -255,31 +255,31 @@ class _MutaBoardWorkspaceDbStub:
         self._next_board_id += 1
         return created
 
-    def update_mutaboard(self, mutaboard_id: int, *, title: str, description: str, capture_text: str, planning_text: str, links_text: str):
-        updated = MutaBoardData(
-            id=mutaboard_id,
+    def update_concept_board(self, concept_board_id: int, *, title: str, description: str, capture_text: str, planning_text: str, links_text: str):
+        updated = ConceptBoardData(
+            id=concept_board_id,
             title=title,
             description=description,
             capture_text=capture_text,
             planning_text=planning_text,
             links_text=links_text,
-            created_at=self._mutaboards[mutaboard_id].created_at,
+            created_at=self._concept_boards[concept_board_id].created_at,
             updated_at=self._now,
         )
-        self._mutaboards[mutaboard_id] = updated
-        self.updated_mutaboards.append((mutaboard_id, title, description, capture_text, planning_text, links_text))
+        self._concept_boards[concept_board_id] = updated
+        self.updated_concept_boards.append((concept_board_id, title, description, capture_text, planning_text, links_text))
         return updated
 
-    def fetch_mutaboard_columns(self, mutaboard_id: int):
-        return list(self._columns.get(mutaboard_id, []))
+    def fetch_concept_board_columns(self, concept_board_id: int):
+        return list(self._columns.get(concept_board_id, []))
 
-    def replace_mutaboard_columns(self, mutaboard_id: int, columns):
+    def replace_concept_board_columns(self, concept_board_id: int, columns):
         payload = []
         for position, (kind, title) in enumerate(columns):
             payload.append(
-                MutaBoardColumnData(
+                ConceptBoardColumnData(
                     id=self._next_column_id + position,
-                    mutaboard_id=mutaboard_id,
+                    concept_board_id=concept_board_id,
                     kind=kind,
                     title=title,
                     position=position,
@@ -288,31 +288,31 @@ class _MutaBoardWorkspaceDbStub:
                 )
             )
         self._next_column_id += len(payload)
-        self._columns[mutaboard_id] = payload
+        self._columns[concept_board_id] = payload
         return list(payload)
 
-    def add_mutaboard_column(self, mutaboard_id: int, kind: str, title: str = ""):
-        column = MutaBoardColumnData(
+    def add_concept_board_column(self, concept_board_id: int, kind: str, title: str = ""):
+        column = ConceptBoardColumnData(
             id=self._next_column_id,
-            mutaboard_id=mutaboard_id,
+            concept_board_id=concept_board_id,
             kind=kind,
             title=title,
-            position=len(self._columns.get(mutaboard_id, [])),
+            position=len(self._columns.get(concept_board_id, [])),
             created_at=self._now,
             updated_at=self._now,
         )
         self._next_column_id += 1
-        self._columns.setdefault(mutaboard_id, []).append(column)
+        self._columns.setdefault(concept_board_id, []).append(column)
         return column
 
-    def update_mutaboard_column(self, column_id: int, *, kind: str, title: str, position: int | None = None):
-        for mutaboard_id, columns in self._columns.items():
+    def update_concept_board_column(self, column_id: int, *, kind: str, title: str, position: int | None = None):
+        for concept_board_id, columns in self._columns.items():
             for index, column in enumerate(columns):
                 if column.id != column_id:
                     continue
-                updated = MutaBoardColumnData(
+                updated = ConceptBoardColumnData(
                     id=column.id,
-                    mutaboard_id=column.mutaboard_id,
+                    concept_board_id=column.concept_board_id,
                     kind=kind,
                     title=title,
                     position=column.position if position is None else position,
@@ -323,29 +323,29 @@ class _MutaBoardWorkspaceDbStub:
                 return updated
         raise AssertionError("column not found")
 
-    def fetch_mutaboard_items(self, mutaboard_id: int):
-        return list(self._items.get(mutaboard_id, []))
+    def fetch_concept_board_items(self, concept_board_id: int):
+        return list(self._items.get(concept_board_id, []))
 
-    def attach_mutaboard_item(self, mutaboard_id: int, entity_kind: str, entity_id: int):
-        item = MutaBoardItemData(
+    def attach_concept_board_item(self, concept_board_id: int, entity_kind: str, entity_id: int):
+        item = ConceptBoardItemData(
             id=self._next_item_id,
-            mutaboard_id=mutaboard_id,
+            concept_board_id=concept_board_id,
             entity_kind=entity_kind,
             entity_id=entity_id,
             created_at=self._now,
         )
         self._next_item_id += 1
-        self._items.setdefault(mutaboard_id, []).append(item)
-        self.attached_items.append((mutaboard_id, entity_kind, entity_id))
+        self._items.setdefault(concept_board_id, []).append(item)
+        self.attached_items.append((concept_board_id, entity_kind, entity_id))
         return item
 
-    def fetch_mutaboard_versions(self, mutaboard_id: int):
-        return list(self._versions.get(mutaboard_id, []))
+    def fetch_concept_board_versions(self, concept_board_id: int):
+        return list(self._versions.get(concept_board_id, []))
 
-    def create_mutaboard_version(self, mutaboard_id: int, *, title: str, description: str = "", why_yes: str = "", why_no: str = "", checks_text: str = "", status: str = "draft"):
-        item = MutaBoardVersionData(
+    def create_concept_board_version(self, concept_board_id: int, *, title: str, description: str = "", why_yes: str = "", why_no: str = "", checks_text: str = "", status: str = "draft"):
+        item = ConceptBoardVersionData(
             id=self._next_version_id,
-            mutaboard_id=mutaboard_id,
+            concept_board_id=concept_board_id,
             title=title,
             description=description,
             why_yes=why_yes,
@@ -356,17 +356,17 @@ class _MutaBoardWorkspaceDbStub:
             updated_at=self._now,
         )
         self._next_version_id += 1
-        self._versions.setdefault(mutaboard_id, []).insert(0, item)
+        self._versions.setdefault(concept_board_id, []).insert(0, item)
         return item
 
-    def update_mutaboard_version(self, version_id: int, *, title: str, description: str, why_yes: str, why_no: str, checks_text: str, status: str):
-        for mutaboard_id, items in self._versions.items():
+    def update_concept_board_version(self, version_id: int, *, title: str, description: str, why_yes: str, why_no: str, checks_text: str, status: str):
+        for concept_board_id, items in self._versions.items():
             for index, item in enumerate(items):
                 if item.id != version_id:
                     continue
-                updated = MutaBoardVersionData(
+                updated = ConceptBoardVersionData(
                     id=item.id,
-                    mutaboard_id=mutaboard_id,
+                    concept_board_id=concept_board_id,
                     title=title,
                     description=description,
                     why_yes=why_yes,
@@ -380,13 +380,13 @@ class _MutaBoardWorkspaceDbStub:
                 return updated
         raise AssertionError("version not found")
 
-    def fetch_mutaboard_solutions(self, mutaboard_id: int):
-        return list(self._solutions.get(mutaboard_id, []))
+    def fetch_concept_board_solutions(self, concept_board_id: int):
+        return list(self._solutions.get(concept_board_id, []))
 
-    def create_mutaboard_solution(self, mutaboard_id: int, *, title: str, summary: str = "", why_selected: str = "", rejected_text: str = "", next_steps_text: str = "", status: str = "draft", selected_version_id=None, decided_at: str = ""):
-        item = MutaBoardSolutionData(
+    def create_concept_board_solution(self, concept_board_id: int, *, title: str, summary: str = "", why_selected: str = "", rejected_text: str = "", next_steps_text: str = "", status: str = "draft", selected_version_id=None, decided_at: str = ""):
+        item = ConceptBoardSolutionData(
             id=self._next_solution_id,
-            mutaboard_id=mutaboard_id,
+            concept_board_id=concept_board_id,
             title=title,
             summary=summary,
             why_selected=why_selected,
@@ -399,17 +399,17 @@ class _MutaBoardWorkspaceDbStub:
             updated_at=self._now,
         )
         self._next_solution_id += 1
-        self._solutions.setdefault(mutaboard_id, []).insert(0, item)
+        self._solutions.setdefault(concept_board_id, []).insert(0, item)
         return item
 
-    def update_mutaboard_solution(self, solution_id: int, *, title: str, summary: str, why_selected: str, rejected_text: str, next_steps_text: str, status: str, selected_version_id=None, decided_at: str = ""):
-        for mutaboard_id, items in self._solutions.items():
+    def update_concept_board_solution(self, solution_id: int, *, title: str, summary: str, why_selected: str, rejected_text: str, next_steps_text: str, status: str, selected_version_id=None, decided_at: str = ""):
+        for concept_board_id, items in self._solutions.items():
             for index, item in enumerate(items):
                 if item.id != solution_id:
                     continue
-                updated = MutaBoardSolutionData(
+                updated = ConceptBoardSolutionData(
                     id=item.id,
-                    mutaboard_id=mutaboard_id,
+                    concept_board_id=concept_board_id,
                     title=title,
                     summary=summary,
                     why_selected=why_selected,
@@ -425,8 +425,8 @@ class _MutaBoardWorkspaceDbStub:
                 return updated
         raise AssertionError("solution not found")
 
-    def fetch_mutaboard_links(self, mutaboard_id: int, *, source_kind=None, source_id=None, target_kind=None, target_id=None):
-        result = list(self._links.get(mutaboard_id, []))
+    def fetch_concept_board_links(self, concept_board_id: int, *, source_kind=None, source_id=None, target_kind=None, target_id=None):
+        result = list(self._links.get(concept_board_id, []))
         if source_kind is not None:
             result = [item for item in result if item.source_kind == source_kind]
         if source_id is not None:
@@ -437,10 +437,10 @@ class _MutaBoardWorkspaceDbStub:
             result = [item for item in result if item.target_id == target_id]
         return result
 
-    def add_mutaboard_link(self, mutaboard_id: int, *, source_kind: str, source_id: int, target_kind: str, target_id: int, link_type: str = "relates_to"):
-        item = MutaBoardLinkData(
+    def add_concept_board_link(self, concept_board_id: int, *, source_kind: str, source_id: int, target_kind: str, target_id: int, link_type: str = "relates_to"):
+        item = ConceptBoardLinkData(
             id=self._next_link_id,
-            mutaboard_id=mutaboard_id,
+            concept_board_id=concept_board_id,
             source_kind=source_kind,
             source_id=source_id,
             target_kind=target_kind,
@@ -449,7 +449,7 @@ class _MutaBoardWorkspaceDbStub:
             created_at=self._now,
         )
         self._next_link_id += 1
-        bucket = self._links.setdefault(mutaboard_id, [])
+        bucket = self._links.setdefault(concept_board_id, [])
         for existing in bucket:
             if (
                 existing.source_kind,
@@ -476,17 +476,17 @@ def _column_widget_by_kind(workspace, kind: str):
     raise AssertionError(f"column kind not found: {kind}")
 
 
-def test_mutaboard_workspace_builds_board_list_and_default_columns(monkeypatch) -> None:
+def test_concept_board_workspace_builds_board_list_and_default_columns(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         assert workspace.objectName() == "ConceptBoardWorkspace"
-        assert workspace.mutaboard_list.count() == 1
-        assert workspace.mutaboard_list.item(0).text().startswith("Основной мутборд\n")
-        assert "Решение принято" in workspace.mutaboard_list.item(0).text()
+        assert workspace.concept_board_list.count() == 1
+        assert workspace.concept_board_list.item(0).text().startswith("Основной мутборд\n")
+        assert "Решение принято" in workspace.concept_board_list.item(0).text()
         assert workspace.focus_title_input.text() == "Основной мутборд"
         assert "Статус: Решение принято" in workspace.focus_caption_label.text()
         assert list(workspace._column_kinds.values()) == ["task", "idea", "image"]
@@ -498,12 +498,12 @@ def test_mutaboard_workspace_builds_board_list_and_default_columns(monkeypatch) 
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_selection_updates_structure_from_active_card(monkeypatch) -> None:
+def test_concept_board_workspace_selection_updates_structure_from_active_card(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         idea_column = _column_widget_by_kind(workspace, "idea")
         idea_column.setCurrentRow(0)
@@ -518,12 +518,12 @@ def test_mutaboard_workspace_selection_updates_structure_from_active_card(monkey
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_saves_focus_and_scenarios(monkeypatch) -> None:
+def test_concept_board_workspace_saves_focus_and_scenarios(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.focus_title_input.setText("Переименованный мутборд")
         workspace.focus_description_input.setPlainText("Новое описание")
@@ -533,26 +533,26 @@ def test_mutaboard_workspace_saves_focus_and_scenarios(monkeypatch) -> None:
         workspace.focus_save_button.click()
         QApplication.processEvents()
 
-        assert stub.updated_mutaboards == [
+        assert stub.updated_concept_boards == [
             (1, "Переименованный мутборд", "Новое описание", "Новый захват", "Новое планирование", "Новые связи")
         ]
-        assert workspace.mutaboard_list.item(0).text().startswith("Переименованный мутборд\n")
+        assert workspace.concept_board_list.item(0).text().startswith("Переименованный мутборд\n")
     finally:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_adds_columns_and_attaches_items(monkeypatch) -> None:
+def test_concept_board_workspace_adds_columns_and_attaches_items(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.add_column_button.click()
         QApplication.processEvents()
         assert len(workspace.board_columns) == 4
 
-        workspace._db.attach_mutaboard_item(1, "task", 101)
+        workspace._db.attach_concept_board_item(1, "task", 101)
         workspace._populate_board()
         QApplication.processEvents()
 
@@ -564,17 +564,17 @@ def test_mutaboard_workspace_adds_columns_and_attaches_items(monkeypatch) -> Non
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_creates_new_board_with_solution_flow_columns(monkeypatch) -> None:
+def test_concept_board_workspace_creates_new_board_with_solution_flow_columns(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
-        workspace.add_mutaboard_button.click()
+        workspace.add_concept_board_button.click()
         QApplication.processEvents()
 
-        assert workspace.mutaboard_list.count() == 2
+        assert workspace.concept_board_list.count() == 2
         assert len(workspace.board_columns) == 6
         assert [label.text() for label in workspace._column_title_labels.values()] == [
             "Входящие",
@@ -588,12 +588,12 @@ def test_mutaboard_workspace_creates_new_board_with_solution_flow_columns(monkey
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_column_kind_filter_switches_catalog(monkeypatch) -> None:
+def test_concept_board_workspace_column_kind_filter_switches_catalog(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "note")
@@ -607,12 +607,12 @@ def test_mutaboard_workspace_column_kind_filter_switches_catalog(monkeypatch) ->
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_builds_synthetic_version_and_solution_cards(monkeypatch) -> None:
+def test_concept_board_workspace_builds_synthetic_version_and_solution_cards(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         second_column_id = list(workspace._column_kinds)[1]
@@ -634,12 +634,12 @@ def test_mutaboard_workspace_builds_synthetic_version_and_solution_cards(monkeyp
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_shows_empty_state_for_missing_column_kind(monkeypatch) -> None:
+def test_concept_board_workspace_shows_empty_state_for_missing_column_kind(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "file")
@@ -652,12 +652,12 @@ def test_mutaboard_workspace_shows_empty_state_for_missing_column_kind(monkeypat
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_accepts_version_into_solution(monkeypatch) -> None:
+def test_concept_board_workspace_accepts_version_into_solution(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "version")
@@ -677,12 +677,12 @@ def test_mutaboard_workspace_accepts_version_into_solution(monkeypatch) -> None:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_creates_next_task_from_focus_card(monkeypatch) -> None:
+def test_concept_board_workspace_creates_next_task_from_focus_card(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "version")
@@ -700,12 +700,12 @@ def test_mutaboard_workspace_creates_next_task_from_focus_card(monkeypatch) -> N
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_quick_actions_seed_concept_flow(monkeypatch) -> None:
+def test_concept_board_workspace_quick_actions_seed_concept_flow(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.quick_add_idea_button.click()
         workspace.quick_add_version_button.click()
@@ -719,12 +719,12 @@ def test_mutaboard_workspace_quick_actions_seed_concept_flow(monkeypatch) -> Non
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_creates_tasks_from_solution_summary(monkeypatch) -> None:
+def test_concept_board_workspace_creates_tasks_from_solution_summary(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace._scenario_editors["capture"].setPlainText("Собрать концептборд вокруг решения")
         QApplication.processEvents()
@@ -738,35 +738,35 @@ def test_mutaboard_workspace_creates_tasks_from_solution_summary(monkeypatch) ->
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
+def test_concept_board_workspace_styles_darken_all_shell_areas(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         stylesheet = workspace.styleSheet()
 
-        assert "QFrame#MutaBoardScenarioCard" in stylesheet
-        assert "QScrollArea#MutaBoardScroll" in stylesheet
-        assert "QComboBox#MutaBoardColumnKindFilter QAbstractItemView" in stylesheet
-        assert "QComboBox#MutaBoardFilterCombo QAbstractItemView" in stylesheet
+        assert "QFrame#ConceptBoardScenarioCard" in stylesheet
+        assert "QScrollArea#ConceptBoardScroll" in stylesheet
+        assert "QComboBox#ConceptBoardColumnKindFilter QAbstractItemView" in stylesheet
+        assert "QComboBox#ConceptBoardFilterCombo QAbstractItemView" in stylesheet
         assert "QLineEdit#WorkspaceSearchInput" in stylesheet
         assert "QToolButton#WorkspaceSearchClear" in stylesheet
-        assert workspace.link_scope_filter.objectName() == "MutaBoardFilterCombo"
-        assert workspace.action_scope_filter.objectName() == "MutaBoardFilterCombo"
+        assert workspace.link_scope_filter.objectName() == "ConceptBoardFilterCombo"
+        assert workspace.action_scope_filter.objectName() == "ConceptBoardFilterCombo"
         assert "QMenu {" in stylesheet
-        assert "QListWidget#MutaBoardColumnList::viewport" in stylesheet
+        assert "QListWidget#ConceptBoardColumnList::viewport" in stylesheet
     finally:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_places_filters_before_search(monkeypatch) -> None:
+def test_concept_board_workspace_places_filters_before_search(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         search_layout = workspace.search_row.layout()
         widgets = [search_layout.itemAt(index).widget() for index in range(search_layout.count())]
@@ -782,12 +782,12 @@ def test_mutaboard_workspace_places_filters_before_search(monkeypatch) -> None:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_columns_use_resizable_splitter(monkeypatch) -> None:
+def test_concept_board_workspace_columns_use_resizable_splitter(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.resize(1600, 900)
         workspace.show()
@@ -804,12 +804,12 @@ def test_mutaboard_workspace_columns_use_resizable_splitter(monkeypatch) -> None
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_builds_semantic_overview_relations(monkeypatch) -> None:
+def test_concept_board_workspace_builds_semantic_overview_relations(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         relations = [workspace.structure_relations_list.item(index).text() for index in range(workspace.structure_relations_list.count())]
 
@@ -819,12 +819,12 @@ def test_mutaboard_workspace_builds_semantic_overview_relations(monkeypatch) -> 
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_builds_semantic_relations_for_selected_idea(monkeypatch) -> None:
+def test_concept_board_workspace_builds_semantic_relations_for_selected_idea(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "version")
@@ -841,12 +841,12 @@ def test_mutaboard_workspace_builds_semantic_relations_for_selected_idea(monkeyp
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_filters_only_linked_items(monkeypatch) -> None:
+def test_concept_board_workspace_filters_only_linked_items(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.link_scope_filter.setCurrentIndex(workspace.link_scope_filter.findData("linked"))
         QApplication.processEvents()
@@ -859,9 +859,9 @@ def test_mutaboard_workspace_filters_only_linked_items(monkeypatch) -> None:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_filters_only_actionable_items(monkeypatch) -> None:
+def test_concept_board_workspace_filters_only_actionable_items(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
+    stub = _ConceptBoardWorkspaceDbStub()
     stub._tasks.append(
         TaskData(
             id=102,
@@ -876,9 +876,9 @@ def test_mutaboard_workspace_filters_only_actionable_items(monkeypatch) -> None:
             project_title="Workspace Project",
         )
     )
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         task_column = _column_widget_by_kind(workspace, "task")
         assert task_column.count() == 2
@@ -896,12 +896,12 @@ def test_mutaboard_workspace_filters_only_actionable_items(monkeypatch) -> None:
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_relation_click_focuses_idea_from_overview(monkeypatch) -> None:
+def test_concept_board_workspace_relation_click_focuses_idea_from_overview(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_relation = workspace.structure_relations_list.item(0)
 
@@ -914,12 +914,12 @@ def test_mutaboard_workspace_relation_click_focuses_idea_from_overview(monkeypat
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_relation_click_focuses_version_from_idea(monkeypatch) -> None:
+def test_concept_board_workspace_relation_click_focuses_version_from_idea(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "version")
@@ -943,12 +943,12 @@ def test_mutaboard_workspace_relation_click_focuses_version_from_idea(monkeypatc
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_quick_add_version_persists_storage_version(monkeypatch) -> None:
+def test_concept_board_workspace_quick_add_version_persists_storage_version(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         workspace.quick_add_version_button.click()
         QApplication.processEvents()
@@ -958,12 +958,12 @@ def test_mutaboard_workspace_quick_add_version_persists_storage_version(monkeypa
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_creates_persisted_version_from_idea(monkeypatch) -> None:
+def test_concept_board_workspace_creates_persisted_version_from_idea(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         idea_column = _column_widget_by_kind(workspace, "idea")
         idea_column.setCurrentRow(0)
@@ -983,13 +983,13 @@ def test_mutaboard_workspace_creates_persisted_version_from_idea(monkeypatch) ->
         workspace.deleteLater()
 
 
-def test_mutaboard_workspace_promotes_persisted_version_to_solution(monkeypatch) -> None:
+def test_concept_board_workspace_promotes_persisted_version_to_solution(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    stub = _MutaBoardWorkspaceDbStub()
-    version = stub.create_mutaboard_version(1, title="Version from storage", why_yes="Ship the board")
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: stub)
+    stub = _ConceptBoardWorkspaceDbStub()
+    version = stub.create_concept_board_version(1, title="Version from storage", why_yes="Ship the board")
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: stub)
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         first_column_id = next(iter(workspace._column_kinds))
         workspace._on_column_kind_changed(first_column_id, "version")

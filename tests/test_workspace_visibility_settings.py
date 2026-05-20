@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from PySide6.QtWidgets import QApplication
 
 import mindnavigator.window.collections.main_window as main_window
-import mindnavigator.workspaces.mutaboard.module_impl as mutaboard_module
-from mindnavigator.storage import MutaBoardColumnData, MutaBoardData
+import mindnavigator.workspaces.concept_board.module_impl as concept_board_module
+from mindnavigator.storage import ConceptBoardColumnData, ConceptBoardData
 from mindnavigator.window.collections.main_window import (
     MainWindow,
     normalize_enabled_workspace_ids,
@@ -44,7 +44,7 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
         MODE_PROJECTS = MainWindow.MODE_PROJECTS
         MODE_TASKS = MainWindow.MODE_TASKS
         MODE_CONCEPTBOARD = MainWindow.MODE_CONCEPTBOARD
-        MODE_MUTABOARD = MainWindow.MODE_MUTABOARD
+        MODE_CONCEPTBOARD = MainWindow.MODE_CONCEPTBOARD
         MODE_PURCHASES = MainWindow.MODE_PURCHASES
         MODE_IDEAS = MainWindow.MODE_IDEAS
         MODE_DOSSIER = MainWindow.MODE_DOSSIER
@@ -59,7 +59,6 @@ def test_workspace_mode_map_contains_characters_mode() -> None:
     mapping = MainWindow._workspace_mode_map(_DummyWindow())
 
     assert mapping["dossier"] == MainWindow.MODE_DOSSIER
-    assert mapping["mutaboard"] == MainWindow.MODE_MUTABOARD
     assert mapping["concept_board"] == MainWindow.MODE_CONCEPTBOARD
     assert mapping["characters"] == MainWindow.MODE_CHARACTERS
     assert mapping["minddraw"] == MainWindow.MODE_MINDDRAW
@@ -69,9 +68,9 @@ def test_settings_workspace_options_include_concept_board() -> None:
     assert ("concept_board", "Концептборд") in SettingsWorkspace.WORKSPACE_OPTIONS
 
 
-class _MutaBoardWorkspaceDbStub:
+class _ConceptBoardWorkspaceDbStub:
     def __init__(self) -> None:
-        self._mutaboards: list[MutaBoardData] = []
+        self._concept_boards: list[ConceptBoardData] = []
 
     def fetch_tasks(self):
         return []
@@ -103,10 +102,10 @@ class _MutaBoardWorkspaceDbStub:
     def fetch_idea_relations(self, idea_id: int):
         return []
 
-    def fetch_mutaboards(self):
-        return list(self._mutaboards)
+    def fetch_concept_boards(self):
+        return list(self._concept_boards)
 
-    def create_mutaboard(
+    def create_concept_board(
         self,
         title: str,
         description: str = "",
@@ -116,7 +115,7 @@ class _MutaBoardWorkspaceDbStub:
         column_kinds=None,
     ):
         now = datetime.now(timezone.utc)
-        board = MutaBoardData(
+        board = ConceptBoardData(
             id=1,
             title=title,
             description=description,
@@ -126,23 +125,23 @@ class _MutaBoardWorkspaceDbStub:
             created_at=now,
             updated_at=now,
         )
-        self._mutaboards = [board]
+        self._concept_boards = [board]
         return board
 
-    def fetch_mutaboard_columns(self, mutaboard_id: int):
+    def fetch_concept_board_columns(self, concept_board_id: int):
         now = datetime.now(timezone.utc)
         return [
-            MutaBoardColumnData(id=1, mutaboard_id=mutaboard_id, kind="task", title="", position=0, created_at=now, updated_at=now),
-            MutaBoardColumnData(id=2, mutaboard_id=mutaboard_id, kind="idea", title="", position=1, created_at=now, updated_at=now),
-            MutaBoardColumnData(id=3, mutaboard_id=mutaboard_id, kind="image", title="", position=2, created_at=now, updated_at=now),
+            ConceptBoardColumnData(id=1, concept_board_id=concept_board_id, kind="task", title="", position=0, created_at=now, updated_at=now),
+            ConceptBoardColumnData(id=2, concept_board_id=concept_board_id, kind="idea", title="", position=1, created_at=now, updated_at=now),
+            ConceptBoardColumnData(id=3, concept_board_id=concept_board_id, kind="image", title="", position=2, created_at=now, updated_at=now),
         ]
 
-    def replace_mutaboard_columns(self, mutaboard_id: int, columns):
+    def replace_concept_board_columns(self, concept_board_id: int, columns):
         now = datetime.now(timezone.utc)
         return [
-            MutaBoardColumnData(
+            ConceptBoardColumnData(
                 id=index + 1,
-                mutaboard_id=mutaboard_id,
+                concept_board_id=concept_board_id,
                 kind=kind,
                 title=title,
                 position=index,
@@ -152,15 +151,15 @@ class _MutaBoardWorkspaceDbStub:
             for index, (kind, title) in enumerate(columns)
         ]
 
-    def fetch_mutaboard_items(self, mutaboard_id: int):
+    def fetch_concept_board_items(self, concept_board_id: int):
         return []
 
 
-def test_mutaboard_workspace_builds_phase_one_shell(monkeypatch) -> None:
+def test_concept_board_workspace_builds_phase_one_shell(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(mutaboard_module, "get_database", lambda: _MutaBoardWorkspaceDbStub())
+    monkeypatch.setattr(concept_board_module, "get_database", lambda: _ConceptBoardWorkspaceDbStub())
 
-    workspace = mutaboard_module.MutaBoardWorkspace()
+    workspace = concept_board_module.ConceptBoardWorkspace()
     try:
         assert workspace.workspace_id == "concept_board"
         assert workspace.search_input.placeholderText() == "Поиск по концептборду..."

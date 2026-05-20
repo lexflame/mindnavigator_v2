@@ -87,7 +87,6 @@ class LeftRail(QWidget):
         self.btn_projects = btn(self._icons["Проекты"], "Проекты")
         self.btn_tasks = btn(self._icons["Задачи"], "Задачи")
         self.btn_concept_board = btn(self._icons["Концептборд"], "Смысловая доска поиска решения")
-        self.btn_mutaboard = self.btn_concept_board
         self.btn_purchases = btn(self._icons["Покупки"], "Покупки")
         self.btn_ideas = btn(self._icons["Идеи"], "Идеи")
         self.btn_dossier = btn(self._icons["Досье"], "Досье")

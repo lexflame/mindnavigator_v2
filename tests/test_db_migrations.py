@@ -272,19 +272,19 @@ def test_database_backfills_concept_board_schema_when_user_version_is_current(un
         assert "file" in items_sql
         assert "link" in items_sql
         assert table_names == {"mutaboard_versions", "mutaboard_solutions", "mutaboard_links"}
-        assert [column.kind for column in database.fetch_mutaboard_columns(1)] == ["task"]
-        assert [(item.entity_kind, item.entity_id) for item in database.fetch_mutaboard_items(1)] == [("task", 101)]
+        assert [column.kind for column in database.fetch_concept_board_columns(1)] == ["task"]
+        assert [(item.entity_kind, item.entity_id) for item in database.fetch_concept_board_items(1)] == [("task", 101)]
 
-        database.add_mutaboard_column(1, "version")
-        version = database.create_mutaboard_version(1, title="Version A")
-        solution = database.create_mutaboard_solution(
+        database.add_concept_board_column(1, "version")
+        version = database.create_concept_board_version(1, title="Version A")
+        solution = database.create_concept_board_solution(
             1,
             title="Solution A",
             status="accepted",
             selected_version_id=version.id,
             decided_at="2026-05-20",
         )
-        database.add_mutaboard_link(
+        database.add_concept_board_link(
             1,
             source_kind="version",
             source_id=version.id,
@@ -293,10 +293,10 @@ def test_database_backfills_concept_board_schema_when_user_version_is_current(un
             link_type="transforms_to",
         )
 
-        assert [column.kind for column in database.fetch_mutaboard_columns(1)] == ["task", "version"]
-        assert [item.title for item in database.fetch_mutaboard_versions(1)] == ["Version A"]
-        assert [item.title for item in database.fetch_mutaboard_solutions(1)] == ["Solution A"]
-        assert [(item.source_kind, item.target_kind, item.link_type) for item in database.fetch_mutaboard_links(1)] == [
+        assert [column.kind for column in database.fetch_concept_board_columns(1)] == ["task", "version"]
+        assert [item.title for item in database.fetch_concept_board_versions(1)] == ["Version A"]
+        assert [item.title for item in database.fetch_concept_board_solutions(1)] == ["Solution A"]
+        assert [(item.source_kind, item.target_kind, item.link_type) for item in database.fetch_concept_board_links(1)] == [
             ("version", "solution", "transforms_to")
         ]
         assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION

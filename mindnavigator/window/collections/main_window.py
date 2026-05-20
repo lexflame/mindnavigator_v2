@@ -87,10 +87,7 @@ def _qtimer_cls():
 
 def normalize_enabled_workspace_ids(raw_value: str, available_ids: set[str]) -> set[str]:
     """Parses and normalizes enabled workspace ids from stored JSON value."""
-    alias_map = {
-        "mutaboard": "concept_board",
-        "muta_board": "concept_board",
-    }
+    alias_map = {"mutaboard": "concept_board", "muta_board": "concept_board"}
     if not raw_value:
         return set(available_ids)
     try:
@@ -129,7 +126,7 @@ class MainWindow(QMainWindow):
     MODE_PROJECTS = "Проекты"
     MODE_TASKS = "Задачи"
     MODE_CONCEPTBOARD = "Концептборд"
-    MODE_MUTABOARD = MODE_CONCEPTBOARD
+    MODE_CONCEPTBOARD = MODE_CONCEPTBOARD
     MODE_PURCHASES = "Покупки"
     MODE_IDEAS = "Идеи"
     MODE_DOSSIER = "Досье"
@@ -255,8 +252,6 @@ class MainWindow(QMainWindow):
         return {
             "projects": self.MODE_PROJECTS,
             "tasks": self.MODE_TASKS,
-            "mutaboard": self.MODE_MUTABOARD,
-            "muta_board": self.MODE_MUTABOARD,
             "concept_board": self.MODE_CONCEPTBOARD,
             "purchases": self.MODE_PURCHASES,
             "ideas": self.MODE_IDEAS,
@@ -896,7 +891,6 @@ class MainWindow(QMainWindow):
         # Pages
         self.page_tasks = TasksWorkspace()
         self.page_concept_board = ConceptBoardWorkspace()
-        self.page_mutaboard = self.page_concept_board
         self.page_projects = ProjectsWorkspace()
         self.page_purchases = PurchasesWorkspace()
         self.page_ideas = IdeasWorkspace()

@@ -1,9 +1,17 @@
-"""ConceptBoardItemData compatibility alias over legacy mutaboard storage rows."""
+"""ConceptBoardItemData storage data class."""
 
 from __future__ import annotations
 
-from .mutaboard_item_data import MutaBoardItemData as ConceptBoardItemData
+from ._model_shared import *  # noqa: F401,F403
 
-MutaBoardItemData = ConceptBoardItemData
 
-__all__ = ["ConceptBoardItemData", "MutaBoardItemData"]
+@dataclass(frozen=True)
+class ConceptBoardItemData:
+    id: int
+    concept_board_id: int
+    entity_kind: str
+    entity_id: int
+    created_at: datetime
+
+
+__all__ = ["ConceptBoardItemData"]
