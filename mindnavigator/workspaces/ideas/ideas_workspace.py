@@ -26,6 +26,7 @@ IDEA_RELATION_KIND_ITEMS = [
 ]
 
 IDEA_RELATION_KIND_LABELS = {value: label for label, value in IDEA_RELATION_KIND_ITEMS}
+IDEA_RELATION_GROUP_ORDER = ("task", "note", "idea", "object", "map", "marker", "concept_board")
 IDEA_OUTPUT_LABELS = {
     "task": "задача",
     "note": "заметка",
@@ -416,12 +417,18 @@ class IdeasWorkspace(BaseWorkspace):
         self.relations_remove_button.setText("Удалить связь")
         self.relations_remove_button.setObjectName("IdeasRelationsRemove")
         self.relations_remove_button.clicked.connect(self._remove_selected_relation)
+        self.relations_open_button = QToolButton()
+        self.relations_open_button.setText("РћС‚РєСЂС‹С‚СЊ СЃРІСЏР·СЊ")
+        self.relations_open_button.setObjectName("IdeasRelationsOpen")
+        self.relations_open_button.clicked.connect(self._open_selected_relation)
         relations_actions.addWidget(self.relations_add_button)
+        relations_actions.addWidget(self.relations_open_button)
         relations_actions.addWidget(self.relations_remove_button)
         relations_actions.addStretch(1)
         relations_layout.addLayout(relations_actions)
         self.relations_list = QListWidget()
         self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
+        self.relations_list.itemDoubleClicked.connect(lambda _item: self._open_selected_relation())
         relations_layout.addWidget(self.relations_list, 1)
         self.relations_tab_index = self.inspector_tabs.addTab(relations_tab, "Связи")
 
@@ -864,9 +871,9 @@ class IdeasWorkspace(BaseWorkspace):
         total = len(active_ideas) + len(archived_ideas)
         return (
             f"Идей: {total}"
-            f" | Inbox: {inbox}"
-            f" | Work: {work}"
-            f" | Ripe: {ripe}"
+            f" | Входящие: {inbox}"
+            f" | В работе: {work}"
+            f" | Созрели: {ripe}"
             f" | Архив: {len(archived_ideas)}"
         )
 
@@ -936,6 +943,23 @@ class IdeasWorkspace(BaseWorkspace):
         row = QListWidgetItem(line)
         row.setData(Qt.ItemDataRole.UserRole, item.id)
         widget.addItem(row)
+
+    @staticmethod
+    def _relation_group_title(entity_type: str) -> str:
+        if entity_type == "concept_board":
+            return "РљРѕРЅС†РµРїС‚Р±РѕСЂРґС‹"
+        return IDEA_RELATION_KIND_LABELS.get(entity_type, entity_type.capitalize())
+
+    @staticmethod
+    def _relation_payload(item: Optional[QListWidgetItem]) -> Optional[tuple[int, str, int]]:
+        if item is None:
+            return None
+        relation_id = item.data(Qt.ItemDataRole.UserRole)
+        entity_type = item.data(int(Qt.ItemDataRole.UserRole) + 1)
+        entity_id = item.data(int(Qt.ItemDataRole.UserRole) + 2)
+        if isinstance(relation_id, int) and isinstance(entity_type, str) and isinstance(entity_id, int):
+            return relation_id, entity_type, entity_id
+        return None
 
     def _populate_funnel_view(self) -> None:
         self.funnel_view.clear()
@@ -1009,8 +1033,7 @@ class IdeasWorkspace(BaseWorkspace):
             for relation in grouped[entity_type]:
                 label = self._relation_display_label(relation.entity_type, relation.entity_id)
                 row = QListWidgetItem(f"  {label}")
-                if relation.entity_type == "idea":
-                    row.setData(Qt.ItemDataRole.UserRole, relation.entity_id)
+                row.setData(Qt.ItemDataRole.UserRole, (relation.entity_type, relation.entity_id))
                 self.links_view.addItem(row)
 
     def _populate_mode_views(self) -> None:
@@ -1033,6 +1056,14 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _on_alt_view_item_activated(self, item: QListWidgetItem) -> None:
         idea_id = item.data(Qt.ItemDataRole.UserRole)
+        if (
+            isinstance(idea_id, tuple)
+            and len(idea_id) == 2
+            and isinstance(idea_id[0], str)
+            and isinstance(idea_id[1], int)
+        ):
+            self._open_relation_target(idea_id[0], idea_id[1])
+            return
         if not isinstance(idea_id, int):
             return
         model = self.list_view.model()
@@ -1316,10 +1347,10 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _update_relations_actions(self) -> None:
         has_idea = self._current_idea_id is not None
-        current_item = self.relations_list.currentItem()
-        relation_id = current_item.data(Qt.ItemDataRole.UserRole) if current_item is not None else None
+        payload = self._relation_payload(self.relations_list.currentItem())
         self.relations_add_button.setEnabled(has_idea)
-        self.relations_remove_button.setEnabled(has_idea and relation_id is not None)
+        self.relations_open_button.setEnabled(has_idea and payload is not None)
+        self.relations_remove_button.setEnabled(has_idea and payload is not None)
 
     def refresh_current_relations(self) -> None:
         if self._current_idea_id is None:
@@ -1419,6 +1450,43 @@ class IdeasWorkspace(BaseWorkspace):
             parent = parent.parent() if hasattr(parent, "parent") else None
         return None
 
+    def _find_navigation_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _open_relation_target(self, entity_type: str, entity_id: int) -> bool:
+        main_window = self._find_navigation_window()
+        if main_window is None:
+            return False
+        handlers: dict[str, tuple[str, str, str]] = {
+            "task": ("MODE_TASKS", "page_tasks", "focus_task"),
+            "note": ("MODE_NOTES", "page_notes", "select_note"),
+            "idea": ("MODE_IDEAS", "page_ideas", "select_idea"),
+            "object": ("MODE_OBJECTS", "page_objects", "select_object"),
+            "map": ("MODE_MAPS", "page_maps", "select_map"),
+            "marker": ("MODE_MAPS", "page_maps", "select_marker"),
+            "concept_board": ("MODE_CONCEPTBOARD", "page_concept_board", "select_concept_board"),
+        }
+        payload = handlers.get(entity_type)
+        if payload is None:
+            return False
+        mode_attr, page_attr, method_name = payload
+        mode_name = getattr(main_window, mode_attr, None)
+        page = getattr(main_window, page_attr, None)
+        if mode_name is None or page is None or not hasattr(page, method_name):
+            return False
+        try:
+            main_window.set_mode(mode_name)
+        except Exception:
+            return False
+        method = getattr(page, method_name)
+        QTimer.singleShot(0, lambda relation_entity_id=entity_id, callback=method: callback(relation_entity_id))
+        return True
+
     def _ensure_concept_board_target(self):
         boards = self._db.fetch_concept_boards()
         if boards:
@@ -1498,6 +1566,17 @@ class IdeasWorkspace(BaseWorkspace):
         self._db.delete_idea_relation(relation_id)
         self._load_relations(self._current_idea_id)
         self._set_status("Связь удалена")
+
+    def _open_selected_relation(self) -> None:
+        payload = self._relation_payload(self.relations_list.currentItem())
+        if payload is None:
+            QMessageBox.information(self, "РЎРІСЏР·Рё", "Р’С‹Р±РµСЂРёС‚Рµ СЃРІСЏР·Р°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ.")
+            return
+        _relation_id, entity_type, entity_id = payload
+        if not self._open_relation_target(entity_type, entity_id):
+            QMessageBox.information(self, "РЎРІСЏР·Рё", "Р­С‚Сѓ СЃРІСЏР·СЊ РїРѕРєР° РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ.")
+            return
+        self._set_status("РЎРІСЏР·Р°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РѕС‚РєСЂС‹С‚")
 
     def _on_status_filter_changed(self, *_args: object) -> None:
         status = self.status_filter.currentData()
@@ -1613,6 +1692,24 @@ class IdeasWorkspace(BaseWorkspace):
         self.inspector_stack.setCurrentWidget(self.inspector_tabs)
         self._populate_links_view()
         self.update_action_states()
+
+    def select_idea(self, idea_id: int) -> bool:
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return False
+        index = model.index_for_id(idea_id)
+        if not index.isValid() and self.archived_only.isChecked():
+            self.archived_only.blockSignals(True)
+            self.archived_only.setChecked(False)
+            self.archived_only.blockSignals(False)
+            self.set_filter("archived", False)
+            self.refresh()
+            index = model.index_for_id(idea_id)
+        if not index.isValid():
+            return False
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+        return True
 
     def _open_selected(self, *_args: object) -> None:
         if self._current_idea_id is None:
@@ -1864,12 +1961,27 @@ class IdeasWorkspace(BaseWorkspace):
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.relations_list.addItem(item)
             self._update_relations_actions()
+            self._populate_links_view()
             return
+        grouped: Dict[str, List[object]] = {}
         for relation in relations:
-            item = QListWidgetItem(self._relation_display_label(relation.entity_type, relation.entity_id))
-            item.setData(Qt.ItemDataRole.UserRole, relation.id)
-            self.relations_list.addItem(item)
+            grouped.setdefault((relation.entity_type or "").strip().lower(), []).append(relation)
+        ordered_types = [entity_type for entity_type in IDEA_RELATION_GROUP_ORDER if entity_type in grouped]
+        ordered_types.extend(sorted(entity_type for entity_type in grouped if entity_type not in IDEA_RELATION_GROUP_ORDER))
+        for entity_type in ordered_types:
+            bucket = grouped[entity_type]
+            header = QListWidgetItem(f"{self._relation_group_title(entity_type)} В· {len(bucket)}")
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.relations_list.addItem(header)
+            for relation in bucket:
+                item = QListWidgetItem(f"  {self._relation_display_label(relation.entity_type, relation.entity_id)}")
+                item.setData(Qt.ItemDataRole.UserRole, relation.id)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 1, entity_type)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 2, relation.entity_id)
+                item.setToolTip("Р”РІРѕР№РЅРѕР№ С‰РµР»С‡РѕРє РѕС‚РєСЂС‹РІР°РµС‚ СЃРІСЏР·Р°РЅРЅСѓСЋ СЃСѓС‰РЅРѕСЃС‚СЊ.")
+                self.relations_list.addItem(item)
         self._update_relations_actions()
+        self._populate_links_view()
 
     def _load_materials(self, idea_id: int) -> None:
         self._idea_images = self._db.fetch_idea_images(idea_id)

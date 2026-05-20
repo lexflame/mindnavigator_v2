@@ -387,6 +387,9 @@ class NoteWorkspace(QWidget):
         self.controller.set_task_filter(task_id)
         self._refresh_empty_state()
 
+    def select_note(self, note_id: int) -> None:
+        self.controller.open_note(note_id)
+
     def _on_filter_changed(self):
         btn = self.filters_group.checkedButton()
         if not btn:

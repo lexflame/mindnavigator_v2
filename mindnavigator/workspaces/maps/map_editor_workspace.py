@@ -695,6 +695,13 @@ class MapEditorWorkspace(QWidget):
     def focus_marker(self, marker: Marker, zoom_boost: float = 4.0) -> None:
         self.canvas.focus_on_marker(marker, zoom_boost=zoom_boost)
 
+    def focus_marker_by_id(self, marker_id: int, zoom_boost: float = 4.0) -> bool:
+        marker = self._markers_by_id.get(marker_id)
+        if not isinstance(marker, Marker):
+            return False
+        self.focus_marker(marker, zoom_boost=zoom_boost)
+        return True
+
     def focus_overlay(self, overlay: MapOverlay, zoom_boost: float = 2.0) -> None:
         self.canvas.focus_on_overlay(overlay, zoom_boost=zoom_boost)
 

@@ -406,6 +406,26 @@ class ObjectWorkspace(QWidget):
     def set_marker_filter(self, marker_id: Optional[int]) -> None:
         self.model.set_marker_filter(marker_id)
 
+    def select_object(self, object_id: int) -> bool:
+        row = self.model.row_for_object_id(object_id)
+        if row is None:
+            self.model.set_project_filter(None)
+            self.model.set_task_filter(None)
+            self.model.set_marker_filter(None)
+            self.model.set_catalog_filter(None)
+            self.model.set_search("")
+            self.search_edit.clear()
+            self.catalog_tree.setCurrentItem(self.catalog_tree.topLevelItem(0))
+            row = self.model.row_for_object_id(object_id)
+        if row is None:
+            return False
+        index = self.model.index(row)
+        if not index.isValid():
+            return False
+        self.card_list.setCurrentIndex(index)
+        self.card_list.scrollTo(index, QListView.ScrollHint.PositionAtCenter)
+        return True
+
     def _export_objects_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,

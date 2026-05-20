@@ -333,10 +333,11 @@ def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, un
         assert len(relations) == 1
         assert relations[0].entity_type == "task"
         assert relations[0].entity_id == task.id
-        assert workspace.relations_list.count() == 1
-        assert "Linked task" in workspace.relations_list.item(0).text()
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+        assert "Linked task" in workspace.relations_list.item(1).text()
 
-        workspace.relations_list.setCurrentRow(0)
+        workspace.relations_list.setCurrentRow(1)
         QApplication.processEvents()
         QTest.mouseClick(workspace.relations_remove_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
@@ -383,8 +384,66 @@ def test_ideas_workspace_refresh_current_relations_reloads_selected_idea_relatio
         workspace.refresh_current_relations()
         QApplication.processEvents()
 
-        assert workspace.relations_list.count() == 1
-        assert "Late linked task" in workspace.relations_list.item(0).text()
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+        assert "Late linked task" in workspace.relations_list.item(1).text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_relations_open_navigates_to_linked_entity(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_open_relation", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea with note relation", status="inbox")
+        note = database.create_note(title="Linked note", preview="Body", tags=["ref"], project="Inbox")
+        database.add_idea_relation(idea.id, "note", note.id)
+
+        class _FakeNotesPage:
+            def __init__(self) -> None:
+                self.selected_ids: list[int] = []
+
+            def select_note(self, note_id: int) -> None:
+                self.selected_ids.append(note_id)
+
+        class _FakeMainWindow(QWidget):
+            MODE_NOTES = "Р—Р°РјРµС‚РєРё"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.mode_calls: list[str] = []
+                self.page_notes = _FakeNotesPage()
+
+            def set_mode(self, mode_name: str) -> None:
+                self.mode_calls.append(mode_name)
+
+        main_window = _FakeMainWindow()
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace(parent=main_window)
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 2
+        workspace.relations_list.setCurrentRow(1)
+        QApplication.processEvents()
+        assert workspace.relations_open_button.isEnabled()
+
+        QTest.mouseClick(workspace.relations_open_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        assert main_window.mode_calls == [main_window.MODE_NOTES]
+        assert main_window.page_notes.selected_ids == [note.id]
     finally:
         if workspace is not None:
             workspace.deleteLater()
