@@ -633,6 +633,7 @@ class DatabaseSchemaMixin:
         self._ensure_idea_category_schema()
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
+        self._ensure_concept_board_schema()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
