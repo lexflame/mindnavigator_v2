@@ -11,5 +11,6 @@ class IdeaRelationData:
     entity_type: str
     entity_id: int
     created_at: datetime
+    relation_kind: str = "related"
 
 __all__ = ["IdeaRelationData"]

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
@@ -299,6 +299,85 @@ def test_database_backfills_concept_board_schema_when_user_version_is_current(un
         assert [(item.source_kind, item.target_kind, item.link_type) for item in database.fetch_concept_board_links(1)] == [
             ("version", "solution", "transforms_to")
         ]
+        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_database_backfills_idea_relation_kind_schema_when_user_version_is_current(unique_temp_path) -> None:
+    db_path = unique_temp_path("idea_relation_kind_schema_backfill", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            """
+            CREATE TABLE ideas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL DEFAULT '',
+                body_md TEXT NOT NULL DEFAULT '',
+                type TEXT NOT NULL DEFAULT 'other',
+                status TEXT NOT NULL DEFAULT 'inbox',
+                value_score INTEGER NOT NULL DEFAULT 3,
+                effort_score INTEGER NOT NULL DEFAULT 3,
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                archived_at TEXT
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE idea_relations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                entity_type TEXT NOT NULL,
+                entity_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(idea_id, entity_type, entity_id)
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            INSERT INTO ideas(title, created_at, updated_at)
+            VALUES (?, ?, ?);
+            """,
+            ("Legacy relation source", now, now),
+        )
+        legacy_conn.execute(
+            """
+            INSERT INTO idea_relations(idea_id, entity_type, entity_id, created_at)
+            VALUES (?, ?, ?, ?);
+            """,
+            (1, "task", 101, now),
+        )
+        legacy_conn.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION};")
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        relation_columns = {
+            row["name"] for row in database._conn.execute("PRAGMA table_info(idea_relations);").fetchall()
+        }
+        assert "relation_kind" in relation_columns
+        relations = database.fetch_idea_relations(1)
+        assert len(relations) == 1
+        assert relations[0].relation_kind == "related"
+
+        database.add_idea_relation(1, "task", 101, relation_kind="transforms_to")
+        refreshed = database.fetch_idea_relations(1)
+        assert {
+            (relation.entity_type, relation.entity_id, relation.relation_kind)
+            for relation in refreshed
+        } == {
+            ("task", 101, "related"),
+            ("task", 101, "transforms_to"),
+        }
         assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION
     finally:
         database.close()

@@ -15,5 +15,9 @@ class IdeaRoles:
     EffortScore = Qt.ItemDataRole.UserRole + 9
     ProjectTitle = Qt.ItemDataRole.UserRole + 10
     Archived = Qt.ItemDataRole.UserRole + 11
+    OutputLabel = Qt.ItemDataRole.UserRole + 12
+    RelationsCount = Qt.ItemDataRole.UserRole + 13
+    MaterialsCount = Qt.ItemDataRole.UserRole + 14
+    UpdatedLabel = Qt.ItemDataRole.UserRole + 15
 
 __all__ = ["IdeaRoles"]

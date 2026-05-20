@@ -1511,6 +1511,10 @@ class ConceptBoardWorkspace(BaseWorkspace):
             self.concept_board_list.setCurrentItem(item)
             break
 
+    def select_concept_board(self, concept_board_id: int) -> None:
+        self.refresh()
+        self._select_concept_board(concept_board_id)
+
     def _load_current_concept_board(self) -> None:
         board = self._current_concept_board()
         if board is None:

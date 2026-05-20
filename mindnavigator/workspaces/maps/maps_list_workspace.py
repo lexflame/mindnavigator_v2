@@ -483,6 +483,32 @@ class MapsListWorkspace(QWidget):
             self.filter_project.setCurrentIndex(0)
             self.model.set_project_filter(None)
 
+    def select_map(self, map_id: int) -> bool:
+        row = self.model.row_for_map_id(map_id)
+        if row is None:
+            self.set_project_filter(None)
+            self.search.clear()
+            self.model.set_search("")
+            row = self.model.row_for_map_id(map_id)
+        if row is None:
+            return False
+        index = self.model.index(row, 0)
+        if not index.isValid():
+            return False
+        self.list.setCurrentIndex(index)
+        self.list.scrollTo(index, QListView.ScrollHint.PositionAtCenter)
+        self._on_open_map(index)
+        return True
+
+    def select_marker(self, marker_id: int) -> bool:
+        marker = next((item for item in self._db.fetch_map_markers() if item.id == marker_id), None)
+        if marker is None:
+            return False
+        if not self.select_map(marker.map_id):
+            return False
+        QTimer.singleShot(0, lambda target_marker_id=marker_id: self.editor_workspace.focus_marker_by_id(target_marker_id))
+        return True
+
     def _on_create_map(self) -> None:
         self.model.add_map(
             self.new_title.text(),

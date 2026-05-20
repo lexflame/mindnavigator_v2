@@ -1,13 +1,28 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import pytest
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import ideas as ideas_workspace
 from mindnavigator.workspaces.ideas import ideas_workspace as ideas_workspace_module
+
+
+def test_ideas_workspace_format_relative_time_accepts_naive_and_aware_datetimes() -> None:
+    aware_value = datetime.now(timezone.utc)
+    naive_value = datetime.now()
+
+    aware_result = ideas_workspace_module.IdeasWorkspace._format_relative_time(aware_value)
+    naive_result = ideas_workspace_module.IdeasWorkspace._format_relative_time(naive_value)
+
+    assert isinstance(aware_result, str)
+    assert isinstance(naive_result, str)
 
 
 def test_ideas_workspace_toolbar_create_and_edit_round_trip(monkeypatch, unique_temp_path) -> None:
@@ -58,6 +73,7 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
             summary="Initial summary",
             body_md="Initial body",
             status="inbox",
+            source="Legacy source",
         )
         monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
         monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
@@ -73,6 +89,7 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
         workspace.title_input.setText("Existing idea updated")
         workspace.summary_input.setText("Updated summary")
         workspace.body_input.setPlainText("Updated body")
+        workspace.source_input.setText("Inbox capture")
         QApplication.processEvents()
 
         QTest.mouseClick(workspace.save_button, Qt.MouseButton.LeftButton)
@@ -83,6 +100,211 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
         assert saved.title == "Existing idea updated"
         assert saved.summary == "Updated summary"
         assert saved.body_md == "Updated body"
+        assert saved.source == "Inbox capture"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_remaster_tabs_and_source_field(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_tabs", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_idea(title="Workspace tabs", status="inbox", source="Voice memo")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        tab_titles = [workspace.inspector_tabs.tabText(index) for index in range(workspace.inspector_tabs.count())]
+        assert tab_titles == ["Суть", "Развитие", "Связи (0)", "Материалы и референсы (0)", "Выход"]
+        assert workspace.search_input.placeholderText() == "Поиск по идеям, краткому описанию, тексту, источнику..."
+        assert workspace.source_input.placeholderText() == "Откуда пришла идея"
+        assert workspace.development_insert_button.text() == "Вставить шаблон развития"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_view_modes", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_idea = database.create_idea(
+            title="Capture idea",
+            summary="Quick win",
+            status="inbox",
+            value_score=5,
+            effort_score=1,
+        )
+        second_idea = database.create_idea(
+            title="Heavy idea",
+            summary="Need more research",
+            status="work",
+            value_score=4,
+            effort_score=4,
+        )
+        database.add_idea_relation(first_idea.id, "idea", second_idea.id)
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert [workspace.view_mode_combo.itemData(index) for index in range(workspace.view_mode_combo.count())] == [
+            "list",
+            "funnel",
+            "matrix",
+            "links",
+        ]
+
+        model = workspace.list_view.model()
+        assert model is not None
+        first_index = model.index_for_id(first_idea.id)
+        workspace.list_view.setCurrentIndex(first_index)
+        QApplication.processEvents()
+
+        funnel_index = workspace.view_mode_combo.findData("funnel")
+        assert funnel_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(funnel_index)
+        QApplication.processEvents()
+
+        assert workspace.list_mode_stack.currentWidget() is workspace.funnel_view
+        inbox_rows = [
+            workspace.funnel_lists["inbox"].item(row).text()
+            for row in range(workspace.funnel_lists["inbox"].count())
+        ]
+        work_rows = [
+            workspace.funnel_lists["work"].item(row).text()
+            for row in range(workspace.funnel_lists["work"].count())
+        ]
+        assert any("Capture idea" in row for row in inbox_rows)
+        assert any("Heavy idea" in row for row in work_rows)
+
+        funnel_idea_item = next(
+            workspace.funnel_lists["inbox"].item(row)
+            for row in range(workspace.funnel_lists["inbox"].count())
+            if isinstance(workspace.funnel_lists["inbox"].item(row).data(Qt.ItemDataRole.UserRole), int)
+        )
+        workspace.funnel_lists["inbox"].setCurrentItem(funnel_idea_item)
+        workspace.funnel_lists["inbox"].itemClicked.emit(funnel_idea_item)
+        QApplication.processEvents()
+        assert workspace.get_selection() == funnel_idea_item.data(Qt.ItemDataRole.UserRole)
+
+        matrix_index = workspace.view_mode_combo.findData("matrix")
+        assert matrix_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(matrix_index)
+        QApplication.processEvents()
+
+        matrix_rows = []
+        for widget in workspace.matrix_lists.values():
+            matrix_rows.extend(widget.item(row).text() for row in range(widget.count()))
+        assert any("Capture idea" in row for row in matrix_rows)
+        assert any("Heavy idea" in row for row in matrix_rows)
+        assert " · 1" in workspace.matrix_headers["first"].text()
+        assert " · 1" in workspace.matrix_headers["planned"].text()
+
+        links_index = workspace.view_mode_combo.findData("links")
+        assert links_index >= 0
+        workspace.view_mode_combo.setCurrentIndex(links_index)
+        QApplication.processEvents()
+
+        root_item = workspace.links_view.topLevelItem(0)
+        assert root_item is not None
+        assert root_item.text(0) == "Capture idea"
+        assert root_item.childCount() == 1
+        group_item = root_item.child(0)
+        assert group_item is not None
+        assert "1" in group_item.text(0)
+        assert group_item.childCount() == 1
+        relation_item = group_item.child(0)
+        assert relation_item is not None
+        assert "Heavy idea" in relation_item.text(0)
+
+        second_index = model.index_for_id(second_idea.id)
+        workspace.list_view.setCurrentIndex(second_index)
+        QApplication.processEvents()
+
+        updated_root = workspace.links_view.topLevelItem(0)
+        assert updated_root is not None
+        assert updated_root.text(0) == "Heavy idea"
+        assert updated_root.childCount() >= 2
+        assert updated_root.child(0).text(0) == "РЎРІСЏР·РµР№ РїРѕРєР° РЅРµС‚"
+        assert "Capture idea" not in updated_root.child(0).text(0)
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_funnel_move_updates_idea_status(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_funnel_move", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Inbox idea", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert workspace.move_idea_to_funnel_status(idea.id, "work")
+        QApplication.processEvents()
+
+        updated = database.get_idea(idea.id)
+        assert updated is not None
+        assert updated.status == "work"
+        assert updated.archived_at is None
+        assert workspace.get_selection() == idea.id
+        work_rows = [
+            workspace.funnel_lists["work"].item(row).text()
+            for row in range(workspace.funnel_lists["work"].count())
+        ]
+        assert any("Inbox idea" in row for row in work_rows)
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_archive_action_switches_to_restore_for_archived_selection(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_archive_action", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Archived idea", status="inbox")
+        database.set_idea_archived(idea.id, True)
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert workspace.actions["archive"].text() == "В архив"
+        assert not workspace.actions["archive"].isEnabled()
+
+        workspace.archived_only.setChecked(True)
+        QApplication.processEvents()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.actions["archive"].isEnabled()
+        assert workspace.actions["archive"].text() == "Восстановить"
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -171,6 +393,7 @@ def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, un
             def values(self) -> dict:
                 return {
                     "entity_type": "task",
+                    "relation_kind": "develops",
                     "entity_id": task.id,
                 }
 
@@ -199,10 +422,13 @@ def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, un
         assert len(relations) == 1
         assert relations[0].entity_type == "task"
         assert relations[0].entity_id == task.id
-        assert workspace.relations_list.count() == 1
-        assert "Linked task" in workspace.relations_list.item(0).text()
+        assert relations[0].relation_kind == "develops"
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+        assert "develops" not in workspace.relations_list.item(1).text().lower()
+        assert "Linked task" in workspace.relations_list.item(1).text()
 
-        workspace.relations_list.setCurrentRow(0)
+        workspace.relations_list.setCurrentRow(1)
         QApplication.processEvents()
         QTest.mouseClick(workspace.relations_remove_button, Qt.MouseButton.LeftButton)
         QApplication.processEvents()
@@ -249,8 +475,66 @@ def test_ideas_workspace_refresh_current_relations_reloads_selected_idea_relatio
         workspace.refresh_current_relations()
         QApplication.processEvents()
 
-        assert workspace.relations_list.count() == 1
-        assert "Late linked task" in workspace.relations_list.item(0).text()
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+        assert "Late linked task" in workspace.relations_list.item(1).text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_relations_open_navigates_to_linked_entity(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_open_relation", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea with note relation", status="inbox")
+        note = database.create_note(title="Linked note", preview="Body", tags=["ref"], project="Inbox")
+        database.add_idea_relation(idea.id, "note", note.id)
+
+        class _FakeNotesPage:
+            def __init__(self) -> None:
+                self.selected_ids: list[int] = []
+
+            def select_note(self, note_id: int) -> None:
+                self.selected_ids.append(note_id)
+
+        class _FakeMainWindow(QWidget):
+            MODE_NOTES = "Р—Р°РјРµС‚РєРё"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.mode_calls: list[str] = []
+                self.page_notes = _FakeNotesPage()
+
+            def set_mode(self, mode_name: str) -> None:
+                self.mode_calls.append(mode_name)
+
+        main_window = _FakeMainWindow()
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace(parent=main_window)
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 2
+        workspace.relations_list.setCurrentRow(1)
+        QApplication.processEvents()
+        assert workspace.relations_open_button.isEnabled()
+
+        QTest.mouseClick(workspace.relations_open_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        assert main_window.mode_calls == [main_window.MODE_NOTES]
+        assert main_window.page_notes.selected_ids == [note.id]
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -282,7 +566,8 @@ def test_ideas_workspace_triage_focuses_first_inbox_idea(monkeypatch, unique_tem
         assert workspace.get_selection() == first_inbox_index.data(ideas_workspace_module.IdeaRoles.IdeaId)
         assert workspace.title_input.text() == first_inbox_index.data(ideas_workspace_module.IdeaRoles.Title)
         assert workspace.inspector_tabs.currentWidget() is workspace.transform_tab
-        assert "Разбор инбокса" in workspace.status_row.text()
+        assert workspace.triage_progress_label.text() == "Разбор идеи 1 из 2"
+        assert "Разбор идеи 1 из 2" in workspace.status_row.text()
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -317,7 +602,188 @@ def test_ideas_workspace_triage_promotes_inbox_and_advances(monkeypatch, unique_
         remaining_inbox_id = older_inbox.id if current_before == latest_inbox.id else latest_inbox.id
         assert workspace.get_selection() == remaining_inbox_id
         assert database.get_idea(remaining_inbox_id).status == "inbox"
-        assert "Осталось inbox: 1" in workspace.status_row.text()
+        assert workspace.triage_progress_label.text() == "Разбор идеи 2 из 2"
+        assert "Разбор идеи 2 из 2" in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_triage_hotkey_promotes_idea(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_hotkey_work", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        older_inbox = database.create_idea(title="Older inbox", status="inbox")
+        latest_inbox = database.create_idea(title="Latest inbox", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {older_inbox.id, latest_inbox.id}
+
+        workspace.list_view.setFocus()
+        QTest.keyClick(workspace.list_view, Qt.Key.Key_W)
+        QApplication.processEvents()
+
+        updated = database.get_idea(current_before)
+        assert updated is not None
+        assert updated.status == "work"
+        remaining_inbox_id = older_inbox.id if current_before == latest_inbox.id else latest_inbox.id
+        assert workspace.get_selection() == remaining_inbox_id
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_triage_hotkeys_do_not_fire_inside_text_fields(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_hotkey_guard", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_inbox = database.create_idea(title="First inbox", status="inbox")
+        second_inbox = database.create_idea(title="Second inbox", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {first_inbox.id, second_inbox.id}
+
+        workspace.title_input.setFocus()
+        QTest.keyClick(workspace.title_input, Qt.Key.Key_W)
+        QApplication.processEvents()
+
+        unchanged = database.get_idea(current_before)
+        assert unchanged is not None
+        assert unchanged.status == "inbox"
+        assert workspace.get_selection() == current_before
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize(
+    ("kind", "button_name", "created_status"),
+    [
+        ("note", "transform_note_btn", "Из идеи создана заметка."),
+        ("object", "transform_object_btn", "Из идеи создан объект."),
+    ],
+)
+def test_ideas_workspace_triage_advances_after_note_and_object_transform(
+    monkeypatch,
+    unique_temp_path,
+    kind: str,
+    button_name: str,
+    created_status: str,
+) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path(f"ideas_workspace_triage_{kind}", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_inbox = database.create_idea(title=f"First {kind}", status="inbox")
+        second_inbox = database.create_idea(title=f"Second {kind}", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {first_inbox.id, second_inbox.id}
+
+        button = getattr(workspace, button_name)
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        updated = database.get_idea(current_before)
+        assert updated is not None
+        assert updated.status == "ripe"
+        remaining_inbox_id = first_inbox.id if current_before == second_inbox.id else second_inbox.id
+        assert workspace.get_selection() == remaining_inbox_id
+        assert workspace.triage_progress_label.text() == "Разбор идеи 2 из 2"
+        assert created_status in workspace.status_row.text()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_adds_current_idea_to_concept_board(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_concept_board", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Idea to board", status="inbox")
+
+        class _FakeConceptBoardPage:
+            def __init__(self) -> None:
+                self.selected_ids: list[int] = []
+
+            def select_concept_board(self, concept_board_id: int) -> None:
+                self.selected_ids.append(concept_board_id)
+
+        class _FakeMainWindow(QWidget):
+            MODE_CONCEPTBOARD = "Концептборд"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.mode_calls: list[str] = []
+                self.page_concept_board = _FakeConceptBoardPage()
+
+            def set_mode(self, mode_name: str) -> None:
+                self.mode_calls.append(mode_name)
+
+        main_window = _FakeMainWindow()
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace(parent=main_window)
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        workspace.inspector_tabs.setCurrentWidget(workspace.transform_tab)
+        QApplication.processEvents()
+
+        QTest.mouseClick(workspace.transform_concept_board_btn, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        boards = database.fetch_concept_boards()
+        assert len(boards) == 1
+        board = boards[0]
+        board_items = database.fetch_concept_board_items(board.id)
+        assert [(item.entity_kind, item.entity_id) for item in board_items] == [("idea", idea.id)]
+        idea_relations = database.fetch_idea_relations(idea.id)
+        assert ("concept_board", board.id, "transforms_to") in {
+            (item.entity_type, item.entity_id, item.relation_kind) for item in idea_relations
+        }
+        updated = database.get_idea(idea.id)
+        assert updated is not None
+        assert updated.status == "ripe"
+        assert main_window.mode_calls == [main_window.MODE_CONCEPTBOARD]
+        assert main_window.page_concept_board.selected_ids == [board.id]
+        assert "Выход: концептборд" == workspace.output_summary_label.text()
     finally:
         if workspace is not None:
             workspace.deleteLater()

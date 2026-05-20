@@ -164,4 +164,10 @@ class MapsModel(QAbstractListModel):
         self._items = items
         self.endResetModel()
 
+    def row_for_map_id(self, map_id: int) -> Optional[int]:
+        for index, item in enumerate(self._items):
+            if item.id == map_id:
+                return index
+        return None
+
 __all__ = ["MapsModel"]

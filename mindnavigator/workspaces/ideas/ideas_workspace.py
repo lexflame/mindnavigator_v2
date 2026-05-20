@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from ._shared import *  # noqa: F401,F403
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QMimeData, QTimer
+from PySide6.QtGui import QDrag, QKeySequence, QShortcut
+from PySide6.QtWidgets import QApplication
 from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
@@ -22,6 +26,88 @@ IDEA_RELATION_KIND_ITEMS = [
 ]
 
 IDEA_RELATION_KIND_LABELS = {value: label for label, value in IDEA_RELATION_KIND_ITEMS}
+IDEA_RELATION_GROUP_ORDER = ("task", "note", "idea", "object", "map", "marker", "concept_board")
+IDEA_RELATION_TYPE_ITEMS = [
+    ("РћС‚РЅРѕСЃРёС‚СЃСЏ Рє", "related"),
+    ("Р Р°Р·РІРёРІР°РµС‚", "develops"),
+    ("РџСЂРѕС‚РёРІРѕСЂРµС‡РёС‚", "conflicts"),
+    ("РџСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ", "transforms_to"),
+    ("РСЃС‚РѕС‡РЅРёРє", "source"),
+]
+IDEA_RELATION_TYPE_LABELS = {value: label for label, value in IDEA_RELATION_TYPE_ITEMS}
+IDEA_OUTPUT_LABELS = {
+    "task": "задача",
+    "note": "заметка",
+    "object": "объект",
+    "marker": "метка карты",
+    "map": "карта",
+    "idea": "идея",
+    "concept_board": "концептборд",
+}
+IDEA_OUTPUT_PRIORITY = ("task", "note", "object", "concept_board", "marker", "map", "idea")
+IDEA_DEVELOPMENT_TEMPLATE = (
+    "## Почему это важно\n"
+    "\n"
+    "## Что может дать\n"
+    "\n"
+    "## Что непонятно\n"
+    "\n"
+    "## Что проверить\n"
+    "\n"
+    "## Риски и ограничения\n"
+)
+
+
+class IdeasFunnelList(QListWidget):
+    MIME_TYPE = "application/x-mindnavigator-idea-id"
+
+    def __init__(self, status_code: str, workspace: "IdeasWorkspace") -> None:
+        super().__init__()
+        self._status_code = status_code
+        self._workspace = workspace
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+    def startDrag(self, supported_actions: Qt.DropActions) -> None:
+        current_item = self.currentItem()
+        if current_item is None:
+            return
+        idea_id = current_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(idea_id, int):
+            return
+        mime_data = QMimeData()
+        mime_data.setData(self.MIME_TYPE, str(idea_id).encode("ascii"))
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(supported_actions)
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        payload = event.mimeData().data(self.MIME_TYPE)
+        try:
+            idea_id = int(bytes(payload).decode("ascii"))
+        except (TypeError, ValueError):
+            event.ignore()
+            return
+        if self._workspace.move_idea_to_funnel_status(idea_id, self._status_code):
+            event.acceptProposedAction()
+            return
+        event.ignore()
 
 
 class IdeaRelationDialog(QDialog):
@@ -50,11 +136,16 @@ class IdeaRelationDialog(QDialog):
         for label, value in IDEA_RELATION_KIND_ITEMS:
             self.kind_combo.addItem(label, value)
 
+        self.relation_type_combo = QComboBox()
+        for label, value in IDEA_RELATION_TYPE_ITEMS:
+            self.relation_type_combo.addItem(label, value)
+
         self.target_combo = QComboBox()
         self.kind_combo.currentIndexChanged.connect(self._fill_targets)
 
         form.addRow("Тип", self.kind_combo)
         form.addRow("Элемент", self.target_combo)
+        form.insertRow(1, "РЎРјС‹СЃР»", self.relation_type_combo)
         layout.addLayout(form)
 
         buttons_row = QHBoxLayout()
@@ -92,6 +183,7 @@ class IdeaRelationDialog(QDialog):
     def values(self) -> dict[str, object]:
         return {
             "entity_type": self.kind_combo.currentData(),
+            "relation_kind": self.relation_type_combo.currentData(),
             "entity_id": self.target_combo.currentData(),
         }
 
@@ -161,11 +253,16 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_project_id: Optional[int] = None
         self._dirty = False
         self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
         self._theme_mode = "dark"
         self._idea_categories = []
         self._idea_categories_by_code: Dict[str, Any] = {}
         self._idea_images: List[IdeaImageData] = []
         self._current_material_index = 0
+        self._status_message = ""
+        self._stats_text = ""
+        self._visible_idea_items: List[IdeaItem] = []
         super().__init__(parent)
         triage_action = self.actions.get("triage")
         if triage_action is not None:
@@ -175,7 +272,7 @@ class IdeasWorkspace(BaseWorkspace):
                 pass
             triage_action.triggered.connect(self._start_inbox_triage)
         self.setObjectName("IdeasWorkspace")
-        self.search_input.setPlaceholderText("Поиск…")
+        self.search_input.setPlaceholderText("Поиск по идеям, краткому описанию, тексту, источнику...")
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -233,6 +330,22 @@ class IdeasWorkspace(BaseWorkspace):
         quick_layout.addWidget(self.quick_create_btn)
         list_layout.addWidget(quick_row)
 
+        view_mode_row = QWidget()
+        view_mode_layout = QHBoxLayout(view_mode_row)
+        view_mode_layout.setContentsMargins(0, 0, 0, 0)
+        view_mode_layout.setSpacing(6)
+        self.view_mode_label = QLabel("Режим")
+        self.view_mode_combo = QComboBox()
+        self.view_mode_combo.addItem("Список", "list")
+        self.view_mode_combo.addItem("Воронка", "funnel")
+        self.view_mode_combo.addItem("Матрица", "matrix")
+        self.view_mode_combo.addItem("Связи", "links")
+        self.view_mode_combo.currentIndexChanged.connect(self._on_view_mode_changed)
+        view_mode_layout.addWidget(self.view_mode_label)
+        view_mode_layout.addWidget(self.view_mode_combo)
+        view_mode_layout.addStretch(1)
+        list_layout.addWidget(view_mode_row)
+
         self.list_view = QListView()
         self.list_view.setObjectName("IdeasList")
         self.list_view.setModel(IdeasListModel(self.list_view))
@@ -244,8 +357,95 @@ class IdeasWorkspace(BaseWorkspace):
         self.list_view.doubleClicked.connect(self._open_selected)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.customContextMenuRequested.connect(self._show_context_menu)
+        self.funnel_view = QWidget()
+        self.funnel_view.setObjectName("IdeasFunnelView")
+        funnel_layout = QHBoxLayout(self.funnel_view)
+        funnel_layout.setContentsMargins(0, 0, 0, 0)
+        funnel_layout.setSpacing(8)
+        self.funnel_lists: Dict[str, IdeasFunnelList] = {}
+        self.funnel_headers: Dict[str, QLabel] = {}
+        for status_code, title in (
+            ("inbox", "Входящие"),
+            ("work", "В работе"),
+            ("ripe", "Созрели"),
+            ("archived", "Архив"),
+        ):
+            column_host = QWidget()
+            column_host.setObjectName("IdeasFunnelColumn")
+            column_layout = QVBoxLayout(column_host)
+            column_layout.setContentsMargins(8, 8, 8, 8)
+            column_layout.setSpacing(6)
+            heading = QLabel(title)
+            heading.setObjectName("IdeasFunnelHeading")
+            column_layout.addWidget(heading)
+            column_list = IdeasFunnelList(status_code, self)
+            column_list.setObjectName(f"IdeasFunnelList_{status_code}")
+            column_list.itemActivated.connect(self._on_alt_view_item_activated)
+            column_list.itemClicked.connect(self._on_alt_view_item_activated)
+            column_layout.addWidget(column_list, 1)
+            funnel_layout.addWidget(column_host, 1)
+            self.funnel_lists[status_code] = column_list
+            self.funnel_headers[status_code] = heading
+        self.matrix_view = QWidget()
+        self.matrix_view.setObjectName("IdeasMatrixView")
+        matrix_root = QVBoxLayout(self.matrix_view)
+        matrix_root.setContentsMargins(0, 0, 0, 0)
+        matrix_root.setSpacing(8)
+        self.matrix_lists: Dict[str, QListWidget] = {}
+        self.matrix_headers: Dict[str, QLabel] = {}
+        for row_titles in (
+            ("РЎРґРµР»Р°С‚СЊ РїРµСЂРІС‹Рј", "Р—Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ"),
+            ("Р‘С‹СЃС‚СЂРѕ Р·Р°РєСЂС‹С‚СЊ", "Р’ Р°СЂС…РёРІ / РїРѕР·Р¶Рµ"),
+        ):
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            for title in row_titles:
+                quadrant_host = QWidget()
+                quadrant_host.setObjectName("IdeasMatrixQuadrant")
+                quadrant_layout = QVBoxLayout(quadrant_host)
+                quadrant_layout.setContentsMargins(8, 8, 8, 8)
+                quadrant_layout.setSpacing(6)
+                heading = QLabel(title)
+                heading.setObjectName("IdeasMatrixHeading")
+                quadrant_layout.addWidget(heading)
+                quadrant_list = QListWidget()
+                quadrant_list.setObjectName("IdeasMatrixList")
+                quadrant_list.itemActivated.connect(self._on_alt_view_item_activated)
+                quadrant_list.itemClicked.connect(self._on_alt_view_item_activated)
+                quadrant_layout.addWidget(quadrant_list, 1)
+                row_layout.addWidget(quadrant_host, 1)
+                self.matrix_lists[title] = quadrant_list
+                self.matrix_headers[title] = heading
+            matrix_root.addLayout(row_layout, 1)
+        matrix_list_values = list(self.matrix_lists.values())
+        matrix_header_values = list(self.matrix_headers.values())
+        if len(matrix_list_values) == 4 and len(matrix_header_values) == 4:
+            self.matrix_lists = {
+                "first": matrix_list_values[0],
+                "planned": matrix_list_values[1],
+                "quick": matrix_list_values[2],
+                "later": matrix_list_values[3],
+            }
+            self.matrix_headers = {
+                "first": matrix_header_values[0],
+                "planned": matrix_header_values[1],
+                "quick": matrix_header_values[2],
+                "later": matrix_header_values[3],
+            }
+        self.links_view = QTreeWidget()
+        self.links_view.setObjectName("IdeasLinksView")
+        self.links_view.setHeaderHidden(True)
+        self.links_view.itemActivated.connect(lambda item, _column: self._on_alt_view_item_activated(item))
+        self.links_view.itemClicked.connect(lambda item, _column: self._on_alt_view_item_activated(item))
+        self.list_mode_stack = QStackedWidget()
+        self.list_mode_stack.setObjectName("IdeasListModeStack")
+        self.list_mode_stack.addWidget(self.list_view)
+        self.list_mode_stack.addWidget(self.funnel_view)
+        self.list_mode_stack.addWidget(self.matrix_view)
+        self.list_mode_stack.addWidget(self.links_view)
 
-        list_layout.addWidget(self.list_view, 1)
+        list_layout.addWidget(self.list_mode_stack, 1)
         splitter.addWidget(list_host)
 
         self.inspector_stack = QStackedWidget()
@@ -267,8 +467,11 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.setSpacing(10)
 
         self.title_input = QLineEdit()
+        self.title_input.setPlaceholderText("Название идеи")
         self.summary_input = QLineEdit()
+        self.summary_input.setPlaceholderText("Краткая формулировка идеи...")
         self.body_input = QPlainTextEdit()
+        self.body_input.setPlaceholderText("Разверните идею, контекст и детали...")
         self.project_input = QComboBox()
         self._populate_projects()
         self.type_input = QComboBox()
@@ -276,6 +479,8 @@ class IdeasWorkspace(BaseWorkspace):
             self.type_input.addItem(label, value)
         self.status_input = QComboBox()
         self._reload_idea_categories()
+        self.source_input = QLineEdit()
+        self.source_input.setPlaceholderText("Откуда пришла идея")
 
         self.value_input = QSpinBox()
         self.value_input.setRange(1, 5)
@@ -288,6 +493,7 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.addRow("Проект", self.project_input)
         content_layout.addRow("Тип", self.type_input)
         content_layout.addRow("Статус", self.status_input)
+        content_layout.addRow("Источник", self.source_input)
         content_layout.addRow("Ценность", self.value_input)
         content_layout.addRow("Сложность", self.effort_input)
 
@@ -305,7 +511,32 @@ class IdeasWorkspace(BaseWorkspace):
         button_row.addWidget(self.save_button)
         content_layout.addRow("", button_row)
 
-        self.inspector_tabs.addTab(content_tab, "Содержание")
+        self.content_tab_index = self.inspector_tabs.addTab(content_tab, "Суть")
+
+        development_tab = QWidget()
+        development_tab.setObjectName("IdeasDevelopmentTab")
+        development_layout = QVBoxLayout(development_tab)
+        development_layout.setContentsMargins(12, 12, 12, 12)
+        development_layout.setSpacing(8)
+        self.development_hint = QLabel(
+            "Развитие помогает превратить сырую мысль в проверяемую идею. "
+            "Шаблон записывается в поле «Описание» на вкладке «Суть»."
+        )
+        self.development_hint.setObjectName("IdeasDevelopmentHint")
+        self.development_hint.setWordWrap(True)
+        self.development_insert_button = QToolButton()
+        self.development_insert_button.setText("Вставить шаблон развития")
+        self.development_insert_button.setObjectName("IdeasDevelopmentInsert")
+        self.development_insert_button.clicked.connect(self._insert_development_template)
+        self.development_preview = QPlainTextEdit()
+        self.development_preview.setObjectName("IdeasDevelopmentPreview")
+        self.development_preview.setReadOnly(True)
+        self.development_preview.setPlaceholderText("Описание идеи появится здесь.")
+        self.development_preview.setMinimumHeight(220)
+        development_layout.addWidget(self.development_hint)
+        development_layout.addWidget(self.development_insert_button, 0, Qt.AlignmentFlag.AlignLeft)
+        development_layout.addWidget(self.development_preview, 1)
+        self.development_tab_index = self.inspector_tabs.addTab(development_tab, "Развитие")
 
         relations_tab = QWidget()
         relations_tab.setObjectName("IdeasRelationsTab")
@@ -321,14 +552,20 @@ class IdeasWorkspace(BaseWorkspace):
         self.relations_remove_button.setText("Удалить связь")
         self.relations_remove_button.setObjectName("IdeasRelationsRemove")
         self.relations_remove_button.clicked.connect(self._remove_selected_relation)
+        self.relations_open_button = QToolButton()
+        self.relations_open_button.setText("РћС‚РєСЂС‹С‚СЊ СЃРІСЏР·СЊ")
+        self.relations_open_button.setObjectName("IdeasRelationsOpen")
+        self.relations_open_button.clicked.connect(self._open_selected_relation)
         relations_actions.addWidget(self.relations_add_button)
+        relations_actions.addWidget(self.relations_open_button)
         relations_actions.addWidget(self.relations_remove_button)
         relations_actions.addStretch(1)
         relations_layout.addLayout(relations_actions)
         self.relations_list = QListWidget()
         self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
+        self.relations_list.itemDoubleClicked.connect(lambda _item: self._open_selected_relation())
         relations_layout.addWidget(self.relations_list, 1)
-        self.inspector_tabs.addTab(relations_tab, "Связи")
+        self.relations_tab_index = self.inspector_tabs.addTab(relations_tab, "Связи")
 
         materials_tab = QWidget()
         materials_tab.setObjectName("IdeasMaterialsTab")
@@ -348,7 +585,9 @@ class IdeasWorkspace(BaseWorkspace):
         materials_actions.addWidget(self.materials_remove_button)
         materials_actions.addStretch(1)
 
-        self.materials_hint = QLabel("Прикрепите изображения из режима Файлы.")
+        self.materials_hint = QLabel(
+            "Материалов пока нет.\nДобавьте изображение или референс, чтобы связать идею с визуальным контекстом."
+        )
         self.materials_hint.setObjectName("IdeasMaterialsHint")
         self.materials_hint.setWordWrap(True)
 
@@ -358,9 +597,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_thumbnail_list.setFlow(QListView.Flow.LeftToRight)
         self.materials_thumbnail_list.setResizeMode(QListView.ResizeMode.Adjust)
         self.materials_thumbnail_list.setMovement(QListView.Movement.Static)
-        self.materials_thumbnail_list.setIconSize(QSize(64, 64))
-        self.materials_thumbnail_list.setGridSize(QSize(92, 96))
-        self.materials_thumbnail_list.setFixedHeight(112)
+        self.materials_thumbnail_list.setIconSize(QSize(88, 88))
+        self.materials_thumbnail_list.setGridSize(QSize(116, 122))
+        self.materials_thumbnail_list.setFixedHeight(138)
         self.materials_thumbnail_list.setSpacing(8)
         self.materials_thumbnail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.materials_thumbnail_list.setToolTip("Двойной щелчок открывает изображение в полном размере.")
@@ -369,7 +608,7 @@ class IdeasWorkspace(BaseWorkspace):
 
         self.materials_caption_input = QPlainTextEdit()
         self.materials_caption_input.setObjectName("IdeasMaterialsCaption")
-        self.materials_caption_input.setPlaceholderText("Подпись к изображению...")
+        self.materials_caption_input.setPlaceholderText("Подпись и контекст материала...")
 
         self.materials_save_caption_button = QToolButton()
         self.materials_save_caption_button.setText("Сохранить подпись")
@@ -381,7 +620,7 @@ class IdeasWorkspace(BaseWorkspace):
         materials_layout.addWidget(self.materials_thumbnail_list)
         materials_layout.addWidget(self.materials_caption_input)
         materials_layout.addWidget(self.materials_save_caption_button, 0, Qt.AlignmentFlag.AlignRight)
-        self.inspector_tabs.addTab(materials_tab, "Материалы")
+        self.materials_tab_index = self.inspector_tabs.addTab(materials_tab, "Материалы и референсы")
 
         transform_tab = QWidget()
         transform_tab.setObjectName("IdeasTransformTab")
@@ -389,12 +628,20 @@ class IdeasWorkspace(BaseWorkspace):
         transform_layout = QVBoxLayout(transform_tab)
         transform_layout.setContentsMargins(12, 12, 12, 12)
         transform_layout.setSpacing(8)
+        self.triage_progress_label = QLabel("Выход идеи")
+        self.triage_progress_label.setObjectName("IdeasTriageProgress")
+        transform_layout.addWidget(self.triage_progress_label)
         self.triage_hint = QLabel(
-            "Разбор инбокса: переведите идею в work или ripe, создайте задачу или отправьте в архив."
+            "Идея должна либо созреть, либо стать действием, либо уйти в архив."
         )
         self.triage_hint.setObjectName("IdeasTriageHint")
         self.triage_hint.setWordWrap(True)
         transform_layout.addWidget(self.triage_hint)
+        self.output_summary_label = QLabel("Выход: нет")
+        self.output_summary_label.setObjectName("IdeasOutputSummary")
+        self.output_summary_label.setWordWrap(True)
+        transform_layout.addWidget(self.output_summary_label)
+        transform_layout.addWidget(QLabel("Разобрать идею"))
         triage_row = QHBoxLayout()
         triage_row.setSpacing(6)
         self.triage_skip_btn = QToolButton()
@@ -402,11 +649,11 @@ class IdeasWorkspace(BaseWorkspace):
         self.triage_skip_btn.setObjectName("IdeasTriageSkip")
         self.triage_skip_btn.clicked.connect(self._skip_inbox_idea)
         self.triage_work_btn = QToolButton()
-        self.triage_work_btn.setText("В work")
+        self.triage_work_btn.setText("В работу")
         self.triage_work_btn.setObjectName("IdeasTriageWork")
         self.triage_work_btn.clicked.connect(lambda: self._triage_current_status("work"))
         self.triage_ripe_btn = QToolButton()
-        self.triage_ripe_btn.setText("В ripe")
+        self.triage_ripe_btn.setText("Созрела")
         self.triage_ripe_btn.setObjectName("IdeasTriageRipe")
         self.triage_ripe_btn.clicked.connect(lambda: self._triage_current_status("ripe"))
         self.triage_archive_btn = QToolButton()
@@ -418,26 +665,27 @@ class IdeasWorkspace(BaseWorkspace):
         triage_row.addWidget(self.triage_ripe_btn)
         triage_row.addWidget(self.triage_archive_btn)
         transform_layout.addLayout(triage_row)
+        transform_layout.addWidget(QLabel("Преобразовать в"))
         self.transform_task_btn = QToolButton()
-        self.transform_task_btn.setText("✅ Создать задачу")
+        self.transform_task_btn.setText("Создать задачу")
         self.transform_task_btn.setObjectName("IdeasTransformTask")
         self.transform_task_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_task_btn.clicked.connect(lambda: self._triage_transform("task"))
         self.transform_note_btn = QToolButton()
-        self.transform_note_btn.setText("📝 Создать заметку")
+        self.transform_note_btn.setText("Создать заметку")
         self.transform_note_btn.setObjectName("IdeasTransformNote")
         self.transform_note_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_note_btn.clicked.connect(lambda: self._transform_idea("note"))
+        self.transform_note_btn.clicked.connect(lambda: self._triage_transform("note"))
         self.transform_object_btn = QToolButton()
-        self.transform_object_btn.setText("🧱 Создать объект")
+        self.transform_object_btn.setText("Создать объект")
         self.transform_object_btn.setObjectName("IdeasTransformObject")
         self.transform_object_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_object_btn.clicked.connect(lambda: self._transform_idea("object"))
+        self.transform_object_btn.clicked.connect(lambda: self._triage_transform("object"))
         self.transform_marker_btn = QToolButton()
-        self.transform_marker_btn.setText("🗺️ Создать метку")
+        self.transform_marker_btn.setText("Создать метку карты")
         self.transform_marker_btn.setObjectName("IdeasTransformMarker")
         self.transform_marker_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_marker_btn.clicked.connect(lambda: self._transform_idea("marker"))
+        self.transform_marker_btn.clicked.connect(lambda: self._triage_transform("marker"))
         self._transform_action_buttons = [
             self.transform_task_btn,
             self.transform_note_btn,
@@ -455,8 +703,13 @@ class IdeasWorkspace(BaseWorkspace):
         transform_actions_row.addWidget(self.transform_object_btn, 1)
         transform_actions_row.addWidget(self.transform_marker_btn, 1)
         transform_layout.addWidget(self.transform_actions_host)
+        self.transform_concept_board_btn = QToolButton()
+        self.transform_concept_board_btn.setText("Добавить в концептборд")
+        self.transform_concept_board_btn.setObjectName("IdeasTransformConceptBoard")
+        self.transform_concept_board_btn.clicked.connect(self._attach_current_idea_to_concept_board)
+        transform_layout.addWidget(self.transform_concept_board_btn, 0, Qt.AlignmentFlag.AlignLeft)
         transform_layout.addStretch(1)
-        self.inspector_tabs.addTab(transform_tab, "Решение")
+        self.output_tab_index = self.inspector_tabs.addTab(transform_tab, "Выход")
 
         self.inspector_stack.addWidget(self.inspector_tabs)
         splitter.addWidget(self.inspector_stack)
@@ -468,9 +721,11 @@ class IdeasWorkspace(BaseWorkspace):
         self.title_input.textChanged.connect(self._mark_dirty)
         self.summary_input.textChanged.connect(self._mark_dirty)
         self.body_input.textChanged.connect(self._mark_dirty)
+        self.body_input.textChanged.connect(self._sync_development_preview)
         self.project_input.currentIndexChanged.connect(self._on_project_changed)
         self.type_input.currentIndexChanged.connect(self._mark_dirty)
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
+        self.source_input.textChanged.connect(self._mark_dirty)
         self.value_input.valueChanged.connect(self._mark_dirty)
         self.effort_input.valueChanged.connect(self._mark_dirty)
         self.quick_create_btn.clicked.connect(self._create_idea_from_quick_form)
@@ -478,9 +733,52 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_title_input.returnPressed.connect(self._create_idea_from_quick_form)
         self._set_quick_status(None)
         self._update_material_view()
+        self._init_triage_shortcuts()
 
         self.set_theme_mode("dark")
         QTimer.singleShot(0, self._sync_transform_action_widths)
+
+    def _init_triage_shortcuts(self) -> None:
+        self._triage_shortcuts: list[QShortcut] = []
+        bindings = [
+            ("W", lambda: self._triage_current_status("work")),
+            ("R", lambda: self._triage_current_status("ripe")),
+            ("A", self._triage_archive_current),
+            ("T", lambda: self._triage_transform("task")),
+            ("N", lambda: self._triage_transform("note")),
+            ("O", lambda: self._triage_transform("object")),
+            ("Space", self._skip_inbox_idea),
+            ("Escape", self._exit_triage_mode),
+        ]
+        for sequence, callback in bindings:
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda cb=callback: self._run_triage_shortcut(cb))
+            self._triage_shortcuts.append(shortcut)
+
+    def _run_triage_shortcut(self, callback) -> None:
+        if not self._should_handle_triage_shortcut():
+            return
+        callback()
+
+    def _should_handle_triage_shortcut(self) -> bool:
+        if not self._triage_mode:
+            return False
+        focus_widget = QApplication.focusWidget()
+        if focus_widget is None:
+            return True
+        if isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QComboBox, QSpinBox)):
+            return False
+        return self.isAncestorOf(focus_widget) or focus_widget is self
+
+    def _exit_triage_mode(self) -> None:
+        if not self._triage_mode:
+            return
+        self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
+        self._update_triage_panel()
+        self._set_status("Режим разбора inbox завершён.")
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
@@ -521,6 +819,18 @@ class IdeasWorkspace(BaseWorkspace):
             QLabel#IdeasQuickStatus {{
                 color: {palette.chart_muted};
                 font-size: 11px;
+            }}
+
+            QLabel#IdeasWorkspaceHeading {{
+                color: {palette.text};
+                font-size: 15px;
+                font-weight: 600;
+            }}
+
+            QLabel#IdeasTriageProgress,
+            QLabel#IdeasOutputSummary {{
+                color: {palette.chart_muted};
+                font-weight: 600;
             }}
 
             QWidget#IdeasWorkspace QWidget#WorkspaceToolbar,
@@ -595,6 +905,7 @@ class IdeasWorkspace(BaseWorkspace):
             }}
 
             QWidget#IdeasContentTab,
+            QWidget#IdeasDevelopmentTab,
             QWidget#IdeasRelationsTab,
             QWidget#IdeasMaterialsTab,
             QWidget#IdeasTransformTab {{
@@ -621,6 +932,30 @@ class IdeasWorkspace(BaseWorkspace):
                 padding: 6px;
             }}
 
+            QWidget#IdeasWorkspace QWidget#IdeasFunnelColumn {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QWidget#IdeasWorkspace QWidget#IdeasMatrixQuadrant {{
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QWidget#IdeasWorkspace QLabel#IdeasFunnelHeading {{
+                color: {palette.text};
+                font-size: 12px;
+                font-weight: 600;
+            }}
+
+            QWidget#IdeasWorkspace QLabel#IdeasMatrixHeading {{
+                color: {palette.text};
+                font-size: 12px;
+                font-weight: 600;
+            }}
+
             QLabel#IdeasEmpty {{
                 color: {palette.dim_text};
             }}
@@ -630,19 +965,19 @@ class IdeasWorkspace(BaseWorkspace):
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)
         action_new.triggered.connect(self._create_default_idea)
+        action_triage = QAction("Разобрать inbox", self)
+        action_triage.triggered.connect(lambda: self._set_status("Разбор инбокса пока не реализован"))
         action_export = QAction("Экспорт", self)
         action_export.triggered.connect(self._export_ideas_csv)
         action_import = QAction("Импорт", self)
         action_import.triggered.connect(self._import_ideas_csv)
-        action_triage = QAction("Разобрать инбокс", self)
-        action_triage.triggered.connect(lambda: self._set_status("Разбор инбокса пока не реализован"))
         action_archive = QAction("В архив", self)
         action_archive.triggered.connect(self._archive_selected)
         return {
             "new": action_new,
+            "triage": action_triage,
             "export": action_export,
             "import": action_import,
-            "triage": action_triage,
             "archive": action_archive,
         }
 
@@ -652,11 +987,24 @@ class IdeasWorkspace(BaseWorkspace):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        self.toolbar_layout.addStretch(1)
-        for action in actions.values():
+        heading = QLabel("Идеи · Инкубатор решений")
+        heading.setObjectName("IdeasWorkspaceHeading")
+        self.toolbar_layout.addWidget(heading)
+        self.toolbar_layout.addSpacing(12)
+
+        ordered_keys = ("new", "triage", "export", "import", "archive")
+        for key in ordered_keys:
+            action = actions.get(key)
+            if action is None:
+                continue
             button = QToolButton()
             button.setDefaultAction(action)
+            if key == "archive":
+                button.setObjectName("IdeasArchiveAction")
             self.toolbar_layout.addWidget(button)
+            if key in {"triage", "import"}:
+                self.toolbar_layout.addSpacing(6)
+        self.toolbar_layout.addStretch(1)
 
     def get_selection(self):
         index = self.list_view.currentIndex()
@@ -664,8 +1012,480 @@ class IdeasWorkspace(BaseWorkspace):
             return None
         return index.data(IdeaRoles.IdeaId)
 
+    def update_action_states(self) -> None:
+        super().update_action_states()
+        archive_action = self.actions.get("archive")
+        if archive_action is None:
+            return
+        idea_id = self.get_selection()
+        idea = self._db.get_idea(idea_id) if idea_id is not None else None
+        archive_action.setEnabled(idea is not None and not self._busy)
+        archive_action.setText("Восстановить" if idea is not None and idea.archived_at is not None else "В архив")
+
     def _set_status(self, text: str) -> None:
-        self.status_row.setText(text)
+        self._status_message = text.strip()
+        self._refresh_status_bar()
+
+    def _refresh_status_bar(self) -> None:
+        self._stats_text = self._compose_stats_text()
+        parts = [part for part in [self._status_message, self._stats_text] if part]
+        self.status_row.setText(" | ".join(parts))
+
+    def _compose_stats_text(self) -> str:
+        active_ideas = self._db.fetch_ideas(archived=False)
+        archived_ideas = self._db.fetch_ideas(archived=True)
+        inbox = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "inbox")
+        work = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "work")
+        ripe = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "ripe")
+        total = len(active_ideas) + len(archived_ideas)
+        return (
+            f"Идей: {total}"
+            f" | Входящие: {inbox}"
+            f" | В работе: {work}"
+            f" | Созрели: {ripe}"
+            f" | Архив: {len(archived_ideas)}"
+        )
+
+    def _update_empty_state(self, items: List[IdeaItem]) -> None:
+        if items:
+            self.inspector_empty.setText("Выберите идею слева")
+            return
+        filters = self.get_filters()
+        if self._query:
+            self.inspector_empty.setText("Ничего не найдено\nПопробуйте изменить запрос или сбросить фильтры.")
+            return
+        if filters.get("status") == "inbox":
+            self.inspector_empty.setText("Inbox пуст\nВсе входящие идеи разобраны.")
+            return
+        self.inspector_empty.setText("Идей пока нет\nСоздайте первую идею или импортируйте CSV.")
+
+    @staticmethod
+    def _format_relative_time(value: datetime) -> str:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value = value.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = max(0, int((now - value).total_seconds()))
+        if delta < 60:
+            return "только что"
+        if delta < 3600:
+            return f"{delta // 60} мин назад"
+        if delta < 86400:
+            return f"{delta // 3600} ч назад"
+        return f"{delta // 86400} д назад"
+
+    def _idea_output_label(self, idea, relations: List[object]) -> str:
+        relation_types = {
+            (relation.entity_type or "").strip().lower()
+            for relation in relations
+            if (getattr(relation, "relation_kind", "related") or "related").strip().lower() == "transforms_to"
+        }
+        if not relation_types:
+            relation_types = {(relation.entity_type or "").strip().lower() for relation in relations}
+        for entity_type in IDEA_OUTPUT_PRIORITY:
+            if entity_type in relation_types:
+                return IDEA_OUTPUT_LABELS[entity_type]
+        if idea.archived_at is not None:
+            return "архив"
+        return "нет"
+
+    @staticmethod
+    def _relation_kind_title(relation_kind: Optional[str]) -> str:
+        normalized = (relation_kind or "related").strip().lower() or "related"
+        return IDEA_RELATION_TYPE_LABELS.get(normalized, IDEA_RELATION_TYPE_LABELS["related"])
+
+    def _set_counted_tab_title(self, tab_index: int, title: str, count: Optional[int] = None) -> None:
+        if count is None:
+            self.inspector_tabs.setTabText(tab_index, title)
+            return
+        self.inspector_tabs.setTabText(tab_index, f"{title} ({count})")
+
+    @staticmethod
+    def _quadrant_label(item: IdeaItem) -> str:
+        if item.value_score >= 4 and item.effort_score <= 2:
+            return "Сделать первым"
+        if item.value_score >= 4:
+            return "Запланировать"
+        if item.effort_score <= 2:
+            return "Быстро закрыть"
+        return "В архив / позже"
+
+    @staticmethod
+    def _quadrant_key(item: IdeaItem) -> str:
+        if item.value_score >= 4 and item.effort_score <= 2:
+            return "first"
+        if item.value_score >= 4:
+            return "planned"
+        if item.effort_score <= 2:
+            return "quick"
+        return "later"
+
+    @staticmethod
+    def _funnel_bucket(item: IdeaItem) -> str:
+        if item.archived:
+            return "archived"
+        status = (item.status or "").strip().lower()
+        if status in {"inbox", "work", "ripe"}:
+            return status
+        if status == "done":
+            return "ripe"
+        return "inbox"
+
+    def _add_alt_view_header(self, widget: QListWidget, text: str) -> None:
+        item = QListWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        widget.addItem(item)
+
+    def _add_alt_view_idea(self, widget: QListWidget, item: IdeaItem, *, prefix: str = "") -> None:
+        line = (
+            f"{prefix}{item.title} · {self._category_title(item.status)}"
+            f" · Value {item.value_score} / Effort {item.effort_score}"
+            f" · Выход: {item.output_label}"
+        )
+        row = QListWidgetItem(line)
+        row.setData(Qt.ItemDataRole.UserRole, item.id)
+        widget.addItem(row)
+
+    @staticmethod
+    def _relation_group_title(entity_type: str) -> str:
+        if entity_type == "concept_board":
+            return "РљРѕРЅС†РµРїС‚Р±РѕСЂРґС‹"
+        return IDEA_RELATION_KIND_LABELS.get(entity_type, entity_type.capitalize())
+
+    @staticmethod
+    def _relation_payload(item: Optional[QListWidgetItem]) -> Optional[tuple[int, str, int]]:
+        if item is None:
+            return None
+        relation_id = item.data(Qt.ItemDataRole.UserRole)
+        entity_type = item.data(int(Qt.ItemDataRole.UserRole) + 1)
+        entity_id = item.data(int(Qt.ItemDataRole.UserRole) + 2)
+        if isinstance(relation_id, int) and isinstance(entity_type, str) and isinstance(entity_id, int):
+            return relation_id, entity_type, entity_id
+        return None
+
+    def _populate_funnel_view(self) -> None:
+        self.funnel_view.clear()
+        order = [
+            ("inbox", "Входящие"),
+            ("work", "В работе"),
+            ("ripe", "Созрели"),
+            ("archived", "Архив"),
+        ]
+        grouped: Dict[str, List[IdeaItem]] = {key: [] for key, _label in order}
+        for item in self._visible_idea_items:
+            status = (item.status or "").strip().lower()
+            grouped["archived" if item.archived else status].append(item)
+        for key, label in order:
+            bucket = grouped.get(key, [])
+            self._add_alt_view_header(self.funnel_view, f"{label} · {len(bucket)}")
+            if not bucket:
+                self._add_alt_view_header(self.funnel_view, "  Нет идей")
+                continue
+            for item in bucket:
+                self._add_alt_view_idea(self.funnel_view, item, prefix="  ")
+
+    def _populate_funnel_view(self) -> None:
+        grouped: Dict[str, List[IdeaItem]] = {key: [] for key in self.funnel_lists}
+        for item in self._visible_idea_items:
+            grouped[self._funnel_bucket(item)].append(item)
+        for key, widget in self.funnel_lists.items():
+            widget.clear()
+            bucket = grouped.get(key, [])
+            heading = self.funnel_headers.get(key)
+            if heading is not None:
+                base_title = heading.text().split(" · ", 1)[0]
+                heading.setText(f"{base_title} · {len(bucket)}")
+            if not bucket:
+                empty_row = QListWidgetItem("Нет идей")
+                empty_row.setFlags(Qt.ItemFlag.NoItemFlags)
+                widget.addItem(empty_row)
+                continue
+            bucket.sort(key=lambda idea: idea.id, reverse=True)
+            for item in bucket:
+                preview = idea_preview_line(item.summary, item.body_md)
+                row = QListWidgetItem(
+                    f"{item.title}\n{preview}\nValue {item.value_score} / Effort {item.effort_score} · Выход: {item.output_label}"
+                )
+                row.setData(Qt.ItemDataRole.UserRole, item.id)
+                row.setToolTip(f"{item.title}\n{preview}")
+                widget.addItem(row)
+
+    def move_idea_to_funnel_status(self, idea_id: int, status_code: str) -> bool:
+        target_status = (status_code or "").strip().lower()
+        if target_status not in {"inbox", "work", "ripe", "archived"}:
+            return False
+        if self._dirty and self._current_idea_id == idea_id and not self._maybe_save_changes():
+            return False
+        idea = self._db.get_idea(idea_id)
+        if idea is None:
+            return False
+        was_archived = idea.archived_at is not None
+        current_bucket = "archived" if was_archived else self._funnel_bucket(
+            IdeaItem(
+                id=idea.id,
+                title=idea.title,
+                summary=idea.summary,
+                body_md=idea.body_md,
+                status=idea.status,
+                idea_type=idea.type,
+                value_score=idea.value_score,
+                effort_score=idea.effort_score,
+                project_id=idea.project_id,
+                project_title=idea.project_title,
+                archived=was_archived,
+                source=idea.source,
+            )
+        )
+        if current_bucket == target_status:
+            return True
+        if target_status == "archived":
+            self._db.set_idea_archived(idea_id, True)
+        else:
+            if was_archived:
+                self._db.set_idea_archived(idea_id, False)
+            if (idea.status or "").strip().lower() != target_status:
+                self._db.update_idea(
+                    idea_id=idea.id,
+                    title=idea.title,
+                    summary=idea.summary,
+                    body_md=idea.body_md,
+                    idea_type=idea.type,
+                    status=target_status,
+                    value_score=idea.value_score,
+                    effort_score=idea.effort_score,
+                    project_id=idea.project_id,
+                    source=idea.source,
+                )
+        self._current_idea_id = idea_id
+        self.refresh()
+        self.select_idea(idea_id)
+        self._set_status(f"Идея перемещена в {self._category_title(target_status)}.")
+        return True
+
+    def _populate_matrix_view(self) -> None:
+        self.matrix_view.clear()
+        groups: Dict[str, List[IdeaItem]] = {
+            "Сделать первым": [],
+            "Запланировать": [],
+            "Быстро закрыть": [],
+            "В архив / позже": [],
+        }
+        for item in self._visible_idea_items:
+            groups[self._quadrant_label(item)].append(item)
+        for label, bucket in groups.items():
+            self._add_alt_view_header(self.matrix_view, f"{label} · {len(bucket)}")
+            if not bucket:
+                self._add_alt_view_header(self.matrix_view, "  Нет идей")
+                continue
+            bucket.sort(key=lambda idea: (-idea.value_score, idea.effort_score, idea.title.casefold(), idea.id))
+            for item in bucket:
+                self._add_alt_view_idea(self.matrix_view, item, prefix="  ")
+
+    def _populate_matrix_view(self) -> None:
+        groups: Dict[str, List[IdeaItem]] = {key: [] for key in self.matrix_lists}
+        for item in self._visible_idea_items:
+            groups[self._quadrant_key(item)].append(item)
+        for label, widget in self.matrix_lists.items():
+            widget.clear()
+            bucket = groups.get(label, [])
+            heading = self.matrix_headers.get(label)
+            if heading is not None:
+                base_title = heading.text().split(" · ", 1)[0]
+                heading.setText(f"{base_title} · {len(bucket)}")
+            if not bucket:
+                empty_row = QListWidgetItem("Нет идей")
+                empty_row.setFlags(Qt.ItemFlag.NoItemFlags)
+                widget.addItem(empty_row)
+                continue
+            bucket.sort(key=lambda idea: (-idea.value_score, idea.effort_score, idea.title.casefold(), idea.id))
+            for item in bucket:
+                row = QListWidgetItem(
+                    f"{item.title}\n{idea_preview_line(item.summary, item.body_md)}\nВыход: {item.output_label}"
+                )
+                row.setData(Qt.ItemDataRole.UserRole, item.id)
+                row.setToolTip(item.title)
+                widget.addItem(row)
+
+    def _populate_links_view(self) -> None:
+        self.links_view.clear()
+        if self._current_idea_id is None:
+            self._add_alt_view_header(self.links_view, "Выберите идею, чтобы увидеть её связи.")
+            return
+        idea = next((item for item in self._visible_idea_items if item.id == self._current_idea_id), None)
+        if idea is None:
+            current = self._db.get_idea(self._current_idea_id)
+            if current is not None:
+                self._add_alt_view_header(self.links_view, f"{current.title}")
+            else:
+                self._add_alt_view_header(self.links_view, "Связи недоступны.")
+                return
+        else:
+            self._add_alt_view_header(self.links_view, f"{idea.title}")
+        relations = self._db.fetch_idea_relations(self._current_idea_id)
+        if not relations:
+            self._add_alt_view_header(self.links_view, "Связей пока нет")
+            self._add_alt_view_header(
+                self.links_view,
+                "Свяжите идею с задачей, заметкой, объектом или картой, чтобы она стала частью рабочего контекста.",
+            )
+            return
+        grouped: Dict[str, List[object]] = {}
+        for relation in relations:
+            grouped.setdefault(relation.entity_type, []).append(relation)
+        for entity_type in sorted(grouped.keys()):
+            title = IDEA_RELATION_KIND_LABELS.get(entity_type, entity_type.capitalize())
+            self._add_alt_view_header(self.links_view, f"{title} · {len(grouped[entity_type])}")
+            for relation in grouped[entity_type]:
+                label = self._relation_display_label(relation.entity_type, relation.entity_id)
+                row = QListWidgetItem(f"  {label}")
+                row.setData(Qt.ItemDataRole.UserRole, (relation.entity_type, relation.entity_id))
+                self.links_view.addItem(row)
+
+    def _populate_links_view(self) -> None:
+        self.links_view.clear()
+        if self._current_idea_id is None:
+            empty_item = QTreeWidgetItem(["Р’С‹Р±РµСЂРёС‚Рµ РёРґРµСЋ, С‡С‚РѕР±С‹ СѓРІРёРґРµС‚СЊ РµС‘ СЃРІСЏР·Рё."])
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.links_view.addTopLevelItem(empty_item)
+            return
+        idea = next((item for item in self._visible_idea_items if item.id == self._current_idea_id), None)
+        if idea is None:
+            current = self._db.get_idea(self._current_idea_id)
+            if current is None:
+                unavailable_item = QTreeWidgetItem(["РЎРІСЏР·Рё РЅРµРґРѕСЃС‚СѓРїРЅС‹."])
+                unavailable_item.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.links_view.addTopLevelItem(unavailable_item)
+                return
+            root_title = current.title
+        else:
+            root_title = idea.title
+        root_item = QTreeWidgetItem([root_title])
+        root_item.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.links_view.addTopLevelItem(root_item)
+
+        relations = self._db.fetch_idea_relations(self._current_idea_id)
+        if not relations:
+            empty_group = QTreeWidgetItem(["РЎРІСЏР·РµР№ РїРѕРєР° РЅРµС‚"])
+            empty_group.setFlags(Qt.ItemFlag.NoItemFlags)
+            root_item.addChild(empty_group)
+            empty_hint = QTreeWidgetItem(
+                ["РЎРІСЏР¶РёС‚Рµ РёРґРµСЋ СЃ Р·Р°РґР°С‡РµР№, Р·Р°РјРµС‚РєРѕР№, РѕР±СЉРµРєС‚РѕРј РёР»Рё РєР°СЂС‚РѕР№, С‡С‚РѕР±С‹ РѕРЅР° СЃС‚Р°Р»Р° С‡Р°СЃС‚СЊСЋ СЂР°Р±РѕС‡РµРіРѕ РєРѕРЅС‚РµРєСЃС‚Р°."]
+            )
+            empty_hint.setFlags(Qt.ItemFlag.NoItemFlags)
+            root_item.addChild(empty_hint)
+            self.links_view.expandItem(root_item)
+            return
+
+        grouped: Dict[str, List[object]] = {}
+        for relation in relations:
+            grouped.setdefault(relation.entity_type, []).append(relation)
+        for entity_type in IDEA_RELATION_GROUP_ORDER:
+            bucket = grouped.get(entity_type, [])
+            if not bucket:
+                continue
+            title = self._relation_group_title(entity_type)
+            group_item = QTreeWidgetItem([f"{title} В· {len(bucket)}"])
+            group_item.setFlags(Qt.ItemFlag.NoItemFlags)
+            root_item.addChild(group_item)
+            for relation in bucket:
+                label = self._relation_display_label(relation.entity_type, relation.entity_id)
+                row = QTreeWidgetItem([f"{self._relation_kind_title(getattr(relation, 'relation_kind', 'related'))} В· {label}"])
+                row.setData(0, Qt.ItemDataRole.UserRole, (relation.entity_type, relation.entity_id))
+                group_item.addChild(row)
+            self.links_view.expandItem(group_item)
+        self.links_view.expandItem(root_item)
+
+    def _populate_mode_views(self) -> None:
+        if not hasattr(self, "funnel_view"):
+            return
+        self._populate_funnel_view()
+        self._populate_matrix_view()
+        self._populate_links_view()
+
+    def _on_view_mode_changed(self, *_args: object) -> None:
+        mode = self.view_mode_combo.currentData()
+        page_index = {
+            "list": 0,
+            "funnel": 1,
+            "matrix": 2,
+            "links": 3,
+        }.get(mode, 0)
+        self.list_mode_stack.setCurrentIndex(page_index)
+        self._populate_mode_views()
+
+    def _on_alt_view_item_activated(self, item: QListWidgetItem) -> None:
+        idea_id = item.data(Qt.ItemDataRole.UserRole)
+        if (
+            isinstance(idea_id, tuple)
+            and len(idea_id) == 2
+            and isinstance(idea_id[0], str)
+            and isinstance(idea_id[1], int)
+        ):
+            self._open_relation_target(idea_id[0], idea_id[1])
+            return
+        if not isinstance(idea_id, int):
+            return
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return
+        index = model.index_for_id(idea_id)
+        if not index.isValid():
+            return
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+
+    def _reset_tab_titles(self) -> None:
+        self._set_counted_tab_title(self.content_tab_index, "Суть")
+        self._set_counted_tab_title(self.development_tab_index, "Развитие")
+        self._set_counted_tab_title(self.relations_tab_index, "Связи", 0)
+        self._set_counted_tab_title(self.materials_tab_index, "Материалы и референсы", 0)
+        self._set_counted_tab_title(self.output_tab_index, "Выход")
+
+    def _sync_development_preview(self) -> None:
+        if not hasattr(self, "development_preview"):
+            return
+        self.development_preview.setPlainText(self.body_input.toPlainText().strip())
+
+    def _insert_development_template(self) -> None:
+        current_text = self.body_input.toPlainText().strip()
+        if IDEA_DEVELOPMENT_TEMPLATE.strip() in current_text:
+            self._set_status("Шаблон развития уже добавлен в описание.")
+            self.inspector_tabs.setCurrentIndex(self.content_tab_index)
+            self.body_input.setFocus()
+            return
+        if current_text:
+            new_text = f"{current_text}\n\n{IDEA_DEVELOPMENT_TEMPLATE}"
+        else:
+            new_text = IDEA_DEVELOPMENT_TEMPLATE
+        self.body_input.setPlainText(new_text)
+        self.inspector_tabs.setCurrentIndex(self.content_tab_index)
+        self.body_input.setFocus()
+        self._set_status("Шаблон развития добавлен в описание идеи.")
+
+    def _update_output_summary(self, idea_id: Optional[int]) -> None:
+        if idea_id is None:
+            self.output_summary_label.setText("Выход: нет")
+            return
+        idea = self._db.get_idea(idea_id)
+        if idea is None:
+            self.output_summary_label.setText("Выход: нет")
+            return
+        relations = self._db.fetch_idea_relations(idea_id)
+        self.output_summary_label.setText(f"Выход: {self._idea_output_label(idea, relations)}")
+
+    def _update_triage_panel(self) -> None:
+        if not hasattr(self, "triage_progress_label"):
+            return
+        if not self._triage_mode or self._triage_total <= 0:
+            self.triage_progress_label.setText("Выход идеи")
+            self.triage_hint.setText("Идея должна либо созреть, либо стать действием, либо уйти в архив.")
+            return
+        remaining = self._inbox_count()
+        position = max(1, min(self._triage_position, self._triage_total))
+        self.triage_progress_label.setText(f"Разбор идеи {position} из {self._triage_total}")
+        self.triage_hint.setText(
+            "Поймал → Оценил → Развил → Связал → Превратил. "
+            f"Осталось inbox: {remaining}."
+        )
 
     def _category_titles(self) -> Dict[str, str]:
         return {category.code: category.title for category in self._idea_categories}
@@ -800,7 +1620,7 @@ class IdeasWorkspace(BaseWorkspace):
         confirm = QMessageBox.question(
             self,
             "Удалить категорию",
-            f"Удалить категорию «{category.title}»? Идеи будут перенесены в Inbox.",
+            f"Удалить категорию «{category.title}»? Идеи будут перенесены во Входящие.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm != QMessageBox.StandardButton.Yes:
@@ -885,10 +1705,10 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _update_relations_actions(self) -> None:
         has_idea = self._current_idea_id is not None
-        current_item = self.relations_list.currentItem()
-        relation_id = current_item.data(Qt.ItemDataRole.UserRole) if current_item is not None else None
+        payload = self._relation_payload(self.relations_list.currentItem())
         self.relations_add_button.setEnabled(has_idea)
-        self.relations_remove_button.setEnabled(has_idea and relation_id is not None)
+        self.relations_open_button.setEnabled(has_idea and payload is not None)
+        self.relations_remove_button.setEnabled(has_idea and payload is not None)
 
     def refresh_current_relations(self) -> None:
         if self._current_idea_id is None:
@@ -974,7 +1794,104 @@ class IdeasWorkspace(BaseWorkspace):
                     map_title = map_titles.get(marker.map_id, "")
                     suffix = f"{marker.name} · {map_title}" if map_title else marker.name
                     return f"{label_prefix} · {suffix}"
+        elif entity_type == "concept_board":
+            board = next((item for item in self._db.fetch_concept_boards() if item.id == entity_id), None)
+            if board is not None:
+                return f"Концептборд · {board.title}"
         return f"{label_prefix} #{entity_id}"
+
+    def _find_main_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode") and hasattr(parent, "MODE_CONCEPTBOARD"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _find_navigation_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _open_relation_target(self, entity_type: str, entity_id: int) -> bool:
+        main_window = self._find_navigation_window()
+        if main_window is None:
+            return False
+        handlers: dict[str, tuple[str, str, str]] = {
+            "task": ("MODE_TASKS", "page_tasks", "focus_task"),
+            "note": ("MODE_NOTES", "page_notes", "select_note"),
+            "idea": ("MODE_IDEAS", "page_ideas", "select_idea"),
+            "object": ("MODE_OBJECTS", "page_objects", "select_object"),
+            "map": ("MODE_MAPS", "page_maps", "select_map"),
+            "marker": ("MODE_MAPS", "page_maps", "select_marker"),
+            "concept_board": ("MODE_CONCEPTBOARD", "page_concept_board", "select_concept_board"),
+        }
+        payload = handlers.get(entity_type)
+        if payload is None:
+            return False
+        mode_attr, page_attr, method_name = payload
+        mode_name = getattr(main_window, mode_attr, None)
+        page = getattr(main_window, page_attr, None)
+        if mode_name is None or page is None or not hasattr(page, method_name):
+            return False
+        try:
+            main_window.set_mode(mode_name)
+        except Exception:
+            return False
+        method = getattr(page, method_name)
+        QTimer.singleShot(0, lambda relation_entity_id=entity_id, callback=method: callback(relation_entity_id))
+        return True
+
+    def _ensure_concept_board_target(self):
+        boards = self._db.fetch_concept_boards()
+        if boards:
+            return boards[0]
+        return self._db.create_concept_board("Концептборд 1")
+
+    def _open_concept_board(self, concept_board_id: int) -> None:
+        main_window = self._find_main_window()
+        if main_window is None:
+            return
+        try:
+            main_window.set_mode(main_window.MODE_CONCEPTBOARD)
+        except Exception:
+            return
+        page = getattr(main_window, "page_concept_board", None)
+        if page is not None and hasattr(page, "select_concept_board"):
+            try:
+                page.select_concept_board(concept_board_id)
+            except Exception:
+                return
+
+    def _attach_current_idea_to_concept_board(self) -> None:
+        if self._current_idea_id is None:
+            return
+        idea = self._db.get_idea(self._current_idea_id)
+        if idea is None:
+            return
+        board = self._ensure_concept_board_target()
+        self._db.attach_concept_board_item(board.id, "idea", idea.id)
+        self._db.add_idea_relation(idea.id, "concept_board", board.id, "transforms_to")
+        self._db.update_idea(
+            idea_id=idea.id,
+            title=idea.title,
+            summary=idea.summary,
+            body_md=idea.body_md,
+            idea_type=idea.type,
+            status="ripe",
+            value_score=idea.value_score,
+            effort_score=idea.effort_score,
+            project_id=idea.project_id,
+            source=idea.source,
+        )
+        self.refresh()
+        self._current_idea_id = idea.id
+        self._sync_selection()
+        self._open_concept_board(board.id)
+        self._set_status(f"Идея добавлена в концептборд «{board.title}».")
 
     def _add_relation(self) -> None:
         if self._current_idea_id is None:
@@ -988,11 +1905,17 @@ class IdeasWorkspace(BaseWorkspace):
             return
         values = dialog.values()
         entity_type = values.get("entity_type")
+        relation_kind = values.get("relation_kind")
         entity_id = values.get("entity_id")
         if not isinstance(entity_type, str) or not isinstance(entity_id, int):
             QMessageBox.warning(self, "Связи", "Выберите элемент для связи.")
             return
-        self._db.add_idea_relation(self._current_idea_id, entity_type, entity_id)
+        self._db.add_idea_relation(
+            self._current_idea_id,
+            entity_type,
+            entity_id,
+            relation_kind if isinstance(relation_kind, str) else "related",
+        )
         self._load_relations(self._current_idea_id)
         self._set_status("Связь добавлена")
 
@@ -1008,6 +1931,17 @@ class IdeasWorkspace(BaseWorkspace):
         self._load_relations(self._current_idea_id)
         self._set_status("Связь удалена")
 
+    def _open_selected_relation(self) -> None:
+        payload = self._relation_payload(self.relations_list.currentItem())
+        if payload is None:
+            QMessageBox.information(self, "РЎРІСЏР·Рё", "Р’С‹Р±РµСЂРёС‚Рµ СЃРІСЏР·Р°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ.")
+            return
+        _relation_id, entity_type, entity_id = payload
+        if not self._open_relation_target(entity_type, entity_id):
+            QMessageBox.information(self, "РЎРІСЏР·Рё", "Р­С‚Сѓ СЃРІСЏР·СЊ РїРѕРєР° РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ.")
+            return
+        self._set_status("РЎРІСЏР·Р°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РѕС‚РєСЂС‹С‚")
+
     def _on_status_filter_changed(self, *_args: object) -> None:
         status = self.status_filter.currentData()
         self.set_filter("status", status)
@@ -1020,9 +1954,13 @@ class IdeasWorkspace(BaseWorkspace):
         self.set_filter("archived", self.archived_only.isChecked())
 
     def apply_query(self, query: str) -> None:
+        _ = query
+        self._status_message = ""
         self.refresh()
 
     def apply_filters(self, filters: dict[str, object]) -> None:
+        _ = filters
+        self._status_message = ""
         self.refresh()
 
     def refresh(self) -> None:
@@ -1034,22 +1972,31 @@ class IdeasWorkspace(BaseWorkspace):
             idea_type=filters.get("type"),
             archived=bool(filters.get("archived")),
         )
-        items = [
-            IdeaItem(
-                id=idea.id,
-                title=idea.title,
-                summary=idea.summary,
-                body_md=idea.body_md,
-                status=idea.status,
-                idea_type=idea.type,
-                value_score=idea.value_score,
-                effort_score=idea.effort_score,
-                project_id=idea.project_id,
-                project_title=idea.project_title,
-                archived=idea.archived_at is not None,
+        items: List[IdeaItem] = []
+        for idea in ideas:
+            relations = self._db.fetch_idea_relations(idea.id)
+            materials = self._db.fetch_idea_images(idea.id)
+            items.append(
+                IdeaItem(
+                    id=idea.id,
+                    title=idea.title,
+                    summary=idea.summary,
+                    body_md=idea.body_md,
+                    status=idea.status,
+                    idea_type=idea.type,
+                    value_score=idea.value_score,
+                    effort_score=idea.effort_score,
+                    project_id=idea.project_id,
+                    project_title=idea.project_title,
+                    archived=idea.archived_at is not None,
+                    source=idea.source,
+                    output_label=self._idea_output_label(idea, relations),
+                    relations_count=len(relations),
+                    materials_count=len(materials),
+                    updated_label=self._format_relative_time(idea.updated_at),
+                )
             )
-            for idea in ideas
-        ]
+        self._visible_idea_items = items
         model = self.list_view.model()
         if isinstance(model, IdeasListModel):
             model.set_items(
@@ -1060,12 +2007,18 @@ class IdeasWorkspace(BaseWorkspace):
             quick_status = self.quick_status_label.property("quick_status")
             if isinstance(quick_status, str) and quick_status not in model.statuses():
                 self._set_quick_status(None)
+        self._update_empty_state(items)
         self._sync_selection()
+        self._populate_mode_views()
+        self._refresh_status_bar()
 
     def _sync_selection(self) -> None:
         if self._current_idea_id is None:
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._reset_tab_titles()
+            self._update_output_summary(None)
+            self._update_triage_panel()
             self._update_relations_actions()
             self.update_action_states()
             return
@@ -1079,6 +2032,9 @@ class IdeasWorkspace(BaseWorkspace):
                 return
         self._current_idea_id = None
         self.inspector_stack.setCurrentWidget(self.inspector_empty)
+        self._reset_tab_titles()
+        self._update_output_summary(None)
+        self._update_triage_panel()
         self._update_relations_actions()
         self.update_action_states()
 
@@ -1091,13 +2047,33 @@ class IdeasWorkspace(BaseWorkspace):
             self._current_idea_id = None
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._populate_links_view()
             self._update_relations_actions()
             self.update_action_states()
             return
         self._current_idea_id = index.data(IdeaRoles.IdeaId)
         self._load_idea(self._current_idea_id)
         self.inspector_stack.setCurrentWidget(self.inspector_tabs)
+        self._populate_links_view()
         self.update_action_states()
+
+    def select_idea(self, idea_id: int) -> bool:
+        model = self.list_view.model()
+        if not isinstance(model, IdeasListModel):
+            return False
+        index = model.index_for_id(idea_id)
+        if not index.isValid() and self.archived_only.isChecked():
+            self.archived_only.blockSignals(True)
+            self.archived_only.setChecked(False)
+            self.archived_only.blockSignals(False)
+            self.set_filter("archived", False)
+            self.refresh()
+            index = model.index_for_id(idea_id)
+        if not index.isValid():
+            return False
+        self.list_view.setCurrentIndex(index)
+        self._open_selected()
+        return True
 
     def _open_selected(self, *_args: object) -> None:
         if self._current_idea_id is None:
@@ -1116,11 +2092,16 @@ class IdeasWorkspace(BaseWorkspace):
         self.body_input.setPlainText(idea.body_md)
         self._set_combo_value(self.type_input, idea.type)
         self._set_combo_value(self.status_input, idea.status)
+        self.source_input.setText(idea.source)
         self.value_input.setValue(idea.value_score)
         self.effort_input.setValue(idea.effort_score)
         self._dirty = False
         self._load_relations(idea_id)
         self._load_materials(idea_id)
+        self._sync_development_preview()
+        self._update_output_summary(idea_id)
+        self._update_triage_panel()
+        self.update_action_states()
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: str) -> None:
@@ -1158,6 +2139,7 @@ class IdeasWorkspace(BaseWorkspace):
             value_score=self.value_input.value(),
             effort_score=self.effort_input.value(),
             project_id=self._current_project_id,
+            source=self.source_input.text(),
         )
         self._dirty = False
         self._set_status("Изменения сохранены")
@@ -1257,6 +2239,28 @@ class IdeasWorkspace(BaseWorkspace):
         self.refresh()
         self._set_status("Идея удалена")
 
+    def _set_selected_idea_status(self, idea_id: int, status: str) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        idea = self._db.get_idea(idea_id)
+        if idea is None:
+            return
+        self._db.update_idea(
+            idea_id=idea.id,
+            title=idea.title,
+            summary=idea.summary,
+            body_md=idea.body_md,
+            idea_type=idea.type,
+            status=status,
+            value_score=idea.value_score,
+            effort_score=idea.effort_score,
+            project_id=idea.project_id,
+            source=idea.source,
+        )
+        self._current_idea_id = idea_id
+        self.refresh()
+        self._set_status(f"Идея переведена в {self._category_title(status)}.")
+
     def _show_context_menu(self, pos) -> None:
         index = self.list_view.indexAt(pos)
         if not index.isValid() or index.data(IdeaRoles.RowType) != "idea":
@@ -1264,19 +2268,31 @@ class IdeasWorkspace(BaseWorkspace):
         idea_id = index.data(IdeaRoles.IdeaId)
         idea = self._db.get_idea(idea_id)
         menu = QMenu(self)
-        action_edit = menu.addAction("Edit")
-        action_archive = menu.addAction("Archive" if idea and not idea.archived_at else "Unarchive")
-        action_delete = menu.addAction("Delete")
-        transform_menu = menu.addMenu("Transform")
-        transform_task = transform_menu.addAction("Task")
-        transform_note = transform_menu.addAction("Note")
-        transform_object = transform_menu.addAction("Object")
-        transform_marker = transform_menu.addAction("Marker")
+        action_open = menu.addAction("Открыть")
+        action_edit = menu.addAction("Редактировать")
+        transform_task = menu.addAction("Создать задачу")
+        transform_note = menu.addAction("Создать заметку")
+        transform_object = menu.addAction("Создать объект")
+        transform_concept_board = menu.addAction("Добавить в концептборд")
+        transform_marker = menu.addAction("Создать метку карты")
+        menu.addSeparator()
+        status_work = menu.addAction("В работу")
+        status_ripe = menu.addAction("Созрела")
+        action_archive = menu.addAction("В архив" if idea and not idea.archived_at else "Восстановить")
+        menu.addSeparator()
+        action_delete = menu.addAction("Удалить")
 
         action = menu.exec(QCursor.pos())
-        if action == action_edit:
+        if action == action_open:
             self.list_view.setCurrentIndex(index)
             self._open_selected()
+        elif action == action_edit:
+            self.list_view.setCurrentIndex(index)
+            self._open_selected()
+        elif action == status_work:
+            self._set_selected_idea_status(idea_id, "work")
+        elif action == status_ripe:
+            self._set_selected_idea_status(idea_id, "ripe")
         elif action == action_archive:
             self._current_idea_id = idea_id
             self._archive_selected()
@@ -1292,6 +2308,9 @@ class IdeasWorkspace(BaseWorkspace):
         elif action == transform_object:
             self._current_idea_id = idea_id
             self._transform_idea("object")
+        elif action == transform_concept_board:
+            self._current_idea_id = idea_id
+            self._attach_current_idea_to_concept_board()
         elif action == transform_marker:
             self._current_idea_id = idea_id
             self._transform_idea("marker")
@@ -1299,21 +2318,43 @@ class IdeasWorkspace(BaseWorkspace):
     def _load_relations(self, idea_id: int) -> None:
         self.relations_list.clear()
         relations = self._db.fetch_idea_relations(idea_id)
+        self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations))
         if not relations:
-            item = QListWidgetItem("Связей пока нет")
+            item = QListWidgetItem(
+                "Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой."
+            )
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.relations_list.addItem(item)
             self._update_relations_actions()
+            self._populate_links_view()
             return
+        grouped: Dict[str, List[object]] = {}
         for relation in relations:
-            item = QListWidgetItem(self._relation_display_label(relation.entity_type, relation.entity_id))
-            item.setData(Qt.ItemDataRole.UserRole, relation.id)
-            self.relations_list.addItem(item)
+            grouped.setdefault((relation.entity_type or "").strip().lower(), []).append(relation)
+        ordered_types = [entity_type for entity_type in IDEA_RELATION_GROUP_ORDER if entity_type in grouped]
+        ordered_types.extend(sorted(entity_type for entity_type in grouped if entity_type not in IDEA_RELATION_GROUP_ORDER))
+        for entity_type in ordered_types:
+            bucket = grouped[entity_type]
+            header = QListWidgetItem(f"{self._relation_group_title(entity_type)} В· {len(bucket)}")
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.relations_list.addItem(header)
+            for relation in bucket:
+                item = QListWidgetItem(
+                    f"  {self._relation_kind_title(getattr(relation, 'relation_kind', 'related'))} В· "
+                    f"{self._relation_display_label(relation.entity_type, relation.entity_id)}"
+                )
+                item.setData(Qt.ItemDataRole.UserRole, relation.id)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 1, entity_type)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 2, relation.entity_id)
+                item.setToolTip("Р”РІРѕР№РЅРѕР№ С‰РµР»С‡РѕРє РѕС‚РєСЂС‹РІР°РµС‚ СЃРІСЏР·Р°РЅРЅСѓСЋ СЃСѓС‰РЅРѕСЃС‚СЊ.")
+                self.relations_list.addItem(item)
         self._update_relations_actions()
+        self._populate_links_view()
 
     def _load_materials(self, idea_id: int) -> None:
         self._idea_images = self._db.fetch_idea_images(idea_id)
         self._current_material_index = 0
+        self._set_counted_tab_title(self.materials_tab_index, "Материалы и референсы", len(self._idea_images))
         self._refresh_material_thumbnails()
         self._update_material_view()
 
@@ -1343,7 +2384,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_caption_input.setEnabled(has_images)
         self.materials_save_caption_button.setEnabled(has_images)
         if not has_images:
-            self.materials_hint.setText("Прикрепите изображения из режима Файлы.")
+            self.materials_hint.setText(
+                "Материалов пока нет.\nДобавьте изображение или референс, чтобы связать идею с визуальным контекстом."
+            )
             self.materials_caption_input.setPlainText("")
             return
 
@@ -1433,12 +2476,12 @@ class IdeasWorkspace(BaseWorkspace):
         )
         dialog.exec()
 
-    def _transform_idea(self, kind: str) -> None:
+    def _transform_idea(self, kind: str) -> bool:
         if self._current_idea_id is None:
-            return
+            return False
         idea = self._db.get_idea(self._current_idea_id)
         if idea is None:
-            return
+            return False
         if kind == "task":
             task = self._db.create_task(
                 title=idea.title,
@@ -1448,7 +2491,7 @@ class IdeasWorkspace(BaseWorkspace):
                 priority="Medium",
                 project_id=idea.project_id,
             )
-            self._db.add_idea_relation(idea.id, "task", task.id)
+            self._db.add_idea_relation(idea.id, "task", task.id, "transforms_to")
             self._set_status("Создана задача")
         elif kind == "note":
             note = self._db.create_note(
@@ -1457,7 +2500,7 @@ class IdeasWorkspace(BaseWorkspace):
                 tags=[],
                 project=idea.project_title,
             )
-            self._db.add_idea_relation(idea.id, "note", note.id)
+            self._db.add_idea_relation(idea.id, "note", note.id, "transforms_to")
             self._set_status("Создана заметка")
         elif kind == "object":
             obj = self._db.create_object(
@@ -1467,11 +2510,11 @@ class IdeasWorkspace(BaseWorkspace):
                 status="",
                 description=idea.body_md,
             )
-            self._db.add_idea_relation(idea.id, "object", obj.id)
+            self._db.add_idea_relation(idea.id, "object", obj.id, "transforms_to")
             self._set_status("Создан объект")
         else:
             self._set_status("Для метки нужно выбрать карту")
-            return
+            return False
         self._db.update_idea(
             idea_id=idea.id,
             title=idea.title,
@@ -1486,23 +2529,31 @@ class IdeasWorkspace(BaseWorkspace):
         )
         self._load_relations(idea.id)
         self.refresh()
+        return True
 
     def _start_inbox_triage(self, *_args: object) -> None:
         if self._dirty and not self._maybe_save_changes():
             return
-        self._triage_mode = True
         self.search_input.setText("")
         self.type_filter.setCurrentIndex(0)
         self.archived_only.setChecked(False)
         inbox_index = self.status_filter.findData("inbox")
         if inbox_index >= 0:
             self.status_filter.setCurrentIndex(inbox_index)
-        if not self._select_first_inbox_idea():
+        self._triage_total = self._inbox_count()
+        self._triage_position = 1 if self._triage_total else 0
+        self._triage_mode = self._triage_total > 0
+        self._update_triage_panel()
+        if not self._triage_mode or not self._select_first_inbox_idea():
             self._triage_mode = False
-            self._set_status("Инбокс пуст: нет идей со статусом inbox.")
+            self._triage_total = 0
+            self._triage_position = 0
+            self._update_triage_panel()
+            self._set_status("Inbox пуст. Нет идей для разбора.")
             return
         self.inspector_tabs.setCurrentWidget(self.transform_tab)
-        self._set_status(f"Разбор инбокса: {self._inbox_count()} идей в очереди.")
+        self._update_triage_panel()
+        self._set_status(f"Разбор идеи {self._triage_position} из {self._triage_total}.")
 
     def _select_first_inbox_idea(self) -> bool:
         model = self.list_view.model()
@@ -1533,13 +2584,19 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _advance_inbox_triage(self, status_message: str) -> None:
         self.refresh()
+        if self._triage_mode:
+            self._triage_position = min(self._triage_total, self._triage_position + 1)
         if self._triage_mode and self._select_first_inbox_idea():
             self.inspector_tabs.setCurrentWidget(self.transform_tab)
-            self._set_status(f"{status_message} Осталось inbox: {self._inbox_count()}.")
+            self._update_triage_panel()
+            self._set_status(f"{status_message} Разбор идеи {self._triage_position} из {self._triage_total}.")
             return
         self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
         self._current_idea_id = None
         self._sync_selection()
+        self._update_triage_panel()
         self._set_status(f"{status_message} Инбокс разобран.")
 
     def _triage_current_status(self, status: str) -> None:
@@ -1580,9 +2637,15 @@ class IdeasWorkspace(BaseWorkspace):
             return
         if self._dirty and not self._save_current():
             return
-        self._transform_idea(kind)
-        if kind == "task" and self._triage_mode:
-            self._advance_inbox_triage("Из идеи создана задача.")
+        if not self._transform_idea(kind):
+            return
+        if self._triage_mode and kind in {"task", "note", "object"}:
+            messages = {
+                "task": "Из идеи создана задача.",
+                "note": "Из идеи создана заметка.",
+                "object": "Из идеи создан объект.",
+            }
+            self._advance_inbox_triage(messages[kind])
 
     def _skip_inbox_idea(self) -> None:
         if self._current_idea_id is None:
@@ -1590,6 +2653,9 @@ class IdeasWorkspace(BaseWorkspace):
                 self._set_status("Инбокс пуст.")
             return
         if self._select_next_inbox_idea():
+            if self._triage_mode:
+                self._triage_position = min(self._triage_total, self._triage_position + 1)
+                self._update_triage_panel()
             self.inspector_tabs.setCurrentWidget(self.transform_tab)
             self._set_status("Идея пропущена.")
             return

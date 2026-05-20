@@ -5,6 +5,18 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 
 class DatabaseNotesIdeasMixin:
+    IDEA_RELATION_KINDS = {"related", "develops", "conflicts", "transforms_to", "source"}
+
+    @staticmethod
+    def _parse_idea_timestamp(value: Optional[str]) -> datetime:
+        if value:
+            parsed = datetime.fromisoformat(value)
+        else:
+            parsed = datetime.now(timezone.utc)
+        if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
     def fetch_notes(self) -> List[NoteData]:
         """Возвращает список всех заметок."""
         rows = self._conn.execute(
@@ -140,6 +152,11 @@ class DatabaseNotesIdeasMixin:
     @staticmethod
     def _normalize_idea_status_code(status: Optional[str]) -> str:
         return (status or "inbox").strip() or "inbox"
+
+    @classmethod
+    def _normalize_idea_relation_kind(cls, relation_kind: Optional[str]) -> str:
+        normalized = (relation_kind or "related").strip().lower() or "related"
+        return normalized if normalized in cls.IDEA_RELATION_KINDS else "related"
 
     @staticmethod
     def _default_idea_category_title(code: str) -> str:
@@ -314,8 +331,15 @@ class DatabaseNotesIdeasMixin:
             params.append(project_id)
         if search:
             like = f"%{search.strip().lower()}%"
-            conditions.append("(lower(ideas.title) LIKE ? OR lower(ideas.body_md) LIKE ?)")
-            params.extend([like, like])
+            conditions.append(
+                "("
+                "lower(COALESCE(ideas.title, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.summary, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.body_md, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.source, '')) LIKE ?"
+                ")"
+            )
+            params.extend([like, like, like, like])
         if status:
             conditions.append("ideas.status = ?")
             params.append(status)
@@ -374,9 +398,9 @@ class DatabaseNotesIdeasMixin:
                     value_score=row["value_score"],
                     effort_score=row["effort_score"],
                     source=row["source"] or "",
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                    archived_at=datetime.fromisoformat(row["archived_at"])
+                    created_at=self._parse_idea_timestamp(row["created_at"]),
+                    updated_at=self._parse_idea_timestamp(row["updated_at"]),
+                    archived_at=self._parse_idea_timestamp(row["archived_at"])
                     if row["archived_at"]
                     else None,
                     project_title=row["project_title"] or "",
@@ -422,9 +446,9 @@ class DatabaseNotesIdeasMixin:
             value_score=row["value_score"],
             effort_score=row["effort_score"],
             source=row["source"] or "",
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-            archived_at=datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None,
+            created_at=self._parse_idea_timestamp(row["created_at"]),
+            updated_at=self._parse_idea_timestamp(row["updated_at"]),
+            archived_at=self._parse_idea_timestamp(row["archived_at"]) if row["archived_at"] else None,
             project_title=row["project_title"] or "",
         )
 
@@ -485,8 +509,8 @@ class DatabaseNotesIdeasMixin:
             value_score=value_score,
             effort_score=effort_score,
             source=source,
-            created_at=datetime.fromisoformat(now),
-            updated_at=datetime.fromisoformat(now),
+            created_at=self._parse_idea_timestamp(now),
+            updated_at=self._parse_idea_timestamp(now),
             archived_at=None,
             project_title=self._fetch_project_title(project_id),
         )
@@ -542,12 +566,12 @@ class DatabaseNotesIdeasMixin:
             (idea_id,),
         ).fetchone()
         created_at = (
-            datetime.fromisoformat(meta_row["created_at"])
+            self._parse_idea_timestamp(meta_row["created_at"])
             if meta_row and meta_row["created_at"]
-            else datetime.fromisoformat(now)
+            else self._parse_idea_timestamp(now)
         )
         archived_at = (
-            datetime.fromisoformat(meta_row["archived_at"])
+            self._parse_idea_timestamp(meta_row["archived_at"])
             if meta_row and meta_row["archived_at"]
             else None
         )
@@ -563,7 +587,7 @@ class DatabaseNotesIdeasMixin:
             effort_score=effort_score,
             source=source,
             created_at=created_at,
-            updated_at=datetime.fromisoformat(now),
+            updated_at=self._parse_idea_timestamp(now),
             archived_at=archived_at,
             project_title=self._fetch_project_title(project_id),
         )
@@ -586,7 +610,7 @@ class DatabaseNotesIdeasMixin:
         """Возвращает список связей идеи."""
         rows = self._conn.execute(
             """
-            SELECT id, idea_id, entity_type, entity_id, created_at
+            SELECT id, idea_id, entity_type, entity_id, relation_kind, created_at
             FROM idea_relations
             WHERE idea_id = ?
             ORDER BY created_at DESC;
@@ -600,6 +624,7 @@ class DatabaseNotesIdeasMixin:
                 entity_type=row["entity_type"],
                 entity_id=row["entity_id"],
                 created_at=datetime.fromisoformat(row["created_at"]),
+                relation_kind=self._normalize_idea_relation_kind(row["relation_kind"]),
             )
             for row in rows
         ]
@@ -708,16 +733,23 @@ class DatabaseNotesIdeasMixin:
         with self._conn:
             self._conn.execute("DELETE FROM idea_images WHERE id = ?;", (image_id,))
 
-    def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
+    def add_idea_relation(
+        self,
+        idea_id: int,
+        entity_type: str,
+        entity_id: int,
+        relation_kind: Optional[str] = None,
+    ) -> None:
         """Создает связь идеи с сущностью."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        normalized_kind = self._normalize_idea_relation_kind(relation_kind)
         with self._conn:
             self._conn.execute(
                 """
-                INSERT OR IGNORE INTO idea_relations (idea_id, entity_type, entity_id, created_at)
-                VALUES (?, ?, ?, ?);
+                INSERT OR IGNORE INTO idea_relations (idea_id, entity_type, entity_id, relation_kind, created_at)
+                VALUES (?, ?, ?, ?, ?);
                 """,
-                (idea_id, entity_type, entity_id, now),
+                (idea_id, entity_type, entity_id, normalized_kind, now),
             )
 
     def delete_idea_relation(self, relation_id: int) -> None:
