@@ -17,5 +17,10 @@ class IdeaItem:
     project_id: Optional[int]
     project_title: str
     archived: bool
+    source: str = ""
+    output_label: str = "нет"
+    relations_count: int = 0
+    materials_count: int = 0
+    updated_label: str = ""
 
 __all__ = ["IdeaItem"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtCore import QTimer
 from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
@@ -22,6 +24,26 @@ IDEA_RELATION_KIND_ITEMS = [
 ]
 
 IDEA_RELATION_KIND_LABELS = {value: label for label, value in IDEA_RELATION_KIND_ITEMS}
+IDEA_OUTPUT_LABELS = {
+    "task": "задача",
+    "note": "заметка",
+    "object": "объект",
+    "marker": "метка карты",
+    "map": "карта",
+    "idea": "идея",
+}
+IDEA_OUTPUT_PRIORITY = ("task", "note", "object", "marker", "map", "idea")
+IDEA_DEVELOPMENT_TEMPLATE = (
+    "## Почему это важно\n"
+    "\n"
+    "## Что может дать\n"
+    "\n"
+    "## Что непонятно\n"
+    "\n"
+    "## Что проверить\n"
+    "\n"
+    "## Риски и ограничения\n"
+)
 
 
 class IdeaRelationDialog(QDialog):
@@ -161,11 +183,15 @@ class IdeasWorkspace(BaseWorkspace):
         self._current_project_id: Optional[int] = None
         self._dirty = False
         self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
         self._theme_mode = "dark"
         self._idea_categories = []
         self._idea_categories_by_code: Dict[str, Any] = {}
         self._idea_images: List[IdeaImageData] = []
         self._current_material_index = 0
+        self._status_message = ""
+        self._stats_text = ""
         super().__init__(parent)
         triage_action = self.actions.get("triage")
         if triage_action is not None:
@@ -175,7 +201,7 @@ class IdeasWorkspace(BaseWorkspace):
                 pass
             triage_action.triggered.connect(self._start_inbox_triage)
         self.setObjectName("IdeasWorkspace")
-        self.search_input.setPlaceholderText("Поиск…")
+        self.search_input.setPlaceholderText("Поиск по идеям, краткому описанию, тексту, источнику...")
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -267,8 +293,11 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.setSpacing(10)
 
         self.title_input = QLineEdit()
+        self.title_input.setPlaceholderText("Название идеи")
         self.summary_input = QLineEdit()
+        self.summary_input.setPlaceholderText("Краткая формулировка идеи...")
         self.body_input = QPlainTextEdit()
+        self.body_input.setPlaceholderText("Разверните идею, контекст и детали...")
         self.project_input = QComboBox()
         self._populate_projects()
         self.type_input = QComboBox()
@@ -276,6 +305,8 @@ class IdeasWorkspace(BaseWorkspace):
             self.type_input.addItem(label, value)
         self.status_input = QComboBox()
         self._reload_idea_categories()
+        self.source_input = QLineEdit()
+        self.source_input.setPlaceholderText("Откуда пришла идея")
 
         self.value_input = QSpinBox()
         self.value_input.setRange(1, 5)
@@ -288,6 +319,7 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.addRow("Проект", self.project_input)
         content_layout.addRow("Тип", self.type_input)
         content_layout.addRow("Статус", self.status_input)
+        content_layout.addRow("Источник", self.source_input)
         content_layout.addRow("Ценность", self.value_input)
         content_layout.addRow("Сложность", self.effort_input)
 
@@ -305,7 +337,32 @@ class IdeasWorkspace(BaseWorkspace):
         button_row.addWidget(self.save_button)
         content_layout.addRow("", button_row)
 
-        self.inspector_tabs.addTab(content_tab, "Содержание")
+        self.content_tab_index = self.inspector_tabs.addTab(content_tab, "Суть")
+
+        development_tab = QWidget()
+        development_tab.setObjectName("IdeasDevelopmentTab")
+        development_layout = QVBoxLayout(development_tab)
+        development_layout.setContentsMargins(12, 12, 12, 12)
+        development_layout.setSpacing(8)
+        self.development_hint = QLabel(
+            "Развитие помогает превратить сырую мысль в проверяемую идею. "
+            "Шаблон записывается в поле «Описание» на вкладке «Суть»."
+        )
+        self.development_hint.setObjectName("IdeasDevelopmentHint")
+        self.development_hint.setWordWrap(True)
+        self.development_insert_button = QToolButton()
+        self.development_insert_button.setText("Вставить шаблон развития")
+        self.development_insert_button.setObjectName("IdeasDevelopmentInsert")
+        self.development_insert_button.clicked.connect(self._insert_development_template)
+        self.development_preview = QPlainTextEdit()
+        self.development_preview.setObjectName("IdeasDevelopmentPreview")
+        self.development_preview.setReadOnly(True)
+        self.development_preview.setPlaceholderText("Описание идеи появится здесь.")
+        self.development_preview.setMinimumHeight(220)
+        development_layout.addWidget(self.development_hint)
+        development_layout.addWidget(self.development_insert_button, 0, Qt.AlignmentFlag.AlignLeft)
+        development_layout.addWidget(self.development_preview, 1)
+        self.development_tab_index = self.inspector_tabs.addTab(development_tab, "Развитие")
 
         relations_tab = QWidget()
         relations_tab.setObjectName("IdeasRelationsTab")
@@ -328,7 +385,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.relations_list = QListWidget()
         self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
         relations_layout.addWidget(self.relations_list, 1)
-        self.inspector_tabs.addTab(relations_tab, "Связи")
+        self.relations_tab_index = self.inspector_tabs.addTab(relations_tab, "Связи")
 
         materials_tab = QWidget()
         materials_tab.setObjectName("IdeasMaterialsTab")
@@ -348,7 +405,9 @@ class IdeasWorkspace(BaseWorkspace):
         materials_actions.addWidget(self.materials_remove_button)
         materials_actions.addStretch(1)
 
-        self.materials_hint = QLabel("Прикрепите изображения из режима Файлы.")
+        self.materials_hint = QLabel(
+            "Материалов пока нет.\nДобавьте изображение или референс, чтобы связать идею с визуальным контекстом."
+        )
         self.materials_hint.setObjectName("IdeasMaterialsHint")
         self.materials_hint.setWordWrap(True)
 
@@ -358,9 +417,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_thumbnail_list.setFlow(QListView.Flow.LeftToRight)
         self.materials_thumbnail_list.setResizeMode(QListView.ResizeMode.Adjust)
         self.materials_thumbnail_list.setMovement(QListView.Movement.Static)
-        self.materials_thumbnail_list.setIconSize(QSize(64, 64))
-        self.materials_thumbnail_list.setGridSize(QSize(92, 96))
-        self.materials_thumbnail_list.setFixedHeight(112)
+        self.materials_thumbnail_list.setIconSize(QSize(88, 88))
+        self.materials_thumbnail_list.setGridSize(QSize(116, 122))
+        self.materials_thumbnail_list.setFixedHeight(138)
         self.materials_thumbnail_list.setSpacing(8)
         self.materials_thumbnail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.materials_thumbnail_list.setToolTip("Двойной щелчок открывает изображение в полном размере.")
@@ -369,7 +428,7 @@ class IdeasWorkspace(BaseWorkspace):
 
         self.materials_caption_input = QPlainTextEdit()
         self.materials_caption_input.setObjectName("IdeasMaterialsCaption")
-        self.materials_caption_input.setPlaceholderText("Подпись к изображению...")
+        self.materials_caption_input.setPlaceholderText("Подпись и контекст материала...")
 
         self.materials_save_caption_button = QToolButton()
         self.materials_save_caption_button.setText("Сохранить подпись")
@@ -381,7 +440,7 @@ class IdeasWorkspace(BaseWorkspace):
         materials_layout.addWidget(self.materials_thumbnail_list)
         materials_layout.addWidget(self.materials_caption_input)
         materials_layout.addWidget(self.materials_save_caption_button, 0, Qt.AlignmentFlag.AlignRight)
-        self.inspector_tabs.addTab(materials_tab, "Материалы")
+        self.materials_tab_index = self.inspector_tabs.addTab(materials_tab, "Материалы и референсы")
 
         transform_tab = QWidget()
         transform_tab.setObjectName("IdeasTransformTab")
@@ -389,12 +448,20 @@ class IdeasWorkspace(BaseWorkspace):
         transform_layout = QVBoxLayout(transform_tab)
         transform_layout.setContentsMargins(12, 12, 12, 12)
         transform_layout.setSpacing(8)
+        self.triage_progress_label = QLabel("Выход идеи")
+        self.triage_progress_label.setObjectName("IdeasTriageProgress")
+        transform_layout.addWidget(self.triage_progress_label)
         self.triage_hint = QLabel(
-            "Разбор инбокса: переведите идею в work или ripe, создайте задачу или отправьте в архив."
+            "Идея должна либо созреть, либо стать действием, либо уйти в архив."
         )
         self.triage_hint.setObjectName("IdeasTriageHint")
         self.triage_hint.setWordWrap(True)
         transform_layout.addWidget(self.triage_hint)
+        self.output_summary_label = QLabel("Выход: нет")
+        self.output_summary_label.setObjectName("IdeasOutputSummary")
+        self.output_summary_label.setWordWrap(True)
+        transform_layout.addWidget(self.output_summary_label)
+        transform_layout.addWidget(QLabel("Разобрать идею"))
         triage_row = QHBoxLayout()
         triage_row.setSpacing(6)
         self.triage_skip_btn = QToolButton()
@@ -402,11 +469,11 @@ class IdeasWorkspace(BaseWorkspace):
         self.triage_skip_btn.setObjectName("IdeasTriageSkip")
         self.triage_skip_btn.clicked.connect(self._skip_inbox_idea)
         self.triage_work_btn = QToolButton()
-        self.triage_work_btn.setText("В work")
+        self.triage_work_btn.setText("В работу")
         self.triage_work_btn.setObjectName("IdeasTriageWork")
         self.triage_work_btn.clicked.connect(lambda: self._triage_current_status("work"))
         self.triage_ripe_btn = QToolButton()
-        self.triage_ripe_btn.setText("В ripe")
+        self.triage_ripe_btn.setText("Созрела")
         self.triage_ripe_btn.setObjectName("IdeasTriageRipe")
         self.triage_ripe_btn.clicked.connect(lambda: self._triage_current_status("ripe"))
         self.triage_archive_btn = QToolButton()
@@ -418,26 +485,27 @@ class IdeasWorkspace(BaseWorkspace):
         triage_row.addWidget(self.triage_ripe_btn)
         triage_row.addWidget(self.triage_archive_btn)
         transform_layout.addLayout(triage_row)
+        transform_layout.addWidget(QLabel("Преобразовать в"))
         self.transform_task_btn = QToolButton()
-        self.transform_task_btn.setText("✅ Создать задачу")
+        self.transform_task_btn.setText("Создать задачу")
         self.transform_task_btn.setObjectName("IdeasTransformTask")
         self.transform_task_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.transform_task_btn.clicked.connect(lambda: self._triage_transform("task"))
         self.transform_note_btn = QToolButton()
-        self.transform_note_btn.setText("📝 Создать заметку")
+        self.transform_note_btn.setText("Создать заметку")
         self.transform_note_btn.setObjectName("IdeasTransformNote")
         self.transform_note_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_note_btn.clicked.connect(lambda: self._transform_idea("note"))
+        self.transform_note_btn.clicked.connect(lambda: self._triage_transform("note"))
         self.transform_object_btn = QToolButton()
-        self.transform_object_btn.setText("🧱 Создать объект")
+        self.transform_object_btn.setText("Создать объект")
         self.transform_object_btn.setObjectName("IdeasTransformObject")
         self.transform_object_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_object_btn.clicked.connect(lambda: self._transform_idea("object"))
+        self.transform_object_btn.clicked.connect(lambda: self._triage_transform("object"))
         self.transform_marker_btn = QToolButton()
-        self.transform_marker_btn.setText("🗺️ Создать метку")
+        self.transform_marker_btn.setText("Создать метку карты")
         self.transform_marker_btn.setObjectName("IdeasTransformMarker")
         self.transform_marker_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.transform_marker_btn.clicked.connect(lambda: self._transform_idea("marker"))
+        self.transform_marker_btn.clicked.connect(lambda: self._triage_transform("marker"))
         self._transform_action_buttons = [
             self.transform_task_btn,
             self.transform_note_btn,
@@ -456,7 +524,7 @@ class IdeasWorkspace(BaseWorkspace):
         transform_actions_row.addWidget(self.transform_marker_btn, 1)
         transform_layout.addWidget(self.transform_actions_host)
         transform_layout.addStretch(1)
-        self.inspector_tabs.addTab(transform_tab, "Решение")
+        self.output_tab_index = self.inspector_tabs.addTab(transform_tab, "Выход")
 
         self.inspector_stack.addWidget(self.inspector_tabs)
         splitter.addWidget(self.inspector_stack)
@@ -468,9 +536,11 @@ class IdeasWorkspace(BaseWorkspace):
         self.title_input.textChanged.connect(self._mark_dirty)
         self.summary_input.textChanged.connect(self._mark_dirty)
         self.body_input.textChanged.connect(self._mark_dirty)
+        self.body_input.textChanged.connect(self._sync_development_preview)
         self.project_input.currentIndexChanged.connect(self._on_project_changed)
         self.type_input.currentIndexChanged.connect(self._mark_dirty)
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
+        self.source_input.textChanged.connect(self._mark_dirty)
         self.value_input.valueChanged.connect(self._mark_dirty)
         self.effort_input.valueChanged.connect(self._mark_dirty)
         self.quick_create_btn.clicked.connect(self._create_idea_from_quick_form)
@@ -521,6 +591,18 @@ class IdeasWorkspace(BaseWorkspace):
             QLabel#IdeasQuickStatus {{
                 color: {palette.chart_muted};
                 font-size: 11px;
+            }}
+
+            QLabel#IdeasWorkspaceHeading {{
+                color: {palette.text};
+                font-size: 15px;
+                font-weight: 600;
+            }}
+
+            QLabel#IdeasTriageProgress,
+            QLabel#IdeasOutputSummary {{
+                color: {palette.chart_muted};
+                font-weight: 600;
             }}
 
             QWidget#IdeasWorkspace QWidget#WorkspaceToolbar,
@@ -595,6 +677,7 @@ class IdeasWorkspace(BaseWorkspace):
             }}
 
             QWidget#IdeasContentTab,
+            QWidget#IdeasDevelopmentTab,
             QWidget#IdeasRelationsTab,
             QWidget#IdeasMaterialsTab,
             QWidget#IdeasTransformTab {{
@@ -630,19 +713,19 @@ class IdeasWorkspace(BaseWorkspace):
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Идея", self)
         action_new.triggered.connect(self._create_default_idea)
+        action_triage = QAction("Разобрать inbox", self)
+        action_triage.triggered.connect(lambda: self._set_status("Разбор инбокса пока не реализован"))
         action_export = QAction("Экспорт", self)
         action_export.triggered.connect(self._export_ideas_csv)
         action_import = QAction("Импорт", self)
         action_import.triggered.connect(self._import_ideas_csv)
-        action_triage = QAction("Разобрать инбокс", self)
-        action_triage.triggered.connect(lambda: self._set_status("Разбор инбокса пока не реализован"))
         action_archive = QAction("В архив", self)
         action_archive.triggered.connect(self._archive_selected)
         return {
             "new": action_new,
+            "triage": action_triage,
             "export": action_export,
             "import": action_import,
-            "triage": action_triage,
             "archive": action_archive,
         }
 
@@ -652,11 +735,24 @@ class IdeasWorkspace(BaseWorkspace):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        self.toolbar_layout.addStretch(1)
-        for action in actions.values():
+        heading = QLabel("Идеи · Инкубатор решений")
+        heading.setObjectName("IdeasWorkspaceHeading")
+        self.toolbar_layout.addWidget(heading)
+        self.toolbar_layout.addSpacing(12)
+
+        ordered_keys = ("new", "triage", "export", "import", "archive")
+        for key in ordered_keys:
+            action = actions.get(key)
+            if action is None:
+                continue
             button = QToolButton()
             button.setDefaultAction(action)
+            if key == "archive":
+                button.setObjectName("IdeasArchiveAction")
             self.toolbar_layout.addWidget(button)
+            if key in {"triage", "import"}:
+                self.toolbar_layout.addSpacing(6)
+        self.toolbar_layout.addStretch(1)
 
     def get_selection(self):
         index = self.list_view.currentIndex()
@@ -665,7 +761,122 @@ class IdeasWorkspace(BaseWorkspace):
         return index.data(IdeaRoles.IdeaId)
 
     def _set_status(self, text: str) -> None:
-        self.status_row.setText(text)
+        self._status_message = text.strip()
+        self._refresh_status_bar()
+
+    def _refresh_status_bar(self) -> None:
+        self._stats_text = self._compose_stats_text()
+        parts = [part for part in [self._status_message, self._stats_text] if part]
+        self.status_row.setText(" | ".join(parts))
+
+    def _compose_stats_text(self) -> str:
+        active_ideas = self._db.fetch_ideas(archived=False)
+        archived_ideas = self._db.fetch_ideas(archived=True)
+        inbox = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "inbox")
+        work = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "work")
+        ripe = sum(1 for idea in active_ideas if (idea.status or "").strip().lower() == "ripe")
+        total = len(active_ideas) + len(archived_ideas)
+        return (
+            f"Идей: {total}"
+            f" | Inbox: {inbox}"
+            f" | Work: {work}"
+            f" | Ripe: {ripe}"
+            f" | Архив: {len(archived_ideas)}"
+        )
+
+    def _update_empty_state(self, items: List[IdeaItem]) -> None:
+        if items:
+            self.inspector_empty.setText("Выберите идею слева")
+            return
+        filters = self.get_filters()
+        if self._query:
+            self.inspector_empty.setText("Ничего не найдено\nПопробуйте изменить запрос или сбросить фильтры.")
+            return
+        if filters.get("status") == "inbox":
+            self.inspector_empty.setText("Inbox пуст\nВсе входящие идеи разобраны.")
+            return
+        self.inspector_empty.setText("Идей пока нет\nСоздайте первую идею или импортируйте CSV.")
+
+    @staticmethod
+    def _format_relative_time(value: datetime) -> str:
+        now = datetime.now(timezone.utc)
+        delta = max(0, int((now - value).total_seconds()))
+        if delta < 60:
+            return "только что"
+        if delta < 3600:
+            return f"{delta // 60} мин назад"
+        if delta < 86400:
+            return f"{delta // 3600} ч назад"
+        return f"{delta // 86400} д назад"
+
+    def _idea_output_label(self, idea, relations: List[object]) -> str:
+        relation_types = {(relation.entity_type or "").strip().lower() for relation in relations}
+        for entity_type in IDEA_OUTPUT_PRIORITY:
+            if entity_type in relation_types:
+                return IDEA_OUTPUT_LABELS[entity_type]
+        if idea.archived_at is not None:
+            return "архив"
+        return "нет"
+
+    def _set_counted_tab_title(self, tab_index: int, title: str, count: Optional[int] = None) -> None:
+        if count is None:
+            self.inspector_tabs.setTabText(tab_index, title)
+            return
+        self.inspector_tabs.setTabText(tab_index, f"{title} ({count})")
+
+    def _reset_tab_titles(self) -> None:
+        self._set_counted_tab_title(self.content_tab_index, "Суть")
+        self._set_counted_tab_title(self.development_tab_index, "Развитие")
+        self._set_counted_tab_title(self.relations_tab_index, "Связи", 0)
+        self._set_counted_tab_title(self.materials_tab_index, "Материалы и референсы", 0)
+        self._set_counted_tab_title(self.output_tab_index, "Выход")
+
+    def _sync_development_preview(self) -> None:
+        if not hasattr(self, "development_preview"):
+            return
+        self.development_preview.setPlainText(self.body_input.toPlainText().strip())
+
+    def _insert_development_template(self) -> None:
+        current_text = self.body_input.toPlainText().strip()
+        if IDEA_DEVELOPMENT_TEMPLATE.strip() in current_text:
+            self._set_status("Шаблон развития уже добавлен в описание.")
+            self.inspector_tabs.setCurrentIndex(self.content_tab_index)
+            self.body_input.setFocus()
+            return
+        if current_text:
+            new_text = f"{current_text}\n\n{IDEA_DEVELOPMENT_TEMPLATE}"
+        else:
+            new_text = IDEA_DEVELOPMENT_TEMPLATE
+        self.body_input.setPlainText(new_text)
+        self.inspector_tabs.setCurrentIndex(self.content_tab_index)
+        self.body_input.setFocus()
+        self._set_status("Шаблон развития добавлен в описание идеи.")
+
+    def _update_output_summary(self, idea_id: Optional[int]) -> None:
+        if idea_id is None:
+            self.output_summary_label.setText("Выход: нет")
+            return
+        idea = self._db.get_idea(idea_id)
+        if idea is None:
+            self.output_summary_label.setText("Выход: нет")
+            return
+        relations = self._db.fetch_idea_relations(idea_id)
+        self.output_summary_label.setText(f"Выход: {self._idea_output_label(idea, relations)}")
+
+    def _update_triage_panel(self) -> None:
+        if not hasattr(self, "triage_progress_label"):
+            return
+        if not self._triage_mode or self._triage_total <= 0:
+            self.triage_progress_label.setText("Выход идеи")
+            self.triage_hint.setText("Идея должна либо созреть, либо стать действием, либо уйти в архив.")
+            return
+        remaining = self._inbox_count()
+        position = max(1, min(self._triage_position, self._triage_total))
+        self.triage_progress_label.setText(f"Разбор идеи {position} из {self._triage_total}")
+        self.triage_hint.setText(
+            "Поймал → Оценил → Развил → Связал → Превратил. "
+            f"Осталось inbox: {remaining}."
+        )
 
     def _category_titles(self) -> Dict[str, str]:
         return {category.code: category.title for category in self._idea_categories}
@@ -1020,9 +1231,13 @@ class IdeasWorkspace(BaseWorkspace):
         self.set_filter("archived", self.archived_only.isChecked())
 
     def apply_query(self, query: str) -> None:
+        _ = query
+        self._status_message = ""
         self.refresh()
 
     def apply_filters(self, filters: dict[str, object]) -> None:
+        _ = filters
+        self._status_message = ""
         self.refresh()
 
     def refresh(self) -> None:
@@ -1034,22 +1249,30 @@ class IdeasWorkspace(BaseWorkspace):
             idea_type=filters.get("type"),
             archived=bool(filters.get("archived")),
         )
-        items = [
-            IdeaItem(
-                id=idea.id,
-                title=idea.title,
-                summary=idea.summary,
-                body_md=idea.body_md,
-                status=idea.status,
-                idea_type=idea.type,
-                value_score=idea.value_score,
-                effort_score=idea.effort_score,
-                project_id=idea.project_id,
-                project_title=idea.project_title,
-                archived=idea.archived_at is not None,
+        items: List[IdeaItem] = []
+        for idea in ideas:
+            relations = self._db.fetch_idea_relations(idea.id)
+            materials = self._db.fetch_idea_images(idea.id)
+            items.append(
+                IdeaItem(
+                    id=idea.id,
+                    title=idea.title,
+                    summary=idea.summary,
+                    body_md=idea.body_md,
+                    status=idea.status,
+                    idea_type=idea.type,
+                    value_score=idea.value_score,
+                    effort_score=idea.effort_score,
+                    project_id=idea.project_id,
+                    project_title=idea.project_title,
+                    archived=idea.archived_at is not None,
+                    source=idea.source,
+                    output_label=self._idea_output_label(idea, relations),
+                    relations_count=len(relations),
+                    materials_count=len(materials),
+                    updated_label=self._format_relative_time(idea.updated_at),
+                )
             )
-            for idea in ideas
-        ]
         model = self.list_view.model()
         if isinstance(model, IdeasListModel):
             model.set_items(
@@ -1060,12 +1283,17 @@ class IdeasWorkspace(BaseWorkspace):
             quick_status = self.quick_status_label.property("quick_status")
             if isinstance(quick_status, str) and quick_status not in model.statuses():
                 self._set_quick_status(None)
+        self._update_empty_state(items)
         self._sync_selection()
+        self._refresh_status_bar()
 
     def _sync_selection(self) -> None:
         if self._current_idea_id is None:
             self._current_project_id = None
             self.inspector_stack.setCurrentWidget(self.inspector_empty)
+            self._reset_tab_titles()
+            self._update_output_summary(None)
+            self._update_triage_panel()
             self._update_relations_actions()
             self.update_action_states()
             return
@@ -1079,6 +1307,9 @@ class IdeasWorkspace(BaseWorkspace):
                 return
         self._current_idea_id = None
         self.inspector_stack.setCurrentWidget(self.inspector_empty)
+        self._reset_tab_titles()
+        self._update_output_summary(None)
+        self._update_triage_panel()
         self._update_relations_actions()
         self.update_action_states()
 
@@ -1116,11 +1347,15 @@ class IdeasWorkspace(BaseWorkspace):
         self.body_input.setPlainText(idea.body_md)
         self._set_combo_value(self.type_input, idea.type)
         self._set_combo_value(self.status_input, idea.status)
+        self.source_input.setText(idea.source)
         self.value_input.setValue(idea.value_score)
         self.effort_input.setValue(idea.effort_score)
         self._dirty = False
         self._load_relations(idea_id)
         self._load_materials(idea_id)
+        self._sync_development_preview()
+        self._update_output_summary(idea_id)
+        self._update_triage_panel()
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: str) -> None:
@@ -1158,6 +1393,7 @@ class IdeasWorkspace(BaseWorkspace):
             value_score=self.value_input.value(),
             effort_score=self.effort_input.value(),
             project_id=self._current_project_id,
+            source=self.source_input.text(),
         )
         self._dirty = False
         self._set_status("Изменения сохранены")
@@ -1257,6 +1493,28 @@ class IdeasWorkspace(BaseWorkspace):
         self.refresh()
         self._set_status("Идея удалена")
 
+    def _set_selected_idea_status(self, idea_id: int, status: str) -> None:
+        if self._dirty and not self._maybe_save_changes():
+            return
+        idea = self._db.get_idea(idea_id)
+        if idea is None:
+            return
+        self._db.update_idea(
+            idea_id=idea.id,
+            title=idea.title,
+            summary=idea.summary,
+            body_md=idea.body_md,
+            idea_type=idea.type,
+            status=status,
+            value_score=idea.value_score,
+            effort_score=idea.effort_score,
+            project_id=idea.project_id,
+            source=idea.source,
+        )
+        self._current_idea_id = idea_id
+        self.refresh()
+        self._set_status(f"Идея переведена в {self._category_title(status)}.")
+
     def _show_context_menu(self, pos) -> None:
         index = self.list_view.indexAt(pos)
         if not index.isValid() or index.data(IdeaRoles.RowType) != "idea":
@@ -1264,19 +1522,30 @@ class IdeasWorkspace(BaseWorkspace):
         idea_id = index.data(IdeaRoles.IdeaId)
         idea = self._db.get_idea(idea_id)
         menu = QMenu(self)
-        action_edit = menu.addAction("Edit")
-        action_archive = menu.addAction("Archive" if idea and not idea.archived_at else "Unarchive")
-        action_delete = menu.addAction("Delete")
-        transform_menu = menu.addMenu("Transform")
-        transform_task = transform_menu.addAction("Task")
-        transform_note = transform_menu.addAction("Note")
-        transform_object = transform_menu.addAction("Object")
-        transform_marker = transform_menu.addAction("Marker")
+        action_open = menu.addAction("Открыть")
+        action_edit = menu.addAction("Редактировать")
+        transform_task = menu.addAction("Создать задачу")
+        transform_note = menu.addAction("Создать заметку")
+        transform_object = menu.addAction("Создать объект")
+        transform_marker = menu.addAction("Создать метку карты")
+        menu.addSeparator()
+        status_work = menu.addAction("В работу")
+        status_ripe = menu.addAction("Созрела")
+        action_archive = menu.addAction("В архив" if idea and not idea.archived_at else "Восстановить")
+        menu.addSeparator()
+        action_delete = menu.addAction("Удалить")
 
         action = menu.exec(QCursor.pos())
-        if action == action_edit:
+        if action == action_open:
             self.list_view.setCurrentIndex(index)
             self._open_selected()
+        elif action == action_edit:
+            self.list_view.setCurrentIndex(index)
+            self._open_selected()
+        elif action == status_work:
+            self._set_selected_idea_status(idea_id, "work")
+        elif action == status_ripe:
+            self._set_selected_idea_status(idea_id, "ripe")
         elif action == action_archive:
             self._current_idea_id = idea_id
             self._archive_selected()
@@ -1299,8 +1568,11 @@ class IdeasWorkspace(BaseWorkspace):
     def _load_relations(self, idea_id: int) -> None:
         self.relations_list.clear()
         relations = self._db.fetch_idea_relations(idea_id)
+        self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations))
         if not relations:
-            item = QListWidgetItem("Связей пока нет")
+            item = QListWidgetItem(
+                "Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой."
+            )
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.relations_list.addItem(item)
             self._update_relations_actions()
@@ -1314,6 +1586,7 @@ class IdeasWorkspace(BaseWorkspace):
     def _load_materials(self, idea_id: int) -> None:
         self._idea_images = self._db.fetch_idea_images(idea_id)
         self._current_material_index = 0
+        self._set_counted_tab_title(self.materials_tab_index, "Материалы и референсы", len(self._idea_images))
         self._refresh_material_thumbnails()
         self._update_material_view()
 
@@ -1343,7 +1616,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.materials_caption_input.setEnabled(has_images)
         self.materials_save_caption_button.setEnabled(has_images)
         if not has_images:
-            self.materials_hint.setText("Прикрепите изображения из режима Файлы.")
+            self.materials_hint.setText(
+                "Материалов пока нет.\nДобавьте изображение или референс, чтобы связать идею с визуальным контекстом."
+            )
             self.materials_caption_input.setPlainText("")
             return
 
@@ -1433,12 +1708,12 @@ class IdeasWorkspace(BaseWorkspace):
         )
         dialog.exec()
 
-    def _transform_idea(self, kind: str) -> None:
+    def _transform_idea(self, kind: str) -> bool:
         if self._current_idea_id is None:
-            return
+            return False
         idea = self._db.get_idea(self._current_idea_id)
         if idea is None:
-            return
+            return False
         if kind == "task":
             task = self._db.create_task(
                 title=idea.title,
@@ -1471,7 +1746,7 @@ class IdeasWorkspace(BaseWorkspace):
             self._set_status("Создан объект")
         else:
             self._set_status("Для метки нужно выбрать карту")
-            return
+            return False
         self._db.update_idea(
             idea_id=idea.id,
             title=idea.title,
@@ -1486,23 +1761,31 @@ class IdeasWorkspace(BaseWorkspace):
         )
         self._load_relations(idea.id)
         self.refresh()
+        return True
 
     def _start_inbox_triage(self, *_args: object) -> None:
         if self._dirty and not self._maybe_save_changes():
             return
-        self._triage_mode = True
         self.search_input.setText("")
         self.type_filter.setCurrentIndex(0)
         self.archived_only.setChecked(False)
         inbox_index = self.status_filter.findData("inbox")
         if inbox_index >= 0:
             self.status_filter.setCurrentIndex(inbox_index)
-        if not self._select_first_inbox_idea():
+        self._triage_total = self._inbox_count()
+        self._triage_position = 1 if self._triage_total else 0
+        self._triage_mode = self._triage_total > 0
+        self._update_triage_panel()
+        if not self._triage_mode or not self._select_first_inbox_idea():
             self._triage_mode = False
-            self._set_status("Инбокс пуст: нет идей со статусом inbox.")
+            self._triage_total = 0
+            self._triage_position = 0
+            self._update_triage_panel()
+            self._set_status("Inbox пуст. Нет идей для разбора.")
             return
         self.inspector_tabs.setCurrentWidget(self.transform_tab)
-        self._set_status(f"Разбор инбокса: {self._inbox_count()} идей в очереди.")
+        self._update_triage_panel()
+        self._set_status(f"Разбор идеи {self._triage_position} из {self._triage_total}.")
 
     def _select_first_inbox_idea(self) -> bool:
         model = self.list_view.model()
@@ -1533,13 +1816,19 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _advance_inbox_triage(self, status_message: str) -> None:
         self.refresh()
+        if self._triage_mode:
+            self._triage_position = min(self._triage_total, self._triage_position + 1)
         if self._triage_mode and self._select_first_inbox_idea():
             self.inspector_tabs.setCurrentWidget(self.transform_tab)
-            self._set_status(f"{status_message} Осталось inbox: {self._inbox_count()}.")
+            self._update_triage_panel()
+            self._set_status(f"{status_message} Разбор идеи {self._triage_position} из {self._triage_total}.")
             return
         self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
         self._current_idea_id = None
         self._sync_selection()
+        self._update_triage_panel()
         self._set_status(f"{status_message} Инбокс разобран.")
 
     def _triage_current_status(self, status: str) -> None:
@@ -1580,9 +1869,15 @@ class IdeasWorkspace(BaseWorkspace):
             return
         if self._dirty and not self._save_current():
             return
-        self._transform_idea(kind)
-        if kind == "task" and self._triage_mode:
-            self._advance_inbox_triage("Из идеи создана задача.")
+        if not self._transform_idea(kind):
+            return
+        if self._triage_mode and kind in {"task", "note", "object"}:
+            messages = {
+                "task": "Из идеи создана задача.",
+                "note": "Из идеи создана заметка.",
+                "object": "Из идеи создан объект.",
+            }
+            self._advance_inbox_triage(messages[kind])
 
     def _skip_inbox_idea(self) -> None:
         if self._current_idea_id is None:
@@ -1590,6 +1885,9 @@ class IdeasWorkspace(BaseWorkspace):
                 self._set_status("Инбокс пуст.")
             return
         if self._select_next_inbox_idea():
+            if self._triage_mode:
+                self._triage_position = min(self._triage_total, self._triage_position + 1)
+                self._update_triage_panel()
             self.inspector_tabs.setCurrentWidget(self.transform_tab)
             self._set_status("Идея пропущена.")
             return

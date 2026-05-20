@@ -28,6 +28,10 @@ class IdeasDelegate(QStyledItemDelegate):
         effort_score = index.data(IdeaRoles.EffortScore)
         summary = index.data(IdeaRoles.Summary) or ""
         body_md = index.data(IdeaRoles.Body) or ""
+        output_label = index.data(IdeaRoles.OutputLabel) or "нет"
+        relations_count = int(index.data(IdeaRoles.RelationsCount) or 0)
+        materials_count = int(index.data(IdeaRoles.MaterialsCount) or 0)
+        updated_label = index.data(IdeaRoles.UpdatedLabel) or ""
         preview_text = idea_preview_line(summary, body_md)
 
         title_font = QFont(option.font)
@@ -54,17 +58,33 @@ class IdeasDelegate(QStyledItemDelegate):
 
         painter.setPen(QColor("#adb3bc"))
         painter.drawText(
-            rect.adjusted(12, 46, -12, -10),
+            rect.adjusted(12, 46, -12, -30),
             Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
             preview_text,
         )
 
-        score_text = f"Value {value_score} | Effort {effort_score}"
+        score_text = f"Value {value_score} | Effort {effort_score} | Выход: {output_label}"
         painter.setPen(QColor("#8bb5e8"))
         painter.drawText(
-            rect.adjusted(12, 64, -12, -2),
+            rect.adjusted(12, 66, -12, -12),
             Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
             score_text,
+        )
+
+        footer_text = " | ".join(
+            part
+            for part in [
+                f"Связи: {relations_count}",
+                f"Материалы: {materials_count}",
+                updated_label,
+            ]
+            if part
+        )
+        painter.setPen(QColor("#8d939b"))
+        painter.drawText(
+            rect.adjusted(12, 84, -12, -2),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            footer_text,
         )
 
         painter.restore()
@@ -72,7 +92,7 @@ class IdeasDelegate(QStyledItemDelegate):
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         if index.data(IdeaRoles.RowType) == "category":
             return QSize(option.rect.width(), 30)
-        return QSize(option.rect.width(), 88)
+        return QSize(option.rect.width(), 108)
 
     @staticmethod
     def _paint_category(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:

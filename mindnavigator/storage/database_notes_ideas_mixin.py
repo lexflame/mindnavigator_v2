@@ -314,8 +314,15 @@ class DatabaseNotesIdeasMixin:
             params.append(project_id)
         if search:
             like = f"%{search.strip().lower()}%"
-            conditions.append("(lower(ideas.title) LIKE ? OR lower(ideas.body_md) LIKE ?)")
-            params.extend([like, like])
+            conditions.append(
+                "("
+                "lower(COALESCE(ideas.title, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.summary, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.body_md, '')) LIKE ? "
+                "OR lower(COALESCE(ideas.source, '')) LIKE ?"
+                ")"
+            )
+            params.extend([like, like, like, like])
         if status:
             conditions.append("ideas.status = ?")
             params.append(status)

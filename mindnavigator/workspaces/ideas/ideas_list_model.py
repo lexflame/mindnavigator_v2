@@ -50,6 +50,14 @@ class IdeasListModel(QAbstractListModel):
             return item.project_title
         if role == IdeaRoles.Archived:
             return item.archived
+        if role == IdeaRoles.OutputLabel:
+            return item.output_label
+        if role == IdeaRoles.RelationsCount:
+            return item.relations_count
+        if role == IdeaRoles.MaterialsCount:
+            return item.materials_count
+        if role == IdeaRoles.UpdatedLabel:
+            return item.updated_label
         if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
