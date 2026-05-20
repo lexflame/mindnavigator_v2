@@ -633,6 +633,7 @@ class DatabaseSchemaMixin:
         self._ensure_idea_category_schema()
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
+        self._ensure_concept_board_schema()
         self._seed_defaults()
 
     def _run_schema_migrations(self) -> None:
@@ -648,6 +649,7 @@ class DatabaseSchemaMixin:
             MigrationStep(8, "idea_image_schema", self._migration_v8_idea_image_schema),
             MigrationStep(9, "mutaboard_schema", self._migration_v9_mutaboard_schema),
             MigrationStep(10, "idea_category_schema", self._migration_v10_idea_category_schema),
+            MigrationStep(11, "concept_board_schema", self._migration_v11_concept_board_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -665,6 +667,7 @@ class DatabaseSchemaMixin:
         self._ensure_idea_category_schema()
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
+        self._ensure_concept_board_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
 
@@ -722,6 +725,10 @@ class DatabaseSchemaMixin:
     def _migration_v9_mutaboard_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds storage for persistent mutaboards, columns, and attached items."""
         self._ensure_mutaboard_schema()
+
+    def _migration_v11_concept_board_schema(self, _connection: sqlite3.Connection) -> None:
+        """Expands mutaboard storage for persisted concept versions, solutions, and typed links."""
+        self._ensure_concept_board_schema()
 
     def _migration_v10_idea_category_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds editable idea categories and removes the fixed status CHECK."""
@@ -832,7 +839,7 @@ class DatabaseSchemaMixin:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
                     kind TEXT NOT NULL
-                        CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                        CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object', 'version', 'solution', 'file', 'link')),
                     title TEXT NOT NULL DEFAULT '',
                     position INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -846,7 +853,7 @@ class DatabaseSchemaMixin:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
                     entity_kind TEXT NOT NULL
-                        CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                        CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object', 'version', 'solution', 'file', 'link')),
                     entity_id INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE(mutaboard_id, entity_kind, entity_id)
@@ -860,6 +867,136 @@ class DatabaseSchemaMixin:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_mutaboard_items_board_kind ON mutaboard_items(mutaboard_id, entity_kind, entity_id);"
             )
+
+    def _ensure_concept_board_schema(self) -> None:
+        """Ensures extended concept board storage exists and legacy mutaboard constraints are upgraded."""
+        self._rebuild_mutaboard_kind_table_if_needed(
+            "mutaboard_columns",
+            """
+            CREATE TABLE mutaboard_columns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL
+                    CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object', 'version', 'solution', 'file', 'link')),
+                title TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """,
+            ("id", "mutaboard_id", "kind", "title", "position", "created_at", "updated_at"),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_columns_board_position ON mutaboard_columns(mutaboard_id, position, id);",
+            ),
+        )
+        self._rebuild_mutaboard_kind_table_if_needed(
+            "mutaboard_items",
+            """
+            CREATE TABLE mutaboard_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                entity_kind TEXT NOT NULL
+                    CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object', 'version', 'solution', 'file', 'link')),
+                entity_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(mutaboard_id, entity_kind, entity_id)
+            );
+            """,
+            ("id", "mutaboard_id", "entity_kind", "entity_id", "created_at"),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_items_board_kind ON mutaboard_items(mutaboard_id, entity_kind, entity_id);",
+            ),
+        )
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_versions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    why_yes TEXT NOT NULL DEFAULT '',
+                    why_no TEXT NOT NULL DEFAULT '',
+                    checks_text TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'draft',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_solutions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT '',
+                    why_selected TEXT NOT NULL DEFAULT '',
+                    rejected_text TEXT NOT NULL DEFAULT '',
+                    next_steps_text TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'draft',
+                    selected_version_id INTEGER REFERENCES mutaboard_versions(id) ON DELETE SET NULL,
+                    decided_at TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mutaboard_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                    source_kind TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    target_id INTEGER NOT NULL,
+                    link_type TEXT NOT NULL DEFAULT 'relates_to',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(mutaboard_id, source_kind, source_id, target_kind, target_id, link_type)
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mutaboard_versions_board ON mutaboard_versions(mutaboard_id, updated_at, id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_mutaboard_solutions_board ON mutaboard_solutions(mutaboard_id, updated_at, id);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_links_board_source ON mutaboard_links(mutaboard_id, source_kind, source_id, link_type, id);"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mutaboard_links_board_target ON mutaboard_links(mutaboard_id, target_kind, target_id, link_type, id);"
+            )
+
+    def _rebuild_mutaboard_kind_table_if_needed(
+        self,
+        table_name: str,
+        create_sql: str,
+        columns: tuple[str, ...],
+        index_sql: tuple[str, ...],
+    ) -> None:
+        row = self._conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?;",
+            (table_name,),
+        ).fetchone()
+        if row is None:
+            with self._conn:
+                self._conn.execute(create_sql)
+                for statement in index_sql:
+                    self._conn.execute(statement)
+            return
+        sql = str(row["sql"] or "").lower()
+        if all(token in sql for token in ("version", "solution", "file", "link")):
+            return
+        legacy_table = f"{table_name}_legacy_upgrade"
+        column_list = ", ".join(columns)
+        with self._conn:
+            self._conn.execute(f"ALTER TABLE {table_name} RENAME TO {legacy_table};")
+            self._conn.execute(create_sql)
+            self._conn.execute(
+                f"INSERT INTO {table_name} ({column_list}) SELECT {column_list} FROM {legacy_table};"
+            )
+            self._conn.execute(f"DROP TABLE {legacy_table};")
+            for statement in index_sql:
+                self._conn.execute(statement)
 
     def _ensure_task_project_column(self) -> None:
         """Добавляет колонку project_id, если она отсутствует."""

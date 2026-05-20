@@ -1,4 +1,4 @@
-"""MutaBoardData storage data class."""
+"""ConceptBoardData storage data class."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from ._model_shared import *  # noqa: F401,F403
 
 
 @dataclass(frozen=True)
-class MutaBoardData:
+class ConceptBoardData:
     id: int
     title: str
     description: str
@@ -17,4 +17,4 @@ class MutaBoardData:
     updated_at: datetime
 
 
-__all__ = ["MutaBoardData"]
+__all__ = ["ConceptBoardData"]

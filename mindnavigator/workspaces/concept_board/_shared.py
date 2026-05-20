@@ -1,4 +1,4 @@
-"""Shared imports for the mutaboard workspace package."""
+"""Shared imports for the concept board workspace package."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,

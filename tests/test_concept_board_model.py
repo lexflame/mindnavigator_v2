@@ -14,10 +14,10 @@ from mindnavigator.storage import (
     TaskAttachmentData,
     TaskData,
 )
-from mindnavigator.workspaces.mutaboard.module_impl import MutaBoardModel
+from mindnavigator.workspaces.concept_board.module_impl import ConceptBoardModel
 
 
-class _MutaBoardDbStub:
+class _ConceptBoardDbStub:
     def __init__(self) -> None:
         now = datetime(2026, 5, 17, 12, 0, tzinfo=timezone.utc)
         self._tasks = [
@@ -178,8 +178,8 @@ class _MutaBoardDbStub:
         return list(self._idea_relations.get(idea_id, []))
 
 
-def test_mutaboard_model_builds_catalog_cards_for_supported_kinds() -> None:
-    model = MutaBoardModel(db=_MutaBoardDbStub())
+def test_concept_board_model_builds_catalog_cards_for_supported_kinds() -> None:
+    model = ConceptBoardModel(db=_ConceptBoardDbStub())
 
     cards = model.reload()
     kinds = {(card.entity_kind, card.title) for card in cards}
@@ -194,8 +194,8 @@ def test_mutaboard_model_builds_catalog_cards_for_supported_kinds() -> None:
     assert ("object", "Object Delta") in kinds
 
 
-def test_mutaboard_model_filters_catalog_by_kind_query_and_project() -> None:
-    model = MutaBoardModel(db=_MutaBoardDbStub())
+def test_concept_board_model_filters_catalog_by_kind_query_and_project() -> None:
+    model = ConceptBoardModel(db=_ConceptBoardDbStub())
     model.reload()
 
     image_cards = model.filtered_cards(entity_kind="image")
@@ -208,8 +208,8 @@ def test_mutaboard_model_filters_catalog_by_kind_query_and_project() -> None:
     assert [card.title for card in query_cards] == ["Marker Flux"]
 
 
-def test_mutaboard_model_counts_relations_for_selected_entities() -> None:
-    model = MutaBoardModel(db=_MutaBoardDbStub())
+def test_concept_board_model_counts_relations_for_selected_entities() -> None:
+    model = ConceptBoardModel(db=_ConceptBoardDbStub())
     cards = {card.title: card for card in model.reload()}
 
     assert cards["Task Alpha"].total_linked_count == 1

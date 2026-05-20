@@ -12,7 +12,7 @@ from .database_dossier_mixin import DatabaseDossierMixin
 from .database_collections_mixin import DatabaseCollectionsMixin
 from .database_purchases_mixin import DatabasePurchasesMixin
 from .database_settings_cloud_mixin import DatabaseSettingsCloudMixin
-from .database_mutaboards_mixin import DatabaseMutaBoardsMixin
+from .database_concept_boards_mixin import DatabaseConceptBoardsMixin
 from .database_core_mixin import DatabaseCoreMixin
 
 class Database(
@@ -26,7 +26,7 @@ class Database(
     DatabaseCollectionsMixin,
     DatabasePurchasesMixin,
     DatabaseSettingsCloudMixin,
-    DatabaseMutaBoardsMixin,
+    DatabaseConceptBoardsMixin,
     DatabaseCoreMixin,
 ):
     """???????????????? ?? ?????????????????? ?????????? ???????????? ????????????????????."""

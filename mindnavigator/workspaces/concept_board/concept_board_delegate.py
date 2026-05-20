@@ -1,4 +1,4 @@
-"""Card delegate for MutaBoard catalog columns."""
+"""Card delegate for ConceptBoard catalog columns."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ._shared import (
 )
 
 
-class MutaBoardDelegate(QStyledItemDelegate):
+class ConceptBoardDelegate(QStyledItemDelegate):
     """Draws a compact entity card for the board columns."""
 
     ROW_H = 126
@@ -135,6 +135,10 @@ class MutaBoardDelegate(QStyledItemDelegate):
             "task": "TASK",
             "idea": "IDEA",
             "image": "IMAGE",
+            "version": "VERSION",
+            "solution": "SOLUTION",
+            "file": "FILE",
+            "link": "LINK",
             "map": "MAP",
             "marker": "MARKER",
             "note": "NOTE",
@@ -143,4 +147,6 @@ class MutaBoardDelegate(QStyledItemDelegate):
         }.get(entity_kind, entity_kind.upper())
 
 
-__all__ = ["MutaBoardDelegate"]
+ConceptBoardDelegate = ConceptBoardDelegate
+
+__all__ = ["ConceptBoardDelegate", "ConceptBoardDelegate"]

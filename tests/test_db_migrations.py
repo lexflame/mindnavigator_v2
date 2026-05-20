@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
@@ -167,6 +167,139 @@ def test_apply_schema_updates_backfills_dossier_schema_when_user_version_is_curr
             ).fetchall()
         }
         assert dossier_tables == {"dossiers", "dossier_links"}
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_database_backfills_concept_board_schema_when_user_version_is_current(unique_temp_path) -> None:
+    db_path = unique_temp_path("concept_board_schema_backfill", ".sqlite3")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    legacy_conn = sqlite3.connect(db_path)
+    with legacy_conn:
+        legacy_conn.execute(
+            """
+            CREATE TABLE mutaboards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                capture_text TEXT NOT NULL DEFAULT '',
+                planning_text TEXT NOT NULL DEFAULT '',
+                links_text TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE mutaboard_columns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL
+                    CHECK (kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                title TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            CREATE TABLE mutaboard_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mutaboard_id INTEGER NOT NULL REFERENCES mutaboards(id) ON DELETE CASCADE,
+                entity_kind TEXT NOT NULL
+                    CHECK (entity_kind IN ('task', 'idea', 'image', 'map', 'marker', 'note', 'project', 'object')),
+                entity_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(mutaboard_id, entity_kind, entity_id)
+            );
+            """
+        )
+        legacy_conn.execute(
+            """
+            INSERT INTO mutaboards(title, description, capture_text, planning_text, links_text, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """,
+            ("Legacy Board", "Legacy description", "", "", "", now, now),
+        )
+        legacy_conn.execute(
+            """
+            INSERT INTO mutaboard_columns(mutaboard_id, kind, title, position, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """,
+            (1, "task", "Tasks", 0, now, now),
+        )
+        legacy_conn.execute(
+            "INSERT INTO mutaboard_items(mutaboard_id, entity_kind, entity_id, created_at) VALUES (?, ?, ?, ?);",
+            (1, "task", 101, now),
+        )
+        legacy_conn.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION};")
+    legacy_conn.close()
+
+    database = Database(path=db_path)
+    try:
+        columns_sql = str(
+            database._conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'mutaboard_columns';"
+            ).fetchone()["sql"]
+        ).lower()
+        items_sql = str(
+            database._conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'mutaboard_items';"
+            ).fetchone()["sql"]
+        ).lower()
+        table_names = {
+            row["name"]
+            for row in database._conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name IN ('mutaboard_versions', 'mutaboard_solutions', 'mutaboard_links');
+                """
+            ).fetchall()
+        }
+
+        assert "version" in columns_sql
+        assert "solution" in columns_sql
+        assert "file" in columns_sql
+        assert "link" in columns_sql
+        assert "version" in items_sql
+        assert "solution" in items_sql
+        assert "file" in items_sql
+        assert "link" in items_sql
+        assert table_names == {"mutaboard_versions", "mutaboard_solutions", "mutaboard_links"}
+        assert [column.kind for column in database.fetch_concept_board_columns(1)] == ["task"]
+        assert [(item.entity_kind, item.entity_id) for item in database.fetch_concept_board_items(1)] == [("task", 101)]
+
+        database.add_concept_board_column(1, "version")
+        version = database.create_concept_board_version(1, title="Version A")
+        solution = database.create_concept_board_solution(
+            1,
+            title="Solution A",
+            status="accepted",
+            selected_version_id=version.id,
+            decided_at="2026-05-20",
+        )
+        database.add_concept_board_link(
+            1,
+            source_kind="version",
+            source_id=version.id,
+            target_kind="solution",
+            target_id=solution.id,
+            link_type="transforms_to",
+        )
+
+        assert [column.kind for column in database.fetch_concept_board_columns(1)] == ["task", "version"]
+        assert [item.title for item in database.fetch_concept_board_versions(1)] == ["Version A"]
+        assert [item.title for item in database.fetch_concept_board_solutions(1)] == ["Solution A"]
+        assert [(item.source_kind, item.target_kind, item.link_type) for item in database.fetch_concept_board_links(1)] == [
+            ("version", "solution", "transforms_to")
+        ]
+        assert database._conn.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
