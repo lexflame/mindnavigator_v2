@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import QApplication
 from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
@@ -554,9 +556,52 @@ class IdeasWorkspace(BaseWorkspace):
         self.quick_title_input.returnPressed.connect(self._create_idea_from_quick_form)
         self._set_quick_status(None)
         self._update_material_view()
+        self._init_triage_shortcuts()
 
         self.set_theme_mode("dark")
         QTimer.singleShot(0, self._sync_transform_action_widths)
+
+    def _init_triage_shortcuts(self) -> None:
+        self._triage_shortcuts: list[QShortcut] = []
+        bindings = [
+            ("W", lambda: self._triage_current_status("work")),
+            ("R", lambda: self._triage_current_status("ripe")),
+            ("A", self._triage_archive_current),
+            ("T", lambda: self._triage_transform("task")),
+            ("N", lambda: self._triage_transform("note")),
+            ("O", lambda: self._triage_transform("object")),
+            ("Space", self._skip_inbox_idea),
+            ("Escape", self._exit_triage_mode),
+        ]
+        for sequence, callback in bindings:
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda cb=callback: self._run_triage_shortcut(cb))
+            self._triage_shortcuts.append(shortcut)
+
+    def _run_triage_shortcut(self, callback) -> None:
+        if not self._should_handle_triage_shortcut():
+            return
+        callback()
+
+    def _should_handle_triage_shortcut(self) -> bool:
+        if not self._triage_mode:
+            return False
+        focus_widget = QApplication.focusWidget()
+        if focus_widget is None:
+            return True
+        if isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QComboBox, QSpinBox)):
+            return False
+        return self.isAncestorOf(focus_widget) or focus_widget is self
+
+    def _exit_triage_mode(self) -> None:
+        if not self._triage_mode:
+            return
+        self._triage_mode = False
+        self._triage_total = 0
+        self._triage_position = 0
+        self._update_triage_panel()
+        self._set_status("Режим разбора inbox завершён.")
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)

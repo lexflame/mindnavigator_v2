@@ -369,6 +369,73 @@ def test_ideas_workspace_triage_promotes_inbox_and_advances(monkeypatch, unique_
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_triage_hotkey_promotes_idea(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_hotkey_work", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        older_inbox = database.create_idea(title="Older inbox", status="inbox")
+        latest_inbox = database.create_idea(title="Latest inbox", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {older_inbox.id, latest_inbox.id}
+
+        workspace.list_view.setFocus()
+        QTest.keyClick(workspace.list_view, Qt.Key.Key_W)
+        QApplication.processEvents()
+
+        updated = database.get_idea(current_before)
+        assert updated is not None
+        assert updated.status == "work"
+        remaining_inbox_id = older_inbox.id if current_before == latest_inbox.id else latest_inbox.id
+        assert workspace.get_selection() == remaining_inbox_id
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_triage_hotkeys_do_not_fire_inside_text_fields(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_triage_hotkey_guard", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first_inbox = database.create_idea(title="First inbox", status="inbox")
+        second_inbox = database.create_idea(title="Second inbox", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        workspace.actions["triage"].trigger()
+        QApplication.processEvents()
+        current_before = workspace.get_selection()
+        assert current_before in {first_inbox.id, second_inbox.id}
+
+        workspace.title_input.setFocus()
+        QTest.keyClick(workspace.title_input, Qt.Key.Key_W)
+        QApplication.processEvents()
+
+        unchanged = database.get_idea(current_before)
+        assert unchanged is not None
+        assert unchanged.status == "inbox"
+        assert workspace.get_selection() == current_before
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 @pytest.mark.parametrize(
     ("kind", "button_name", "created_status"),
     [
