@@ -224,6 +224,40 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_archive_action_switches_to_restore_for_archived_selection(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_archive_action", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Archived idea", status="inbox")
+        database.set_idea_archived(idea.id, True)
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert workspace.actions["archive"].text() == "В архив"
+        assert not workspace.actions["archive"].isEnabled()
+
+        workspace.archived_only.setChecked(True)
+        QApplication.processEvents()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(idea.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        assert workspace.actions["archive"].isEnabled()
+        assert workspace.actions["archive"].text() == "Восстановить"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_save_button_persists_project_change(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_change_project", ".sqlite3")

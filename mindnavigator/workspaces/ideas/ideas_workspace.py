@@ -853,6 +853,16 @@ class IdeasWorkspace(BaseWorkspace):
             return None
         return index.data(IdeaRoles.IdeaId)
 
+    def update_action_states(self) -> None:
+        super().update_action_states()
+        archive_action = self.actions.get("archive")
+        if archive_action is None:
+            return
+        idea_id = self.get_selection()
+        idea = self._db.get_idea(idea_id) if idea_id is not None else None
+        archive_action.setEnabled(idea is not None and not self._busy)
+        archive_action.setText("Восстановить" if idea is not None and idea.archived_at is not None else "В архив")
+
     def _set_status(self, text: str) -> None:
         self._status_message = text.strip()
         self._refresh_status_bar()
@@ -1737,6 +1747,7 @@ class IdeasWorkspace(BaseWorkspace):
         self._sync_development_preview()
         self._update_output_summary(idea_id)
         self._update_triage_panel()
+        self.update_action_states()
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: str) -> None:
