@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QScrollArea,
 )
+from shiboken6 import isValid
 
 from mindnavigator.storage import get_database
 from mindnavigator.spaceenity.marker_types import (
@@ -474,14 +475,17 @@ class CompleterPopupSync(QObject):
         self._completer = completer
         self._popup = completer.popup()
         self._max_visible_items = max_visible_items
+        self._line_edit.destroyed.connect(self._on_line_edit_destroyed)
         self._configure_popup()
         self._line_edit.installEventFilter(self)
         if self._popup:
+            self._popup.destroyed.connect(self._on_popup_destroyed)
             self._popup.installEventFilter(self)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
         # Отслеживаем изменения размеров/позиции для синхронизации popup.
-        if watched in (self._line_edit, self._popup) and event.type() in {
+        popup = self._popup if self._popup_is_alive() else None
+        if watched in (self._line_edit, popup) and event.type() in {
             QEvent.Type.Resize,
             QEvent.Type.Move,
             QEvent.Type.Show,
@@ -494,7 +498,7 @@ class CompleterPopupSync(QObject):
 
     def _configure_popup(self) -> None:
         # Базовая настройка popup подсказок.
-        if not self._popup:
+        if not self._popup_is_alive():
             return
         self._popup.setObjectName("CompleterPopup")
         self._popup.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -505,7 +509,7 @@ class CompleterPopupSync(QObject):
 
     def _sync_popup(self) -> None:
         # Синхронизируем ширину и позицию popup.
-        if not self._popup:
+        if not self._line_edit_is_alive() or not self._popup_is_alive():
             return
         width = self._line_edit.width()
         if width > 0:
@@ -517,12 +521,24 @@ class CompleterPopupSync(QObject):
 
     def _update_max_height(self) -> None:
         # Ограничиваем высоту списка подсказок.
-        if not self._popup:
+        if not self._popup_is_alive():
             return
         row_height = self._popup.sizeHintForRow(0)
         if row_height > 0:
             padding = self._popup.frameWidth() * 2 + 4
             self._popup.setMaximumHeight(row_height * self._max_visible_items + padding)
+
+    def _line_edit_is_alive(self) -> bool:
+        return self._line_edit is not None and isValid(self._line_edit)
+
+    def _popup_is_alive(self) -> bool:
+        return self._popup is not None and isValid(self._popup)
+
+    def _on_line_edit_destroyed(self, *_args) -> None:
+        self._line_edit = None
+
+    def _on_popup_destroyed(self, *_args) -> None:
+        self._popup = None
 
 
 class ImageDropLabel(QLabel):
