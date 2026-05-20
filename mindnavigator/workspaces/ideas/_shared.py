@@ -40,6 +40,8 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QListWidget,
     QListWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QDialog,
     QFileDialog,
     QInputDialog,

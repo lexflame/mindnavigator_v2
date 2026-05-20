@@ -5,6 +5,8 @@ from __future__ import annotations
 from ._shared import *  # noqa: F401,F403
 
 class DatabaseNotesIdeasMixin:
+    IDEA_RELATION_KINDS = {"related", "develops", "conflicts", "transforms_to", "source"}
+
     @staticmethod
     def _parse_idea_timestamp(value: Optional[str]) -> datetime:
         if value:
@@ -150,6 +152,11 @@ class DatabaseNotesIdeasMixin:
     @staticmethod
     def _normalize_idea_status_code(status: Optional[str]) -> str:
         return (status or "inbox").strip() or "inbox"
+
+    @classmethod
+    def _normalize_idea_relation_kind(cls, relation_kind: Optional[str]) -> str:
+        normalized = (relation_kind or "related").strip().lower() or "related"
+        return normalized if normalized in cls.IDEA_RELATION_KINDS else "related"
 
     @staticmethod
     def _default_idea_category_title(code: str) -> str:
@@ -603,7 +610,7 @@ class DatabaseNotesIdeasMixin:
         """Возвращает список связей идеи."""
         rows = self._conn.execute(
             """
-            SELECT id, idea_id, entity_type, entity_id, created_at
+            SELECT id, idea_id, entity_type, entity_id, relation_kind, created_at
             FROM idea_relations
             WHERE idea_id = ?
             ORDER BY created_at DESC;
@@ -617,6 +624,7 @@ class DatabaseNotesIdeasMixin:
                 entity_type=row["entity_type"],
                 entity_id=row["entity_id"],
                 created_at=datetime.fromisoformat(row["created_at"]),
+                relation_kind=self._normalize_idea_relation_kind(row["relation_kind"]),
             )
             for row in rows
         ]
@@ -725,16 +733,23 @@ class DatabaseNotesIdeasMixin:
         with self._conn:
             self._conn.execute("DELETE FROM idea_images WHERE id = ?;", (image_id,))
 
-    def add_idea_relation(self, idea_id: int, entity_type: str, entity_id: int) -> None:
+    def add_idea_relation(
+        self,
+        idea_id: int,
+        entity_type: str,
+        entity_id: int,
+        relation_kind: Optional[str] = None,
+    ) -> None:
         """Создает связь идеи с сущностью."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        normalized_kind = self._normalize_idea_relation_kind(relation_kind)
         with self._conn:
             self._conn.execute(
                 """
-                INSERT OR IGNORE INTO idea_relations (idea_id, entity_type, entity_id, created_at)
-                VALUES (?, ?, ?, ?);
+                INSERT OR IGNORE INTO idea_relations (idea_id, entity_type, entity_id, relation_kind, created_at)
+                VALUES (?, ?, ?, ?, ?);
                 """,
-                (idea_id, entity_type, entity_id, now),
+                (idea_id, entity_type, entity_id, normalized_kind, now),
             )
 
     def delete_idea_relation(self, relation_id: int) -> None:

@@ -169,8 +169,9 @@ class DatabaseSchemaMixin:
                     idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
                     entity_type TEXT NOT NULL,
                     entity_id INTEGER NOT NULL,
+                    relation_kind TEXT NOT NULL DEFAULT 'related',
                     created_at TEXT NOT NULL,
-                    UNIQUE(idea_id, entity_type, entity_id)
+                    UNIQUE(idea_id, entity_type, entity_id, relation_kind)
                 );
                 """
             )
@@ -631,6 +632,7 @@ class DatabaseSchemaMixin:
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
         self._ensure_idea_category_schema()
+        self._ensure_idea_relation_schema()
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
         self._ensure_concept_board_schema()
@@ -650,6 +652,7 @@ class DatabaseSchemaMixin:
             MigrationStep(9, "mutaboard_schema", self._migration_v9_mutaboard_schema),
             MigrationStep(10, "idea_category_schema", self._migration_v10_idea_category_schema),
             MigrationStep(11, "concept_board_schema", self._migration_v11_concept_board_schema),
+            MigrationStep(12, "idea_relation_kind_schema", self._migration_v12_idea_relation_kind_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -665,6 +668,7 @@ class DatabaseSchemaMixin:
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
         self._ensure_idea_category_schema()
+        self._ensure_idea_relation_schema()
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
         self._ensure_concept_board_schema()
@@ -729,6 +733,10 @@ class DatabaseSchemaMixin:
     def _migration_v11_concept_board_schema(self, _connection: sqlite3.Connection) -> None:
         """Expands mutaboard storage for persisted concept versions, solutions, and typed links."""
         self._ensure_concept_board_schema()
+
+    def _migration_v12_idea_relation_kind_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds typed relation semantics to idea links without breaking legacy rows."""
+        self._ensure_idea_relation_schema()
 
     def _migration_v10_idea_category_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds editable idea categories and removes the fixed status CHECK."""
@@ -815,6 +823,31 @@ class DatabaseSchemaMixin:
                 """
             )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_categories_sort ON idea_categories(sort_index, title);")
+
+    def _ensure_idea_relation_schema(self) -> None:
+        """Ensures idea relations support typed link semantics."""
+        columns = self._conn.execute("PRAGMA table_info(idea_relations);").fetchall()
+        names = {row["name"] for row in columns}
+        if not names:
+            with self._conn:
+                self._conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS idea_relations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+                        entity_type TEXT NOT NULL,
+                        entity_id INTEGER NOT NULL,
+                        relation_kind TEXT NOT NULL DEFAULT 'related',
+                        created_at TEXT NOT NULL,
+                        UNIQUE(idea_id, entity_type, entity_id, relation_kind)
+                    );
+                    """
+                )
+                self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")
+            return
+        if "relation_kind" not in names:
+            with self._conn:
+                self._rebuild_idea_relations_table()
 
     def _ensure_mutaboard_schema(self) -> None:
         """Ensures persistent mutaboard tables and indexes exist."""
@@ -1790,21 +1823,30 @@ class DatabaseSchemaMixin:
                 idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
                 entity_type TEXT NOT NULL,
                 entity_id INTEGER NOT NULL,
+                relation_kind TEXT NOT NULL DEFAULT 'related',
                 created_at TEXT NOT NULL,
-                UNIQUE(idea_id, entity_type, entity_id)
+                UNIQUE(idea_id, entity_type, entity_id, relation_kind)
             );
             """
         )
+        select_relation_kind = ", relation_kind" if "relation_kind" in names else ""
         rows = self._conn.execute(
-            "SELECT id, idea_id, entity_type, entity_id, created_at FROM idea_relations_old;"
+            f"SELECT id, idea_id, entity_type, entity_id, created_at{select_relation_kind} FROM idea_relations_old;"
         ).fetchall()
         for row in rows:
             self._conn.execute(
                 """
-                INSERT INTO idea_relations (id, idea_id, entity_type, entity_id, created_at)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT INTO idea_relations (id, idea_id, entity_type, entity_id, relation_kind, created_at)
+                VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (row["id"], row["idea_id"], row["entity_type"], row["entity_id"], row["created_at"]),
+                (
+                    row["id"],
+                    row["idea_id"],
+                    row["entity_type"],
+                    row["entity_id"],
+                    (row["relation_kind"] if "relation_kind" in names else "related") or "related",
+                    row["created_at"],
+                ),
             )
         self._conn.execute("DROP TABLE idea_relations_old;")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")

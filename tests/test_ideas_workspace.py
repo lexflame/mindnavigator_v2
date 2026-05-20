@@ -178,16 +178,24 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         QApplication.processEvents()
 
         assert workspace.list_mode_stack.currentWidget() is workspace.funnel_view
-        funnel_rows = [workspace.funnel_view.item(row).text() for row in range(workspace.funnel_view.count())]
-        assert any("Capture idea" in row for row in funnel_rows)
-        assert any("Heavy idea" in row for row in funnel_rows)
+        inbox_rows = [
+            workspace.funnel_lists["inbox"].item(row).text()
+            for row in range(workspace.funnel_lists["inbox"].count())
+        ]
+        work_rows = [
+            workspace.funnel_lists["work"].item(row).text()
+            for row in range(workspace.funnel_lists["work"].count())
+        ]
+        assert any("Capture idea" in row for row in inbox_rows)
+        assert any("Heavy idea" in row for row in work_rows)
 
         funnel_idea_item = next(
-            workspace.funnel_view.item(row)
-            for row in range(workspace.funnel_view.count())
-            if isinstance(workspace.funnel_view.item(row).data(Qt.ItemDataRole.UserRole), int)
+            workspace.funnel_lists["inbox"].item(row)
+            for row in range(workspace.funnel_lists["inbox"].count())
+            if isinstance(workspace.funnel_lists["inbox"].item(row).data(Qt.ItemDataRole.UserRole), int)
         )
-        workspace.funnel_view.itemClicked.emit(funnel_idea_item)
+        workspace.funnel_lists["inbox"].setCurrentItem(funnel_idea_item)
+        workspace.funnel_lists["inbox"].itemClicked.emit(funnel_idea_item)
         QApplication.processEvents()
         assert workspace.get_selection() == funnel_idea_item.data(Qt.ItemDataRole.UserRole)
 
@@ -196,27 +204,73 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         workspace.view_mode_combo.setCurrentIndex(matrix_index)
         QApplication.processEvents()
 
-        matrix_rows = [workspace.matrix_view.item(row).text() for row in range(workspace.matrix_view.count())]
+        matrix_rows = []
+        for widget in workspace.matrix_lists.values():
+            matrix_rows.extend(widget.item(row).text() for row in range(widget.count()))
         assert any("Capture idea" in row for row in matrix_rows)
         assert any("Heavy idea" in row for row in matrix_rows)
+        assert " · 1" in workspace.matrix_headers["first"].text()
+        assert " · 1" in workspace.matrix_headers["planned"].text()
 
         links_index = workspace.view_mode_combo.findData("links")
         assert links_index >= 0
         workspace.view_mode_combo.setCurrentIndex(links_index)
         QApplication.processEvents()
 
-        link_rows = [workspace.links_view.item(row).text() for row in range(workspace.links_view.count())]
-        assert any("Capture idea" in row for row in link_rows)
-        assert any("Heavy idea" in row for row in link_rows)
+        root_item = workspace.links_view.topLevelItem(0)
+        assert root_item is not None
+        assert root_item.text(0) == "Capture idea"
+        assert root_item.childCount() == 1
+        group_item = root_item.child(0)
+        assert group_item is not None
+        assert "1" in group_item.text(0)
+        assert group_item.childCount() == 1
+        relation_item = group_item.child(0)
+        assert relation_item is not None
+        assert "Heavy idea" in relation_item.text(0)
 
         second_index = model.index_for_id(second_idea.id)
         workspace.list_view.setCurrentIndex(second_index)
         QApplication.processEvents()
 
-        updated_link_rows = [workspace.links_view.item(row).text() for row in range(workspace.links_view.count())]
-        assert any("Heavy idea" == row for row in updated_link_rows)
-        assert not any("Capture idea" in row for row in updated_link_rows)
-        assert len(updated_link_rows) >= 2
+        updated_root = workspace.links_view.topLevelItem(0)
+        assert updated_root is not None
+        assert updated_root.text(0) == "Heavy idea"
+        assert updated_root.childCount() >= 2
+        assert updated_root.child(0).text(0) == "РЎРІСЏР·РµР№ РїРѕРєР° РЅРµС‚"
+        assert "Capture idea" not in updated_root.child(0).text(0)
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_funnel_move_updates_idea_status(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_funnel_move", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Inbox idea", status="inbox")
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        assert workspace.move_idea_to_funnel_status(idea.id, "work")
+        QApplication.processEvents()
+
+        updated = database.get_idea(idea.id)
+        assert updated is not None
+        assert updated.status == "work"
+        assert updated.archived_at is None
+        assert workspace.get_selection() == idea.id
+        work_rows = [
+            workspace.funnel_lists["work"].item(row).text()
+            for row in range(workspace.funnel_lists["work"].count())
+        ]
+        assert any("Inbox idea" in row for row in work_rows)
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -339,6 +393,7 @@ def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, un
             def values(self) -> dict:
                 return {
                     "entity_type": "task",
+                    "relation_kind": "develops",
                     "entity_id": task.id,
                 }
 
@@ -367,8 +422,10 @@ def test_ideas_workspace_relations_tab_adds_and_removes_relation(monkeypatch, un
         assert len(relations) == 1
         assert relations[0].entity_type == "task"
         assert relations[0].entity_id == task.id
+        assert relations[0].relation_kind == "develops"
         assert workspace.relations_list.count() == 2
         assert workspace.relations_list.item(0).data(Qt.ItemDataRole.UserRole) is None
+        assert "develops" not in workspace.relations_list.item(1).text().lower()
         assert "Linked task" in workspace.relations_list.item(1).text()
 
         workspace.relations_list.setCurrentRow(1)
@@ -718,7 +775,9 @@ def test_ideas_workspace_adds_current_idea_to_concept_board(monkeypatch, unique_
         board_items = database.fetch_concept_board_items(board.id)
         assert [(item.entity_kind, item.entity_id) for item in board_items] == [("idea", idea.id)]
         idea_relations = database.fetch_idea_relations(idea.id)
-        assert ("concept_board", board.id) in {(item.entity_type, item.entity_id) for item in idea_relations}
+        assert ("concept_board", board.id, "transforms_to") in {
+            (item.entity_type, item.entity_id, item.relation_kind) for item in idea_relations
+        }
         updated = database.get_idea(idea.id)
         assert updated is not None
         assert updated.status == "ripe"

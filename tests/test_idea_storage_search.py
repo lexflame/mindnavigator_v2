@@ -62,3 +62,27 @@ def test_fetch_ideas_normalizes_legacy_naive_timestamps(unique_temp_path) -> Non
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_idea_relations_support_typed_links(unique_temp_path) -> None:
+    db_path = unique_temp_path("idea_relations_typed_links", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        source = database.create_idea(title="Source idea")
+        target = database.create_idea(title="Target idea")
+
+        database.add_idea_relation(source.id, "idea", target.id)
+        database.add_idea_relation(source.id, "idea", target.id, relation_kind="develops")
+
+        relations = database.fetch_idea_relations(source.id)
+
+        assert {
+            (relation.entity_type, relation.entity_id, relation.relation_kind)
+            for relation in relations
+        } == {
+            ("idea", target.id, "related"),
+            ("idea", target.id, "develops"),
+        }
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
