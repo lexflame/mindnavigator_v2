@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QDialog, QFrame
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QWidget
 
 from mindnavigator.storage import Database
 from mindnavigator.ui.workspaces import base_workspace as base_workspace_module
@@ -414,3 +414,228 @@ def test_dossier_workspace_dark_theme_covers_preview_and_popups(monkeypatch, uni
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_quick_actions_create_idea_and_task(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_quick_actions", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    host = None
+    try:
+        dossier = database.create_dossier(
+            kind="book",
+            title="Roadside Picnic",
+            summary="Zone as a source of ideas.",
+            description="Use as a reference for restricted spaces and dangerous wonder.",
+            status="active",
+            tags=["sci-fi"],
+            metadata={"author_display": "Arkady and Boris Strugatsky"},
+        )
+
+        class _PageIdeas:
+            def __init__(self) -> None:
+                self.selected: list[int] = []
+
+            def select_idea(self, idea_id: int) -> bool:
+                self.selected.append(idea_id)
+                return True
+
+        class _PageTasks:
+            def __init__(self) -> None:
+                self.focused: list[int] = []
+
+            def focus_task(self, task_id: int) -> bool:
+                self.focused.append(task_id)
+                return True
+
+        class _Host(QWidget):
+            MODE_IDEAS = "ideas"
+            MODE_TASKS = "tasks"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.modes: list[str] = []
+                self.page_ideas = _PageIdeas()
+                self.page_tasks = _PageTasks()
+
+            def set_mode(self, mode_name: str) -> None:
+                self.modes.append(mode_name)
+
+        host = _Host()
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace(parent=host)
+        workspace.on_enter()
+        QApplication.processEvents()
+
+        assert workspace.get_selection() == dossier.id
+        tasks_before = database.fetch_tasks()
+
+        workspace._create_idea_from_dossier()
+        QApplication.processEvents()
+        workspace._create_task_from_dossier()
+        QApplication.processEvents()
+
+        ideas = database.fetch_ideas()
+        tasks = database.fetch_tasks()
+        created_tasks = [item for item in tasks if item.title == "Roadside Picnic"]
+        links = database.fetch_dossier_links(dossier.id)
+
+        assert len(ideas) == 1
+        assert ideas[0].title == "Roadside Picnic"
+        assert ideas[0].source == "Досье: Roadside Picnic"
+        assert len(tasks) == len(tasks_before) + 1
+        assert len(created_tasks) == 1
+        assert "Источник: досье" in created_tasks[0].description
+        assert {(link.entity_kind, link.entity_id) for link in links} == {
+            ("idea", ideas[0].id),
+            ("task", created_tasks[0].id),
+        }
+        assert host.page_ideas.selected == [ideas[0].id]
+        assert host.page_tasks.focused == [created_tasks[0].id]
+        assert host.modes == ["ideas", "tasks"]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        if host is not None:
+            host.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_switches_between_view_modes(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    db_path = unique_temp_path("dossier_workspace_view_modes", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        first = database.create_dossier(
+            kind="book",
+            title="A Fire Upon the Deep",
+            summary="Zones of thought.",
+            description="",
+            status="active",
+            rating=None,
+            tags=["space"],
+            metadata={"author_display": "Vernor Vinge"},
+        )
+        second = database.create_dossier(
+            kind="film",
+            title="Solaris",
+            summary="Memory over the ocean.",
+            description="",
+            status="completed",
+            rating=9,
+            tags=["arthouse"],
+            metadata={"director": "Andrei Tarkovsky"},
+        )
+        task = database.create_task(
+            title="Write Solaris comparison notes",
+            description="",
+            day=date(2026, 3, 13),
+            time_text="10:00",
+            priority="Medium",
+        )
+        database.add_dossier_link(second.id, "task", task.id)
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: database)
+        workspace = dossier_workspace.DossierWorkspace()
+        workspace.on_enter()
+        QApplication.processEvents()
+
+        workspace._set_view_mode("shelf")
+        QApplication.processEvents()
+        assert workspace.left_mode_stack.currentIndex() == 1
+        assert workspace.shelf_view.count() == 2
+
+        workspace._set_view_mode("matrix")
+        QApplication.processEvents()
+        assert workspace.left_mode_stack.currentIndex() == 2
+        assert workspace.matrix_view.count() >= 4
+
+        workspace._set_view_mode("links")
+        QApplication.processEvents()
+        assert workspace.left_mode_stack.currentIndex() == 3
+        assert workspace.links_mode_view.count() == 2
+
+        workspace.links_mode_view.setCurrentRow(1)
+        QApplication.processEvents()
+        assert workspace.get_selection() in {first.id, second.id}
+        assert workspace.preview_title_label.text() in {"A Fire Upon the Deep", "Solaris"}
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_export_and_import_csv(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    source_db_path = unique_temp_path("dossier_workspace_export_source", ".sqlite3")
+    target_db_path = unique_temp_path("dossier_workspace_export_target", ".sqlite3")
+    export_path = unique_temp_path("dossier_workspace_export", ".csv")
+    source_db = Database(path=source_db_path)
+    target_db = Database(path=target_db_path)
+    source_workspace = None
+    target_workspace = None
+    try:
+        source_db.create_dossier(
+            kind="writer",
+            title="Stanislaw Lem",
+            summary="Philosophical science fiction.",
+            description="Useful for tone, speculation and epistemic uncertainty.",
+            status="completed",
+            tags=["classic", "sci-fi"],
+            metadata={"country": "Poland", "languages": ["Polish"]},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: source_db)
+        monkeypatch.setattr(
+            dossier_workspace_module.QFileDialog,
+            "getSaveFileName",
+            staticmethod(lambda *args, **kwargs: (str(export_path), "CSV (*.csv)")),
+        )
+        source_workspace = dossier_workspace.DossierWorkspace()
+        source_workspace._export_dossiers_csv()
+        QApplication.processEvents()
+
+        assert export_path.exists()
+        csv_text = export_path.read_text(encoding="utf-8")
+        assert "Stanislaw Lem" in csv_text
+        assert "metadata_json" in csv_text
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: target_db)
+        monkeypatch.setattr(
+            dossier_workspace_module.QFileDialog,
+            "getOpenFileName",
+            staticmethod(lambda *args, **kwargs: (str(export_path), "CSV (*.csv)")),
+        )
+        target_workspace = dossier_workspace.DossierWorkspace()
+        target_workspace._import_dossiers_csv()
+        QApplication.processEvents()
+
+        imported = [item for item in target_db.fetch_dossiers() if item.title == "Stanislaw Lem"]
+        assert len(imported) == 1
+        assert imported[0].metadata == {"country": "Poland", "languages": ["Polish"]}
+    finally:
+        if source_workspace is not None:
+            source_workspace.deleteLater()
+        if target_workspace is not None:
+            target_workspace.deleteLater()
+        source_db.close()
+        target_db.close()
+        source_db_path.unlink(missing_ok=True)
+        target_db_path.unlink(missing_ok=True)
+        export_path.unlink(missing_ok=True)

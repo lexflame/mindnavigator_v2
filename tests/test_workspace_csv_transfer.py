@@ -6,7 +6,9 @@ from mindnavigator.storage import Database
 from mindnavigator.workspaces.csv_transfer import (
     build_category_path_map,
     export_collections_rows,
+    export_dossiers_rows,
     export_notes_rows,
+    import_dossiers_rows,
     import_notes_rows,
     import_projects_rows,
     import_tasks_rows,
@@ -172,6 +174,39 @@ def test_export_collections_rows_contains_category_path_and_import_recreates_it(
         category_map = build_category_path_map(target_db.fetch_collection_categories())
         assert imported_item.category_id is not None
         assert category_map[imported_item.category_id] == "Root / Child"
+    finally:
+        source_db.close()
+        target_db.close()
+
+
+def test_export_and_import_dossiers_rows_preserve_metadata_and_rating(unique_temp_path) -> None:
+    source_db = Database(path=unique_temp_path("csv_dossiers_source", ".db"))
+    target_db = Database(path=unique_temp_path("csv_dossiers_target", ".db"))
+    try:
+        created = source_db.create_dossier(
+            kind="game",
+            title="Pathologic",
+            summary="Town plague dossier.",
+            description="Use as a reference for pressure, rumor and atmosphere.",
+            tags=["plague", "horror"],
+            status="active",
+            rating=9,
+            source="Library",
+            cover_image="covers/pathologic.png",
+            metadata={"developer": "Ice-Pick Lodge", "platforms": ["PC", "Xbox"]},
+        )
+        rows = export_dossiers_rows([created])
+        result = import_dossiers_rows(target_db, rows)
+        assert result.imported == 1
+
+        imported = [item for item in target_db.fetch_dossiers() if item.title == "Pathologic"]
+        assert len(imported) == 1
+        dossier = imported[0]
+        assert dossier.kind == "game"
+        assert dossier.rating == 9
+        assert dossier.tags == ["plague", "horror"]
+        assert dossier.cover_image == "covers/pathologic.png"
+        assert dossier.metadata == {"developer": "Ice-Pick Lodge", "platforms": ["PC", "Xbox"]}
     finally:
         source_db.close()
         target_db.close()
