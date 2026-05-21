@@ -23,9 +23,21 @@ class _InfoCard(QFrame):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(6)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(8)
+
         self.title_label = QLabel(title)
         self.title_label.setObjectName("TaskDetailsCardTitle")
-        layout.addWidget(self.title_label)
+        title_row.addWidget(self.title_label)
+        title_row.addStretch(1)
+
+        self.action_button = QToolButton(self)
+        self.action_button.setObjectName("TaskDetailsCardAction")
+        self.action_button.hide()
+        title_row.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignRight)
+
+        layout.addLayout(title_row)
 
         value_row = QHBoxLayout()
         value_row.setContentsMargins(0, 0, 0, 0)
@@ -58,6 +70,13 @@ class _InfoCard(QFrame):
             self.dot_label.setStyleSheet(f"color: {normalized};")
         else:
             self.dot_label.setStyleSheet("")
+
+    def set_action(self, text: str, handler) -> None:
+        self.action_button.setText(text)
+        self.action_button.clicked.connect(handler)
+
+    def set_action_visible(self, visible: bool) -> None:
+        self.action_button.setVisible(bool(visible))
 
 
 class TaskDetailsDialog(QDialog):
@@ -259,6 +278,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_id_card = _InfoCard("ID", self.details_card)
         self.detail_project_card = _InfoCard("Проект", self.details_card)
         self.detail_parent_card = _InfoCard("Родительская задача", self.details_card)
+        self.detail_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
         self.detail_type_card = _InfoCard("Тип", self.details_card)
         self.detail_marker_card = _InfoCard("Маркер", self.details_card, accent_dot=True)
         self.detail_theme_card = _InfoCard("Тема маркера", self.details_card)
@@ -439,6 +459,7 @@ class TaskDetailsDialog(QDialog):
                 border-radius: 10px;
                 padding: 18px 14px;
             }}
+            QToolButton#TaskDetailsCardAction,
             QToolButton#TaskDetailsHeaderEditButton,
             QToolButton#TaskDetailsLinkAction,
             QPushButton#TaskDetailsSecondaryButton,
@@ -447,6 +468,7 @@ class TaskDetailsDialog(QDialog):
                 padding: 8px 14px;
                 font-weight: 600;
             }}
+            QToolButton#TaskDetailsCardAction,
             QToolButton#TaskDetailsHeaderEditButton,
             QToolButton#TaskDetailsLinkAction,
             QPushButton#TaskDetailsSecondaryButton {{
@@ -454,6 +476,7 @@ class TaskDetailsDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border_strong};
             }}
+            QToolButton#TaskDetailsCardAction:hover,
             QToolButton#TaskDetailsHeaderEditButton:hover,
             QPushButton#TaskDetailsSecondaryButton:hover {{
                 background: {palette.selection_bg};
@@ -524,6 +547,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_id_card.set_value(str(self._task.id))
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
         self.detail_parent_card.set_value(parent_text, muted=parent_text == "—")
+        self.detail_parent_card.set_action_visible(self._parent_schedule_mismatch())
         self.detail_type_card.set_value(self._task_type_text())
         self.detail_marker_card.set_value(marker_text, muted=marker_text == "Нет")
         self.detail_marker_card.set_dot_color((self._task.marker_color or "").strip())
@@ -640,6 +664,46 @@ class TaskDetailsDialog(QDialog):
             return "—"
         title = normalize_task_text_quotes((task.title or "").strip())
         return title or f"MN-{task_id}"
+
+    def _parent_task(self) -> Optional[TaskRow]:
+        if self._task.parent_id is None:
+            return None
+        if self._task.parent_id not in self._tasks_by_id:
+            self._tasks_by_id = {task.id: task for task in self._db.fetch_tasks()}
+        return self._tasks_by_id.get(self._task.parent_id)
+
+    def _parent_schedule_mismatch(self) -> bool:
+        parent_task = self._parent_task()
+        if parent_task is None:
+            return False
+        return self._task.day != parent_task.day or (self._task.time_text or "") != (parent_task.time_text or "")
+
+    def _sync_schedule_to_parent(self) -> None:
+        parent_task = self._parent_task()
+        if parent_task is None or not self._parent_schedule_mismatch():
+            return
+        try:
+            self._db.update_task(
+                self._task.id,
+                title=self._task.title,
+                description=self._task.description,
+                day=parent_task.day,
+                time_text=parent_task.time_text,
+                priority=self._task.priority,
+                done=self._task.done,
+                project_id=self._task.project_id,
+                parent_id=self._task.parent_id,
+                recurrence_kind=self._task.recurrence_kind,
+                recurrence_interval=self._task.recurrence_interval,
+                is_plan_task=bool(self._task.is_plan_task),
+                plan_order=int(self._task.plan_order or 0),
+                marker_color=self._task.marker_color,
+                marker_theme=self._task.marker_theme,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        self._refresh_view()
 
     def _open_edit_dialog(self) -> None:
         dialog = TaskEditDialog(self._task, parent=self)

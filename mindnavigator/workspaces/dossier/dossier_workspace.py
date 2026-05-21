@@ -746,6 +746,17 @@ class DossierWorkspace(BaseWorkspace):
     def get_selection(self) -> Optional[int]:
         return self._current_dossier_id
 
+    def select_dossier(self, dossier_id: int) -> bool:
+        normalized_id = int(dossier_id)
+        if normalized_id <= 0:
+            return False
+        if normalized_id not in self._dossiers_by_id:
+            self.refresh()
+        if normalized_id not in self._dossiers_by_id:
+            return False
+        self._set_current_dossier_from_id(normalized_id)
+        return self.get_selection() == normalized_id
+
     def open_edit_selected_dossier(self) -> None:
         self._open_edit_dialog()
 

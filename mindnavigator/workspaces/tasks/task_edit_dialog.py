@@ -97,6 +97,7 @@ class TaskEditDialog(QDialog):
         self.setProperty("dialog_category", "keep_size")
         self.setMinimumSize(640, 520)
         self._db = get_database()
+        self._task = task
         self._is_plan_item = self._resolve_plan_item_state(task.id)
         self._auto_minimize_pending = False
         self._validation_widgets: tuple[QWidget, ...] = ()
@@ -261,9 +262,29 @@ class TaskEditDialog(QDialog):
         params_layout.addWidget(self.marker_color_edit, 1)
         params_layout.addWidget(self.marker_theme_edit, 1)
 
+        parent_row = None
+        if task.parent_id is not None:
+            parent_row = QWidget()
+            parent_layout = QHBoxLayout(parent_row)
+            parent_layout.setContentsMargins(0, 0, 0, 0)
+            parent_layout.setSpacing(8)
+            self.parent_task_label = QLabel("")
+            self.parent_task_label.setObjectName("TaskParentLabel")
+            self.parent_task_label.setWordWrap(True)
+            parent_layout.addWidget(self.parent_task_label, 1)
+
+            self.parent_schedule_button = QToolButton()
+            self.parent_schedule_button.setObjectName("TaskParentScheduleButton")
+            self.parent_schedule_button.setText("Перенести к родителю")
+            self.parent_schedule_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.parent_schedule_button.clicked.connect(self._sync_schedule_to_parent)
+            parent_layout.addWidget(self.parent_schedule_button, 0)
+
         form.addRow(self._make_form_label("Название"), self.title_edit)
         form.addRow(self._make_form_label("Описание"), self.description_edit)
         form.addRow(self._make_form_label("Проект"), project_row)
+        if parent_row is not None:
+            form.addRow(self._make_form_label("Родитель"), parent_row)
         form.addRow(self._make_form_label("Дата и время"), time_block)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label("Параметры"), params_row)
@@ -342,6 +363,7 @@ class TaskEditDialog(QDialog):
         self._setup_shortcuts()
         self._setup_error_reset_handlers()
         self._apply_plan_child_restrictions()
+        self._refresh_parent_schedule_action()
         self.header_bar.set_minimize_visible(bool(self.property("task_dialog_minimizable")))
         palette = get_theme_palette("dark")
 
@@ -382,6 +404,10 @@ class TaskEditDialog(QDialog):
             QDialog#TaskEditDialog QLabel#TaskFormLabel {{
                 color: {palette.text};
                 font-size: 13px;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskParentLabel {{
+                color: {palette.text};
             }}
 
             QDialog#TaskEditDialog QLineEdit,
@@ -523,6 +549,10 @@ class TaskEditDialog(QDialog):
                 border-color: {palette.border_strong};
             }}
 
+            QDialog#TaskEditDialog QToolButton#TaskParentScheduleButton {{
+                padding: 6px 10px;
+            }}
+
             QDialog#TaskEditDialog QToolButton#TaskDialogHeaderButton,
             QDialog#TaskEditDialog QToolButton#TaskDialogCloseButton {{
                 background: transparent;
@@ -602,6 +632,9 @@ class TaskEditDialog(QDialog):
         self.time_edit.timeChanged.connect(lambda *_: self._apply_error_state(self.time_edit, False))
         self.time_toggle.toggled.connect(lambda *_: self._apply_error_state(self.time_edit, False))
         self.priority_edit.currentIndexChanged.connect(lambda *_: self._apply_error_state(self.priority_edit, False))
+        self.day_edit.dateChanged.connect(lambda *_: self._refresh_parent_schedule_action())
+        self.time_toggle.toggled.connect(lambda *_: self._refresh_parent_schedule_action())
+        self.time_edit.timeChanged.connect(lambda *_: self._refresh_parent_schedule_action())
 
     def _apply_plan_child_restrictions(self) -> None:
         if not self._is_plan_item:
@@ -616,6 +649,62 @@ class TaskEditDialog(QDialog):
         self.project_create_btn.setToolTip(inherit_tip)
         self.priority_edit.setEnabled(False)
         self.priority_edit.setToolTip(inherit_tip)
+
+    def _task_by_id(self, task_id: int | None) -> Optional[TaskRow]:
+        if task_id is None:
+            return None
+        fetch_tasks = getattr(self._db, "fetch_tasks", None)
+        if not callable(fetch_tasks):
+            return None
+        return next((item for item in fetch_tasks() if item.id == int(task_id)), None)
+
+    def _parent_task(self) -> Optional[TaskRow]:
+        return self._task_by_id(self._task.parent_id)
+
+    def _current_schedule(self) -> tuple[date, str]:
+        qd = self.day_edit.date()
+        current_day = date(qd.year(), qd.month(), qd.day())
+        return current_day, self._current_time_text()
+
+    def _parent_schedule_mismatch(self) -> bool:
+        parent_task = self._parent_task()
+        if parent_task is None:
+            return False
+        current_day, current_time = self._current_schedule()
+        return current_day != parent_task.day or current_time != (parent_task.time_text or "")
+
+    def _refresh_parent_schedule_action(self) -> None:
+        label = getattr(self, "parent_task_label", None)
+        button = getattr(self, "parent_schedule_button", None)
+        if label is None or button is None:
+            return
+        parent_task = self._parent_task()
+        if parent_task is None:
+            label.setText("—")
+            button.setVisible(False)
+            return
+        parent_title = normalize_task_text_quotes((parent_task.title or "").strip()) or f"MN-{parent_task.id}"
+        schedule_text = parent_task.day.isoformat()
+        if (parent_task.time_text or "").strip():
+            schedule_text = f"{schedule_text} {parent_task.time_text.strip()}"
+        label.setText(f"{parent_title} · {schedule_text}")
+        button.setVisible(self._parent_schedule_mismatch())
+
+    def _sync_schedule_to_parent(self) -> None:
+        parent_task = self._parent_task()
+        if parent_task is None:
+            return
+        self.day_edit.setDate(QDate(parent_task.day.year, parent_task.day.month, parent_task.day.day))
+        has_time = bool((parent_task.time_text or "").strip())
+        self.time_toggle.setChecked(has_time)
+        if has_time:
+            try:
+                parent_time = datetime.strptime(parent_task.time_text, "%H:%M").time()
+            except ValueError:
+                pass
+            else:
+                self.time_edit.setTime(QTime(parent_time.hour, parent_time.minute))
+        self._refresh_parent_schedule_action()
 
     def _apply_error_state(self, widget: QWidget, enabled: bool, message: str = "") -> None:
         base_tooltip = widget.property("base_tooltip")

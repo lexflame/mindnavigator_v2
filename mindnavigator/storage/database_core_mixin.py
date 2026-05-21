@@ -7,6 +7,7 @@ from ._shared import *  # noqa: F401,F403
 class DatabaseCoreMixin:
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else default_db_path()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(
             self.path,
             check_same_thread=False,

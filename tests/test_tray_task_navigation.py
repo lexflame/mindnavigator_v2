@@ -21,8 +21,8 @@ class _DummyWindow:
         self._tray_message_task_id: int | None = None
         self.page_tasks = _DummyTasksPage()
 
-    def _restore_from_tray(self) -> None:
-        self.calls.append("restore")
+    def _restore_from_notification(self) -> None:
+        self.calls.append("restore_notification")
 
     def _open_task_from_tray_notification(self, task_id: int) -> None:
         self.calls.append(("open", task_id))
@@ -37,7 +37,7 @@ def test_on_tray_message_clicked_opens_task_when_task_id_is_bound() -> None:
 
     MainWindow._on_tray_message_clicked(window)
 
-    assert window.calls == ["restore", ("open", 42)]
+    assert window.calls == ["restore_notification", ("open", 42)]
     assert window._tray_message_task_id is None
 
 
@@ -46,7 +46,7 @@ def test_on_tray_message_clicked_only_restores_when_no_task_bound() -> None:
 
     MainWindow._on_tray_message_clicked(window)
 
-    assert window.calls == ["restore"]
+    assert window.calls == ["restore_notification"]
     assert window._tray_message_task_id is None
 
 

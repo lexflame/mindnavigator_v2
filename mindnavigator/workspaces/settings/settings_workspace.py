@@ -41,10 +41,14 @@ from PySide6.QtWidgets import (
 from mindnavigator.spaceenity.constants import APP_VERSION, UPDATE_REPOSITORY_NAME, UPDATE_REPOSITORY_OWNER
 from mindnavigator.spaceenity.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalize_language_code
 from mindnavigator.storage import (
+    Database,
+    add_configured_db_path,
     default_db_path,
     get_configured_db_path,
+    get_configured_db_paths,
     get_database,
     is_network_database_path,
+    remove_configured_db_path,
     set_configured_db_path,
 )
 from mindnavigator.spaceenity.update_service import UpdateService, UpdateServiceError
@@ -117,6 +121,7 @@ class SettingsWorkspace(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._db = get_database()
+        self._configured_db_paths: list[Path] = []
         self._loading_settings = False
         self._backup_entries: list[dict[str, object]] = []
         self._theme_mode = "dark"
@@ -280,7 +285,7 @@ class SettingsWorkspace(QWidget):
 
         db_title = QLabel("Хранение базы данных")
         db_title.setObjectName("SettingsSectionTitle")
-        db_hint = QLabel("Выберите, где хранится локальный файл базы данных SQLite.")
+        db_hint = QLabel("Управляйте списком локальных баз данных. Активная база сохраняется в конфиге приложения и применяется после перезапуска.")
         db_hint.setObjectName("SettingsHint")
         db_hint.setWordWrap(True)
         db_layout.addWidget(db_title)
@@ -291,14 +296,18 @@ class SettingsWorkspace(QWidget):
         db_text = QVBoxLayout()
         db_text.setSpacing(6)
 
-        db_label = QLabel("Файл базы данных")
+        db_label = QLabel("Список баз данных")
         db_label.setObjectName("SettingsLabel")
-        db_desc = QLabel("Путь применится при следующем запуске приложения. Текущие данные будут скопированы в новое место.")
+        db_desc = QLabel("Добавляйте базы в каталог приложения или внешние SQLite-файлы, переключайте активную базу и удаляйте записи из списка без удаления файла с диска.")
         db_desc.setObjectName("SettingsHint")
         db_desc.setWordWrap(True)
         db_text.addWidget(db_label)
         db_text.addWidget(db_desc)
         db_row.addLayout(db_text, 1)
+
+        self.db_list_combo = QComboBox()
+        self.db_list_combo.setObjectName("SettingsCombo")
+        self.db_list_combo.currentIndexChanged.connect(self._select_database_storage)
 
         self.db_path_edit = QLineEdit()
         self.db_path_edit.setObjectName("SettingsPath")
@@ -306,9 +315,14 @@ class SettingsWorkspace(QWidget):
         self.db_path_edit.setPlaceholderText("Не задано")
 
         self.btn_db_dir = QToolButton()
-        self.btn_db_dir.setText("Выбрать")
+        self.btn_db_dir.setText("Добавить")
         self.btn_db_dir.setObjectName("SettingsEditButton")
         self.btn_db_dir.clicked.connect(self._edit_database_storage)
+
+        self.btn_db_remove = QToolButton()
+        self.btn_db_remove.setText("Убрать")
+        self.btn_db_remove.setObjectName("SettingsEditButton")
+        self.btn_db_remove.clicked.connect(self._remove_database_storage)
 
         self.btn_db_open = QToolButton()
         self.btn_db_open.setText("Открыть")
@@ -320,8 +334,15 @@ class SettingsWorkspace(QWidget):
         self.btn_check_updates.setObjectName("SettingsEditButton")
         self.btn_check_updates.clicked.connect(self._check_updates)
 
-        db_row.addWidget(self.db_path_edit, 2)
+        db_inputs = QVBoxLayout()
+        db_inputs.setContentsMargins(0, 0, 0, 0)
+        db_inputs.setSpacing(8)
+        db_inputs.addWidget(self.db_list_combo)
+        db_inputs.addWidget(self.db_path_edit)
+
+        db_row.addLayout(db_inputs, 2)
         db_row.addWidget(self.btn_db_dir, 0)
+        db_row.addWidget(self.btn_db_remove, 0)
         db_row.addWidget(self.btn_db_open, 0)
         db_row.addWidget(self.btn_check_updates, 0)
         db_layout.addLayout(db_row)
@@ -576,6 +597,10 @@ class SettingsWorkspace(QWidget):
             path_value = self._db.get_setting(self.CLOUD_STORAGE_KEY, default="")
             self.path_edit.setText(path_value)
             configured_db_path = get_configured_db_path() or default_db_path()
+            self._configured_db_paths = get_configured_db_paths()
+            if not self._configured_db_paths:
+                self._configured_db_paths = [configured_db_path]
+            self._populate_database_paths(configured_db_path)
             self.db_path_edit.setText(str(configured_db_path))
             backup_dir = self._db.get_setting(self.BACKUP_DIR_KEY, default="")
             self.backup_path_edit.setText(backup_dir)
@@ -644,34 +669,95 @@ class SettingsWorkspace(QWidget):
         self._db.set_setting(self.CLOUD_STORAGE_KEY, selected)
         self.path_edit.setText(selected)
 
+    def _populate_database_paths(self, active_path: Path) -> None:
+        self.db_list_combo.blockSignals(True)
+        self.db_list_combo.clear()
+        for path in self._configured_db_paths:
+            label = f"{path.stem} · {path.parent}"
+            self.db_list_combo.addItem(label, str(path))
+        active_index = self.db_list_combo.findData(str(active_path))
+        if active_index >= 0:
+            self.db_list_combo.setCurrentIndex(active_index)
+        self.db_list_combo.blockSignals(False)
+        self.btn_db_remove.setEnabled(bool(self._configured_db_paths))
+
+    def _set_active_database_path(self, target_db_path: Path, *, message: str) -> None:
+        set_configured_db_path(target_db_path)
+        if all(str(existing).casefold() != str(target_db_path).casefold() for existing in self._configured_db_paths):
+            self._configured_db_paths.append(target_db_path)
+        self._populate_database_paths(target_db_path)
+        self.db_path_edit.setText(str(target_db_path))
+        self.setting_changed.emit(self.APP_DATABASE_PATH_SIGNAL_KEY, str(target_db_path))
+        self._update_database_status(message=message)
+
+    def _select_database_storage(self, _index: int = -1) -> None:
+        if self._loading_settings:
+            return
+        selected_path = str(self.db_list_combo.currentData() or "").strip()
+        if not selected_path:
+            return
+        self._set_active_database_path(
+            Path(selected_path),
+            message="Активная база обновлена. Перезапустите приложение, чтобы переключиться на выбранную БД.",
+        )
+
     def _edit_database_storage(self) -> None:
         current = self.db_path_edit.text().strip()
         current_path = Path(current) if current else self._db.path
         start_dir = current_path.parent if current_path.parent.exists() else Path.home()
-        selected_dir = QFileDialog.getExistingDirectory(
+        selected_path, _selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Выберите папку для хранения базы данных",
-            str(start_dir),
+            "Добавить базу данных",
+            str(start_dir / "mindnavigator.db"),
+            "SQLite database (*.db *.sqlite *.sqlite3);;All files (*.*)",
         )
-        if not selected_dir:
+        if not selected_path:
             return
-        target_db_path = Path(selected_dir) / "mindnavigator.db"
+        target_db_path = Path(selected_path)
+        if not target_db_path.suffix:
+            target_db_path = target_db_path.with_suffix(".db")
         try:
-            if target_db_path.resolve() != self._db.path.resolve():
-                self._db.backup_to(target_db_path)
-            set_configured_db_path(target_db_path)
+            target_db_path.parent.mkdir(parents=True, exist_ok=True)
+            if not target_db_path.exists():
+                temp_db = Database(path=target_db_path)
+                temp_db.close()
+            self._configured_db_paths = add_configured_db_path(target_db_path)
         except Exception as exc:
             QMessageBox.warning(self, "Путь к базе данных", str(exc))
             self._update_database_status(message="Не удалось обновить путь к базе данных.")
             return
-        self.db_path_edit.setText(str(target_db_path))
-        self.setting_changed.emit(self.APP_DATABASE_PATH_SIGNAL_KEY, str(target_db_path))
-        self._update_database_status(message="Путь к базе данных обновлён. Перезапустите приложение, чтобы переключиться на новую БД.")
+        self._set_active_database_path(
+            target_db_path,
+            message="База добавлена в список. Перезапустите приложение, чтобы переключиться на выбранную БД.",
+        )
+
+    def _remove_database_storage(self) -> None:
+        selected = self.db_path_edit.text().strip()
+        if not selected:
+            self._update_database_status(message="Сначала выберите базу данных из списка.")
+            return
+        dialog = ConfirmDialog(
+            "Убрать базу из списка?",
+            "Файл SQLite останется на диске, будет удалена только запись из конфигурации приложения.",
+            confirm_text="Убрать",
+            cancel_text="Отмена",
+            parent=self,
+        )
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        self._configured_db_paths, next_path = remove_configured_db_path(Path(selected))
+        target_path = next_path or default_db_path()
+        if not self._configured_db_paths:
+            self._configured_db_paths = [target_path]
+        self._set_active_database_path(
+            target_path,
+            message="Запись о базе удалена из списка. Перезапустите приложение, чтобы переключиться на активную БД.",
+        )
 
     def _open_database_storage(self) -> None:
         selected = self.db_path_edit.text().strip()
         if not selected:
-            self._update_database_status(message="Сначала выберите папку хранения базы данных.")
+            self._update_database_status(message="Сначала выберите базу данных из списка.")
             return
         db_path = Path(selected)
         target_dir = db_path.parent if db_path.suffix else db_path

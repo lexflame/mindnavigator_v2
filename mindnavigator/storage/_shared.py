@@ -81,6 +81,7 @@ CHARACTER_ENTITY_KINDS = (
 )
 APP_CONFIG_FILE = "app_config.json"
 APP_CONFIG_DB_PATH_KEY = "db_path"
+APP_CONFIG_DB_PATHS_KEY = "db_paths"
 SQLITE_BUSY_TIMEOUT_MS = 10000
 
 _PACKAGE_MODULE_NAME = "mindnavigator.storage"
@@ -100,9 +101,9 @@ def _app_base_dir() -> Path:
     override = _package_override("_app_base_dir", _app_base_dir)
     if override is not _app_base_dir:
         return override()
-    base = Path.home() / ".mindnavigator"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
 
 
 def _app_config_path() -> Path:
@@ -144,6 +145,76 @@ def get_configured_db_path() -> Optional[Path]:
     return Path(raw_path)
 
 
+def get_configured_db_paths() -> List[Path]:
+    config = _read_app_config()
+    normalized: list[Path] = []
+    seen: set[str] = set()
+
+    def append_path(raw_value: object) -> None:
+        raw_text = str(raw_value or "").strip()
+        if not raw_text:
+            return
+        key = raw_text.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        normalized.append(Path(raw_text))
+
+    raw_paths = config.get(APP_CONFIG_DB_PATHS_KEY, [])
+    if isinstance(raw_paths, list):
+        for raw_path in raw_paths:
+            append_path(raw_path)
+
+    active_path = config.get(APP_CONFIG_DB_PATH_KEY, "")
+    append_path(active_path)
+    return normalized
+
+
+def set_configured_db_paths(paths: Iterable[Path | str]) -> List[Path]:
+    config = _read_app_config()
+    normalized: list[Path] = []
+    seen: set[str] = set()
+    for raw_path in paths:
+        path_text = str(raw_path or "").strip()
+        if not path_text:
+            continue
+        key = path_text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(Path(path_text))
+    config[APP_CONFIG_DB_PATHS_KEY] = [str(path) for path in normalized]
+    active_path = get_configured_db_path()
+    if active_path is not None and str(active_path).casefold() not in seen:
+        config[APP_CONFIG_DB_PATH_KEY] = str(normalized[0]) if normalized else ""
+    _write_app_config(config)
+    return normalized
+
+
+def add_configured_db_path(path: Path | str) -> List[Path]:
+    normalized_path = Path(path)
+    paths = get_configured_db_paths()
+    if all(str(existing).casefold() != str(normalized_path).casefold() for existing in paths):
+        paths.append(normalized_path)
+    return set_configured_db_paths(paths)
+
+
+def remove_configured_db_path(path: Path | str) -> tuple[List[Path], Optional[Path]]:
+    normalized_path = Path(path)
+    remaining = [
+        existing
+        for existing in get_configured_db_paths()
+        if str(existing).casefold() != str(normalized_path).casefold()
+    ]
+    set_configured_db_paths(remaining)
+    current = get_configured_db_path()
+    if current is not None and str(current).casefold() == str(normalized_path).casefold():
+        next_path = remaining[0] if remaining else None
+        set_configured_db_path(next_path)
+        return remaining, next_path
+    return remaining, current
+
+
 def set_configured_db_path(path: Optional[Path | str]) -> Optional[Path]:
     config = _read_app_config()
     if path is None:
@@ -153,6 +224,7 @@ def set_configured_db_path(path: Optional[Path | str]) -> Optional[Path]:
     normalized_path = Path(path)
     config[APP_CONFIG_DB_PATH_KEY] = str(normalized_path)
     _write_app_config(config)
+    add_configured_db_path(normalized_path)
     return normalized_path
 
 
@@ -161,7 +233,9 @@ def default_db_path() -> Path:
     if configured is not None:
         configured.parent.mkdir(parents=True, exist_ok=True)
         return configured
-    return _app_base_dir() / "mindnavigator.db"
+    default_path = _app_base_dir() / "lib" / "db" / "mindnavigator.db"
+    default_path.parent.mkdir(parents=True, exist_ok=True)
+    return default_path
 
 
 def is_network_database_path(path: Path) -> bool:

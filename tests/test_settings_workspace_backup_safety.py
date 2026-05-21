@@ -157,6 +157,7 @@ def test_backup_section_uses_scroll_and_stacked_rows(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(settings_workspace, "get_database", lambda: _DummyUiDB())
     monkeypatch.setattr(settings_workspace_impl, "get_configured_db_path", lambda: Path("D:/mindnavigator/mindnavigator.db"))
+    monkeypatch.setattr(settings_workspace_impl, "get_configured_db_paths", lambda: [Path("D:/mindnavigator/mindnavigator.db")])
     monkeypatch.setattr(settings_workspace_impl, "default_db_path", lambda: Path("D:/mindnavigator/mindnavigator.db"))
     monkeypatch.setattr(SettingsWorkspace, "_apply_windows_autostart", lambda self, enabled: None)
 

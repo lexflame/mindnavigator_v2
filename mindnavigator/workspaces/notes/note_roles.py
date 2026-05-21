@@ -14,5 +14,6 @@ class NoteRoles:
     Favorite = Qt.ItemDataRole.UserRole + 8
     Attachment = Qt.ItemDataRole.UserRole + 9
     Locked = Qt.ItemDataRole.UserRole + 10
+    RelationSummary = Qt.ItemDataRole.UserRole + 11
 
 __all__ = ["NoteRoles"]
