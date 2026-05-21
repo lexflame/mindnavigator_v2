@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any, Optional
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter
+from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -26,9 +28,11 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
     QSpinBox,
+    QStackedWidget,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -69,10 +73,10 @@ DOSSIER_KIND_OPTIONS = [
 
 DOSSIER_STATUS_OPTIONS = [
     ("Все статусы", None),
-    ("Запланировано", "planned"),
+    ("В планах", "planned"),
     ("Активно", "active"),
     ("Завершено", "completed"),
-    ("Пауза", "on_hold"),
+    ("Отложено", "on_hold"),
     ("Архив", "archived"),
 ]
 
@@ -93,40 +97,40 @@ DOSSIER_KIND_LABELS = {
 }
 
 DOSSIER_STATUS_LABELS = {
-    "planned": "Запланировано",
+    "planned": "В планах",
     "active": "Активно",
     "completed": "Завершено",
-    "on_hold": "Пауза",
+    "on_hold": "Отложено",
     "archived": "Архив",
 }
 
 DOSSIER_METADATA_LABELS = {
     "author_display": "Автор",
-    "original_title": "Оригинал",
+    "original_title": "Оригинальное название",
     "publication_year": "Год",
     "genre": "Жанр",
     "language": "Язык",
-    "pages": "Страниц",
+    "pages": "Страницы",
     "publisher": "Издатель",
     "series": "Серия",
     "isbn": "ISBN",
-    "director": "Режиссёр",
-    "release_year": "Релиз",
-    "runtime_minutes": "Минуты",
+    "director": "Режиссер",
+    "release_year": "Год релиза",
+    "runtime_minutes": "Хронометраж",
     "country": "Страна",
     "franchise": "Франшиза",
     "format": "Формат",
-    "age_rating": "Возраст",
+    "age_rating": "Возрастной рейтинг",
     "developer": "Разработчик",
     "platforms": "Платформы",
     "engine": "Движок",
-    "play_status": "Статус игры",
+    "play_status": "Статус прохождения",
     "playtime_hours": "Часы",
-    "birth_year": "Рождение",
-    "death_year": "Смерть",
+    "birth_year": "Год рождения",
+    "death_year": "Год смерти",
     "languages": "Языки",
     "primary_genres": "Жанры",
-    "notable_works_summary": "Главные работы",
+    "notable_works_summary": "Сводка по работам",
 }
 
 DOSSIER_KIND_COLORS = {
@@ -137,18 +141,28 @@ DOSSIER_KIND_COLORS = {
 }
 
 DOSSIER_LINK_KIND_LABELS = {
-    "task": "Задача",
-    "map": "Карта",
-    "marker": "Маркер",
-    "note": "Заметка",
-    "idea": "Идея",
-    "object": "Объект",
-    "character": "Персонаж",
+    "task": "Задачи",
+    "map": "Карты",
+    "marker": "Метки",
+    "note": "Заметки",
+    "idea": "Идеи",
+    "object": "Объекты",
+    "character": "Персонажи",
 }
 
 DOSSIER_LINK_KIND_OPTIONS = [
     (DOSSIER_LINK_KIND_LABELS.get(kind, kind.title()), kind) for kind in DossierLinkData.SUPPORTED_ENTITY_KINDS
 ]
+
+DOSSIER_OUTPUT_KIND_LABELS = {
+    "idea": "идея",
+    "task": "задача",
+    "object": "объект",
+    "map": "карта",
+    "marker": "карта",
+    "note": "заметка",
+    "character": "персонаж",
+}
 
 
 def dossier_kind_label(kind: str) -> str:
@@ -167,6 +181,16 @@ def dossier_tags_text(tags: list[str]) -> str:
     return ", ".join(tags) if tags else "Нет тегов"
 
 
+def dossier_card_tags(tags: list[str], *, limit: int = 3) -> str:
+    if not tags:
+        return "Без тегов"
+    visible = [str(tag).strip() for tag in tags[:limit] if str(tag).strip()]
+    hidden_count = max(0, len(tags) - len(visible))
+    if hidden_count > 0:
+        visible.append(f"+{hidden_count}")
+    return ", ".join(visible)
+
+
 def dossier_metadata_preview(dossier: DossierData, *, max_parts: int = 3) -> str:
     allowed_fields = DossierData.METADATA_FIELDS.get(dossier.kind, {})
     parts: list[str] = []
@@ -182,7 +206,7 @@ def dossier_metadata_preview(dossier: DossierData, *, max_parts: int = 3) -> str
         parts.append(f"{label}: {rendered}")
         if len(parts) >= max_parts:
             break
-    return " • ".join(parts) if parts else "Детали пока не заполнены."
+    return " • ".join(parts) if parts else "Сведения пока не заполнены."
 
 
 def dossier_secondary_line(dossier: DossierData) -> str:
@@ -192,8 +216,55 @@ def dossier_secondary_line(dossier: DossierData) -> str:
         dossier_rating_label(dossier.rating),
     ]
     if dossier.source:
-        parts.append(dossier.source)
+        parts.append(f"Источник: {dossier.source}")
     return " | ".join(part for part in parts if part)
+
+
+def dossier_preview_text(dossier: DossierData) -> str:
+    return dossier.summary.strip() or dossier.description.strip() or dossier_metadata_preview(dossier)
+
+
+def dossier_cover_path(cover_image: str) -> str:
+    raw_path = str(cover_image or "").strip()
+    if not raw_path:
+        return ""
+    normalized = os.path.abspath(raw_path)
+    return normalized if os.path.exists(normalized) else ""
+
+
+def load_dossier_cover_pixmap(cover_image: str) -> Optional[QPixmap]:
+    cover_path = dossier_cover_path(cover_image)
+    if not cover_path:
+        return None
+    pixmap = QPixmap(cover_path)
+    if pixmap.isNull():
+        return None
+    return pixmap
+
+
+def dossier_output_labels(links: list[DossierLinkData]) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for link in links:
+        label = DOSSIER_OUTPUT_KIND_LABELS.get(link.entity_kind)
+        if not label or label in seen:
+            continue
+        labels.append(label)
+        seen.add(label)
+    return labels
+
+
+def dossier_output_summary(links: list[DossierLinkData]) -> str:
+    labels = dossier_output_labels(links)
+    if not labels:
+        return "нет"
+    if len(labels) <= 2:
+        return ", ".join(labels)
+    return f"{len(links)} связи"
+
+
+def dossier_links_count_text(count: int) -> str:
+    return f"Связи: {count}" if count > 0 else "Связей нет"
 
 
 def elided_text(metrics: QFontMetrics, text: str, width: int) -> str:
@@ -232,6 +303,7 @@ __all__ = [
     "DOSSIER_LINK_KIND_LABELS",
     "DOSSIER_LINK_KIND_OPTIONS",
     "DOSSIER_METADATA_LABELS",
+    "DOSSIER_OUTPUT_KIND_LABELS",
     "DOSSIER_RATING_OPTIONS",
     "DOSSIER_STATUS_LABELS",
     "DOSSIER_STATUS_OPTIONS",
@@ -239,6 +311,7 @@ __all__ = [
     "QAbstractItemView",
     "QAbstractListModel",
     "QAction",
+    "QButtonGroup",
     "QColor",
     "QComboBox",
     "QDialog",
@@ -257,35 +330,45 @@ __all__ = [
     "QModelIndex",
     "QMessageBox",
     "QPainter",
+    "QPixmap",
     "QPlainTextEdit",
     "QRect",
     "QScrollArea",
     "QSize",
     "QSpinBox",
     "QSplitter",
+    "QStackedWidget",
     "QStyle",
     "QStyledItemDelegate",
     "QStyleOptionViewItem",
+    "QTabWidget",
     "QToolButton",
     "QVBoxLayout",
     "QWidget",
     "Qt",
+    "build_popup_menu_stylesheet",
+    "build_scrollbar_stylesheet",
+    "dossier_card_tags",
+    "dossier_cover_path",
     "dossier_kind_label",
+    "dossier_links_count_text",
     "dossier_metadata_preview",
+    "dossier_output_labels",
+    "dossier_output_summary",
+    "dossier_preview_text",
     "dossier_rating_label",
     "dossier_secondary_line",
     "dossier_status_label",
     "dossier_tags_text",
     "elided_text",
     "exec_with_overlay",
-    "build_popup_menu_stylesheet",
-    "build_scrollbar_stylesheet",
     "get_database",
     "get_scrollbar_tokens",
     "get_theme_palette",
-    "parse_tag_list",
-    "resolve_theme_mode",
-    "render_list_value",
-    "show_dialog_standard",
+    "load_dossier_cover_pixmap",
     "normalize_theme_mode",
+    "parse_tag_list",
+    "render_list_value",
+    "resolve_theme_mode",
+    "show_dialog_standard",
 ]

@@ -87,17 +87,27 @@ class _DossierEditorDialog(QDialog):
 
         self.title_edit = QLineEdit()
         self.summary_edit = QLineEdit()
+        self.summary_edit.setPlaceholderText("Кратко: почему запись важна и что в ней главное")
+
         self.description_edit = QPlainTextEdit()
         self.description_edit.setMinimumHeight(140)
+        self.description_edit.setPlaceholderText(
+            "Мои заметки, наблюдения, цитаты, впечатления и то, что можно использовать дальше"
+        )
+
         self.tags_edit = QLineEdit()
         self.tags_edit.setPlaceholderText("Через запятую")
+
         self.source_edit = QLineEdit()
+        self.source_edit.setPlaceholderText("Источник, ссылка, коллекция, shelf...")
+
         self.cover_image_edit = QLineEdit()
+        self.cover_image_edit.setPlaceholderText("Путь к обложке или изображению")
 
         common_form.addRow("Вид", self.kind_combo)
         common_form.addRow("Название", self.title_edit)
-        common_form.addRow("Кратко", self.summary_edit)
-        common_form.addRow("Описание", self.description_edit)
+        common_form.addRow("Краткое описание", self.summary_edit)
+        common_form.addRow("Мои заметки / описание", self.description_edit)
         common_form.addRow("Теги", self.tags_edit)
         common_form.addRow("Статус", self.status_combo)
         common_form.addRow("Рейтинг", self.rating_spin)

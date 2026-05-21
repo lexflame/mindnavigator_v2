@@ -20,6 +20,8 @@ class DossierListModel(QAbstractListModel):
         self._items: list[DossierData] = []
         self._rows: list[DossierData | DossierGroupRow] = []
         self._group_by = "none"
+        self._link_counts: dict[int, int] = {}
+        self._output_summaries: dict[int, str] = {}
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
@@ -37,9 +39,10 @@ class DossierListModel(QAbstractListModel):
                 return row.label
             if role == DossierRoles.GroupCount:
                 return row.count
-            if role == DossierRoles.Title or role == Qt.ItemDataRole.DisplayRole:
+            if role in (DossierRoles.Title, Qt.ItemDataRole.DisplayRole):
                 return row.label
             return None
+
         item = row
         if role == DossierRoles.DossierId:
             return item.id
@@ -63,6 +66,14 @@ class DossierListModel(QAbstractListModel):
             return dict(item.metadata)
         if role == DossierRoles.UpdatedAt:
             return item.updated_at
+        if role == DossierRoles.CoverImage:
+            return item.cover_image
+        if role == DossierRoles.LinkCount:
+            return self._link_counts.get(item.id, 0)
+        if role == DossierRoles.OutputSummary:
+            return self._output_summaries.get(item.id, "нет")
+        if role == DossierRoles.PreviewText:
+            return dossier_preview_text(item)
         if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None
@@ -75,10 +86,19 @@ class DossierListModel(QAbstractListModel):
             return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled)
         return Qt.ItemFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
 
-    def set_items(self, items: list[DossierData], *, group_by: str = "none") -> None:
+    def set_items(
+        self,
+        items: list[DossierData],
+        *,
+        group_by: str = "none",
+        link_counts: Optional[dict[int, int]] = None,
+        output_summaries: Optional[dict[int, str]] = None,
+    ) -> None:
         self.beginResetModel()
         self._items = list(items)
         self._group_by = group_by
+        self._link_counts = dict(link_counts or {})
+        self._output_summaries = dict(output_summaries or {})
         self._rows = self._build_rows(self._items, group_by=group_by)
         self.endResetModel()
 

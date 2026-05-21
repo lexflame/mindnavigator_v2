@@ -20,6 +20,10 @@ class DossierRoles:
     UpdatedAt = Qt.ItemDataRole.UserRole + 12
     GroupLabel = Qt.ItemDataRole.UserRole + 13
     GroupCount = Qt.ItemDataRole.UserRole + 14
+    CoverImage = Qt.ItemDataRole.UserRole + 15
+    LinkCount = Qt.ItemDataRole.UserRole + 16
+    OutputSummary = Qt.ItemDataRole.UserRole + 17
+    PreviewText = Qt.ItemDataRole.UserRole + 18
 
 
 __all__ = ["DossierRoles"]
