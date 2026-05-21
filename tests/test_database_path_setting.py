@@ -31,18 +31,41 @@ def test_configured_database_path_overrides_default(monkeypatch) -> None:
     monkeypatch.setattr(storage, "_app_base_dir", lambda: app_home)
 
     assert storage.get_configured_db_path() is None
-    assert storage.default_db_path() == app_home / "mindnavigator.db"
+    assert storage.get_configured_db_paths() == []
+    assert storage.default_db_path() == app_home / "lib" / "db" / "mindnavigator.db"
 
     configured_path = root_dir / "custom" / "mindnavigator.custom.db"
     saved_path = storage.set_configured_db_path(configured_path)
 
     assert saved_path == configured_path
     assert storage.get_configured_db_path() == configured_path
+    assert storage.get_configured_db_paths() == [configured_path]
     assert storage.default_db_path() == configured_path
 
     storage.set_configured_db_path(None)
     assert storage.get_configured_db_path() is None
-    assert storage.default_db_path() == app_home / "mindnavigator.db"
+    assert storage.get_configured_db_paths() == [configured_path]
+    assert storage.default_db_path() == app_home / "lib" / "db" / "mindnavigator.db"
+
+
+def test_database_paths_list_supports_add_and_remove(monkeypatch) -> None:
+    root_dir = _new_temp_dir("cfg_db_list")
+    app_home = root_dir / "app_home"
+    monkeypatch.setattr(storage, "_app_base_dir", lambda: app_home)
+
+    first = root_dir / "db" / "first.db"
+    second = root_dir / "db" / "second.db"
+
+    assert storage.add_configured_db_path(first) == [first]
+    assert storage.add_configured_db_path(second) == [first, second]
+    assert storage.get_configured_db_paths() == [first, second]
+
+    storage.set_configured_db_path(second)
+    remaining, active = storage.remove_configured_db_path(second)
+
+    assert remaining == [first]
+    assert active == first
+    assert storage.get_configured_db_path() == first
 
 
 def test_database_backup_to_copies_current_data() -> None:

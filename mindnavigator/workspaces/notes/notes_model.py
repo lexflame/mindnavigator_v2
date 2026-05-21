@@ -19,6 +19,7 @@ class NotesModel(QAbstractListModel):
         self._load_notes()
 
     def _load_notes(self):
+        relation_summaries = self._build_note_relation_summaries()
         self._notes = [
             NoteItem(
                 note.id,
@@ -30,6 +31,7 @@ class NotesModel(QAbstractListModel):
                 favorite=note.favorite,
                 attachment=note.attachment,
                 locked=note.locked,
+                relation_summary=relation_summaries.get(note.id, ""),
             )
             for note in self._db.fetch_notes()
         ]
@@ -82,6 +84,8 @@ class NotesModel(QAbstractListModel):
             return note.attachment
         if role == NoteRoles.Locked:
             return note.locked
+        if role == NoteRoles.RelationSummary:
+            return note.relation_summary
         if role == Qt.ItemDataRole.DisplayRole:
             return note.title
         return None
@@ -151,6 +155,7 @@ class NotesModel(QAbstractListModel):
                 favorite=updated_note.favorite if item.id == note_id else item.favorite,
                 attachment=updated_note.attachment if item.id == note_id else item.attachment,
                 locked=updated_note.locked if item.id == note_id else item.locked,
+                relation_summary=item.relation_summary,
             )
             for item in self._notes
         ]
@@ -178,10 +183,53 @@ class NotesModel(QAbstractListModel):
                 favorite=updated_note.favorite if item.id == note_id else item.favorite,
                 attachment=updated_note.attachment if item.id == note_id else item.attachment,
                 locked=updated_note.locked if item.id == note_id else item.locked,
+                relation_summary=item.relation_summary,
             )
             for item in self._notes
         ]
         self._rebuild()
+
+    def _build_note_relation_summaries(self) -> dict[int, str]:
+        counts: dict[int, dict[str, int]] = {}
+
+        def bump(note_id: int, label: str) -> None:
+            bucket = counts.setdefault(int(note_id), {})
+            bucket[label] = bucket.get(label, 0) + 1
+
+        for task in self._db.fetch_tasks():
+            for attachment in self._db.fetch_task_attachments(task.id):
+                if attachment.kind == "note":
+                    bump(attachment.ref_id, "Задачи")
+
+        active_ideas = self._db.fetch_ideas(archived=False)
+        archived_ideas = [idea for idea in self._db.fetch_ideas(archived=True) if idea.id not in {item.id for item in active_ideas}]
+        for idea in [*active_ideas, *archived_ideas]:
+            for relation in self._db.fetch_idea_relations(idea.id):
+                if (relation.entity_type or "").strip().lower() == "note":
+                    bump(relation.entity_id, "Идеи")
+
+        fetch_dossiers = getattr(self._db, "fetch_dossiers", None)
+        fetch_dossier_links = getattr(self._db, "fetch_dossier_links", None)
+        if callable(fetch_dossiers) and callable(fetch_dossier_links):
+            for dossier in fetch_dossiers():
+                for link in fetch_dossier_links(dossier.id):
+                    if (link.entity_kind or "").strip().lower() == "note":
+                        bump(link.entity_id, "Досье")
+
+        fetch_markers = getattr(self._db, "fetch_map_markers", None)
+        if callable(fetch_markers):
+            for marker in fetch_markers():
+                for note_id in getattr(marker, "note_ids", []):
+                    bump(note_id, "Метки")
+
+        return {
+            note_id: " · ".join(
+                f"{label} {bucket[label]}"
+                for label in ("Задачи", "Идеи", "Досье", "Метки")
+                if bucket.get(label)
+            )
+            for note_id, bucket in counts.items()
+        }
 
     def create_note(
         self,

@@ -592,11 +592,11 @@ class MainWindow(QMainWindow):
     def _on_tray_message_clicked(self) -> None:
         task_id = self._tray_message_task_id
         self._tray_message_task_id = None
-        restore = getattr(self, "restore_from_tray", None)
+        restore = getattr(self, "restore_from_notification", None)
         if callable(restore):
             restore()
         else:
-            self._restore_from_tray()
+            self._restore_from_notification()
         if task_id is not None:
             self._open_task_from_tray_notification(task_id)
 
@@ -622,8 +622,22 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self.title_bar.sync_max_button()
 
+    def _restore_from_notification(self) -> None:
+        """Разворачивает окно для перехода из системного уведомления."""
+        if self.isHidden():
+            self.showMaximized()
+            self._was_maximized_before_minimize = False
+        elif not self.isFullScreen() and not self.isMaximized():
+            self.showMaximized()
+        self.raise_()
+        self.activateWindow()
+        self.title_bar.sync_max_button()
+
     def restore_from_tray(self) -> None:
         self._restore_from_tray()
+
+    def restore_from_notification(self) -> None:
+        self._restore_from_notification()
 
     def _minimize_to_tray(self):
         """Сворачивает окно в трей."""

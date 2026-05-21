@@ -16,5 +16,6 @@ class NoteItem:
     favorite: bool = False
     attachment: bool = False
     locked: bool = False
+    relation_summary: str = ""
 
 __all__ = ["NoteItem"]

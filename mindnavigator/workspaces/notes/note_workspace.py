@@ -311,6 +311,21 @@ class NoteWorkspace(QWidget):
         title_row.addWidget(self.tags_edit)
         editor_layout.addLayout(title_row)
 
+        relations_row = QHBoxLayout()
+        relations_row.setContentsMargins(0, 0, 0, 0)
+        relations_row.setSpacing(6)
+        self.relations_label = QLabel("Связи")
+        self.relations_label.setObjectName("NotesSubtleLabel")
+        self.relations_label.hide()
+        relations_row.addWidget(self.relations_label, 0)
+        self.relations_host = QWidget()
+        self.relations_host_layout = QHBoxLayout(self.relations_host)
+        self.relations_host_layout.setContentsMargins(0, 0, 0, 0)
+        self.relations_host_layout.setSpacing(6)
+        relations_row.addWidget(self.relations_host, 1)
+        relations_row.addStretch(1)
+        editor_layout.addLayout(relations_row)
+
         self.editor = QTextEdit()
         self.editor.setPlaceholderText(
             "Markdown (подготовка)\n- чекбоксы\n- ссылки [[note]]\n- code block"
@@ -454,6 +469,7 @@ class NoteWorkspace(QWidget):
         note = self.model.note_by_id(note_id)
         if not note:
             self.editor_stack.setCurrentIndex(0)
+            self._clear_note_relations()
             return
         self.editor_stack.setCurrentIndex(1)
         self.title_edit.blockSignals(True)
@@ -464,10 +480,113 @@ class NoteWorkspace(QWidget):
         self.title_edit.setText(note.title)
         self.tags_edit.setText(" ".join(f"#{t}" for t in note.tags))
         self.editor.setPlainText(note.preview)
+        self._refresh_note_relations(note_id)
 
         self.title_edit.blockSignals(False)
         self.tags_edit.blockSignals(False)
         self.editor.blockSignals(False)
+
+    def _clear_note_relations(self) -> None:
+        while self.relations_host_layout.count():
+            item = self.relations_host_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.relations_label.setVisible(False)
+
+    def _refresh_note_relations(self, note_id: int) -> None:
+        self._clear_note_relations()
+        relations = self._note_relation_targets(note_id)
+        if not relations:
+            return
+        self.relations_label.setVisible(True)
+        for kind, label, target_ids in relations:
+            badge = QToolButton()
+            badge.setObjectName("NotesRelationBadge")
+            badge.setText(f"{label} {len(target_ids)}")
+            badge.setCursor(Qt.CursorShape.PointingHandCursor)
+            badge.clicked.connect(lambda _checked=False, current_kind=kind, ids=tuple(target_ids): self._open_related_entity(current_kind, ids))
+            self.relations_host_layout.addWidget(badge, 0)
+        self.relations_host_layout.addStretch(1)
+
+    def _note_relation_targets(self, note_id: int) -> list[tuple[str, str, list[int]]]:
+        buckets: dict[str, set[int]] = {
+            "task": set(),
+            "idea": set(),
+            "dossier": set(),
+            "marker": set(),
+        }
+
+        for task in self._db.fetch_tasks():
+            for attachment in self._db.fetch_task_attachments(task.id):
+                if attachment.kind == "note" and int(attachment.ref_id) == int(note_id):
+                    buckets["task"].add(task.id)
+
+        active_ideas = self._db.fetch_ideas(archived=False)
+        active_ids = {idea.id for idea in active_ideas}
+        archived_ideas = [idea for idea in self._db.fetch_ideas(archived=True) if idea.id not in active_ids]
+        for idea in [*active_ideas, *archived_ideas]:
+            for relation in self._db.fetch_idea_relations(idea.id):
+                if (relation.entity_type or "").strip().lower() == "note" and int(relation.entity_id) == int(note_id):
+                    buckets["idea"].add(idea.id)
+
+        fetch_dossiers = getattr(self._db, "fetch_dossiers", None)
+        fetch_dossier_links = getattr(self._db, "fetch_dossier_links", None)
+        if callable(fetch_dossiers) and callable(fetch_dossier_links):
+            for dossier in fetch_dossiers():
+                for link in fetch_dossier_links(dossier.id):
+                    if (link.entity_kind or "").strip().lower() == "note" and int(link.entity_id) == int(note_id):
+                        buckets["dossier"].add(dossier.id)
+
+        fetch_markers = getattr(self._db, "fetch_map_markers", None)
+        if callable(fetch_markers):
+            for marker in fetch_markers():
+                if int(note_id) in {int(item) for item in getattr(marker, "note_ids", [])}:
+                    buckets["marker"].add(marker.id)
+
+        labels = {
+            "task": "Задачи",
+            "idea": "Идеи",
+            "dossier": "Досье",
+            "marker": "Метки",
+        }
+        return [
+            (kind, labels[kind], sorted(target_ids))
+            for kind, target_ids in buckets.items()
+            if target_ids
+        ]
+
+    def _find_navigation_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _open_related_entity(self, entity_kind: str, target_ids: tuple[int, ...]) -> None:
+        if not target_ids:
+            return
+        main_window = self._find_navigation_window()
+        if main_window is None:
+            return
+        handlers = {
+            "task": ("MODE_TASKS", "page_tasks", "focus_task"),
+            "idea": ("MODE_IDEAS", "page_ideas", "select_idea"),
+            "dossier": ("MODE_DOSSIER", "page_dossier", "select_dossier"),
+            "marker": ("MODE_MAPS", "page_maps", "select_marker"),
+        }
+        payload = handlers.get(entity_kind)
+        if payload is None:
+            return
+        mode_attr, page_attr, method_name = payload
+        mode_name = getattr(main_window, mode_attr, None)
+        page = getattr(main_window, page_attr, None)
+        method = getattr(page, method_name, None) if page is not None else None
+        if mode_name is None or not callable(method):
+            return
+        main_window.set_mode(mode_name)
+        QTimer.singleShot(0, lambda target_id=target_ids[0], callback=method: callback(target_id))
 
     def _update_note_title(self):
         if not self._state.selected_note_id:
@@ -682,6 +801,17 @@ class NoteWorkspace(QWidget):
             QLabel#NotesAutosaveLabel {{
                 color: {palette.muted_text};
                 font-size: 10px;
+            }}
+            QToolButton#NotesRelationBadge {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                color: {palette.text};
+                padding: 4px 10px;
+            }}
+            QToolButton#NotesRelationBadge:hover {{
+                border-color: {palette.accent};
+                background: {palette.selection_bg};
             }}
             QLabel#NotesEmptyTitle {{
                 color: {palette.text};

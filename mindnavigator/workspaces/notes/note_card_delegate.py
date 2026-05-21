@@ -45,6 +45,7 @@ class NoteCardDelegate(QStyledItemDelegate):
         tags = index.data(NoteRoles.Tags) or []
         updated = index.data(NoteRoles.Updated)
         project = index.data(NoteRoles.Project) or ""
+        relation_summary = index.data(NoteRoles.RelationSummary) or ""
         preview_text = note_preview_line(preview)
 
         icon_y = rect.top() + 10
@@ -82,7 +83,7 @@ class NoteCardDelegate(QStyledItemDelegate):
         meta_font.setPointSize(8)
         painter.setFont(meta_font)
         tags_text = " ".join(f"#{tag}" for tag in tags[:3])
-        meta_parts = [part for part in [tags_text, project] if part]
+        meta_parts = [part for part in [tags_text, project, relation_summary] if part]
         if isinstance(updated, datetime):
             meta_parts.append(f"{updated:%d %b %H:%M}")
         meta_text = " | ".join(meta_parts) if meta_parts else "Без метаданных"
