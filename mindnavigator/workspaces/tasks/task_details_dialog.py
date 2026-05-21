@@ -672,6 +672,27 @@ class TaskDetailsDialog(QDialog):
             self._tasks_by_id = {task.id: task for task in self._db.fetch_tasks()}
         return self._tasks_by_id.get(self._task.parent_id)
 
+    def _tasks_model(self):
+        current = self.parent()
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            model_getter = getattr(current, "model", None)
+            if callable(model_getter):
+                try:
+                    model = model_getter()
+                except TypeError:
+                    model = None
+                if (
+                    model is not None
+                    and hasattr(model, "row_for_task_id")
+                    and hasattr(model, "update_task_by_row")
+                    and hasattr(model, "move_task_to_parent_schedule")
+                ):
+                    return model
+            current = current.parent() if hasattr(current, "parent") else None
+        return None
+
     def _parent_schedule_mismatch(self) -> bool:
         parent_task = self._parent_task()
         if parent_task is None:
@@ -681,6 +702,10 @@ class TaskDetailsDialog(QDialog):
     def _sync_schedule_to_parent(self) -> None:
         parent_task = self._parent_task()
         if parent_task is None or not self._parent_schedule_mismatch():
+            return
+        tasks_model = self._tasks_model()
+        if tasks_model is not None and tasks_model.move_task_to_parent_schedule(self._task.id, parent_task.id):
+            self._refresh_view()
             return
         try:
             self._db.update_task(
@@ -710,6 +735,31 @@ class TaskDetailsDialog(QDialog):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         values = dialog.values()
+        tasks_model = self._tasks_model()
+        if tasks_model is not None:
+            row_idx = tasks_model.row_for_task_id(self._task.id)
+            if row_idx >= 0:
+                try:
+                    tasks_model.update_task_by_row(
+                        row_idx,
+                        title=values["title"],
+                        description=values["description"],
+                        day=values["day"],
+                        time_text=values["time_text"],
+                        priority=values["priority"],
+                        done=values["done"],
+                        project_id=values["project_id"],
+                        recurrence_kind=values["recurrence_kind"],
+                        recurrence_interval=values["recurrence_interval"],
+                        is_plan_task=values.get("is_plan_task", bool(self._task.is_plan_task)),
+                        marker_color=values.get("marker_color", ""),
+                        marker_theme=values.get("marker_theme", ""),
+                    )
+                except ValueError as exc:
+                    QMessageBox.warning(self, "РџСЂРѕРІРµСЂРєР°", str(exc))
+                    return
+                self._refresh_view()
+                return
         try:
             self._db.update_task(
                 self._task.id,
