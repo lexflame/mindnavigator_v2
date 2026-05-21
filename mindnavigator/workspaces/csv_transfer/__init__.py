@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import json
 from typing import Mapping, Optional, Sequence
 
 from mindnavigator.storage import (
     CollectionCategoryData,
     CollectionItemData,
+    DossierData,
     IdeaData,
     NoteData,
     ObjectData,
@@ -68,6 +70,19 @@ IDEAS_CSV_FIELDS: tuple[str, ...] = (
     "project_title",
     "source",
     "archived",
+)
+
+DOSSIER_CSV_FIELDS: tuple[str, ...] = (
+    "kind",
+    "title",
+    "summary",
+    "description",
+    "tags",
+    "status",
+    "rating",
+    "source",
+    "cover_image",
+    "metadata_json",
 )
 
 OBJECTS_CSV_FIELDS: tuple[str, ...] = (
@@ -170,6 +185,24 @@ def export_ideas_rows(ideas: Sequence[IdeaData]) -> list[dict[str, object]]:
             "archived": _format_bool(idea.archived_at is not None),
         }
         for idea in ideas
+    ]
+
+
+def export_dossiers_rows(dossiers: Sequence[DossierData]) -> list[dict[str, object]]:
+    return [
+        {
+            "kind": dossier.kind,
+            "title": dossier.title,
+            "summary": dossier.summary,
+            "description": dossier.description,
+            "tags": "|".join(dossier.tags),
+            "status": dossier.status,
+            "rating": "" if dossier.rating is None else dossier.rating,
+            "source": dossier.source,
+            "cover_image": dossier.cover_image,
+            "metadata_json": json.dumps(dossier.metadata, ensure_ascii=False, sort_keys=True),
+        }
+        for dossier in dossiers
     ]
 
 
@@ -424,6 +457,37 @@ def import_ideas_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
     return CsvImportResult(imported=imported, skipped=skipped)
 
 
+def import_dossiers_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
+    imported = 0
+    skipped = 0
+    for row in rows:
+        title = _text(row.get("title"))
+        if not title:
+            skipped += 1
+            continue
+        metadata = _parse_json_mapping(row.get("metadata_json"))
+        if metadata is None:
+            skipped += 1
+            continue
+        try:
+            db.create_dossier(
+                kind=_text(row.get("kind")) or "book",
+                title=title,
+                summary=_text(row.get("summary")),
+                description=_text(row.get("description")),
+                tags=_parse_tags(row.get("tags")),
+                status=_text(row.get("status")) or "planned",
+                rating=_parse_optional_int(row.get("rating")),
+                source=_text(row.get("source")),
+                cover_image=_text(row.get("cover_image")),
+                metadata=metadata,
+            )
+            imported += 1
+        except ValueError:
+            skipped += 1
+    return CsvImportResult(imported=imported, skipped=skipped)
+
+
 def import_objects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
     imported = 0
     skipped = 0
@@ -611,6 +675,17 @@ def _parse_tags(value: object) -> list[str]:
     normalized = text.replace(",", "|")
     tags = [part.strip().lstrip("#") for part in normalized.split("|")]
     return [tag for tag in tags if tag]
+
+
+def _parse_json_mapping(value: object) -> Optional[dict[str, object]]:
+    text = _text(value)
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _normalize_recurrence(value: str) -> str:

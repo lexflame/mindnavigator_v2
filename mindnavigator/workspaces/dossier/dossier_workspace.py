@@ -5,6 +5,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QFileDialog
+
+from mindnavigator.transfer.collections import CsvTransferError, CsvTransferService
+from mindnavigator.workspaces.csv_transfer import (
+    DOSSIER_CSV_FIELDS,
+    export_dossiers_rows,
+    import_dossiers_rows,
+)
 
 from ._shared import *  # noqa: F401,F403
 from .dossier_details_dialog import DossierDetailsDialog
@@ -140,6 +148,7 @@ class DossierWorkspace(BaseWorkspace):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         self._db = get_database()
+        self._csv_service = CsvTransferService()
         self._current_dossier_id: Optional[int] = None
         self._last_refresh_text = "—"
         self._selection_syncing = False
@@ -555,9 +564,9 @@ class DossierWorkspace(BaseWorkspace):
         action_refresh = QAction("Обновить", self)
         action_refresh.triggered.connect(self.refresh)
         action_export = QAction("Экспорт", self)
-        action_export.setToolTip("Экспорт будет добавлен на следующем этапе.")
+        action_export.triggered.connect(self._export_dossiers_csv)
         action_import = QAction("Импорт", self)
-        action_import.setToolTip("Импорт будет добавлен на следующем этапе.")
+        action_import.triggered.connect(self._import_dossiers_csv)
         action_delete = QAction("Удалить", self)
         action_delete.triggered.connect(self._delete_selected)
         return {
@@ -599,10 +608,6 @@ class DossierWorkspace(BaseWorkspace):
         details_action = self.actions.get("details")
         if details_action is not None:
             details_action.setEnabled(has_selection)
-        for key in ("export", "import"):
-            action = self.actions.get(key)
-            if action is not None:
-                action.setEnabled(False)
         self.create_idea_button.setEnabled(has_selection)
         self.create_task_button.setEnabled(has_selection)
         self._update_link_action_states()
@@ -1113,15 +1118,7 @@ class DossierWorkspace(BaseWorkspace):
     def refresh(self) -> None:
         previous_dossier_id = self._current_dossier_id
         filters = self.get_filters()
-        items = self._db.fetch_dossiers(
-            kind=filters.get("kind") if isinstance(filters.get("kind"), str) else None,
-            status=filters.get("status") if isinstance(filters.get("status"), str) else None,
-            search_text=self._query,
-            tag=filters.get("tag") if isinstance(filters.get("tag"), str) and filters.get("tag") else None,
-        )
-        rating_filter = filters.get("rating")
-        if isinstance(rating_filter, int):
-            items = [item for item in items if item.rating == rating_filter]
+        items = self._fetch_filtered_items()
 
         link_counts, output_summaries, links_by_id = self._collect_card_metrics(items)
         model = self.list_view.model()
@@ -1149,6 +1146,19 @@ class DossierWorkspace(BaseWorkspace):
         self._update_status_text(len(items))
         self._update_list_state(items)
         self._sync_selection()
+
+    def _fetch_filtered_items(self) -> list[DossierData]:
+        filters = self.get_filters()
+        items = self._db.fetch_dossiers(
+            kind=filters.get("kind") if isinstance(filters.get("kind"), str) else None,
+            status=filters.get("status") if isinstance(filters.get("status"), str) else None,
+            search_text=self._query,
+            tag=filters.get("tag") if isinstance(filters.get("tag"), str) and filters.get("tag") else None,
+        )
+        rating_filter = filters.get("rating")
+        if isinstance(rating_filter, int):
+            items = [item for item in items if item.rating == rating_filter]
+        return items
 
     def _populate_shelf_view(self, items: list[DossierData], output_summaries: dict[int, str]) -> None:
         self.shelf_view.clear()
@@ -1414,6 +1424,44 @@ class DossierWorkspace(BaseWorkspace):
     def _selected_dossier(self) -> Optional[DossierData]:
         dossier_id = self.get_selection()
         return self._db.get_dossier(dossier_id) if dossier_id is not None else None
+
+    def _export_dossiers_csv(self, *_args: object) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Dossiers",
+            "dossiers_export.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        rows = export_dossiers_rows(self._fetch_filtered_items())
+        if not rows:
+            self.set_status("Нет данных для экспорта")
+            return
+        try:
+            self._csv_service.export_to_file(path, rows, fieldnames=DOSSIER_CSV_FIELDS)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Досье", f"Export failed: {exc}")
+            return
+        self.set_status("Экспорт завершен")
+
+    def _import_dossiers_csv(self, *_args: object) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Dossiers",
+            "",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            rows = self._csv_service.import_from_file(path)
+        except CsvTransferError as exc:
+            QMessageBox.warning(self, "Досье", f"Import failed: {exc}")
+            return
+        result = import_dossiers_rows(self._db, rows)
+        self.refresh()
+        self.set_status(f"Импорт завершен: {result.imported}, пропущено: {result.skipped}")
 
     def _find_navigation_window(self) -> object | None:
         parent = self.parent()

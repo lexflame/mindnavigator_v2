@@ -575,3 +575,67 @@ def test_dossier_workspace_switches_between_view_modes(monkeypatch, unique_temp_
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_dossier_workspace_export_and_import_csv(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    settings = QSettings()
+    settings.remove("workspace/dossier/search_text")
+    settings.remove("workspace/dossier/filters")
+
+    source_db_path = unique_temp_path("dossier_workspace_export_source", ".sqlite3")
+    target_db_path = unique_temp_path("dossier_workspace_export_target", ".sqlite3")
+    export_path = unique_temp_path("dossier_workspace_export", ".csv")
+    source_db = Database(path=source_db_path)
+    target_db = Database(path=target_db_path)
+    source_workspace = None
+    target_workspace = None
+    try:
+        source_db.create_dossier(
+            kind="writer",
+            title="Stanislaw Lem",
+            summary="Philosophical science fiction.",
+            description="Useful for tone, speculation and epistemic uncertainty.",
+            status="completed",
+            tags=["classic", "sci-fi"],
+            metadata={"country": "Poland", "languages": ["Polish"]},
+        )
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: source_db)
+        monkeypatch.setattr(
+            dossier_workspace_module.QFileDialog,
+            "getSaveFileName",
+            staticmethod(lambda *args, **kwargs: (str(export_path), "CSV (*.csv)")),
+        )
+        source_workspace = dossier_workspace.DossierWorkspace()
+        source_workspace._export_dossiers_csv()
+        QApplication.processEvents()
+
+        assert export_path.exists()
+        csv_text = export_path.read_text(encoding="utf-8")
+        assert "Stanislaw Lem" in csv_text
+        assert "metadata_json" in csv_text
+
+        monkeypatch.setattr(dossier_workspace, "get_database", lambda: target_db)
+        monkeypatch.setattr(
+            dossier_workspace_module.QFileDialog,
+            "getOpenFileName",
+            staticmethod(lambda *args, **kwargs: (str(export_path), "CSV (*.csv)")),
+        )
+        target_workspace = dossier_workspace.DossierWorkspace()
+        target_workspace._import_dossiers_csv()
+        QApplication.processEvents()
+
+        imported = [item for item in target_db.fetch_dossiers() if item.title == "Stanislaw Lem"]
+        assert len(imported) == 1
+        assert imported[0].metadata == {"country": "Poland", "languages": ["Polish"]}
+    finally:
+        if source_workspace is not None:
+            source_workspace.deleteLater()
+        if target_workspace is not None:
+            target_workspace.deleteLater()
+        source_db.close()
+        target_db.close()
+        source_db_path.unlink(missing_ok=True)
+        target_db_path.unlink(missing_ok=True)
+        export_path.unlink(missing_ok=True)
