@@ -55,6 +55,8 @@ class DossierDetailsDialog(QDialog):
         scroll.setWidget(content)
 
         buttons = QDialogButtonBox(self)
+        edit_button = buttons.addButton("Изменить", QDialogButtonBox.ButtonRole.ActionRole)
+        edit_button.clicked.connect(self._open_edit_dialog)
         buttons.addButton(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
@@ -132,6 +134,16 @@ class DossierDetailsDialog(QDialog):
             {scrollbar_qss}
             """
         )
+
+    def _open_edit_dialog(self) -> None:
+        parent = self.parent()
+        while parent is not None:
+            edit_method = getattr(parent, "open_edit_selected_dossier", None)
+            if callable(edit_method):
+                self.accept()
+                edit_method()
+                return
+            parent = parent.parent() if hasattr(parent, "parent") else None
 
     def _build_card(self, title_text: str) -> tuple[QFrame, QVBoxLayout]:
         card = QFrame()

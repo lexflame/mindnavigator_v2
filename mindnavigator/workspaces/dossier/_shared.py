@@ -7,7 +7,7 @@ import sys
 from typing import Any, Optional
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -318,6 +318,7 @@ __all__ = [
     "QDialogButtonBox",
     "QFont",
     "QFontMetrics",
+    "QIcon",
     "QFrame",
     "QFormLayout",
     "QHBoxLayout",

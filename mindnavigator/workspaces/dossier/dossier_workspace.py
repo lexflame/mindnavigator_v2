@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+
+from PySide6.QtCore import QTimer
 
 from ._shared import *  # noqa: F401,F403
 from .dossier_details_dialog import DossierDetailsDialog
@@ -14,6 +16,7 @@ from .dossier_roles import DossierRoles
 LINK_ID_ROLE = int(Qt.ItemDataRole.UserRole)
 LINK_ENTITY_KIND_ROLE = LINK_ID_ROLE + 1
 LINK_ENTITY_ID_ROLE = LINK_ID_ROLE + 2
+DOSSIER_ITEM_ID_ROLE = LINK_ID_ROLE + 100
 
 VIEW_MODE_LABELS = {
     "list": "Список",
@@ -21,6 +24,13 @@ VIEW_MODE_LABELS = {
     "matrix": "Матрица",
     "links": "Связи",
 }
+
+MATRIX_BUCKETS = (
+    ("active_unrated", "Активные без оценки"),
+    ("high_rated", "Высоко оцененные"),
+    ("completed", "Завершенные"),
+    ("deferred", "Отложенные"),
+)
 
 
 class DossierLinkDialog(QDialog):
@@ -132,6 +142,7 @@ class DossierWorkspace(BaseWorkspace):
         self._db = get_database()
         self._current_dossier_id: Optional[int] = None
         self._last_refresh_text = "—"
+        self._selection_syncing = False
         super().__init__(parent)
         self.setObjectName("DossierWorkspace")
         self.search_input.setPlaceholderText("Поиск по названию, описанию, тегам, источнику, полям...")
@@ -192,17 +203,14 @@ class DossierWorkspace(BaseWorkspace):
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(14, 12, 14, 12)
         summary_layout.setSpacing(8)
-
         summary_title = QLabel("Панель выдачи")
         summary_title.setObjectName("DossierSectionLabel")
         summary_layout.addWidget(summary_title)
-
         self.summary_chips_host = QWidget()
         self.summary_chips_layout = QHBoxLayout(self.summary_chips_host)
         self.summary_chips_layout.setContentsMargins(0, 0, 0, 0)
         self.summary_chips_layout.setSpacing(6)
         summary_layout.addWidget(self.summary_chips_host)
-
         self.summary_label = QLabel("")
         self.summary_label.setObjectName("DossierSummaryLabel")
         self.summary_label.setVisible(False)
@@ -227,19 +235,15 @@ class DossierWorkspace(BaseWorkspace):
         quick_layout = QHBoxLayout(quick_row)
         quick_layout.setContentsMargins(0, 0, 0, 0)
         quick_layout.setSpacing(6)
-
         self.quick_kind = QComboBox()
         for label, value in DOSSIER_KIND_OPTIONS[1:]:
             self.quick_kind.addItem(label, value)
-
         self.quick_title_input = QLineEdit()
         self.quick_title_input.setPlaceholderText("Название нового досье...")
-
         self.quick_create_btn = QToolButton()
         self.quick_create_btn.setText("Создать")
         self.quick_create_btn.clicked.connect(self._create_dossier_from_quick_form)
         self.quick_title_input.returnPressed.connect(self._create_dossier_from_quick_form)
-
         quick_layout.addWidget(self.quick_kind)
         quick_layout.addWidget(self.quick_title_input, 1)
         quick_layout.addWidget(self.quick_create_btn)
@@ -252,13 +256,9 @@ class DossierWorkspace(BaseWorkspace):
             button.setText(VIEW_MODE_LABELS[mode_key])
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, mode=mode_key: self._set_view_mode(mode))
-            if mode_key != "list":
-                button.setEnabled(False)
-                button.setToolTip("Режим подготовлен и будет включен на следующем этапе.")
             self.view_mode_group.addButton(button)
             self.view_mode_buttons[mode_key] = button
             top_row_layout.addWidget(button)
-
         list_layout.addWidget(top_row)
 
         self.left_mode_stack = QStackedWidget()
@@ -267,7 +267,6 @@ class DossierWorkspace(BaseWorkspace):
         list_page_layout = QVBoxLayout(list_page)
         list_page_layout.setContentsMargins(0, 0, 0, 0)
         list_page_layout.setSpacing(0)
-
         self.list_view = QListView()
         self.list_view.setObjectName("DossierList")
         self.list_view.setModel(DossierListModel(self.list_view))
@@ -275,15 +274,38 @@ class DossierWorkspace(BaseWorkspace):
         self.list_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        self.list_view.selectionModel().selectionChanged.connect(self._on_list_selection_changed)
         self.list_view.doubleClicked.connect(self._open_details_dialog)
         self.list_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_view.customContextMenuRequested.connect(self._show_context_menu)
         list_page_layout.addWidget(self.list_view)
 
+        self.shelf_view = QListWidget()
+        self.shelf_view.setObjectName("DossierShelfView")
+        self.shelf_view.setViewMode(QListWidget.ViewMode.IconMode)
+        self.shelf_view.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.shelf_view.setMovement(QListWidget.Movement.Static)
+        self.shelf_view.setSpacing(10)
+        self.shelf_view.setIconSize(QSize(88, 120))
+        self.shelf_view.itemSelectionChanged.connect(self._on_shelf_selection_changed)
+        self.shelf_view.itemDoubleClicked.connect(lambda _item: self._open_details_dialog())
+
+        self.matrix_view = QListWidget()
+        self.matrix_view.setObjectName("DossierMatrixView")
+        self.matrix_view.itemSelectionChanged.connect(self._on_matrix_selection_changed)
+        self.matrix_view.itemDoubleClicked.connect(lambda _item: self._open_details_dialog())
+
+        self.links_mode_view = QListWidget()
+        self.links_mode_view.setObjectName("DossierLinksModeView")
+        self.links_mode_view.itemSelectionChanged.connect(self._on_links_mode_selection_changed)
+        self.links_mode_view.itemDoubleClicked.connect(lambda _item: self._open_details_dialog())
+
         self.empty_list_page = self._build_empty_list_page()
 
         self.left_mode_stack.addWidget(list_page)
+        self.left_mode_stack.addWidget(self.shelf_view)
+        self.left_mode_stack.addWidget(self.matrix_view)
+        self.left_mode_stack.addWidget(self.links_mode_view)
         self.left_mode_stack.addWidget(self.empty_list_page)
         list_layout.addWidget(self.left_mode_stack, 1)
         splitter.addWidget(list_host)
@@ -367,11 +389,9 @@ class DossierWorkspace(BaseWorkspace):
         self.preview_title_label = QLabel("Досье не выбрано")
         self.preview_title_label.setObjectName("DossierPreviewTitle")
         self.preview_title_label.setWordWrap(True)
-
         self.preview_meta_label = QLabel("Выберите карточку слева, чтобы открыть инспектор.")
         self.preview_meta_label.setObjectName("DossierPreviewMeta")
         self.preview_meta_label.setWordWrap(True)
-
         layout.addWidget(self.preview_title_label)
         layout.addWidget(self.preview_meta_label)
 
@@ -390,44 +410,39 @@ class DossierWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        overview_top = QWidget()
-        overview_top_layout = QHBoxLayout(overview_top)
-        overview_top_layout.setContentsMargins(0, 0, 0, 0)
-        overview_top_layout.setSpacing(10)
+        top_row = QWidget()
+        top_layout = QHBoxLayout(top_row)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(10)
 
         self.preview_cover_label = QLabel("Нет обложки")
         self.preview_cover_label.setObjectName("DossierPreviewCover")
         self.preview_cover_label.setFixedSize(116, 156)
         self.preview_cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_cover_label.setWordWrap(True)
-        overview_top_layout.addWidget(self.preview_cover_label)
+        top_layout.addWidget(self.preview_cover_label)
 
-        overview_text = QWidget()
-        overview_text_layout = QVBoxLayout(overview_text)
-        overview_text_layout.setContentsMargins(0, 0, 0, 0)
-        overview_text_layout.setSpacing(8)
-
+        text_host = QWidget()
+        text_layout = QVBoxLayout(text_host)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(8)
         self.preview_summary_label = QLabel("")
         self.preview_summary_label.setObjectName("DossierPreviewSummary")
         self.preview_summary_label.setWordWrap(True)
-
         self.preview_tags_label = QLabel("")
         self.preview_tags_label.setWordWrap(True)
-
         self.preview_source_label = QLabel("")
         self.preview_source_label.setWordWrap(True)
-
         self.preview_output_overview_label = QLabel("")
         self.preview_output_overview_label.setWordWrap(True)
+        text_layout.addWidget(self.preview_summary_label)
+        text_layout.addWidget(self.preview_tags_label)
+        text_layout.addWidget(self.preview_source_label)
+        text_layout.addWidget(self.preview_output_overview_label)
+        text_layout.addStretch(1)
+        top_layout.addWidget(text_host, 1)
 
-        overview_text_layout.addWidget(self.preview_summary_label)
-        overview_text_layout.addWidget(self.preview_tags_label)
-        overview_text_layout.addWidget(self.preview_source_label)
-        overview_text_layout.addWidget(self.preview_output_overview_label)
-        overview_text_layout.addStretch(1)
-        overview_top_layout.addWidget(overview_text, 1)
-
-        layout.addWidget(overview_top)
+        layout.addWidget(top_row)
         layout.addStretch(1)
         return page
 
@@ -448,11 +463,9 @@ class DossierWorkspace(BaseWorkspace):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-
         notes_intro = QLabel("Мои комментарии, наблюдения, цитаты и все, что стоит использовать дальше.")
         notes_intro.setWordWrap(True)
         layout.addWidget(notes_intro)
-
         self.preview_description = QPlainTextEdit()
         self.preview_description.setReadOnly(True)
         self.preview_description.setPlaceholderText("Заметки появятся после выбора досье.")
@@ -465,29 +478,27 @@ class DossierWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        links_header = QWidget()
-        links_header_layout = QHBoxLayout(links_header)
-        links_header_layout.setContentsMargins(0, 0, 0, 0)
-        links_header_layout.setSpacing(6)
-
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
         self.preview_links_header_label = QLabel("Связи")
-        links_header_layout.addWidget(self.preview_links_header_label)
-        links_header_layout.addStretch(1)
+        header_layout.addWidget(self.preview_links_header_label)
+        header_layout.addStretch(1)
 
         self.add_link_button = QToolButton()
         self.add_link_button.setText("Связать")
         self.add_link_button.clicked.connect(self._open_add_link_dialog)
-
         self.remove_link_button = QToolButton()
         self.remove_link_button.setText("Удалить связь")
         self.remove_link_button.clicked.connect(self._remove_selected_link)
-
-        links_header_layout.addWidget(self.add_link_button)
-        links_header_layout.addWidget(self.remove_link_button)
-        layout.addWidget(links_header)
+        header_layout.addWidget(self.add_link_button)
+        header_layout.addWidget(self.remove_link_button)
+        layout.addWidget(header)
 
         self.preview_links = QListWidget()
         self.preview_links.itemSelectionChanged.connect(self._update_link_action_states)
+        self.preview_links.itemDoubleClicked.connect(self._open_selected_link_target)
         layout.addWidget(self.preview_links, 1)
         return page
 
@@ -496,70 +507,59 @@ class DossierWorkspace(BaseWorkspace):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
-
         self.preview_output_label = QLabel("")
         self.preview_output_label.setWordWrap(True)
         layout.addWidget(self.preview_output_label)
-
         self.preview_output_hint_label = QLabel("")
         self.preview_output_hint_label.setWordWrap(True)
         layout.addWidget(self.preview_output_hint_label)
 
-        actions_row = QWidget()
-        actions_layout = QHBoxLayout(actions_row)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(6)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
 
         self.create_idea_button = QToolButton()
         self.create_idea_button.setText("Создать идею")
-        self.create_idea_button.setEnabled(False)
-        self.create_idea_button.setToolTip("Интеграция с идеями будет добавлена на следующем этапе.")
-        actions_layout.addWidget(self.create_idea_button)
+        self.create_idea_button.clicked.connect(self._create_idea_from_dossier)
+        row_layout.addWidget(self.create_idea_button)
 
         self.create_task_button = QToolButton()
         self.create_task_button.setText("Создать задачу")
-        self.create_task_button.setEnabled(False)
-        self.create_task_button.setToolTip("Интеграция с задачами будет добавлена на следующем этапе.")
-        actions_layout.addWidget(self.create_task_button)
+        self.create_task_button.clicked.connect(self._create_task_from_dossier)
+        row_layout.addWidget(self.create_task_button)
 
         self.conceptboard_button = QToolButton()
         self.conceptboard_button.setText("В концептборд")
         self.conceptboard_button.setEnabled(False)
         self.conceptboard_button.setToolTip("Добавить досье в концептборд как материал или источник.")
-        actions_layout.addWidget(self.conceptboard_button)
+        row_layout.addWidget(self.conceptboard_button)
 
         self.output_link_button = QToolButton()
         self.output_link_button.setText("Связать")
         self.output_link_button.clicked.connect(self._open_add_link_dialog)
-        actions_layout.addWidget(self.output_link_button)
+        row_layout.addWidget(self.output_link_button)
 
-        actions_layout.addStretch(1)
-        layout.addWidget(actions_row)
+        row_layout.addStretch(1)
+        layout.addWidget(row)
         layout.addStretch(1)
         return page
 
     def create_actions(self) -> dict[str, QAction]:
         action_new = QAction("+ Досье", self)
         action_new.triggered.connect(self._open_create_dialog)
-
         action_edit = QAction("Изменить", self)
         action_edit.triggered.connect(self._open_edit_dialog)
-
         action_details = QAction("Карточка", self)
         action_details.triggered.connect(self._open_details_dialog)
-
         action_refresh = QAction("Обновить", self)
         action_refresh.triggered.connect(self.refresh)
-
         action_export = QAction("Экспорт", self)
         action_export.setToolTip("Экспорт будет добавлен на следующем этапе.")
-
         action_import = QAction("Импорт", self)
         action_import.setToolTip("Импорт будет добавлен на следующем этапе.")
-
         action_delete = QAction("Удалить", self)
         action_delete.triggered.connect(self._delete_selected)
-
         return {
             "new": action_new,
             "edit": action_edit,
@@ -576,17 +576,13 @@ class DossierWorkspace(BaseWorkspace):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-
         for key in ("new", "edit", "details"):
             self.toolbar_layout.addWidget(self._make_toolbar_button(actions[key], "DossierPrimaryAction"))
-
         spacer = QWidget()
         spacer.setFixedWidth(18)
         self.toolbar_layout.addWidget(spacer)
-
         for key in ("refresh", "export", "import"):
             self.toolbar_layout.addWidget(self._make_toolbar_button(actions[key], "DossierUtilityAction"))
-
         self.toolbar_layout.addStretch(1)
         self.toolbar_layout.addWidget(self._make_toolbar_button(actions["delete"], "DossierDangerAction"))
 
@@ -599,13 +595,16 @@ class DossierWorkspace(BaseWorkspace):
 
     def update_action_states(self) -> None:
         super().update_action_states()
+        has_selection = self.get_selection() is not None and not self._busy
         details_action = self.actions.get("details")
         if details_action is not None:
-            details_action.setEnabled(self.get_selection() is not None and not self._busy)
+            details_action.setEnabled(has_selection)
         for key in ("export", "import"):
             action = self.actions.get(key)
             if action is not None:
                 action.setEnabled(False)
+        self.create_idea_button.setEnabled(has_selection)
+        self.create_task_button.setEnabled(has_selection)
         self._update_link_action_states()
 
     def set_theme_mode(self, theme_mode: str) -> None:
@@ -662,6 +661,12 @@ class DossierWorkspace(BaseWorkspace):
             QWidget#DossierWorkspace QListView::item:selected {{
                 background: {palette.selection_bg};
                 color: {palette.selection_text};
+            }}
+            QWidget#DossierWorkspace QListWidget#DossierShelfView::item,
+            QWidget#DossierWorkspace QListWidget#DossierMatrixView::item,
+            QWidget#DossierWorkspace QListWidget#DossierLinksModeView::item {{
+                padding: 10px;
+                margin: 4px;
             }}
             QWidget#DossierWorkspace QSplitter::handle {{
                 background: {palette.panel_alt_bg};
@@ -734,11 +739,10 @@ class DossierWorkspace(BaseWorkspace):
         self._sync_filter_controls()
 
     def get_selection(self) -> Optional[int]:
-        index = self.list_view.currentIndex()
-        if not index.isValid():
-            return None
-        value = index.data(DossierRoles.DossierId)
-        return int(value) if isinstance(value, int) else None
+        return self._current_dossier_id
+
+    def open_edit_selected_dossier(self) -> None:
+        self._open_edit_dialog()
 
     def _sync_filter_controls(self) -> None:
         self._set_combo_value(self.kind_filter, self.get_filters().get("kind"))
@@ -797,8 +801,7 @@ class DossierWorkspace(BaseWorkspace):
         self.set_filter("group_by", self.group_filter.currentData())
 
     def _set_view_mode(self, mode: str) -> None:
-        normalized_mode = mode if mode in VIEW_MODE_LABELS else "list"
-        self.set_filter("view_mode", normalized_mode)
+        self.set_filter("view_mode", mode if mode in VIEW_MODE_LABELS else "list")
 
     def _reset_filters(self) -> None:
         self._filters.pop("kind", None)
@@ -882,7 +885,6 @@ class DossierWorkspace(BaseWorkspace):
         except ValueError as exc:
             QMessageBox.warning(self, "Досье", str(exc))
             return
-        self._load_preview(dossier_id)
         self.refresh()
         self.set_status("Связь добавлена.")
 
@@ -898,9 +900,54 @@ class DossierWorkspace(BaseWorkspace):
         if link_id is None:
             return
         self._db.delete_dossier_link(int(link_id))
-        self._load_preview(dossier_id)
         self.refresh()
         self.set_status("Связь удалена.")
+
+    def _create_idea_from_dossier(self, checked: bool = False) -> None:
+        _ = checked
+        dossier = self._selected_dossier()
+        if dossier is None:
+            return
+        try:
+            idea = self._db.create_idea(
+                title=dossier.title,
+                summary=dossier.summary,
+                body_md=dossier.description or dossier_metadata_preview(dossier, max_parts=8),
+                source=f"Досье: {dossier.title}",
+            )
+            self._db.add_dossier_link(dossier.id, "idea", idea.id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Досье", str(exc))
+            return
+        self.refresh()
+        opened = self._open_workspace_target("idea", idea.id)
+        self.set_status("Идея создана и связана с досье." if opened else "Идея создана и связана с досье.")
+
+    def _create_task_from_dossier(self, checked: bool = False) -> None:
+        _ = checked
+        dossier = self._selected_dossier()
+        if dossier is None:
+            return
+        description_parts = [f"Источник: досье «{dossier.title}»"]
+        if dossier.summary:
+            description_parts.append(dossier.summary)
+        if dossier.description:
+            description_parts.append(dossier.description)
+        try:
+            task = self._db.create_task(
+                title=dossier.title,
+                description="\n\n".join(description_parts),
+                day=date.today(),
+                time_text="09:00",
+                priority="Medium",
+            )
+            self._db.add_dossier_link(dossier.id, "task", task.id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Досье", str(exc))
+            return
+        self.refresh()
+        opened = self._open_workspace_target("task", task.id)
+        self.set_status("Задача создана и связана с досье." if opened else "Задача создана и связана с досье.")
 
     def _delete_selected(self, checked: bool = False, *, require_confirmation: bool = True) -> None:
         _ = checked
@@ -926,16 +973,19 @@ class DossierWorkspace(BaseWorkspace):
         index = self.list_view.indexAt(pos)
         menu = QMenu(self)
         menu.setStyleSheet(build_popup_menu_stylesheet(self._theme_mode))
-
         action_new = menu.addAction("+ Досье")
-        action_edit = None
-        action_details = None
-        action_link = None
         action_refresh = menu.addAction("Обновить")
+        action_details = None
+        action_edit = None
+        action_create_idea = None
+        action_create_task = None
+        action_link = None
         action_delete = None
         if index.isValid():
             action_details = menu.addAction("Открыть карточку")
             action_edit = menu.addAction("Изменить")
+            action_create_idea = menu.addAction("Создать идею")
+            action_create_task = menu.addAction("Создать задачу")
             action_link = menu.addAction("Связать")
             menu.addSeparator()
             action_delete = menu.addAction("Удалить")
@@ -947,15 +997,27 @@ class DossierWorkspace(BaseWorkspace):
             self.refresh()
         elif action_details is not None and chosen == action_details:
             self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
             self._open_details_dialog()
         elif action_edit is not None and chosen == action_edit:
             self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
             self._open_edit_dialog()
+        elif action_create_idea is not None and chosen == action_create_idea:
+            self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
+            self._create_idea_from_dossier()
+        elif action_create_task is not None and chosen == action_create_task:
+            self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
+            self._create_task_from_dossier()
         elif action_link is not None and chosen == action_link:
             self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
             self._open_add_link_dialog()
         elif action_delete is not None and chosen == action_delete:
             self.list_view.setCurrentIndex(index)
+            self._set_current_dossier_from_id(index.data(DossierRoles.DossierId))
             self._delete_selected()
 
     def apply_query(self, query: str) -> None:
@@ -984,7 +1046,6 @@ class DossierWorkspace(BaseWorkspace):
     def _update_summary(self, items: list[DossierData], tag_filter: str) -> None:
         if not hasattr(self, "summary_label"):
             return
-
         while self.summary_chips_layout.count():
             item = self.summary_chips_layout.takeAt(0)
             widget = item.widget()
@@ -1010,7 +1071,7 @@ class DossierWorkspace(BaseWorkspace):
 
         parts = [f"Итого: {total}"]
         self._add_chip(f"Найдено: {total}")
-        for label, count in sorted(kind_counts.items(), key=lambda item: (-item[1], item[0].lower()))[:4]:
+        for label, count in sorted(kind_counts.items(), key=lambda current: (-current[1], current[0].lower()))[:4]:
             self._add_chip(f"{label}: {count}")
             parts.append(f"{label}: {count}")
         for preferred_status in ("Активно", "Завершено", "В планах", "Отложено"):
@@ -1022,7 +1083,7 @@ class DossierWorkspace(BaseWorkspace):
             self._add_chip(f"Без оценки: {unrated_count}")
             parts.append(f"Без оценки: {unrated_count}")
         if tag_counts:
-            top_tag, top_count = sorted(tag_counts.items(), key=lambda item: (-item[1], item[0].lower()))[0]
+            top_tag, top_count = sorted(tag_counts.items(), key=lambda current: (-current[1], current[0].lower()))[0]
             self._add_chip(f"Топ тег: {top_tag} ×{top_count}")
             parts.append(f"Теги: {self._render_count_summary(tag_counts, limit=3)}")
         elif tag_filter:
@@ -1035,19 +1096,22 @@ class DossierWorkspace(BaseWorkspace):
     def _render_count_summary(counts: dict[str, int], *, limit: int) -> str:
         if not counts:
             return "—"
-        ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0].lower()))
+        ordered = sorted(counts.items(), key=lambda current: (-current[1], current[0].lower()))
         return ", ".join(f"{label} ×{count}" for label, count in ordered[:limit])
 
-    def _collect_card_metrics(self, items: list[DossierData]) -> tuple[dict[int, int], dict[int, str]]:
+    def _collect_card_metrics(self, items: list[DossierData]) -> tuple[dict[int, int], dict[int, str], dict[int, list[DossierLinkData]]]:
         link_counts: dict[int, int] = {}
         output_summaries: dict[int, str] = {}
+        links_by_id: dict[int, list[DossierLinkData]] = {}
         for item in items:
             links = self._db.fetch_dossier_links(item.id)
+            links_by_id[item.id] = links
             link_counts[item.id] = len(links)
             output_summaries[item.id] = dossier_output_summary(links)
-        return link_counts, output_summaries
+        return link_counts, output_summaries, links_by_id
 
     def refresh(self) -> None:
+        previous_dossier_id = self._current_dossier_id
         filters = self.get_filters()
         items = self._db.fetch_dossiers(
             kind=filters.get("kind") if isinstance(filters.get("kind"), str) else None,
@@ -1059,47 +1123,109 @@ class DossierWorkspace(BaseWorkspace):
         if isinstance(rating_filter, int):
             items = [item for item in items if item.rating == rating_filter]
 
-        link_counts, output_summaries = self._collect_card_metrics(items)
-
+        link_counts, output_summaries, links_by_id = self._collect_card_metrics(items)
         model = self.list_view.model()
-        if isinstance(model, DossierListModel):
-            model.set_items(
-                items,
-                group_by=str(filters.get("group_by") or "none"),
-                link_counts=link_counts,
-                output_summaries=output_summaries,
-            )
+        self._selection_syncing = True
+        try:
+            if isinstance(model, DossierListModel):
+                model.set_items(
+                    items,
+                    group_by=str(filters.get("group_by") or "none"),
+                    link_counts=link_counts,
+                    output_summaries=output_summaries,
+                )
+
+            self._populate_shelf_view(items, output_summaries)
+            self._populate_matrix_view(items, output_summaries)
+            self._populate_links_mode_view(items, links_by_id)
+        finally:
+            self._selection_syncing = False
+
+        available_ids = {item.id for item in items}
+        self._current_dossier_id = previous_dossier_id if previous_dossier_id in available_ids else None
 
         self._update_summary(items, str(filters.get("tag") or ""))
         self._last_refresh_text = datetime.now().strftime("%H:%M:%S")
         self._update_status_text(len(items))
         self._update_list_state(items)
-        self._sync_view_mode_buttons(str(filters.get("view_mode") or "list"))
         self._sync_selection()
+
+    def _populate_shelf_view(self, items: list[DossierData], output_summaries: dict[int, str]) -> None:
+        self.shelf_view.clear()
+        for item in items:
+            widget_item = QListWidgetItem(item.title or "Без названия")
+            widget_item.setData(DOSSIER_ITEM_ID_ROLE, item.id)
+            widget_item.setToolTip(
+                f"{dossier_secondary_line(item)}\n{dossier_preview_text(item)}\nВыход: {output_summaries.get(item.id, 'нет')}"
+            )
+            widget_item.setSizeHint(QSize(120, 180))
+            pixmap = load_dossier_cover_pixmap(item.cover_image)
+            if pixmap is not None:
+                widget_item.setIcon(QIcon(pixmap.scaled(QSize(88, 120), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)))
+            self.shelf_view.addItem(widget_item)
+
+    def _populate_matrix_view(self, items: list[DossierData], output_summaries: dict[int, str]) -> None:
+        self.matrix_view.clear()
+        buckets: dict[str, list[DossierData]] = {key: [] for key, _ in MATRIX_BUCKETS}
+        for item in items:
+            if item.status == "active" and item.rating is None:
+                buckets["active_unrated"].append(item)
+            elif item.rating is not None and item.rating >= 8:
+                buckets["high_rated"].append(item)
+            elif item.status == "completed":
+                buckets["completed"].append(item)
+            elif item.status in {"planned", "on_hold", "archived"}:
+                buckets["deferred"].append(item)
+
+        for bucket_key, bucket_label in MATRIX_BUCKETS:
+            header = QListWidgetItem(f"{bucket_label} ({len(buckets[bucket_key])})")
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.matrix_view.addItem(header)
+            if not buckets[bucket_key]:
+                placeholder = QListWidgetItem("Пусто")
+                placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.matrix_view.addItem(placeholder)
+                continue
+            for item in buckets[bucket_key]:
+                row = QListWidgetItem(f"{item.title}\n{dossier_secondary_line(item)}\nВыход: {output_summaries.get(item.id, 'нет')}")
+                row.setData(DOSSIER_ITEM_ID_ROLE, item.id)
+                self.matrix_view.addItem(row)
+
+    def _populate_links_mode_view(self, items: list[DossierData], links_by_id: dict[int, list[DossierLinkData]]) -> None:
+        self.links_mode_view.clear()
+        for item in items:
+            links = links_by_id.get(item.id, [])
+            grouped: dict[str, int] = {}
+            for link in links:
+                label = DOSSIER_LINK_KIND_LABELS.get(link.entity_kind, link.entity_kind.title())
+                grouped[label] = grouped.get(label, 0) + 1
+            summary = ", ".join(f"{label}: {count}" for label, count in sorted(grouped.items())) or "Связей пока нет"
+            row = QListWidgetItem(f"{item.title}\n{summary}")
+            row.setData(DOSSIER_ITEM_ID_ROLE, item.id)
+            self.links_mode_view.addItem(row)
 
     def _update_list_state(self, items: list[DossierData]) -> None:
         filters = self.get_filters()
         has_query = bool(self._query.strip())
-        has_filters = any(
-            filters.get(key)
-            for key in ("kind", "status", "rating", "tag")
-        ) or str(filters.get("group_by") or "none") != "none"
-
-        if items:
-            self.left_mode_stack.setCurrentIndex(0)
+        has_filters = any(filters.get(key) for key in ("kind", "status", "rating", "tag")) or str(filters.get("group_by") or "none") != "none"
+        if not items:
+            self.left_mode_stack.setCurrentIndex(4)
+            if has_query or has_filters:
+                self.empty_list_title.setText("Ничего не найдено")
+                self.empty_list_text.setText("Попробуйте изменить запрос или сбросить фильтры.")
+                self.empty_secondary_button.setText("Сбросить фильтры")
+                self.empty_secondary_button.setEnabled(True)
+            else:
+                self.empty_list_title.setText("Досье пока нет")
+                self.empty_list_text.setText("Создайте первую карточку или импортируйте данные.")
+                self.empty_secondary_button.setText("Импорт")
+                self.empty_secondary_button.setEnabled(False)
             return
 
-        self.left_mode_stack.setCurrentIndex(1)
-        if has_query or has_filters:
-            self.empty_list_title.setText("Ничего не найдено")
-            self.empty_list_text.setText("Попробуйте изменить запрос или сбросить фильтры.")
-            self.empty_secondary_button.setText("Сбросить фильтры")
-            self.empty_secondary_button.setEnabled(True)
-        else:
-            self.empty_list_title.setText("Досье пока нет")
-            self.empty_list_text.setText("Создайте первую карточку или импортируйте данные.")
-            self.empty_secondary_button.setText("Импорт")
-            self.empty_secondary_button.setEnabled(False)
+        view_mode = str(filters.get("view_mode") or "list")
+        page_index = {"list": 0, "shelf": 1, "matrix": 2, "links": 3}.get(view_mode, 0)
+        self.left_mode_stack.setCurrentIndex(page_index)
+        self._sync_view_mode_buttons(view_mode)
 
     def _update_status_text(self, item_count: int) -> None:
         filters = self.get_filters()
@@ -1112,11 +1238,7 @@ class DossierWorkspace(BaseWorkspace):
             active_filters.append(dossier_rating_label(filters["rating"]))
         if isinstance(filters.get("tag"), str) and filters.get("tag"):
             active_filters.append(f"тег: {filters['tag']}")
-
-        group_label = next(
-            (label for label, value in DOSSIER_GROUP_OPTIONS if value == str(filters.get("group_by") or "none")),
-            "Без групп",
-        )
+        group_label = next((label for label, value in DOSSIER_GROUP_OPTIONS if value == str(filters.get("group_by") or "none")), "Без групп")
         view_label = VIEW_MODE_LABELS.get(str(filters.get("view_mode") or "list"), "Список")
         filters_text = ", ".join(active_filters) if active_filters else "нет"
         self.status_row.setText(
@@ -1131,31 +1253,80 @@ class DossierWorkspace(BaseWorkspace):
         if self._current_dossier_id is None:
             first_index = model.first_item_index()
             if first_index.isValid():
-                self.list_view.setCurrentIndex(first_index)
+                self._set_current_dossier_from_id(first_index.data(DossierRoles.DossierId))
             else:
                 self._clear_preview()
                 self.update_action_states()
             return
-        index = model.index_for_id(self._current_dossier_id)
-        if index.isValid():
-            self.list_view.setCurrentIndex(index)
-            return
-        self._current_dossier_id = None
-        first_index = model.first_item_index()
-        if first_index.isValid():
-            self.list_view.setCurrentIndex(first_index)
-            return
-        self._clear_preview()
+        if not model.index_for_id(self._current_dossier_id).isValid():
+            first_index = model.first_item_index()
+            self._current_dossier_id = int(first_index.data(DossierRoles.DossierId)) if first_index.isValid() else None
+        self._apply_selection_to_views()
+        if self._current_dossier_id is None:
+            self._clear_preview()
+        else:
+            self._load_preview(self._current_dossier_id)
         self.update_action_states()
 
-    def _on_selection_changed(self) -> None:
-        dossier_id = self.get_selection()
-        self._current_dossier_id = dossier_id
-        if dossier_id is None:
-            self._clear_preview()
-            self.update_action_states()
+    def _apply_selection_to_views(self) -> None:
+        if self._selection_syncing:
             return
-        self._load_preview(dossier_id)
+        self._selection_syncing = True
+        try:
+            model = self.list_view.model()
+            if isinstance(model, DossierListModel) and self._current_dossier_id is not None:
+                index = model.index_for_id(self._current_dossier_id)
+                if index.isValid():
+                    self.list_view.setCurrentIndex(index)
+            self._set_current_item_by_dossier_id(self.shelf_view, self._current_dossier_id)
+            self._set_current_item_by_dossier_id(self.matrix_view, self._current_dossier_id)
+            self._set_current_item_by_dossier_id(self.links_mode_view, self._current_dossier_id)
+        finally:
+            self._selection_syncing = False
+
+    @staticmethod
+    def _set_current_item_by_dossier_id(widget: QListWidget, dossier_id: Optional[int]) -> None:
+        widget.blockSignals(True)
+        if dossier_id is None:
+            widget.clearSelection()
+            widget.blockSignals(False)
+            return
+        for row in range(widget.count()):
+            item = widget.item(row)
+            if item.data(DOSSIER_ITEM_ID_ROLE) == dossier_id:
+                widget.setCurrentRow(row)
+                widget.blockSignals(False)
+                return
+        widget.clearSelection()
+        widget.blockSignals(False)
+
+    def _on_list_selection_changed(self) -> None:
+        index = self.list_view.currentIndex()
+        dossier_id = index.data(DossierRoles.DossierId) if index.isValid() else None
+        self._set_current_dossier_from_id(dossier_id)
+
+    def _on_shelf_selection_changed(self) -> None:
+        item = self.shelf_view.currentItem()
+        self._set_current_dossier_from_id(item.data(DOSSIER_ITEM_ID_ROLE) if item is not None else None)
+
+    def _on_matrix_selection_changed(self) -> None:
+        item = self.matrix_view.currentItem()
+        self._set_current_dossier_from_id(item.data(DOSSIER_ITEM_ID_ROLE) if item is not None else None)
+
+    def _on_links_mode_selection_changed(self) -> None:
+        item = self.links_mode_view.currentItem()
+        self._set_current_dossier_from_id(item.data(DOSSIER_ITEM_ID_ROLE) if item is not None else None)
+
+    def _set_current_dossier_from_id(self, dossier_id: object) -> None:
+        if self._selection_syncing:
+            return
+        normalized = int(dossier_id) if isinstance(dossier_id, int) else None
+        self._current_dossier_id = normalized
+        self._apply_selection_to_views()
+        if normalized is None:
+            self._clear_preview()
+        else:
+            self._load_preview(normalized)
         self.update_action_states()
 
     def _clear_preview(self) -> None:
@@ -1182,16 +1353,13 @@ class DossierWorkspace(BaseWorkspace):
             rendered = render_list_value(value) if value not in (None, "", []) else "—"
             label_text = DOSSIER_METADATA_LABELS.get(field_name, field_name.replace("_", " ").title())
             parts.append(f"<b>{label_text}</b><br>{rendered}")
-        if not parts:
-            return "Сведения пока не заполнены"
-        return "<br><br>".join(parts)
+        return "<br><br>".join(parts) if parts else "Сведения пока не заполнены"
 
     def _load_preview(self, dossier_id: int) -> None:
         dossier = self._db.get_dossier(dossier_id)
         if dossier is None:
             self._clear_preview()
             return
-
         links = self._db.fetch_dossier_links(dossier_id)
         output_summary = dossier_output_summary(links)
 
@@ -1208,7 +1376,7 @@ class DossierWorkspace(BaseWorkspace):
             f"Мой вывод пока не сохранен отдельно.\n\nТекущий вычисляемый выход: {output_summary}."
         )
         self.preview_output_hint_label.setText(
-            "Запись не должна быть тупиком: свяжите ее с задачей, идеей, картой, объектом или заметкой."
+            "Следующее действие: создайте идею, задачу или свяжите запись с рабочими сущностями проекта."
         )
         self.preview_links_header_label.setText(dossier_links_count_text(len(links)))
 
@@ -1228,7 +1396,7 @@ class DossierWorkspace(BaseWorkspace):
 
         self.preview_links.clear()
         if links:
-            for link in sorted(links, key=lambda item: (item.entity_kind, item.entity_id)):
+            for link in sorted(links, key=lambda current: (current.entity_kind, current.entity_id)):
                 label = self._db.describe_dossier_link_target(link.entity_kind, link.entity_id)
                 item = QListWidgetItem(f"{DOSSIER_LINK_KIND_LABELS.get(link.entity_kind, link.entity_kind.title())}: {label}")
                 item.setData(LINK_ID_ROLE, link.id)
@@ -1242,6 +1410,57 @@ class DossierWorkspace(BaseWorkspace):
             placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
             self.preview_links.addItem(placeholder)
         self._update_link_action_states()
+
+    def _selected_dossier(self) -> Optional[DossierData]:
+        dossier_id = self.get_selection()
+        return self._db.get_dossier(dossier_id) if dossier_id is not None else None
+
+    def _find_navigation_window(self) -> object | None:
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, "set_mode"):
+                return parent
+            parent = parent.parent() if hasattr(parent, "parent") else None
+        return None
+
+    def _open_workspace_target(self, entity_kind: str, entity_id: int) -> bool:
+        main_window = self._find_navigation_window()
+        if main_window is None:
+            return False
+        handlers: dict[str, tuple[str, str, str]] = {
+            "task": ("MODE_TASKS", "page_tasks", "focus_task"),
+            "note": ("MODE_NOTES", "page_notes", "select_note"),
+            "idea": ("MODE_IDEAS", "page_ideas", "select_idea"),
+            "object": ("MODE_OBJECTS", "page_objects", "select_object"),
+            "map": ("MODE_MAPS", "page_maps", "select_map"),
+            "marker": ("MODE_MAPS", "page_maps", "select_marker"),
+            "concept_board": ("MODE_CONCEPTBOARD", "page_concept_board", "select_concept_board"),
+        }
+        payload = handlers.get(entity_kind)
+        if payload is None:
+            return False
+        mode_attr, page_attr, method_name = payload
+        mode_name = getattr(main_window, mode_attr, None)
+        page = getattr(main_window, page_attr, None)
+        if mode_name is None or page is None or not hasattr(page, method_name):
+            return False
+        try:
+            main_window.set_mode(mode_name)
+        except Exception:
+            return False
+        method = getattr(page, method_name)
+        QTimer.singleShot(0, lambda target_id=entity_id, callback=method: callback(target_id))
+        return True
+
+    def _open_selected_link_target(self, _item: QListWidgetItem | None = None) -> None:
+        item = self.preview_links.currentItem()
+        if item is None:
+            return
+        entity_kind = item.data(LINK_ENTITY_KIND_ROLE)
+        entity_id = item.data(LINK_ENTITY_ID_ROLE)
+        if not isinstance(entity_kind, str) or not isinstance(entity_id, int):
+            return
+        self._open_workspace_target(entity_kind, entity_id)
 
 
 __all__ = ["DossierLinkDialog", "DossierWorkspace"]
