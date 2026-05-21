@@ -368,10 +368,11 @@ class TasksWorkspace(BaseWorkspace):
         }
 
     def build_toolbar(self, actions: dict[str, QAction]) -> None:
+        persistent_widgets = {self.btn_gantt, self.btn_board, self.btn_dash}
         while self.toolbar_layout.count():
             item = self.toolbar_layout.takeAt(0)
             widget = item.widget()
-            if widget is not None:
+            if widget is not None and widget not in persistent_widgets:
                 widget.deleteLater()
         mode_buttons = [self.btn_gantt, self.btn_board, self.btn_dash]
         for button in mode_buttons:
@@ -1347,6 +1348,8 @@ class TasksWorkspace(BaseWorkspace):
             project_id = filters.get("project_id")
             priority = filters.get("priority")
             board_day_filter = filters.get("board_day_filter")
+            secondary_mode_raw = filters.get("secondary_mode")
+            secondary_mode = secondary_mode_raw if isinstance(secondary_mode_raw, str) else None
             if isinstance(focus_day, str):
                 try:
                     focus_day = date.fromisoformat(focus_day)
@@ -1366,7 +1369,9 @@ class TasksWorkspace(BaseWorkspace):
             else:
                 self.cmb_priority.setCurrentText("Любой")
             self._sync_project_quick_links_selection()
-            if self._gantt_mode or self._board_mode or self._dash_mode:
+            if tab == "plan" and secondary_mode in {"gantt", "board", "dash"}:
+                self._set_secondary_mode(secondary_mode, True)
+            elif self._gantt_mode or self._board_mode or self._dash_mode:
                 self._refresh_secondary_view()
         finally:
             self._applying_filters = False
@@ -1860,7 +1865,7 @@ class TasksWorkspace(BaseWorkspace):
             self._focus_day = date.today()
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
-            _set_secondary_buttons_visible(False)
+            _set_secondary_buttons_visible(True)
             self.content_stack.setCurrentWidget(self.list)
             self.tab_today.setChecked(True)
         elif mode == "Выполнено":
@@ -1868,7 +1873,7 @@ class TasksWorkspace(BaseWorkspace):
             self.model.set_filter_mode("Выполнено")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
-            _set_secondary_buttons_visible(False)
+            _set_secondary_buttons_visible(True)
             self.content_stack.setCurrentWidget(self.list)
             self.tab_done.setChecked(True)
         elif mode == "План":
@@ -1889,7 +1894,7 @@ class TasksWorkspace(BaseWorkspace):
             self.model.set_filter_mode("Отложенные")
             self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
-            _set_secondary_buttons_visible(False)
+            _set_secondary_buttons_visible(True)
             self.content_stack.setCurrentWidget(self.list)
             if hasattr(self, "tab_deferred"):
                 self.tab_deferred.setChecked(True)
@@ -1900,7 +1905,7 @@ class TasksWorkspace(BaseWorkspace):
                 self._focus_day = focus_day
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
-            _set_secondary_buttons_visible(False)
+            _set_secondary_buttons_visible(True)
             self.content_stack.setCurrentWidget(self.list)
             self.tab_all.setChecked(True)
         self._update_day_label()
@@ -1925,17 +1930,10 @@ class TasksWorkspace(BaseWorkspace):
     def _set_secondary_mode(self, mode: str, enabled: bool) -> None:
         plan_mode = self.model.filter_mode() == "План"
         if enabled and not plan_mode:
-            button_by_mode = {
-                "gantt": self.btn_gantt,
-                "board": self.btn_board,
-                "dash": self.btn_dash,
-            }
-            target_button = button_by_mode.get(mode)
-            if target_button is not None:
-                target_button.blockSignals(True)
-                target_button.setChecked(False)
-                target_button.blockSignals(False)
-            return
+            if not self._applying_filters:
+                self._filters["tab"] = "plan"
+            self._apply_tab("plan")
+            plan_mode = True
 
         self._gantt_mode = bool(enabled and mode == "gantt" and plan_mode)
         self._board_mode = bool(enabled and mode == "board" and plan_mode)
@@ -1950,6 +1948,13 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_gantt.blockSignals(False)
         self.btn_board.blockSignals(False)
         self.btn_dash.blockSignals(False)
+
+        if not self._applying_filters:
+            if enabled and mode in {"gantt", "board", "dash"}:
+                self._filters["secondary_mode"] = mode
+            else:
+                self._filters.pop("secondary_mode", None)
+            self.save_state()
 
         if self._gantt_mode or self._board_mode or self._dash_mode:
             self.model.set_filter_mode("План")

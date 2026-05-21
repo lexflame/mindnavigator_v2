@@ -974,6 +974,49 @@ def test_tasks_workspace_switches_board_and_dash_modes(monkeypatch, unique_temp_
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_workspace_secondary_modes_remain_available_outside_plan(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_secondary_modes_from_all", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = tasks_workspace.TasksWorkspace()
+    try:
+        workspace._apply_tab("all")
+
+        assert not workspace.btn_gantt.isHidden()
+        assert not workspace.btn_board.isHidden()
+        assert not workspace.btn_dash.isHidden()
+
+        workspace.btn_gantt.setChecked(True)
+
+        assert workspace.model.filter_mode() == "План"
+        assert workspace.tab_plan.isChecked() is True
+        assert workspace._gantt_mode is True
+        assert workspace.content_stack.currentWidget() is workspace.gantt_page
+    finally:
+        workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_restores_secondary_mode_from_filters(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_secondary_mode_restore", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = tasks_workspace.TasksWorkspace()
+    try:
+        workspace.apply_filters({"tab": "plan", "secondary_mode": "board"})
+
+        assert workspace._board_mode is True
+        assert workspace.btn_board.isChecked() is True
+        assert workspace.content_stack.currentWidget() is workspace.board_page
+    finally:
+        workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_board_uses_kanban_columns_in_expected_order(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_board_columns_order", ".sqlite3")
