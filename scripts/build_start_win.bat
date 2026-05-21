@@ -7,6 +7,7 @@ set "FALLBACK_TARGET_DIR=.\artifacts\run"
 set "DIST_SUBDIR=MindNavigator (windows 11 x64)"
 set "DIST_DIR=dist\%DIST_SUBDIR%"
 set "EXE_NAME=MindNavigator.exe"
+set "APP_CONFIG_NAME=app_config.json"
 set "DEBUG_BUILD_START=%DEBUG_BUILD_START%"
 
 if not "%~1"=="" (
@@ -44,6 +45,24 @@ if not exist "!TARGET_DIR!" (
   )
 )
 
+set "TARGET_APP_CONFIG=!TARGET_DIR!\%APP_CONFIG_NAME%"
+set "DIST_APP_CONFIG=%DIST_DIR%\%APP_CONFIG_NAME%"
+set "APP_CONFIG_STAGED=0"
+
+if exist "!TARGET_APP_CONFIG!" (
+  echo [build_start_win] Preserving "%APP_CONFIG_NAME%" from "!TARGET_DIR!"...
+  copy /Y "!TARGET_APP_CONFIG!" "!DIST_APP_CONFIG!" >nul
+  if errorlevel 1 (
+    echo [build_start_win] Failed to stage "%APP_CONFIG_NAME%" into "%DIST_DIR%".
+    exit /b 1
+  )
+  set "APP_CONFIG_STAGED=1"
+) else (
+  if exist "!DIST_APP_CONFIG!" (
+    del /F /Q "!DIST_APP_CONFIG!" >nul 2>&1
+  )
+)
+
 tasklist /FI "IMAGENAME eq %EXE_NAME%" | find /I "%EXE_NAME%" >nul 2>&1
 if "%ERRORLEVEL%"=="0" (
   echo [build_start_win] Stopping running %EXE_NAME%...
@@ -57,6 +76,13 @@ if "%DEBUG_BUILD_START%"=="1" echo [build_start_win][debug] robocopy exit=%ROBOC
 if errorlevel 8 (
   echo [build_start_win] Robocopy failed with code %ROBOCOPY_EXIT%.
   exit /b 1
+)
+
+if "!APP_CONFIG_STAGED!"=="1" if exist "!DIST_APP_CONFIG!" (
+  move /Y "!DIST_APP_CONFIG!" "!TARGET_APP_CONFIG!" >nul
+  if errorlevel 1 (
+    echo [build_start_win] Warning: failed to move "%APP_CONFIG_NAME%" back to "!TARGET_DIR!".
+  )
 )
 
 set "FOLDER_ICON_REL=assets\icon.ico"
