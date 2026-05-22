@@ -1533,6 +1533,25 @@ class TasksWorkspace(BaseWorkspace):
                 return index
         return None
 
+    def _expand_task_ancestors_for_visibility(self, task_id: int) -> None:
+        if not hasattr(self, "model") or not hasattr(self.model, "task_by_id"):
+            return
+        task = self.model.task_by_id(task_id)
+        if task is None:
+            return
+        ancestor_ids: List[int] = []
+        parent_id = task.parent_id
+        while isinstance(parent_id, int):
+            ancestor_ids.append(parent_id)
+            parent_task = self.model.task_by_id(parent_id)
+            if parent_task is None:
+                break
+            parent_id = parent_task.parent_id
+        for ancestor_id in reversed(ancestor_ids):
+            row_idx = self.model.row_for_task_id(ancestor_id)
+            if row_idx >= 0:
+                self.model.expand_subtasks_tree_by_row(row_idx)
+
     def focus_task(self, task_id: int) -> bool:
         index = self._index_for_task_id(task_id)
         if index is None:
@@ -1559,6 +1578,7 @@ class TasksWorkspace(BaseWorkspace):
             self.search_input.blockSignals(True)
             self.search_input.clear()
             self.search_input.blockSignals(False)
+            self._expand_task_ancestors_for_visibility(task_id)
             index = self._index_for_task_id(task_id)
         if index is None:
             return False
@@ -1577,6 +1597,17 @@ class TasksWorkspace(BaseWorkspace):
             )
         self.list.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
         self.list.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
+
+    def open_task_for_edit(self, task_id: int) -> bool:
+        if not self.focus_task(task_id):
+            return False
+        index = self._selected_task_index()
+        if index is None or index.data(TaskRoles.TaskId) != task_id:
+            index = self._index_for_task_id(task_id)
+        if index is None:
+            return False
+        self.delegate.edit_task(index)
         return True
 
     def _edit_selected_task(self) -> None:
@@ -1735,7 +1766,7 @@ class TasksWorkspace(BaseWorkspace):
             time_text = self.new_time.time().toString("HH:mm")
 
         try:
-            self.model.add_task(title=title, day=d, time_text=time_text, priority=pr)
+            created = self.model.add_task(title=title, day=d, time_text=time_text, priority=pr)
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
@@ -1747,6 +1778,7 @@ class TasksWorkspace(BaseWorkspace):
         self.new_title.clear()
         self.new_time.setTime(QTime.currentTime().addSecs(3600))
         self.new_title.setFocus()
+        self.open_task_for_edit(created.id)
 
     def open_create_task_dialog(self) -> None:
         dialog = TaskCreateDialog(parent=self)
@@ -1754,7 +1786,7 @@ class TasksWorkspace(BaseWorkspace):
             return
         values = dialog.values()
         try:
-            self.model.add_task(
+            created = self.model.add_task(
                 title=values["title"],
                 description=values["description"],
                 day=values["day"],
@@ -1772,6 +1804,7 @@ class TasksWorkspace(BaseWorkspace):
         if self._secondary_view_includes_day(values["day"]):
             self._refresh_secondary_view()
         self._refresh_project_quick_links()
+        self.open_task_for_edit(created.id)
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.list and event.type() == QEvent.Type.Resize:
