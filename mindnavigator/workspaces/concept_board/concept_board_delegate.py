@@ -21,8 +21,9 @@ class ConceptBoardDelegate(QStyledItemDelegate):
 
     ROW_H = 126
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, data_role: int = int(Qt.ItemDataRole.UserRole)) -> None:
         super().__init__(parent)
+        self._data_role = int(data_role)
         self._title_font = QFont()
         self._title_font.setPointSize(10)
         self._title_font.setBold(True)
@@ -41,10 +42,12 @@ class ConceptBoardDelegate(QStyledItemDelegate):
         self._footer_font.setPointSize(8)
 
     def sizeHint(self, option: QStyleOptionViewItem, index):  # noqa: N802
+        if index.data(self._data_role) is None:
+            return super().sizeHint(option, index)
         return QSize(option.rect.width(), self.ROW_H)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: N802
-        card = index.data(Qt.ItemDataRole.UserRole)
+        card = index.data(self._data_role)
         if card is None:
             super().paint(painter, option, index)
             return
