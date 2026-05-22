@@ -307,6 +307,7 @@ class TasksModel(QAbstractListModel):
         self._all_rows.append(self._row_from_task_data(task))
         self._recompute_plan_meta()
         self._rebuild()
+        return task
 
     def quick_add_subtask(self, parent_task_id: int) -> None:
         parent_task = next(
@@ -315,7 +316,7 @@ class TasksModel(QAbstractListModel):
         )
         if parent_task is None:
             return
-        self.add_task(
+        return self.add_task(
             title="Новая подзадача",
             description="",
             day=parent_task.day,
@@ -330,7 +331,7 @@ class TasksModel(QAbstractListModel):
         )
 
     def quick_add_task_for_day(self, target_day: date) -> None:
-        self.add_task(
+        return self.add_task(
             title="Новая задача",
             description="",
             day=target_day,

@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QScrollArea, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -23,6 +23,7 @@ from mindnavigator.workspaces.tasks.cast_dash import TasksDashCast
 from mindnavigator.workspaces.tasks.cast_gantt import TasksGanttCast
 from mindnavigator.workspaces.tasks.style import TasksWorkspaceStyle
 from mindnavigator.workspaces.tasks.task_row import TaskRow
+from mindnavigator.workspaces.tasks import tasks_workspace as tasks_workspace_impl
 from mindnavigator.workspaces import tasks as tasks_workspace
 from mindnavigator.workspaces.tasks import TaskRoles
 
@@ -33,6 +34,16 @@ def _find_task_row(model: tasks_workspace.TasksModel, task_id: int) -> int:
         if index.data(TaskRoles.RowType) != "task":
             continue
         if index.data(TaskRoles.TaskId) == task_id:
+            return row
+    return -1
+
+
+def _find_header_row(model: tasks_workspace.TasksModel, target_day: date) -> int:
+    for row in range(model.rowCount()):
+        index = model.index(row, 0)
+        if index.data(TaskRoles.RowType) != "header":
+            continue
+        if index.data(TaskRoles.Day) == target_day:
             return row
     return -1
 
@@ -703,12 +714,15 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
 
         attachments_title = dialog.findChild(QLabel, "TaskAttachmentsTitle")
         buttons = dialog.findChild(QDialogButtonBox)
+        content_scroll = dialog.findChild(QScrollArea, "TaskDialogScroll")
         assert attachments_title is not None
         assert buttons is not None
+        assert content_scroll is not None
         assert dialog.minimumWidth() == 640
         assert dialog.minimumHeight() == 520
-        assert dialog.width() == 680
-        assert dialog.height() == 560
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
+        assert dialog.minimumSizeHint().height() <= dialog._DEFAULT_SIZE.height()
         assert dialog.header_bar.title_label.text() == "Задача"
         assert dialog.plan_task_edit.text() == "План"
         assert dialog.time_toggle.text() == ""
@@ -801,10 +815,10 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
 
         empty_description = dialog.findChild(QLabel, "TaskDetailsDescriptionEmpty")
         empty_links = dialog.findChild(QLabel, "TaskDetailsLinksEmpty")
-        assert dialog.minimumWidth() == 1100
-        assert dialog.minimumHeight() == 700
-        assert dialog.width() == 1260
-        assert dialog.height() == 840
+        assert dialog.minimumWidth() == 1042
+        assert dialog.minimumHeight() == 757
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
         assert dialog.links_title.text() == "Связи"
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
@@ -899,6 +913,34 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_ignores_saved_shared_size_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_ignores_saved_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            day=date(2026, 4, 14),
+            title="Edit size task",
+            description="",
+            priority="Medium",
+            project_id=None,
+            time_text="",
+        )
+        database.set_setting("ui.task_edit_dialog_size", "820x610")
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_project_suggest", ".sqlite3")
@@ -926,6 +968,67 @@ def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_p
         finally:
             dialog.deleteLater()
     finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        database.set_setting("ui.task_edit_dialog_size", "820x610")
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+
+        assert dialog.width() == 820
+        assert dialog.height() == 610
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_save_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+        dialog.resize(790, 600)
+        dialog.close()
+
+        assert database.get_setting("ui.task_edit_dialog_size") == "790x600"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_accept_save_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+        dialog.resize(680, 560)
+        dialog.title_edit.setText("Accepted task")
+        dialog._on_accept()
+
+        assert database.get_setting("ui.task_edit_dialog_size") == "680x560"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
 
@@ -1992,6 +2095,7 @@ def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch
     try:
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
+        monkeypatch.setattr(workspace, "open_task_for_edit", lambda task_id: True)
         workspace.new_title.setText('Задача "тест"')
         workspace._quick_quote_filters[0]._normalize_line_edit(workspace.new_title.text())
 
@@ -2001,6 +2105,38 @@ def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch
 
         created = database.fetch_tasks()
         assert any(task.title == "Задача «тест»" for task in created)
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_quick_create_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_quick_create_open_edit", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        before_count = len(database.fetch_tasks())
+        edited_task_ids: list[int] = []
+
+        def _capture_edit(index: QModelIndex) -> None:
+            task_id = index.data(TaskRoles.TaskId)
+            if isinstance(task_id, int):
+                edited_task_ids.append(task_id)
+
+        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        workspace.new_title.setText("Quick create edit")
+
+        workspace._on_create_task()
+
+        created = database.fetch_tasks()
+        assert len(created) == before_count + 1
+        created_task = next(task for task in created if task.title == "Quick create edit")
+        assert edited_task_ids == [created_task.id]
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -2033,6 +2169,181 @@ def test_task_create_dialog_replaces_and_normalizes_ascii_quotes(monkeypatch, un
     finally:
         if dialog is not None:
             dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_dialog_create_open_edit", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        before_count = len(database.fetch_tasks())
+        edited_task_ids: list[int] = []
+
+        def _capture_edit(index: QModelIndex) -> None:
+            task_id = index.data(TaskRoles.TaskId)
+            if isinstance(task_id, int):
+                edited_task_ids.append(task_id)
+
+        class _FakeTaskCreateDialog:
+            def __init__(self, parent=None) -> None:
+                self.parent = parent
+
+            def values(self) -> dict[str, object]:
+                return {
+                    "title": "Dialog create edit",
+                    "description": "Description",
+                    "day": date(2026, 3, 7),
+                    "time_text": "10:15",
+                    "priority": "High",
+                    "project_id": None,
+                    "recurrence_kind": "",
+                    "recurrence_interval": 1,
+                    "marker_color": "",
+                    "marker_theme": "",
+                }
+
+        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        monkeypatch.setattr(tasks_workspace_impl, "TaskCreateDialog", _FakeTaskCreateDialog)
+        monkeypatch.setattr(tasks_workspace_impl, "exec_with_overlay", lambda dialog, parent: QDialog.DialogCode.Accepted)
+
+        workspace.open_create_task_dialog()
+
+        created = database.fetch_tasks()
+        assert len(created) == before_count + 1
+        created_task = next(task for task in created if task.title == "Dialog create edit")
+        assert edited_task_ids == [created_task.id]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_header_quick_add_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_header_quick_add_open_edit", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        source_task = database.create_task(
+            title="Header source",
+            description="",
+            day=date(2026, 3, 8),
+            time_text="09:00",
+            priority="Medium",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        before_ids = {task.id for task in database.fetch_tasks()}
+        edited_task_ids: list[int] = []
+
+        def _capture_edit(index: QModelIndex) -> None:
+            task_id = index.data(TaskRoles.TaskId)
+            if isinstance(task_id, int):
+                edited_task_ids.append(task_id)
+
+        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        header_row = _find_header_row(workspace.model, source_task.day)
+        assert header_row >= 0
+        index = workspace.model.index(header_row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 1200, workspace.delegate.HEADER_H)
+        option.widget = workspace.list
+        header_text = workspace.delegate._format_header(source_task.day)
+        quick_rect = workspace.delegate._header_quick_rect(
+            option.rect,
+            header_text,
+            include_today_badge=False,
+        )
+        click_point = quick_rect.center()
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        assert workspace.delegate.editorEvent(event, workspace.model, option, index) is True
+
+        created_tasks = [task for task in database.fetch_tasks() if task.id not in before_ids]
+        assert len(created_tasks) == 1
+        created_task = created_tasks[0]
+        assert created_task.day == source_task.day
+        assert created_task.parent_id is None
+        assert edited_task_ids == [created_task.id]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_task_quick_add_opens_created_subtask_for_edit(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_row_quick_add_open_edit", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        root = database.create_task(
+            title="Quick parent",
+            description="",
+            day=date(2026, 3, 9),
+            time_text="10:00",
+            priority="High",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+        before_ids = {task.id for task in database.fetch_tasks()}
+        edited_task_ids: list[int] = []
+
+        def _capture_edit(index: QModelIndex) -> None:
+            task_id = index.data(TaskRoles.TaskId)
+            if isinstance(task_id, int):
+                edited_task_ids.append(task_id)
+
+        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        root_row = _find_task_row(workspace.model, root.id)
+        assert root_row >= 0
+        index = workspace.model.index(root_row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 1200, workspace.delegate.ROW_H)
+        option.widget = workspace.list
+        layout = workspace.delegate.row_layout(
+            option.rect,
+            depth=int(index.data(TaskRoles.SubtaskDepth) or 0),
+            has_subtasks=bool(index.data(TaskRoles.HasSubtasks)),
+        )
+        quick_rect = workspace.delegate._task_quick_rect(layout, option.rect)
+        click_point = quick_rect.center()
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        assert workspace.delegate.editorEvent(event, workspace.model, option, index) is True
+
+        created_tasks = [task for task in database.fetch_tasks() if task.id not in before_ids]
+        assert len(created_tasks) == 1
+        created_task = created_tasks[0]
+        assert created_task.parent_id == root.id
+        assert created_task.day == root.day
+        assert edited_task_ids == [created_task.id]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
 

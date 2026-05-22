@@ -81,7 +81,9 @@ class _TaskDialogHeader(QFrame):
 
 class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
-    _DEFAULT_SIZE = QSize(680, 560)
+    _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
+    _USE_SAVED_SIZE = False
+    _DEFAULT_SIZE = QSize(1042, 757)
     _LABEL_WIDTH = 138
 
     def __init__(self, task: TaskRow, parent=None):
@@ -110,7 +112,9 @@ class TaskEditDialog(QDialog):
                 f"result={int(result_code)} state={self._debug_form_state()}"
             )
         )
-        if not self._restore_saved_size():
+        if self._USE_SAVED_SIZE and self._restore_saved_size():
+            pass
+        else:
             self.resize(self._DEFAULT_SIZE)
 
         root_layout = QVBoxLayout(self)
@@ -120,12 +124,19 @@ class TaskEditDialog(QDialog):
         self.header_bar = _TaskDialogHeader(self, "Задача")
         root_layout.addWidget(self.header_bar)
 
-        content = QWidget(self)
+        self.content_scroll = QScrollArea(self)
+        self.content_scroll.setObjectName("TaskDialogScroll")
+        self.content_scroll.setWidgetResizable(True)
+        self.content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.content_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        root_layout.addWidget(self.content_scroll, 1)
+
+        content = QWidget(self.content_scroll)
         content.setObjectName("TaskDialogContent")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(14)
-        root_layout.addWidget(content)
+        self.content_scroll.setWidget(content)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -399,6 +410,11 @@ class TaskEditDialog(QDialog):
 
             QDialog#TaskEditDialog QWidget#TaskDialogContent {{
                 background: transparent;
+            }}
+
+            QDialog#TaskEditDialog QScrollArea#TaskDialogScroll {{
+                background: transparent;
+                border: none;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskFormLabel {{
@@ -735,23 +751,45 @@ class TaskEditDialog(QDialog):
         self.showMinimized()
 
     def _restore_saved_size(self) -> bool:
-        raw = self._db.get_setting(self._SIZE_SETTING_KEY, default="").strip()
-        if not raw:
-            return False
-        width_str, separator, height_str = raw.partition("x")
-        if not separator:
-            return False
-        try:
-            width = int(width_str)
-            height = int(height_str)
-        except ValueError:
-            return False
-        self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
-        return True
+        for key in self._size_setting_keys():
+            raw = self._db.get_setting(key, default="").strip()
+            if not raw:
+                continue
+            width_str, separator, height_str = raw.partition("x")
+            if not separator:
+                continue
+            try:
+                width = int(width_str)
+                height = int(height_str)
+            except ValueError:
+                continue
+            self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
+            return True
+        return False
 
     def _save_current_size(self) -> None:
+        if not self._USE_SAVED_SIZE:
+            return
         size = self.size()
-        self._db.set_setting(self._SIZE_SETTING_KEY, f"{size.width()}x{size.height()}")
+        keys = self._size_setting_keys()
+        if not keys:
+            return
+        self._db.set_setting(keys[0], f"{size.width()}x{size.height()}")
+
+    def _size_setting_keys(self) -> tuple[str, ...]:
+        keys: list[str] = []
+        primary_key = str(self._SIZE_SETTING_KEY or "").strip()
+        if primary_key:
+            keys.append(primary_key)
+        for key in self._LEGACY_SIZE_SETTING_KEYS:
+            normalized = str(key or "").strip()
+            if normalized and normalized not in keys:
+                keys.append(normalized)
+        return tuple(keys)
+
+    def done(self, result: int) -> None:  # noqa: A003 - Qt API name
+        self._save_current_size()
+        super().done(result)
 
     def closeEvent(self, event) -> None:
         debug_task_dialog(
