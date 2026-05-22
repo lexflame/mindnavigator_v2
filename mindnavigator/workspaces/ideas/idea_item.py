@@ -22,5 +22,6 @@ class IdeaItem:
     relations_count: int = 0
     materials_count: int = 0
     updated_label: str = ""
+    project_path: str = ""
 
 __all__ = ["IdeaItem"]

@@ -19,5 +19,7 @@ class IdeaRoles:
     RelationsCount = Qt.ItemDataRole.UserRole + 13
     MaterialsCount = Qt.ItemDataRole.UserRole + 14
     UpdatedLabel = Qt.ItemDataRole.UserRole + 15
+    Source = Qt.ItemDataRole.UserRole + 16
+    ProjectPath = Qt.ItemDataRole.UserRole + 17
 
 __all__ = ["IdeaRoles"]
