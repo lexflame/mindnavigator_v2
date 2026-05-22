@@ -82,7 +82,7 @@ class _TaskDialogHeader(QFrame):
 class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
     _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
-    _DEFAULT_SIZE = QSize(680, 560)
+    _DEFAULT_SIZE = QSize(1042, 757)
     _LABEL_WIDTH = 138
 
     def __init__(self, task: TaskRow, parent=None):
@@ -769,6 +769,10 @@ class TaskEditDialog(QDialog):
             if normalized and normalized not in keys:
                 keys.append(normalized)
         return tuple(keys)
+
+    def done(self, result: int) -> None:  # noqa: A003 - Qt API name
+        self._save_current_size()
+        super().done(result)
 
     def closeEvent(self, event) -> None:
         debug_task_dialog(

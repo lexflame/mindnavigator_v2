@@ -718,8 +718,8 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
         assert buttons is not None
         assert dialog.minimumWidth() == 640
         assert dialog.minimumHeight() == 520
-        assert dialog.width() == 680
-        assert dialog.height() == 560
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
         assert dialog.header_bar.title_label.text() == "Задача"
         assert dialog.plan_task_edit.text() == "План"
         assert dialog.time_toggle.text() == ""
@@ -974,6 +974,27 @@ def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch
         dialog.close()
 
         assert database.get_setting("ui.task_edit_dialog_size") == "790x600"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_accept_save_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+        dialog.resize(680, 560)
+        dialog.title_edit.setText("Accepted task")
+        dialog._on_accept()
+
+        assert database.get_setting("ui.task_edit_dialog_size") == "680x560"
     finally:
         if dialog is not None:
             dialog.deleteLater()
