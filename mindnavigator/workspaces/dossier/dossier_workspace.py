@@ -612,6 +612,11 @@ class DossierWorkspace(BaseWorkspace):
         self.create_task_button.setEnabled(has_selection)
         self._update_link_action_states()
 
+    def set_status(self, text: str) -> None:
+        self.status_row.setText(text)
+        self.status_row.setProperty("error", False)
+        self.status_row.setStyleSheet("")
+
     def set_theme_mode(self, theme_mode: str) -> None:
         self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
         palette = get_theme_palette(self._theme_mode)
