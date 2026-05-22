@@ -109,6 +109,68 @@ def test_ideas_workspace_save_button_persists_existing_idea_edits(monkeypatch, u
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_sources_support_multiple_lines_and_dossier_append(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_multi_sources", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        created = database.create_idea(
+            title="Source idea",
+            status="inbox",
+            source="Voice memo",
+        )
+        database.create_dossier(
+            kind="book",
+            title="Roadside Picnic",
+            summary="",
+            description="",
+            tags=[],
+            status="active",
+            rating=None,
+            source="Shelf",
+        )
+
+        class _FakeDossierDialog:
+            def __init__(self, _db, parent=None) -> None:
+                self.parent = parent
+
+            def selected_source_text(self) -> str:
+                return "Досье: Roadside Picnic"
+
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "_IdeaDossierSourceDialog", _FakeDossierDialog)
+        monkeypatch.setattr(
+            ideas_workspace_module,
+            "exec_with_overlay",
+            lambda _dialog, _parent: QDialog.DialogCode.Accepted,
+        )
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        index = model.index_for_id(created.id)
+        workspace.list_view.setCurrentIndex(index)
+        QApplication.processEvents()
+
+        workspace.source_input.setText("Voice memo\nVoice memo\n  Desk note  ")
+        workspace.source_input.addDossierRequested.emit()
+        QApplication.processEvents()
+        QTest.mouseClick(workspace.save_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+
+        saved = database.get_idea(created.id)
+        assert saved is not None
+        assert saved.source == "Voice memo\nDesk note\nДосье: Roadside Picnic"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_remaster_tabs_and_source_field(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_tabs", ".sqlite3")
@@ -124,7 +186,7 @@ def test_ideas_workspace_remaster_tabs_and_source_field(monkeypatch, unique_temp
         tab_titles = [workspace.inspector_tabs.tabText(index) for index in range(workspace.inspector_tabs.count())]
         assert tab_titles == ["Суть", "Развитие", "Связи (0)", "Материалы и референсы (0)", "Выход"]
         assert workspace.search_input.placeholderText() == "Поиск по идеям, краткому описанию, тексту, источнику..."
-        assert workspace.source_input.placeholderText() == "Откуда пришла идея"
+        assert workspace.source_input.placeholderText() == "Каждый источник с новой строки"
         assert workspace.development_insert_button.text() == "Вставить шаблон развития"
     finally:
         if workspace is not None:

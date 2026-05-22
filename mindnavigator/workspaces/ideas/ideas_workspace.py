@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ._shared import *  # noqa: F401,F403
-from PySide6.QtCore import QMimeData, QTimer
+from PySide6.QtCore import QMimeData, QTimer, Signal
 from PySide6.QtGui import QDrag, QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialogButtonBox
 from .idea_category_edit_dialog import IdeaCategoryEditDialog, IdeaCategoryRenameDialog
 from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
@@ -63,6 +63,25 @@ _FUNNEL_IDEA_ACCENT = "#6ad56f"
 _FUNNEL_CARD_ROW_HEIGHT = 160
 
 
+def _idea_source_lines(raw_text: str) -> list[str]:
+    normalized = (raw_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    result: list[str] = []
+    for raw_line in normalized.split("\n"):
+        line = " ".join(raw_line.strip().split())
+        if line and line not in result:
+            result.append(line)
+    return result
+
+
+def _join_idea_sources(lines: list[str]) -> str:
+    return "\n".join(_idea_source_lines("\n".join(lines)))
+
+
+def _dossier_source_label(title: str) -> str:
+    normalized_title = " ".join(str(title or "").strip().split())
+    return f"Досье: {normalized_title}" if normalized_title else "Досье"
+
+
 class IdeasFunnelList(QListWidget):
     MIME_TYPE = "application/x-mindnavigator-idea-id"
 
@@ -113,6 +132,111 @@ class IdeasFunnelList(QListWidget):
             event.acceptProposedAction()
             return
         event.ignore()
+
+
+class _IdeaSourcesInput(QWidget):
+    textChanged = Signal()
+    addDossierRequested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self._editor = QPlainTextEdit(self)
+        self._editor.setObjectName("IdeasSourceInput")
+        self._editor.setPlaceholderText("Каждый источник с новой строки")
+        self._editor.setFixedHeight(88)
+        self._editor.textChanged.connect(self.textChanged.emit)
+        layout.addWidget(self._editor)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(6)
+        self.add_dossier_button = QToolButton(self)
+        self.add_dossier_button.setObjectName("IdeasSourceAddDossier")
+        self.add_dossier_button.setText("Добавить досье")
+        self.add_dossier_button.clicked.connect(self.addDossierRequested.emit)
+        actions.addWidget(self.add_dossier_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+    def text(self) -> str:
+        return self._editor.toPlainText()
+
+    def setText(self, text: str) -> None:
+        self._editor.setPlainText(text or "")
+
+    def placeholderText(self) -> str:
+        return self._editor.placeholderText()
+
+    def setPlaceholderText(self, text: str) -> None:
+        self._editor.setPlaceholderText(text)
+
+    def append_source(self, source_text: str) -> None:
+        lines = _idea_source_lines(self.text())
+        source = " ".join(str(source_text or "").strip().split())
+        if not source or source in lines:
+            return
+        lines.append(source)
+        self.setText(_join_idea_sources(lines))
+
+
+class _IdeaDossierSourceDialog(QDialog):
+    def __init__(self, db, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._db = db
+        self.setObjectName("IdeaDossierSourceDialog")
+        self.setWindowTitle("Выбрать досье")
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.search_edit = QLineEdit(self)
+        self.search_edit.setPlaceholderText("Поиск по досье")
+        self.dossier_combo = QComboBox(self)
+        form.addRow("Поиск", self.search_edit)
+        form.addRow("Досье", self.dossier_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(self)
+        self._ok_button = buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.search_edit.textChanged.connect(self._fill_dossiers)
+        self._fill_dossiers()
+
+    def _fill_dossiers(self) -> None:
+        self.dossier_combo.clear()
+        dossiers = self._db.fetch_dossiers(search_text=self.search_edit.text())
+        if not dossiers:
+            self.dossier_combo.addItem("— нет доступных —", None)
+            self._ok_button.setEnabled(False)
+            return
+        for dossier in dossiers:
+            label = f"{dossier.title} · {dossier.kind}" if dossier.kind else dossier.title
+            self.dossier_combo.addItem(label, dossier.id)
+        self._ok_button.setEnabled(True)
+
+    def selected_source_text(self) -> str:
+        dossier_id = self.dossier_combo.currentData()
+        if not isinstance(dossier_id, int):
+            return ""
+        dossier = self._db.get_dossier(dossier_id)
+        if dossier is None:
+            return ""
+        return _dossier_source_label(dossier.title)
 
 
 class IdeaRelationDialog(QDialog):
@@ -496,8 +620,7 @@ class IdeasWorkspace(BaseWorkspace):
             self.type_input.addItem(label, value)
         self.status_input = QComboBox()
         self._reload_idea_categories()
-        self.source_input = QLineEdit()
-        self.source_input.setPlaceholderText("Откуда пришла идея")
+        self.source_input = _IdeaSourcesInput()
 
         self.value_input = QSpinBox()
         self.value_input.setRange(1, 5)
@@ -510,7 +633,7 @@ class IdeasWorkspace(BaseWorkspace):
         content_layout.addRow("Проект", self.project_input)
         content_layout.addRow("Тип", self.type_input)
         content_layout.addRow("Статус", self.status_input)
-        content_layout.addRow("Источник", self.source_input)
+        content_layout.addRow("Источники", self.source_input)
         content_layout.addRow("Ценность", self.value_input)
         content_layout.addRow("Сложность", self.effort_input)
 
@@ -743,6 +866,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.type_input.currentIndexChanged.connect(self._mark_dirty)
         self.status_input.currentIndexChanged.connect(self._mark_dirty)
         self.source_input.textChanged.connect(self._mark_dirty)
+        self.source_input.addDossierRequested.connect(self._add_dossier_source)
         self.value_input.valueChanged.connect(self._mark_dirty)
         self.effort_input.valueChanged.connect(self._mark_dirty)
         self.quick_create_btn.clicked.connect(self._create_idea_from_quick_form)
@@ -2131,7 +2255,7 @@ class IdeasWorkspace(BaseWorkspace):
         self.body_input.setPlainText(idea.body_md)
         self._set_combo_value(self.type_input, idea.type)
         self._set_combo_value(self.status_input, idea.status)
-        self.source_input.setText(idea.source)
+        self.source_input.setText(_join_idea_sources(_idea_source_lines(idea.source)))
         self.value_input.setValue(idea.value_score)
         self.effort_input.setValue(idea.effort_score)
         self._dirty = False
@@ -2141,6 +2265,14 @@ class IdeasWorkspace(BaseWorkspace):
         self._update_output_summary(idea_id)
         self._update_triage_panel()
         self.update_action_states()
+
+    def _add_dossier_source(self) -> None:
+        dialog = _IdeaDossierSourceDialog(self._db, parent=self)
+        if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+            return
+        source_text = dialog.selected_source_text()
+        if source_text:
+            self.source_input.append_source(source_text)
 
     @staticmethod
     def _set_combo_value(combo: QComboBox, value: str) -> None:
@@ -2178,7 +2310,7 @@ class IdeasWorkspace(BaseWorkspace):
             value_score=self.value_input.value(),
             effort_score=self.effort_input.value(),
             project_id=self._current_project_id,
-            source=self.source_input.text(),
+            source=_join_idea_sources(_idea_source_lines(self.source_input.text())),
         )
         self._dirty = False
         self._set_status("Изменения сохранены")
