@@ -10,6 +10,7 @@ from mindnavigator.storage import DEFERRED_PRIORITY
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND, TITLEBAR_BACKGROUND, get_theme_palette
 
 from ._shared import *  # noqa: F401,F403
+from .gantt_duration_edit import GanttEstimateEdit
 from .task_edit_dialog import TaskEditDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
@@ -42,6 +43,7 @@ class _InfoCard(QFrame):
         value_row = QHBoxLayout()
         value_row.setContentsMargins(0, 0, 0, 0)
         value_row.setSpacing(8)
+        self.value_row = value_row
 
         self.dot_label = QLabel("●")
         self.dot_label.setObjectName("TaskDetailsCardDot")
@@ -58,10 +60,15 @@ class _InfoCard(QFrame):
 
     def set_value(self, value: str, *, muted: bool = False) -> None:
         self.value_label.setText(value)
+        self.value_label.setVisible(True)
         self.value_label.setProperty("muted", bool(muted))
         self.value_label.style().unpolish(self.value_label)
         self.value_label.style().polish(self.value_label)
         self.value_label.update()
+
+    def set_value_widget(self, widget: QWidget) -> None:
+        self.value_label.hide()
+        self.value_row.insertWidget(1, widget, 1)
 
     def set_dot_color(self, color: str) -> None:
         normalized = (color or "").strip()
@@ -257,11 +264,18 @@ class TaskDetailsDialog(QDialog):
         self.time_card = _InfoCard("Время", self.params_card)
         self.priority_card = _InfoCard("Приоритет", self.params_card)
         self.recurrence_card = _InfoCard("Повтор", self.params_card)
+        self.gantt_card = _InfoCard("GANTT", self.params_card)
+        self.gantt_edit = GanttEstimateEdit(parent=self.gantt_card)
+        self.gantt_edit.setObjectName("TaskDetailsGanttEdit")
+        self.gantt_edit.setToolTip("Оценка длительности для режима GANTT в формате HH:MM.")
+        self.gantt_edit.minutesCommitted.connect(self._on_gantt_estimate_committed)
+        self.gantt_card.set_value_widget(self.gantt_edit)
         self._param_cards = [
             self.date_card,
             self.time_card,
             self.priority_card,
             self.recurrence_card,
+            self.gantt_card,
         ]
         for card in self._param_cards:
             self.params_grid.addWidget(card)
@@ -411,6 +425,19 @@ class TaskDetailsDialog(QDialog):
                 font-size: 14px;
                 font-weight: 600;
             }}
+            QDialog#TaskDetailsDialog QLineEdit,
+            QDialog#TaskDetailsDialog QTimeEdit {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 6px 10px;
+                min-height: 34px;
+            }}
+            QDialog#TaskDetailsDialog QLineEdit:focus,
+            QDialog#TaskDetailsDialog QTimeEdit:focus {{
+                border: 1px solid {palette.accent};
+            }}
             QLabel#TaskDetailsCardValue[muted="true"] {{
                 color: {palette.dim_text};
                 font-weight: 500;
@@ -541,6 +568,7 @@ class TaskDetailsDialog(QDialog):
         self.recurrence_card.set_value(recurrence_text, muted=recurrence_text == "—")
 
         project_text = self._project_text(fallback="Без проекта")
+        self.gantt_edit.set_minutes(self._effective_gantt_estimate_minutes())
         parent_text = self._parent_title()
         marker_text = self._marker_color_text()
         marker_theme_text = self._marker_theme_text()
@@ -560,6 +588,35 @@ class TaskDetailsDialog(QDialog):
         task = next((item for item in self._db.fetch_tasks() if item.id == self._task.id), None)
         if task is not None:
             self._task = task
+
+    def _effective_gantt_estimate_minutes(self) -> int:
+        stored_minutes = max(0, int(self._task.gantt_estimate_minutes or 0))
+        if stored_minutes > 0:
+            return stored_minutes
+        from .cast_gantt import TasksGanttCast
+
+        return max(5, int(TasksGanttCast.estimate_task_minutes(self._task)))
+
+    def _on_gantt_estimate_committed(self, minutes: int) -> None:
+        if (
+            int(self._task.gantt_estimate_minutes or 0) == int(minutes)
+            and bool(self._task.gantt_forecasted)
+        ):
+            return
+        self._db.set_task_gantt_estimate(self._task.id, minutes, forecasted=True)
+        self._refresh_task_data()
+        self._refresh_parent_workspace()
+
+    def _refresh_parent_workspace(self) -> None:
+        current = self.parent()
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            refresh = getattr(current, "refresh", None)
+            if callable(refresh):
+                refresh()
+                return
+            current = current.parent() if hasattr(current, "parent") else None
 
     def _format_title(self) -> str:
         title = normalize_task_text_quotes((self._task.title or "").strip())
@@ -751,12 +808,13 @@ class TaskDetailsDialog(QDialog):
                         project_id=values["project_id"],
                         recurrence_kind=values["recurrence_kind"],
                         recurrence_interval=values["recurrence_interval"],
+                        gantt_estimate_minutes=values.get("gantt_estimate_minutes"),
                         is_plan_task=values.get("is_plan_task", bool(self._task.is_plan_task)),
                         marker_color=values.get("marker_color", ""),
                         marker_theme=values.get("marker_theme", ""),
                     )
                 except ValueError as exc:
-                    QMessageBox.warning(self, "РџСЂРѕРІРµСЂРєР°", str(exc))
+                    QMessageBox.warning(self, "Проверка", str(exc))
                     return
                 self._refresh_view()
                 return
@@ -778,6 +836,7 @@ class TaskDetailsDialog(QDialog):
                 marker_color=values.get("marker_color", ""),
                 marker_theme=values.get("marker_theme", ""),
             )
+            self._db.set_task_gantt_estimate(self._task.id, values.get("gantt_estimate_minutes", 0), forecasted=True)
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return

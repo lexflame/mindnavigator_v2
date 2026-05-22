@@ -1141,6 +1141,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 project_id=values["project_id"],
                 recurrence_kind=values["recurrence_kind"],
                 recurrence_interval=values["recurrence_interval"],
+                gantt_estimate_minutes=values.get("gantt_estimate_minutes"),
                 is_plan_task=values.get(
                     "is_plan_task",
                     bool(current_task.is_plan_task) if current_task is not None else False,

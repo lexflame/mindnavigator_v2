@@ -8,12 +8,12 @@ from .._shared import (
     QAbstractItemView,
     QHeaderView,
     QLabel,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+from ..gantt_duration_edit import GanttEstimateEdit, format_gantt_estimate_minutes
 
 
 class _GanttBarWidget(QWidget):
@@ -174,15 +174,13 @@ class TasksGanttCast:
             self.table.setCellWidget(row, 4, bar_widget)
             self.table.setRowHeight(row, 34)
 
-            minutes_spin = QSpinBox(self.table)
-            minutes_spin.setRange(5, 8 * 60)
-            minutes_spin.setSingleStep(5)
-            minutes_spin.setValue(estimate)
-            minutes_spin.setEnabled(bool(task.gantt_forecasted))
-            minutes_spin.valueChanged.connect(
+            duration_edit = GanttEstimateEdit(estimate, self.table)
+            duration_edit.setEnabled(bool(task.gantt_forecasted))
+            duration_edit.setToolTip(format_gantt_estimate_minutes(estimate))
+            duration_edit.minutesCommitted.connect(
                 lambda value, task_id=task.id: self.on_minutes_changed(task_id, value)
             )
-            self.table.setCellWidget(row, 5, minutes_spin)
+            self.table.setCellWidget(row, 5, duration_edit)
 
         total_hours = total_minutes / 60.0
         self.hint_label.setText(

@@ -13,6 +13,8 @@ from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, get_theme_palette
+from .cast_gantt import TasksGanttCast
+from .gantt_duration_edit import GanttEstimateEdit
 from .quick_project_create_dialog import QuickProjectCreateDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
@@ -265,6 +267,11 @@ class TaskEditDialog(QDialog):
         self.done_edit = QCheckBox("Выполнено")
         self.done_edit.setChecked(task.done)
 
+        default_gantt_minutes = int(getattr(task, "gantt_estimate_minutes", 0) or 0) or TasksGanttCast.estimate_task_minutes(task)
+        self.gantt_estimate_edit = GanttEstimateEdit(default_gantt_minutes)
+        self.gantt_estimate_edit.setObjectName("TaskGanttEstimateEdit")
+        self.gantt_estimate_edit.setToolTip("Оценка длительности для режима GANTT в формате HH:MM.")
+
         params_row = QWidget()
         params_layout = QHBoxLayout(params_row)
         params_layout.setContentsMargins(0, 0, 0, 0)
@@ -299,6 +306,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label("Дата и время"), time_block)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label("Параметры"), params_row)
+        form.addRow(self._make_form_label("GANTT"), self.gantt_estimate_edit)
         form.addRow(self._make_form_label(""), self.done_edit)
 
         layout.addLayout(form)
@@ -981,6 +989,7 @@ class TaskEditDialog(QDialog):
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
         self._clear_validation_errors()
+        self.gantt_estimate_edit.commit_pending()
         normalized_title = normalize_task_text_quotes(self.title_edit.text())
         if normalized_title != self.title_edit.text():
             self.title_edit.setText(normalized_title)
@@ -1557,6 +1566,7 @@ class TaskEditDialog(QDialog):
             "project_id": self.project_edit.currentData(),
             "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
             "recurrence_interval": 1,
+            "gantt_estimate_minutes": self.gantt_estimate_edit.minutes(),
             "is_plan_task": self.plan_task_edit.isChecked(),
             "marker_color": self.marker_color_edit.currentData() or "",
             "marker_theme": self.marker_theme_edit.currentData() or "",
@@ -1564,7 +1574,8 @@ class TaskEditDialog(QDialog):
         debug_task_dialog(
             f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
             f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
-            f"priority={payload['priority']!r} done={payload['done']} project_id={payload['project_id']} "
+            f"priority={payload['priority']!r} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
+            f"project_id={payload['project_id']} "
             f"recurrence={payload['recurrence_kind']!r} is_plan_task={payload['is_plan_task']} marker_color={payload['marker_color']!r} "
             f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
         )
@@ -1578,6 +1589,7 @@ class TaskEditDialog(QDialog):
         return (
             f"title={title!r} day={day} time={self._current_time_text()!r} "
             f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
+            f"gantt={self.gantt_estimate_edit.minutes()} "
             f"project_id={self.project_edit.currentData()} is_plan_task={self.plan_task_edit.isChecked()} "
             f"recurrence_enabled={self.recurrence_toggle.isChecked()} "
             f"recurrence={self.recurrence_type_edit.currentData()!r} marker_color={self.marker_color_edit.currentData()!r} "

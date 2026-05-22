@@ -796,6 +796,108 @@ def test_task_edit_dialog_marks_time_error_locally(monkeypatch, unique_temp_path
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_returns_gantt_estimate_minutes(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_gantt_values", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 95, forecasted=True)
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        assert dialog.gantt_estimate_edit.text() == "01:35"
+        assert dialog.values()["gantt_estimate_minutes"] == 95
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_applies_gantt_estimate_after_manual_input(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_dialog_gantt_manual", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 60, forecasted=True)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.show()
+        QApplication.processEvents()
+        line_edit = dialog.gantt_edit.lineEdit()
+        assert line_edit is not None
+
+        dialog.gantt_edit.setFocus()
+        line_edit.selectAll()
+        QTest.keyClicks(dialog.gantt_edit, "01:45")
+        QTest.qWait(300)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.gantt_estimate_minutes == 105
+        assert dialog.gantt_edit.text() == "01:45"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_applies_gantt_estimate_after_arrow_step(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_dialog_gantt_arrows", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 60, forecasted=True)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.show()
+        QApplication.processEvents()
+        line_edit = dialog.gantt_edit.lineEdit()
+        assert line_edit is not None
+
+        dialog.gantt_edit.setFocus()
+        line_edit.setCursorPosition(4)
+        QTest.keyClick(dialog.gantt_edit, Qt.Key.Key_Up)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.gantt_estimate_minutes == 61
+        assert dialog.gantt_edit.text() == "01:01"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_dialog_dashboard", ".sqlite3")

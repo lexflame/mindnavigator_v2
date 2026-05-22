@@ -423,6 +423,7 @@ class TasksModel(QAbstractListModel):
         project_id: Optional[int],
         recurrence_kind: str,
         recurrence_interval: int,
+        gantt_estimate_minutes: Optional[int] = None,
         is_plan_task: Optional[bool] = None,
         marker_color: str = "",
         marker_theme: str = "",
@@ -457,6 +458,8 @@ class TasksModel(QAbstractListModel):
             marker_color=marker_color,
             marker_theme=marker_theme,
         )
+        if gantt_estimate_minutes is not None:
+            self._db.set_task_gantt_estimate(updated.id, gantt_estimate_minutes, forecasted=True)
         debug_task_dialog(
             f"tasks_model update_task_by_row db_result task_id={updated.id} "
             f"day={updated.day.isoformat()} time={updated.time_text!r} "
