@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import List, Tuple
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QTableWidget, QWidget
 
@@ -175,6 +176,7 @@ class TasksWorkspaceStyle:
                 border: 1px solid {palette.border};
             }}
 
+            QTableWidget#TasksGanttTable QLineEdit,
             QTableWidget#TasksGanttTable QSpinBox {{
                 background: {palette.input_bg};
                 color: {palette.text};
@@ -468,14 +470,14 @@ class TasksWorkspaceStyle:
         track_color = palette.alternateBase().color()
         accent_color = palette.highlight().color()
         label_color = palette.text().color()
-        label_color.setAlpha(140)
+        label_color.setAlpha(210)
         minor_tick_color = palette.mid().color()
         minor_tick_color.setAlpha(120)
         if track_color.lightness() > 120:
             border_color = QColor("#3a3b40")
             track_color = QColor("#1f2227")
             accent_color = QColor("#4f7ecf")
-            label_color = QColor("#8a8d95")
+            label_color = QColor("#b3b7c2")
             minor_tick_color = QColor("#43464d")
 
         painter.setPen(border_color)
@@ -483,20 +485,23 @@ class TasksWorkspaceStyle:
         painter.drawRoundedRect(rect, 4, 4)
 
         span = max(1, day_end - day_start)
-        baseline_y = rect.bottom() - 9
+        label_height = max(12, widget.fontMetrics().height())
+        tick_bottom = rect.bottom() - label_height - 4
+        if tick_bottom <= rect.top() + 6:
+            tick_bottom = rect.center().y()
         for hour in range(day_start // 60, day_end // 60 + 1):
             minute_mark = hour * 60
             x = rect.left() + int((minute_mark - day_start) / span * rect.width())
             strong_tick = (hour % 2 == 0) or (minute_mark == day_start) or (minute_mark == day_end)
             tick_color = border_color if strong_tick else minor_tick_color
             painter.setPen(tick_color)
-            painter.drawLine(x, rect.top() + 1, x, baseline_y)
+            painter.drawLine(x, rect.top() + 1, x, tick_bottom)
             if strong_tick:
-                label_rect = QRect(x - 10, baseline_y + 1, 20, 8)
+                label_rect = QRect(x - 14, tick_bottom + 2, 28, label_height)
                 painter.setPen(label_color)
                 painter.drawText(
                     label_rect,
-                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                     f"{hour:02d}",
                 )
 
@@ -507,7 +512,87 @@ class TasksWorkspaceStyle:
 
         x1 = rect.left() + int((start_clamped - day_start) / span * rect.width())
         x2 = rect.left() + int((end_clamped - day_start) / span * rect.width())
-        bar = QRect(x1, rect.top() + 1, max(2, x2 - x1), max(2, baseline_y - rect.top() - 1))
+        bar = QRect(x1, rect.top() + 1, max(2, x2 - x1), max(2, tick_bottom - rect.top() - 1))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(accent_color)
         painter.drawRoundedRect(bar, 4, 4)
+
+    def paint_gantt_clock(
+        self,
+        widget: QWidget,
+        start_minutes: int,
+        end_minutes: int,
+    ) -> None:
+        painter = QPainter(widget)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = widget.rect().adjusted(4, 4, -4, -4)
+        if rect.width() <= 0 or rect.height() <= 0:
+            return
+
+        palette = widget.palette()
+        border_color = palette.mid().color()
+        face_color = palette.alternateBase().color()
+        accent_color = palette.highlight().color()
+        text_color = palette.text().color()
+        text_color.setAlpha(210)
+        tick_color = palette.mid().color()
+        tick_color.setAlpha(140)
+        if face_color.lightness() > 120:
+            border_color = QColor("#3a3b40")
+            face_color = QColor("#1f2227")
+            accent_color = QColor("#4f7ecf")
+            text_color = QColor("#b3b7c2")
+            tick_color = QColor("#43464d")
+
+        radius = max(10.0, min(rect.width(), rect.height()) / 2.0 - 2.0)
+        center_x = rect.center().x()
+        center_y = rect.center().y()
+
+        def point_for(total_minutes: float, factor: float) -> tuple[float, float]:
+            minute_on_dial = total_minutes % 720.0
+            angle_rad = math.radians(minute_on_dial * 0.5 - 90.0)
+            return (
+                center_x + math.cos(angle_rad) * radius * factor,
+                center_y + math.sin(angle_rad) * radius * factor,
+            )
+
+        painter.setPen(border_color)
+        painter.setBrush(face_color)
+        painter.drawEllipse(rect.center(), int(radius), int(radius))
+
+        for hour in range(12):
+            outer_x, outer_y = point_for(hour * 60.0, 1.0)
+            inner_x, inner_y = point_for(hour * 60.0, 0.82 if hour % 3 == 0 else 0.88)
+            painter.setPen(border_color if hour % 3 == 0 else tick_color)
+            painter.drawLine(int(inner_x), int(inner_y), int(outer_x), int(outer_y))
+
+        duration_minutes = max(0, int(end_minutes - start_minutes))
+        if duration_minutes > 0:
+            steps = max(6, min(48, duration_minutes // 10 or 1))
+            polygon = [rect.center()]
+            for step in range(steps + 1):
+                current_minutes = float(start_minutes) + duration_minutes * step / steps
+                x, y = point_for(current_minutes, 0.76)
+                polygon.append(QPoint(int(x), int(y)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            fill_color = QColor(accent_color)
+            fill_color.setAlpha(110)
+            painter.setBrush(fill_color)
+            painter.drawPolygon(polygon)
+
+        start_x, start_y = point_for(float(start_minutes), 0.8)
+        end_x, end_y = point_for(float(end_minutes), 0.62)
+        painter.setPen(QColor(accent_color))
+        painter.drawLine(rect.center(), QPoint(int(start_x), int(start_y)))
+        painter.setPen(QColor(text_color))
+        painter.drawLine(rect.center(), QPoint(int(end_x), int(end_y)))
+        painter.setBrush(accent_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(rect.center(), 3, 3)
+
+        painter.setPen(text_color)
+        painter.drawText(
+            rect.adjusted(0, 0, 0, -2),
+            Qt.AlignmentFlag.AlignCenter,
+            f"{max(0, duration_minutes // 60):02d}:{max(0, duration_minutes % 60):02d}",
+        )

@@ -23,6 +23,7 @@ class TaskRow:
     recurrence_kind: str = ""
     recurrence_interval: int = 1
     completion_delay_minutes: int = 0
+    gantt_estimate_minutes: int = 0
     started_at: str = ""
     finished_at: str = ""
     actual_minutes: int = 0

@@ -796,6 +796,108 @@ def test_task_edit_dialog_marks_time_error_locally(monkeypatch, unique_temp_path
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_returns_gantt_estimate_minutes(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_gantt_values", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 95, forecasted=True)
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        assert dialog.gantt_estimate_edit.text() == "01:35"
+        assert dialog.values()["gantt_estimate_minutes"] == 95
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_applies_gantt_estimate_after_manual_input(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_dialog_gantt_manual", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 60, forecasted=True)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.show()
+        QApplication.processEvents()
+        line_edit = dialog.gantt_edit.lineEdit()
+        assert line_edit is not None
+
+        dialog.gantt_edit.setFocus()
+        line_edit.selectAll()
+        QTest.keyClicks(dialog.gantt_edit, "01:45")
+        QTest.qWait(300)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.gantt_estimate_minutes == 105
+        assert dialog.gantt_edit.text() == "01:45"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_applies_gantt_estimate_after_arrow_step(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_dialog_gantt_arrows", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+        )
+        database.set_task_gantt_estimate(task.id, 60, forecasted=True)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        dialog.show()
+        QApplication.processEvents()
+        line_edit = dialog.gantt_edit.lineEdit()
+        assert line_edit is not None
+
+        dialog.gantt_edit.setFocus()
+        line_edit.setCursorPosition(4)
+        QTest.keyClick(dialog.gantt_edit, Qt.Key.Key_Up)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.gantt_estimate_minutes == 61
+        assert dialog.gantt_edit.text() == "01:01"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_dialog_dashboard", ".sqlite3")
@@ -1098,6 +1200,121 @@ def test_tasks_workspace_secondary_modes_remain_available_outside_plan(monkeypat
         assert workspace.content_stack.currentWidget() is workspace.gantt_page
     finally:
         workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_gantt_rows_use_taller_height_for_hour_labels(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_gantt_row_height", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_task(
+            title="Gantt row",
+            description="",
+            day=date.today(),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+
+        workspace.btn_gantt.setChecked(True)
+        QApplication.processEvents()
+
+        assert workspace.gantt_table.rowCount() >= 1
+        assert workspace.gantt_table.rowHeight(0) == TasksGanttCast._ROW_HEIGHT
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_gantt_switches_between_timeline_and_clock_views(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_gantt_view_switch", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_task(
+            title="Gantt clock",
+            description="",
+            day=date.today(),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+
+        workspace.btn_gantt.setChecked(True)
+        QApplication.processEvents()
+
+        assert workspace.gantt_view_combo is not None
+        assert workspace.gantt_table.cellWidget(0, 4).objectName() == "TasksGanttTimelineWidget"
+
+        clock_index = workspace.gantt_view_combo.findData("clock")
+        workspace.gantt_view_combo.setCurrentIndex(clock_index)
+        QApplication.processEvents()
+
+        assert workspace.gantt_table.horizontalHeaderItem(4).text() == "Циферблат"
+        assert workspace.gantt_table.cellWidget(0, 4).objectName() == "TasksGanttClockWidget"
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_plan_header_shows_daily_gantt_total_and_overrun(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_plan_header_gantt_total", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    target_day = date(2026, 3, 6)
+    try:
+        first = database.create_task(
+            title="Long task one",
+            description="",
+            day=target_day,
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        second = database.create_task(
+            title="Long task two",
+            description="",
+            day=target_day,
+            time_text="10:00",
+            priority="High",
+        )
+        database.set_task_gantt_estimate(first.id, 6 * 60, forecasted=True)
+        database.set_task_gantt_estimate(second.id, 10 * 60, forecasted=True)
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace._apply_tab("plan")
+        QApplication.processEvents()
+
+        header_row = _find_header_row(workspace.model, target_day)
+        assert header_row >= 0
+        header_index = workspace.model.index(header_row, 0)
+        assert header_index.data(TaskRoles.HeaderTotalMinutes) == 16 * 60
+        assert header_index.data(TaskRoles.HeaderOverrunMinutes) == 2 * 60
+
+        rendered = workspace.delegate.format_header_with_plan_summary(
+            target_day,
+            header_index.data(TaskRoles.HeaderTotalMinutes),
+            header_index.data(TaskRoles.HeaderOverrunMinutes),
+        )
+        assert "Σ" in rendered
+        assert "+2" in rendered
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
 

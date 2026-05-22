@@ -305,6 +305,7 @@ class TasksWorkspace(BaseWorkspace):
         self._sticky_header = None
         self.content_stack = None
         self.gantt_page = None
+        self.gantt_view_combo = None
         self.board_page = None
         self.dash_page = None
         self.btn_gantt = None
@@ -594,6 +595,7 @@ class TasksWorkspace(BaseWorkspace):
         page = self._gantt_cast.build_page()
         self.gantt_hint = self._gantt_cast.hint_label
         self.gantt_table = self._gantt_cast.table
+        self.gantt_view_combo = self._gantt_cast.view_combo
         return page
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -2079,7 +2081,9 @@ class TasksWorkspace(BaseWorkspace):
             self._sticky_header.hide()
             return
 
-        text = self.delegate.format_header(active_day)
+        total_minutes = max(0, int(active_index.data(TaskRoles.HeaderTotalMinutes) or 0))
+        overrun_minutes = max(0, int(active_index.data(TaskRoles.HeaderOverrunMinutes) or 0))
+        text = self.delegate.format_header_with_plan_summary(active_day, total_minutes, overrun_minutes)
         if active_day == date.today():
             text = f"{text}  СЕГОДНЯ"
         self._sticky_header.setText(text)
