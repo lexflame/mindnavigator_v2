@@ -910,6 +910,34 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         db_path.unlink(missing_ok=True)
 
 
+def test_task_edit_dialog_ignores_saved_shared_size_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_dialog_ignores_saved_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task(
+            day=date(2026, 4, 14),
+            title="Edit size task",
+            description="",
+            priority="Medium",
+            project_id=None,
+            time_text="",
+        )
+        database.set_setting("ui.task_edit_dialog_size", "820x610")
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_project_suggest", ".sqlite3")

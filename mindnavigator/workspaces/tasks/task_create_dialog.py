@@ -8,6 +8,7 @@ from .task_edit_dialog import TaskEditDialog
 class TaskCreateDialog(TaskEditDialog):
     _SIZE_SETTING_KEY = TaskEditDialog._SIZE_SETTING_KEY
     _LEGACY_SIZE_SETTING_KEYS = ("ui.task_create_dialog_size",)
+    _USE_SAVED_SIZE = True
 
     def __init__(self, parent=None):
         task = TaskRow(

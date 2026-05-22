@@ -82,6 +82,7 @@ class _TaskDialogHeader(QFrame):
 class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
     _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
+    _USE_SAVED_SIZE = False
     _DEFAULT_SIZE = QSize(1042, 757)
     _LABEL_WIDTH = 138
 
@@ -111,7 +112,9 @@ class TaskEditDialog(QDialog):
                 f"result={int(result_code)} state={self._debug_form_state()}"
             )
         )
-        if not self._restore_saved_size():
+        if self._USE_SAVED_SIZE and self._restore_saved_size():
+            pass
+        else:
             self.resize(self._DEFAULT_SIZE)
 
         root_layout = QVBoxLayout(self)
@@ -753,6 +756,8 @@ class TaskEditDialog(QDialog):
         return False
 
     def _save_current_size(self) -> None:
+        if not self._USE_SAVED_SIZE:
+            return
         size = self.size()
         keys = self._size_setting_keys()
         if not keys:
