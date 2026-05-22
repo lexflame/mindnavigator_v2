@@ -17,7 +17,7 @@ from ..gantt_duration_edit import GanttEstimateEdit, format_gantt_estimate_minut
 
 
 class _GanttBarWidget(QWidget):
-    _MIN_HEIGHT = 24
+    _MIN_HEIGHT = 34
 
     def __init__(self, styler, start_minutes: int, end_minutes: int, day_start: int, day_end: int, parent=None):
         super().__init__(parent)
@@ -36,7 +36,7 @@ class _GanttBarWidget(QWidget):
 class TasksGanttCast:
     """Owns GANTT page widgets and gantt-specific data refresh logic."""
 
-    _ROW_HEIGHT = 42
+    _ROW_HEIGHT = 56
 
     def __init__(self, workspace, styler) -> None:
         self._workspace = workspace

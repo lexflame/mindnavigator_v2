@@ -468,14 +468,14 @@ class TasksWorkspaceStyle:
         track_color = palette.alternateBase().color()
         accent_color = palette.highlight().color()
         label_color = palette.text().color()
-        label_color.setAlpha(140)
+        label_color.setAlpha(210)
         minor_tick_color = palette.mid().color()
         minor_tick_color.setAlpha(120)
         if track_color.lightness() > 120:
             border_color = QColor("#3a3b40")
             track_color = QColor("#1f2227")
             accent_color = QColor("#4f7ecf")
-            label_color = QColor("#8a8d95")
+            label_color = QColor("#b3b7c2")
             minor_tick_color = QColor("#43464d")
 
         painter.setPen(border_color)
@@ -483,20 +483,23 @@ class TasksWorkspaceStyle:
         painter.drawRoundedRect(rect, 4, 4)
 
         span = max(1, day_end - day_start)
-        baseline_y = rect.bottom() - 9
+        label_height = max(12, widget.fontMetrics().height())
+        tick_bottom = rect.bottom() - label_height - 4
+        if tick_bottom <= rect.top() + 6:
+            tick_bottom = rect.center().y()
         for hour in range(day_start // 60, day_end // 60 + 1):
             minute_mark = hour * 60
             x = rect.left() + int((minute_mark - day_start) / span * rect.width())
             strong_tick = (hour % 2 == 0) or (minute_mark == day_start) or (minute_mark == day_end)
             tick_color = border_color if strong_tick else minor_tick_color
             painter.setPen(tick_color)
-            painter.drawLine(x, rect.top() + 1, x, baseline_y)
+            painter.drawLine(x, rect.top() + 1, x, tick_bottom)
             if strong_tick:
-                label_rect = QRect(x - 10, baseline_y + 1, 20, 8)
+                label_rect = QRect(x - 14, tick_bottom + 2, 28, label_height)
                 painter.setPen(label_color)
                 painter.drawText(
                     label_rect,
-                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                     f"{hour:02d}",
                 )
 
@@ -507,7 +510,7 @@ class TasksWorkspaceStyle:
 
         x1 = rect.left() + int((start_clamped - day_start) / span * rect.width())
         x2 = rect.left() + int((end_clamped - day_start) / span * rect.width())
-        bar = QRect(x1, rect.top() + 1, max(2, x2 - x1), max(2, baseline_y - rect.top() - 1))
+        bar = QRect(x1, rect.top() + 1, max(2, x2 - x1), max(2, tick_bottom - rect.top() - 1))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(accent_color)
         painter.drawRoundedRect(bar, 4, 4)
