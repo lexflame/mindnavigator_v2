@@ -201,12 +201,34 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
     database = Database(path=db_path)
     workspace = None
     try:
+        root_project = database.create_project(
+            area="Work",
+            title="Universe",
+            updated=ideas_workspace_module.date.today(),
+            priority="Medium",
+        )
+        child_project = database.create_project(
+            area="Work",
+            title="Chapter",
+            updated=ideas_workspace_module.date.today(),
+            priority="Medium",
+            parent_project_id=root_project.id,
+        )
+        leaf_project = database.create_project(
+            area="Work",
+            title="Scene",
+            updated=ideas_workspace_module.date.today(),
+            priority="Medium",
+            parent_project_id=child_project.id,
+        )
         first_idea = database.create_idea(
             title="Capture idea",
             summary="Quick win",
             status="inbox",
             value_score=5,
             effort_score=1,
+            project_id=leaf_project.id,
+            source="Voice memo\nДосье: Archive",
         )
         second_idea = database.create_idea(
             title="Heavy idea",
@@ -234,6 +256,14 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         first_index = model.index_for_id(first_idea.id)
         workspace.list_view.setCurrentIndex(first_index)
         QApplication.processEvents()
+        assert first_index.data(ideas_workspace_module.IdeaRoles.Source) == "Voice memo\nДосье: Archive"
+        assert first_index.data(ideas_workspace_module.IdeaRoles.ProjectTitle) == "Scene"
+        assert first_index.data(ideas_workspace_module.IdeaRoles.ProjectPath) == "Work / Universe / Chapter / Scene"
+        list_delegate = workspace.list_view.itemDelegate()
+        assert isinstance(list_delegate, ideas_workspace_module.IdeasDelegate)
+        list_option = QStyleOptionViewItem()
+        list_option.rect = workspace.list_view.visualRect(first_index)
+        assert list_delegate.sizeHint(list_option, first_index).height() == 128
 
         funnel_index = workspace.view_mode_combo.findData("funnel")
         assert funnel_index >= 0

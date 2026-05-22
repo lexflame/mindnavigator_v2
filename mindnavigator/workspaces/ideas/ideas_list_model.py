@@ -48,6 +48,8 @@ class IdeasListModel(QAbstractListModel):
             return item.effort_score
         if role == IdeaRoles.ProjectTitle:
             return item.project_title
+        if role == IdeaRoles.ProjectPath:
+            return item.project_path or item.project_title
         if role == IdeaRoles.Archived:
             return item.archived
         if role == IdeaRoles.OutputLabel:
@@ -58,6 +60,8 @@ class IdeasListModel(QAbstractListModel):
             return item.materials_count
         if role == IdeaRoles.UpdatedLabel:
             return item.updated_label
+        if role == IdeaRoles.Source:
+            return item.source
         if role == Qt.ItemDataRole.DisplayRole:
             return item.title
         return None

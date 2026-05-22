@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 
+
 class IdeasDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
@@ -21,18 +22,20 @@ class IdeasDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(rect, 8, 8)
 
         title = index.data(IdeaRoles.Title) or "Без названия"
-        project = index.data(IdeaRoles.ProjectTitle) or "Без проекта"
+        project = index.data(IdeaRoles.ProjectPath) or index.data(IdeaRoles.ProjectTitle) or "Без проекта"
         status = STATUS_LABELS.get(index.data(IdeaRoles.Status), "")
         idea_type = TYPE_LABELS.get(index.data(IdeaRoles.Type), "")
         value_score = index.data(IdeaRoles.ValueScore)
         effort_score = index.data(IdeaRoles.EffortScore)
         summary = index.data(IdeaRoles.Summary) or ""
         body_md = index.data(IdeaRoles.Body) or ""
+        source_text = index.data(IdeaRoles.Source) or ""
         output_label = index.data(IdeaRoles.OutputLabel) or "нет"
         relations_count = int(index.data(IdeaRoles.RelationsCount) or 0)
         materials_count = int(index.data(IdeaRoles.MaterialsCount) or 0)
         updated_label = index.data(IdeaRoles.UpdatedLabel) or ""
         preview_text = idea_preview_line(summary, body_md)
+        source_preview = self._compact_source(source_text)
 
         title_font = QFont(option.font)
         title_font.setPointSize(title_font.pointSize() + 1)
@@ -63,10 +66,17 @@ class IdeasDelegate(QStyledItemDelegate):
             preview_text,
         )
 
+        painter.setPen(QColor("#d6c08d"))
+        painter.drawText(
+            rect.adjusted(12, 66, -12, -30),
+            Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
+            f"Источник: {source_preview}",
+        )
+
         score_text = f"Value {value_score} | Effort {effort_score} | Выход: {output_label}"
         painter.setPen(QColor("#8bb5e8"))
         painter.drawText(
-            rect.adjusted(12, 66, -12, -12),
+            rect.adjusted(12, 86, -12, -12),
             Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
             score_text,
         )
@@ -82,7 +92,7 @@ class IdeasDelegate(QStyledItemDelegate):
         )
         painter.setPen(QColor("#8d939b"))
         painter.drawText(
-            rect.adjusted(12, 84, -12, -2),
+            rect.adjusted(12, 104, -12, -2),
             Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft,
             footer_text,
         )
@@ -92,7 +102,16 @@ class IdeasDelegate(QStyledItemDelegate):
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         if index.data(IdeaRoles.RowType) == "category":
             return QSize(option.rect.width(), 30)
-        return QSize(option.rect.width(), 108)
+        return QSize(option.rect.width(), 128)
+
+    @staticmethod
+    def _compact_source(source_text: str) -> str:
+        parts = [
+            " ".join(raw_line.strip().split())
+            for raw_line in str(source_text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            if raw_line.strip()
+        ]
+        return " • ".join(parts) if parts else "нет"
 
     @staticmethod
     def _paint_category(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
@@ -106,5 +125,6 @@ class IdeasDelegate(QStyledItemDelegate):
         painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, title)
         painter.setPen(QColor("#30333a"))
         painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
+
 
 __all__ = ["IdeasDelegate"]

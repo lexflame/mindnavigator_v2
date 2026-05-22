@@ -82,6 +82,35 @@ def _dossier_source_label(title: str) -> str:
     return f"Досье: {normalized_title}" if normalized_title else "Досье"
 
 
+def _build_project_path_map(projects: list[object]) -> dict[int, str]:
+    by_id = {int(project.id): project for project in projects if getattr(project, "id", None) is not None}
+    cache: dict[int, str] = {}
+
+    def resolve(project_id: int, seen: set[int]) -> str:
+        if project_id in cache:
+            return cache[project_id]
+        project = by_id.get(project_id)
+        if project is None:
+            return ""
+        title = " ".join(str(getattr(project, "title", "") or "").split())
+        area = " ".join(str(getattr(project, "area", "") or "").split())
+        parent_id = getattr(project, "parent_project_id", None)
+        base_title = f"{area} / {title}" if area and title else area or title
+        if not base_title:
+            cache[project_id] = ""
+            return ""
+        if parent_id is None or parent_id in seen:
+            cache[project_id] = base_title
+            return base_title
+        parent_title = resolve(int(parent_id), seen | {project_id})
+        cache[project_id] = f"{parent_title} / {title}" if parent_title and title else parent_title or base_title
+        return cache[project_id]
+
+    for project_id in by_id:
+        resolve(project_id, set())
+    return cache
+
+
 class IdeasFunnelList(QListWidget):
     MIME_TYPE = "application/x-mindnavigator-idea-id"
 
@@ -2128,6 +2157,7 @@ class IdeasWorkspace(BaseWorkspace):
 
     def refresh(self) -> None:
         filters = self.get_filters()
+        project_paths = _build_project_path_map(self._db.fetch_projects())
         ideas = self._db.fetch_ideas(
             project_id=None,
             search=self._query,
@@ -2157,6 +2187,7 @@ class IdeasWorkspace(BaseWorkspace):
                     relations_count=len(relations),
                     materials_count=len(materials),
                     updated_label=self._format_relative_time(idea.updated_at),
+                    project_path=project_paths.get(idea.project_id or -1, idea.project_title),
                 )
             )
         self._visible_idea_items = items
