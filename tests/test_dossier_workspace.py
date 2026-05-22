@@ -134,6 +134,12 @@ def test_dossier_workspace_create_and_delete_round_trip(monkeypatch, unique_temp
         assert created[0].kind == "writer"
         assert created[0].metadata["country"] == "USSR"
         assert workspace.get_selection() == created[0].id
+        assert workspace.left_mode_stack.currentIndex() == 0
+        assert workspace.preview_stack.currentIndex() == 1
+        stylesheet = workspace.styleSheet()
+        assert "QFrame#DossierPreviewCard" in stylesheet
+        assert "QSplitter::handle" in stylesheet
+        assert "QTabBar::tab:selected" in stylesheet
 
         workspace._delete_selected(require_confirmation=False)
         QApplication.processEvents()
