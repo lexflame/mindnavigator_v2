@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QScrollArea, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -714,12 +714,15 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
 
         attachments_title = dialog.findChild(QLabel, "TaskAttachmentsTitle")
         buttons = dialog.findChild(QDialogButtonBox)
+        content_scroll = dialog.findChild(QScrollArea, "TaskDialogScroll")
         assert attachments_title is not None
         assert buttons is not None
+        assert content_scroll is not None
         assert dialog.minimumWidth() == 640
         assert dialog.minimumHeight() == 520
         assert dialog.width() == 1042
         assert dialog.height() == 757
+        assert dialog.minimumSizeHint().height() <= dialog._DEFAULT_SIZE.height()
         assert dialog.header_bar.title_label.text() == "Задача"
         assert dialog.plan_task_edit.text() == "План"
         assert dialog.time_toggle.text() == ""

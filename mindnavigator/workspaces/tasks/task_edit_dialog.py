@@ -124,12 +124,19 @@ class TaskEditDialog(QDialog):
         self.header_bar = _TaskDialogHeader(self, "Задача")
         root_layout.addWidget(self.header_bar)
 
-        content = QWidget(self)
+        self.content_scroll = QScrollArea(self)
+        self.content_scroll.setObjectName("TaskDialogScroll")
+        self.content_scroll.setWidgetResizable(True)
+        self.content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.content_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        root_layout.addWidget(self.content_scroll, 1)
+
+        content = QWidget(self.content_scroll)
         content.setObjectName("TaskDialogContent")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(14)
-        root_layout.addWidget(content)
+        self.content_scroll.setWidget(content)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -403,6 +410,11 @@ class TaskEditDialog(QDialog):
 
             QDialog#TaskEditDialog QWidget#TaskDialogContent {{
                 background: transparent;
+            }}
+
+            QDialog#TaskEditDialog QScrollArea#TaskDialogScroll {{
+                background: transparent;
+                border: none;
             }}
 
             QDialog#TaskEditDialog QLabel#TaskFormLabel {{
