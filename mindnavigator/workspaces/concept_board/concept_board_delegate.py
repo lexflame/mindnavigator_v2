@@ -27,10 +27,12 @@ class ConceptBoardDelegate(QStyledItemDelegate):
         *,
         data_role: int = int(Qt.ItemDataRole.UserRole),
         row_height: int | None = None,
+        stack_footer: bool = False,
     ) -> None:
         super().__init__(parent)
         self._data_role = int(data_role)
         self._row_height = max(80, int(row_height or self.ROW_H))
+        self._stack_footer = bool(stack_footer)
         self._title_font = QFont()
         self._title_font.setPointSize(10)
         self._title_font.setBold(True)
@@ -115,14 +117,18 @@ class ConceptBoardDelegate(QStyledItemDelegate):
         subtitle = subtitle_metrics.elidedText(card.subtitle or "Без описания", Qt.TextElideMode.ElideRight, width)
         painter.drawText(x, y + 64, subtitle)
 
-        footer_y = rect.bottom() - 30
+        footer_y = rect.bottom() - (48 if self._stack_footer else 30)
         painter.setFont(self._footer_font)
         painter.setPen(QColor("#73839a"))
         project_text = meta_metrics.elidedText(card.project_title or "Без проекта", Qt.TextElideMode.ElideRight, width // 2)
         painter.drawText(x, footer_y, project_text)
 
         links_text = meta_metrics.elidedText(card.link_summary, Qt.TextElideMode.ElideRight, 96)
-        links_rect = rect.adjusted(rect.width() - 114, rect.height() - 40, -14, -12)
+        links_rect = (
+            rect.adjusted(rect.width() - 114, rect.height() - 34, -14, -8)
+            if self._stack_footer
+            else rect.adjusted(rect.width() - 114, rect.height() - 40, -14, -12)
+        )
         painter.setBrush(QColor(255, 255, 255, 12))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(links_rect, 10, 10)

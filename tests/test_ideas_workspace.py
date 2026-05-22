@@ -204,7 +204,7 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         assert funnel_card.title == "Capture idea"
         option = QStyleOptionViewItem()
         option.rect = workspace.funnel_lists["inbox"].visualItemRect(funnel_idea_item)
-        assert delegate.sizeHint(option, workspace.funnel_lists["inbox"].indexFromItem(funnel_idea_item)).height() == 144
+        assert delegate.sizeHint(option, workspace.funnel_lists["inbox"].indexFromItem(funnel_idea_item)).height() == 160
         assert "В·" not in funnel_card.meta_text
         assert "В·" not in funnel_card.relation_summary
         assert funnel_card.relation_summary.startswith("Связи · ")

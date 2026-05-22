@@ -60,7 +60,7 @@ IDEA_DEVELOPMENT_TEMPLATE = (
 )
 _FUNNEL_CARD_ROLE = int(Qt.ItemDataRole.UserRole) + 50
 _FUNNEL_IDEA_ACCENT = "#6ad56f"
-_FUNNEL_CARD_ROW_HEIGHT = 144
+_FUNNEL_CARD_ROW_HEIGHT = 160
 
 
 class IdeasFunnelList(QListWidget):
@@ -394,6 +394,7 @@ class IdeasWorkspace(BaseWorkspace):
                     column_list,
                     data_role=_FUNNEL_CARD_ROLE,
                     row_height=_FUNNEL_CARD_ROW_HEIGHT,
+                    stack_footer=True,
                 )
             )
             column_list.itemActivated.connect(self._on_alt_view_item_activated)
