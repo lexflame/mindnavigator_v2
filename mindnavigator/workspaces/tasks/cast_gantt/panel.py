@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 
 from .._shared import (
     QAbstractItemView,
+    QComboBox,
     QHeaderView,
+    QHBoxLayout,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
@@ -26,11 +28,29 @@ class _GanttBarWidget(QWidget):
         self._end = int(end_minutes)
         self._day_start = int(day_start)
         self._day_end = int(day_end)
+        self.setObjectName("TasksGanttTimelineWidget")
         self.setMinimumHeight(self._MIN_HEIGHT)
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         self._styler.paint_gantt_bar(self, self._start, self._end, self._day_start, self._day_end)
+
+
+class _GanttClockWidget(QWidget):
+    _MIN_HEIGHT = 40
+
+    def __init__(self, styler, start_minutes: int, end_minutes: int, parent=None):
+        super().__init__(parent)
+        self._styler = styler
+        self._start = int(start_minutes)
+        self._end = int(end_minutes)
+        self.setObjectName("TasksGanttClockWidget")
+        self.setMinimumHeight(self._MIN_HEIGHT)
+        self.setMinimumWidth(76)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        self._styler.paint_gantt_clock(self, self._start, self._end)
 
 
 class TasksGanttCast:
@@ -41,15 +61,35 @@ class TasksGanttCast:
     def __init__(self, workspace, styler) -> None:
         self._workspace = workspace
         self._styler = styler
+        self._view_mode = "timeline"
         self.page: QWidget | None = None
         self.hint_label: QLabel | None = None
         self.table: QTableWidget | None = None
+        self.view_combo: QComboBox | None = None
 
     def build_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
+
+        controls_row = QWidget(page)
+        controls_layout = QHBoxLayout(controls_row)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+
+        view_label = QLabel("Вид:", controls_row)
+        view_label.setObjectName("TasksGanttViewLabel")
+        controls_layout.addWidget(view_label)
+
+        self.view_combo = QComboBox(controls_row)
+        self.view_combo.setObjectName("TasksGanttViewCombo")
+        self.view_combo.addItem("Шкала времени", "timeline")
+        self.view_combo.addItem("Циферблат", "clock")
+        self.view_combo.currentIndexChanged.connect(self._on_view_mode_changed)
+        controls_layout.addWidget(self.view_combo)
+        controls_layout.addStretch(1)
+        layout.addWidget(controls_row)
 
         self.hint_label = QLabel(
             "Режим Gantt: прогноз длительности строится автоматически и сохраняется."
@@ -68,6 +108,7 @@ class TasksGanttCast:
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._styler.apply_gantt_palette(self.table, self._workspace._theme_mode)
+        self._update_timeline_header()
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -78,6 +119,24 @@ class TasksGanttCast:
 
         self.page = page
         return page
+
+    def _on_view_mode_changed(self, _index: int) -> None:
+        if self.view_combo is None:
+            return
+        next_mode = str(self.view_combo.currentData() or "timeline")
+        if next_mode == self._view_mode:
+            return
+        self._view_mode = next_mode
+        self._update_timeline_header()
+        self.refresh()
+
+    def _update_timeline_header(self) -> None:
+        if self.table is None:
+            return
+        label = "Циферблат" if self._view_mode == "clock" else "Шкала"
+        header_item = self.table.horizontalHeaderItem(4)
+        if header_item is not None:
+            header_item.setText(label)
 
     @staticmethod
     def estimate_task_minutes(task) -> int:
@@ -167,15 +226,23 @@ class TasksGanttCast:
 
             start_minutes = start_dt.hour * 60 + start_dt.minute
             end_minutes = end_dt.hour * 60 + end_dt.minute
-            bar_widget = _GanttBarWidget(
-                styler=self._styler,
-                start_minutes=start_minutes,
-                end_minutes=end_minutes,
-                day_start=day_start_minutes,
-                day_end=day_end_minutes,
-                parent=self.table,
-            )
-            self.table.setCellWidget(row, 4, bar_widget)
+            if self._view_mode == "clock":
+                gantt_widget = _GanttClockWidget(
+                    styler=self._styler,
+                    start_minutes=start_minutes,
+                    end_minutes=end_minutes,
+                    parent=self.table,
+                )
+            else:
+                gantt_widget = _GanttBarWidget(
+                    styler=self._styler,
+                    start_minutes=start_minutes,
+                    end_minutes=end_minutes,
+                    day_start=day_start_minutes,
+                    day_end=day_end_minutes,
+                    parent=self.table,
+                )
+            self.table.setCellWidget(row, 4, gantt_widget)
             self.table.setRowHeight(row, self._ROW_HEIGHT)
 
             duration_edit = GanttEstimateEdit(estimate, self.table)

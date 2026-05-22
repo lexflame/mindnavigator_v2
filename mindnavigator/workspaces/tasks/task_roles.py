@@ -37,5 +37,7 @@ class TaskRoles:
     StartedAt = Qt.ItemDataRole.UserRole + 30
     FinishedAt = Qt.ItemDataRole.UserRole + 31
     ActualMinutes = Qt.ItemDataRole.UserRole + 32
+    HeaderTotalMinutes = Qt.ItemDataRole.UserRole + 33
+    HeaderOverrunMinutes = Qt.ItemDataRole.UserRole + 34
 
 __all__ = ["TaskRoles"]

@@ -58,6 +58,7 @@ class TasksModel(QAbstractListModel):
             recurrence_kind=task.recurrence_kind,
             recurrence_interval=task.recurrence_interval,
             completion_delay_minutes=task.completion_delay_minutes,
+            gantt_estimate_minutes=task.gantt_estimate_minutes,
             started_at=task.started_at,
             finished_at=task.finished_at,
             actual_minutes=task.actual_minutes,
@@ -150,6 +151,10 @@ class TasksModel(QAbstractListModel):
         if isinstance(r, HeaderRow):
             if role == TaskRoles.Day:
                 return r.day
+            if role == TaskRoles.HeaderTotalMinutes:
+                return r.total_minutes
+            if role == TaskRoles.HeaderOverrunMinutes:
+                return r.overrun_minutes
             if role == Qt.ItemDataRole.DisplayRole:
                 return r.day.isoformat()
             return None
@@ -1106,6 +1111,28 @@ class TasksModel(QAbstractListModel):
                 children.sort(key=lambda child: (child.plan_order, child.id))
             return children
 
+        def effective_gantt_minutes(task_item: TaskRow) -> int:
+            stored = max(0, int(task_item.gantt_estimate_minutes or 0))
+            if stored > 0:
+                return stored
+            from .cast_gantt import TasksGanttCast
+
+            return max(15, int(TasksGanttCast.estimate_task_minutes(task_item)))
+
+        plan_day_capacity_minutes = max(
+            0,
+            (int(getattr(self.parent(), "GANTT_DAY_END_HOUR", 22)) - int(getattr(self.parent(), "GANTT_DAY_START_HOUR", 8))) * 60,
+        )
+        header_plan_totals: dict[date, int] = {}
+        header_plan_overruns: dict[date, int] = {}
+        if self._drag_enabled:
+            for task_item in base_tasks:
+                if task_item.done or not should_include(task_item):
+                    continue
+                header_plan_totals[task_item.day] = header_plan_totals.get(task_item.day, 0) + effective_gantt_minutes(task_item)
+            for header_day, total_minutes in header_plan_totals.items():
+                header_plan_overruns[header_day] = max(0, total_minutes - plan_day_capacity_minutes)
+
         new_rows: List[Row] = []
         self._task_children = {}
         self._task_depths = {}
@@ -1137,7 +1164,13 @@ class TasksModel(QAbstractListModel):
             for root_task in roots:
                 if current_day != root_task.day:
                     current_day = root_task.day
-                    new_rows.append(HeaderRow(current_day))
+                    new_rows.append(
+                        HeaderRow(
+                            current_day,
+                            total_minutes=header_plan_totals.get(current_day, 0),
+                            overrun_minutes=header_plan_overruns.get(current_day, 0),
+                        )
+                    )
                 append_task(root_task, 0)
 
         self.beginResetModel()

@@ -342,14 +342,25 @@ class TasksItemDelegate(QStyledItemDelegate):
         if row_type == "header":
             d: date = index.data(TaskRoles.Day)
             txt = self._format_header(d)
+            header_total_minutes = max(0, int(index.data(TaskRoles.HeaderTotalMinutes) or 0))
+            header_overrun_minutes = max(0, int(index.data(TaskRoles.HeaderOverrunMinutes) or 0))
             show_today = should_show_today_badge(d)
             painter.fillRect(r, self.C_BG)
 
             painter.setPen(self.C_DIM)
             painter.setFont(self._font_header)
             quick_rect = self._header_quick_rect(r, txt, include_today_badge=show_today)
+            summary_text = self._format_header_total_text(header_total_minutes)
+            overrun_text = self._format_header_overrun_text(header_overrun_minutes)
+            summary_rect = QRect(quick_rect.right() + 12, r.top(), max(0, r.right() - quick_rect.right() - 24), r.height())
             text_rect = QRect(r.left() + 10, r.top(), quick_rect.left() - r.left() - 18, r.height())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, txt)
+            if summary_text:
+                painter.setPen(self.C_TODAY if header_total_minutes > 0 else self.C_DIM)
+                painter.drawText(summary_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, summary_text)
+            if overrun_text:
+                painter.setPen(self.C_OVERDUE)
+                painter.drawText(summary_rect.adjusted(0, 0, -110, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, overrun_text)
 
             if show_today:
                 metrics = QFontMetrics(self._font_header)
@@ -1224,6 +1235,17 @@ class TasksItemDelegate(QStyledItemDelegate):
     def format_header(self, d: date) -> str:
         return self._format_header(d)
 
+    def format_header_with_plan_summary(self, d: date, total_minutes: int = 0, overrun_minutes: int = 0) -> str:
+        base = self._format_header(d)
+        summary_text = self._format_header_total_text(total_minutes)
+        overrun_text = self._format_header_overrun_text(overrun_minutes)
+        parts = [base]
+        if summary_text:
+            parts.append(summary_text)
+        if overrun_text:
+            parts.append(overrun_text)
+        return "  •  ".join(parts)
+
     @staticmethod
     def _format_completion_delay(delay_minutes: int) -> str:
         """Формирует подпись расхождения по факту выполнения."""
@@ -1241,6 +1263,20 @@ class TasksItemDelegate(QStyledItemDelegate):
         if hours:
             return f"{hours}ч"
         return f"{minutes}м"
+
+    @classmethod
+    def _format_header_total_text(cls, total_minutes: int) -> str:
+        total = max(0, int(total_minutes or 0))
+        if total <= 0:
+            return ""
+        return f"Σ {cls._format_duration_minutes(total)}"
+
+    @classmethod
+    def _format_header_overrun_text(cls, overrun_minutes: int) -> str:
+        overrun = max(0, int(overrun_minutes or 0))
+        if overrun <= 0:
+            return ""
+        return f"+{cls._format_duration_minutes(overrun)}"
 
     @staticmethod
     def _elapsed_minutes_since(started_at: str, now_dt: datetime | None = None) -> Optional[int]:
