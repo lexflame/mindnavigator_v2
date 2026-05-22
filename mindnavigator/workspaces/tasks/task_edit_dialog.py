@@ -81,6 +81,7 @@ class _TaskDialogHeader(QFrame):
 
 class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
+    _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
     _DEFAULT_SIZE = QSize(680, 560)
     _LABEL_WIDTH = 138
 
@@ -735,23 +736,39 @@ class TaskEditDialog(QDialog):
         self.showMinimized()
 
     def _restore_saved_size(self) -> bool:
-        raw = self._db.get_setting(self._SIZE_SETTING_KEY, default="").strip()
-        if not raw:
-            return False
-        width_str, separator, height_str = raw.partition("x")
-        if not separator:
-            return False
-        try:
-            width = int(width_str)
-            height = int(height_str)
-        except ValueError:
-            return False
-        self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
-        return True
+        for key in self._size_setting_keys():
+            raw = self._db.get_setting(key, default="").strip()
+            if not raw:
+                continue
+            width_str, separator, height_str = raw.partition("x")
+            if not separator:
+                continue
+            try:
+                width = int(width_str)
+                height = int(height_str)
+            except ValueError:
+                continue
+            self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
+            return True
+        return False
 
     def _save_current_size(self) -> None:
         size = self.size()
-        self._db.set_setting(self._SIZE_SETTING_KEY, f"{size.width()}x{size.height()}")
+        keys = self._size_setting_keys()
+        if not keys:
+            return
+        self._db.set_setting(keys[0], f"{size.width()}x{size.height()}")
+
+    def _size_setting_keys(self) -> tuple[str, ...]:
+        keys: list[str] = []
+        primary_key = str(self._SIZE_SETTING_KEY or "").strip()
+        if primary_key:
+            keys.append(primary_key)
+        for key in self._LEGACY_SIZE_SETTING_KEYS:
+            normalized = str(key or "").strip()
+            if normalized and normalized not in keys:
+                keys.append(normalized)
+        return tuple(keys)
 
     def closeEvent(self, event) -> None:
         debug_task_dialog(

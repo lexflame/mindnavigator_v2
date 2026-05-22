@@ -6,7 +6,8 @@ from ._shared import *  # noqa: F401,F403
 from .task_edit_dialog import TaskEditDialog
 
 class TaskCreateDialog(TaskEditDialog):
-    _SIZE_SETTING_KEY = "ui.task_create_dialog_size"
+    _SIZE_SETTING_KEY = TaskEditDialog._SIZE_SETTING_KEY
+    _LEGACY_SIZE_SETTING_KEYS = ("ui.task_create_dialog_size",)
 
     def __init__(self, parent=None):
         task = TaskRow(

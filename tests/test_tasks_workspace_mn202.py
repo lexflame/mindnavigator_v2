@@ -941,6 +941,46 @@ def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_p
         db_path.unlink(missing_ok=True)
 
 
+def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        database.set_setting("ui.task_edit_dialog_size", "820x610")
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+
+        assert dialog.width() == 820
+        assert dialog.height() == 610
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_save_shared_size", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+
+        dialog = tasks_workspace.TaskCreateDialog()
+        dialog.resize(790, 600)
+        dialog.close()
+
+        assert database.get_setting("ui.task_edit_dialog_size") == "790x600"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_switches_board_and_dash_modes(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_board_dash_modes", ".sqlite3")
