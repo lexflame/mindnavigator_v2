@@ -1186,9 +1186,9 @@ class IdeasWorkspace(BaseWorkspace):
             project_id=item.project_id,
             project_title=item.project_title,
             accent_color=_FUNNEL_IDEA_ACCENT,
-            meta_text=" В· ".join(str(part).strip() for part in meta_parts if str(part or "").strip()),
+            meta_text=" · ".join(str(part).strip() for part in meta_parts if str(part or "").strip()),
             relation_count=max(0, int(item.relations_count)),
-            relation_summary=f"РЎРІСЏР·Рё В· {max(0, int(item.relations_count))}",
+            relation_summary=f"Связи · {max(0, int(item.relations_count))}",
             source_payload=item,
         )
 

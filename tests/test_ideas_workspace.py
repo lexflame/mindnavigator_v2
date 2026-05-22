@@ -201,6 +201,9 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         assert funnel_card.entity_kind == "idea"
         assert funnel_card.entity_id == first_idea.id
         assert funnel_card.title == "Capture idea"
+        assert "В·" not in funnel_card.meta_text
+        assert "В·" not in funnel_card.relation_summary
+        assert funnel_card.relation_summary.startswith("Связи · ")
         workspace.funnel_lists["inbox"].setCurrentItem(funnel_idea_item)
         workspace.funnel_lists["inbox"].itemClicked.emit(funnel_idea_item)
         QApplication.processEvents()
