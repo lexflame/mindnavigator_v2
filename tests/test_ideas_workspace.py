@@ -7,9 +7,10 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QStyleOptionViewItem, QWidget
 
 from mindnavigator.storage import Database
+from mindnavigator.workspaces.concept_board.concept_board_delegate import ConceptBoardDelegate
 from mindnavigator.workspaces import ideas as ideas_workspace
 from mindnavigator.workspaces.ideas import ideas_workspace as ideas_workspace_module
 
@@ -178,6 +179,8 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
         QApplication.processEvents()
 
         assert workspace.list_mode_stack.currentWidget() is workspace.funnel_view
+        delegate = workspace.funnel_lists["inbox"].itemDelegate()
+        assert isinstance(delegate, ConceptBoardDelegate)
         inbox_rows = [
             workspace.funnel_lists["inbox"].item(row).text()
             for row in range(workspace.funnel_lists["inbox"].count())
@@ -194,6 +197,17 @@ def test_ideas_workspace_view_modes_show_items_and_links(monkeypatch, unique_tem
             for row in range(workspace.funnel_lists["inbox"].count())
             if isinstance(workspace.funnel_lists["inbox"].item(row).data(Qt.ItemDataRole.UserRole), int)
         )
+        funnel_card = funnel_idea_item.data(ideas_workspace_module._FUNNEL_CARD_ROLE)
+        assert funnel_card is not None
+        assert funnel_card.entity_kind == "idea"
+        assert funnel_card.entity_id == first_idea.id
+        assert funnel_card.title == "Capture idea"
+        option = QStyleOptionViewItem()
+        option.rect = workspace.funnel_lists["inbox"].visualItemRect(funnel_idea_item)
+        assert delegate.sizeHint(option, workspace.funnel_lists["inbox"].indexFromItem(funnel_idea_item)).height() == 160
+        assert "В·" not in funnel_card.meta_text
+        assert "В·" not in funnel_card.relation_summary
+        assert funnel_card.relation_summary.startswith("Связи · ")
         workspace.funnel_lists["inbox"].setCurrentItem(funnel_idea_item)
         workspace.funnel_lists["inbox"].itemClicked.emit(funnel_idea_item)
         QApplication.processEvents()

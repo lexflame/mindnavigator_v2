@@ -13,6 +13,8 @@ from .ideas_list_model import IdeasListModel
 from .ideas_delegate import IdeasDelegate
 from .idea_image_preview_dialog import IdeaImagePreviewDialog
 from .image_utils import load_scaled_pixmap
+from mindnavigator.workspaces.concept_board.concept_board_card import CONCEPT_BOARD_KIND_IDEA, ConceptBoardCard
+from mindnavigator.workspaces.concept_board.concept_board_delegate import ConceptBoardDelegate
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 
@@ -56,6 +58,9 @@ IDEA_DEVELOPMENT_TEMPLATE = (
     "\n"
     "## Риски и ограничения\n"
 )
+_FUNNEL_CARD_ROLE = int(Qt.ItemDataRole.UserRole) + 50
+_FUNNEL_IDEA_ACCENT = "#6ad56f"
+_FUNNEL_CARD_ROW_HEIGHT = 160
 
 
 class IdeasFunnelList(QListWidget):
@@ -380,6 +385,18 @@ class IdeasWorkspace(BaseWorkspace):
             column_layout.addWidget(heading)
             column_list = IdeasFunnelList(status_code, self)
             column_list.setObjectName(f"IdeasFunnelList_{status_code}")
+            column_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+            column_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            column_list.setUniformItemSizes(False)
+            column_list.setSpacing(6)
+            column_list.setItemDelegate(
+                ConceptBoardDelegate(
+                    column_list,
+                    data_role=_FUNNEL_CARD_ROLE,
+                    row_height=_FUNNEL_CARD_ROW_HEIGHT,
+                    stack_footer=True,
+                )
+            )
             column_list.itemActivated.connect(self._on_alt_view_item_activated)
             column_list.itemClicked.connect(self._on_alt_view_item_activated)
             column_layout.addWidget(column_list, 1)
@@ -1162,6 +1179,27 @@ class IdeasWorkspace(BaseWorkspace):
             return relation_id, entity_type, entity_id
         return None
 
+    def _funnel_card_for_idea(self, item: IdeaItem) -> ConceptBoardCard:
+        preview = idea_preview_line(item.summary, item.body_md)
+        meta_parts = [
+            item.project_title,
+            STATUS_LABELS.get((item.status or "").strip().lower(), item.status),
+            TYPE_LABELS.get((item.idea_type or "").strip().lower(), item.idea_type),
+        ]
+        return ConceptBoardCard(
+            entity_kind=CONCEPT_BOARD_KIND_IDEA,
+            entity_id=item.id,
+            title=item.title,
+            subtitle=preview,
+            project_id=item.project_id,
+            project_title=item.project_title,
+            accent_color=_FUNNEL_IDEA_ACCENT,
+            meta_text=" · ".join(str(part).strip() for part in meta_parts if str(part or "").strip()),
+            relation_count=max(0, int(item.relations_count)),
+            relation_summary=f"Связи · {max(0, int(item.relations_count))}",
+            source_payload=item,
+        )
+
     def _populate_funnel_view(self) -> None:
         self.funnel_view.clear()
         order = [
@@ -1206,6 +1244,7 @@ class IdeasWorkspace(BaseWorkspace):
                     f"{item.title}\n{preview}\nValue {item.value_score} / Effort {item.effort_score} · Выход: {item.output_label}"
                 )
                 row.setData(Qt.ItemDataRole.UserRole, item.id)
+                row.setData(_FUNNEL_CARD_ROLE, self._funnel_card_for_idea(item))
                 row.setToolTip(f"{item.title}\n{preview}")
                 widget.addItem(row)
 
