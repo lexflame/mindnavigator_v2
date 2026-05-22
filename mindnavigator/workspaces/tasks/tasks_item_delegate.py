@@ -778,7 +778,8 @@ class TasksItemDelegate(QStyledItemDelegate):
                 if quick_rect.contains(pos) and tasks_model is not None:
                     target_day = index.data(TaskRoles.Day)
                     if isinstance(target_day, date):
-                        tasks_model.quick_add_task_for_day(target_day)
+                        created = tasks_model.quick_add_task_for_day(target_day)
+                        self._open_created_task_for_edit(option, created)
                         return True
             return False
         if row_type != "task":
@@ -884,7 +885,8 @@ class TasksItemDelegate(QStyledItemDelegate):
             if quick_rect.contains(pos):
                 task = tasks_model.task_at_row(index.row())
                 if task is not None:
-                    tasks_model.quick_add_subtask(task.id)
+                    created = tasks_model.quick_add_subtask(task.id)
+                    self._open_created_task_for_edit(option, created)
                     return True
 
         if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.RightButton:
@@ -898,6 +900,21 @@ class TasksItemDelegate(QStyledItemDelegate):
                 return True
 
         return False
+
+    def _open_created_task_for_edit(self, option: QStyleOptionViewItem, created_task: object) -> None:
+        task_id = getattr(created_task, "id", None)
+        if not isinstance(task_id, int):
+            return
+        host_widget = getattr(option, "widget", None)
+        current_widget = host_widget if isinstance(host_widget, QWidget) else (
+            self.parent() if isinstance(self.parent(), QWidget) else None
+        )
+        while current_widget is not None:
+            opener = getattr(current_widget, "open_task_for_edit", None)
+            if callable(opener):
+                opener(task_id)
+                return
+            current_widget = current_widget.parentWidget()
 
     def _show_row_menu(self, index: QModelIndex):
         """Отображает контекстное меню строки."""

@@ -80,7 +80,7 @@ class _InfoCard(QFrame):
 
 
 class TaskDetailsDialog(QDialog):
-    _DEFAULT_SIZE = QSize(1260, 840)
+    _DEFAULT_SIZE = QSize(1042, 757)
     _PARAM_BREAKPOINTS = ((960, 4), (0, 2))
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
@@ -116,7 +116,7 @@ class TaskDetailsDialog(QDialog):
         self.setProperty("task_dialog_id", int(task.id))
         self.setProperty("task_dialog_kind", "details")
         self.setProperty("dialog_category", "keep_size")
-        self.setMinimumSize(1100, 700)
+        self.setMinimumSize(1042, 757)
         self.resize(self._DEFAULT_SIZE)
 
         self._db = get_database()
