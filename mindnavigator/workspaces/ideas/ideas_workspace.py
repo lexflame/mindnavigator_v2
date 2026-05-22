@@ -60,6 +60,7 @@ IDEA_DEVELOPMENT_TEMPLATE = (
 )
 _FUNNEL_CARD_ROLE = int(Qt.ItemDataRole.UserRole) + 50
 _FUNNEL_IDEA_ACCENT = "#6ad56f"
+_FUNNEL_CARD_ROW_HEIGHT = 144
 
 
 class IdeasFunnelList(QListWidget):
@@ -387,8 +388,14 @@ class IdeasWorkspace(BaseWorkspace):
             column_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
             column_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             column_list.setUniformItemSizes(False)
-            column_list.setSpacing(4)
-            column_list.setItemDelegate(ConceptBoardDelegate(column_list, data_role=_FUNNEL_CARD_ROLE))
+            column_list.setSpacing(6)
+            column_list.setItemDelegate(
+                ConceptBoardDelegate(
+                    column_list,
+                    data_role=_FUNNEL_CARD_ROLE,
+                    row_height=_FUNNEL_CARD_ROW_HEIGHT,
+                )
+            )
             column_list.itemActivated.connect(self._on_alt_view_item_activated)
             column_list.itemClicked.connect(self._on_alt_view_item_activated)
             column_layout.addWidget(column_list, 1)
