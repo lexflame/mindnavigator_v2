@@ -815,10 +815,10 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
 
         empty_description = dialog.findChild(QLabel, "TaskDetailsDescriptionEmpty")
         empty_links = dialog.findChild(QLabel, "TaskDetailsLinksEmpty")
-        assert dialog.minimumWidth() == 1100
-        assert dialog.minimumHeight() == 700
-        assert dialog.width() == 1260
-        assert dialog.height() == 840
+        assert dialog.minimumWidth() == 1042
+        assert dialog.minimumHeight() == 757
+        assert dialog.width() == 1042
+        assert dialog.height() == 757
         assert dialog.links_title.text() == "Связи"
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
