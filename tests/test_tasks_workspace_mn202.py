@@ -1204,6 +1204,35 @@ def test_tasks_workspace_secondary_modes_remain_available_outside_plan(monkeypat
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_workspace_gantt_rows_use_taller_height_for_hour_labels(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_gantt_row_height", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        database.create_task(
+            title="Gantt row",
+            description="",
+            day=date.today(),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        workspace = tasks_workspace.TasksWorkspace()
+
+        workspace.btn_gantt.setChecked(True)
+        QApplication.processEvents()
+
+        assert workspace.gantt_table.rowCount() >= 1
+        assert workspace.gantt_table.rowHeight(0) == TasksGanttCast._ROW_HEIGHT
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_restores_secondary_mode_from_filters(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_secondary_mode_restore", ".sqlite3")

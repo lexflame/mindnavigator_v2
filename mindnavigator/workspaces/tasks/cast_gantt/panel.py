@@ -17,6 +17,8 @@ from ..gantt_duration_edit import GanttEstimateEdit, format_gantt_estimate_minut
 
 
 class _GanttBarWidget(QWidget):
+    _MIN_HEIGHT = 24
+
     def __init__(self, styler, start_minutes: int, end_minutes: int, day_start: int, day_end: int, parent=None):
         super().__init__(parent)
         self._styler = styler
@@ -24,7 +26,7 @@ class _GanttBarWidget(QWidget):
         self._end = int(end_minutes)
         self._day_start = int(day_start)
         self._day_end = int(day_end)
-        self.setMinimumHeight(18)
+        self.setMinimumHeight(self._MIN_HEIGHT)
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -33,6 +35,8 @@ class _GanttBarWidget(QWidget):
 
 class TasksGanttCast:
     """Owns GANTT page widgets and gantt-specific data refresh logic."""
+
+    _ROW_HEIGHT = 42
 
     def __init__(self, workspace, styler) -> None:
         self._workspace = workspace
@@ -172,7 +176,7 @@ class TasksGanttCast:
                 parent=self.table,
             )
             self.table.setCellWidget(row, 4, bar_widget)
-            self.table.setRowHeight(row, 34)
+            self.table.setRowHeight(row, self._ROW_HEIGHT)
 
             duration_edit = GanttEstimateEdit(estimate, self.table)
             duration_edit.setEnabled(bool(task.gantt_forecasted))
