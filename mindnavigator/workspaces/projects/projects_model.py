@@ -245,7 +245,7 @@ class ProjectsModel(QAbstractListModel):
         marker_color: str = "",
         marker_theme: str = "",
         repository_catalog: str = "",
-    ):
+    ) -> int:
         """Добавляет новый проект и пересобирает список."""
         project = self._db.create_project(
             area=area,
@@ -282,16 +282,18 @@ class ProjectsModel(QAbstractListModel):
                 project.repository_catalog,
             )
         )
+        self._expand_project_parent_chain(project.parent_project_id)
         self._attachment_summary_dirty = True
         self._rebuild()
+        return int(project.id)
 
     def quick_add_project(
         self,
         area: str,
         parent_project_id: Optional[int] = None,
         title: str = "Новый проект",
-    ) -> None:
-        self.add_project(
+    ) -> int:
+        return self.add_project(
             area=area,
             title=title,
             updated=date.today(),
@@ -299,6 +301,28 @@ class ProjectsModel(QAbstractListModel):
             archived=False,
             parent_project_id=parent_project_id,
         )
+
+    def _expand_project_parent_chain(self, parent_project_id: Optional[int]) -> None:
+        if not isinstance(parent_project_id, int):
+            return
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+        changed = False
+        current_id: Optional[int] = parent_project_id
+        seen: set[int] = set()
+        while isinstance(current_id, int) and current_id not in seen:
+            seen.add(current_id)
+            if current_id in self._collapsed_project_ids:
+                self._collapsed_project_ids.remove(current_id)
+                changed = True
+            parent = project_map.get(current_id)
+            if parent is None:
+                break
+            current_id = parent.parent_project_id
+        if changed:
+            self._save_collapsed_state()
 
     def area_has_active(self, area: str) -> bool:
         """Проверяет наличие активных проектов в области."""
@@ -614,7 +638,8 @@ class ProjectsModel(QAbstractListModel):
         def priority_key(priority: str) -> int:
             return priority_order[normalize_priority(priority)]
 
-        projects.sort(
+        sorted_projects = sorted(
+            projects,
             key=lambda x: (
                 x.area.lower(),
                 priority_key(x.priority),
@@ -623,15 +648,45 @@ class ProjectsModel(QAbstractListModel):
             )
         )
 
+        visible_projects_by_id = {project.id: project for project in projects}
+        visible_depth_cache: Dict[int, int] = {}
+        roots_by_area: Dict[str, List[ProjectRow]] = {}
+        children_by_parent: Dict[int, List[ProjectRow]] = {}
+        area_order: List[str] = []
+        seen_areas: set[str] = set()
+
+        for project in sorted_projects:
+            if project.area not in seen_areas:
+                seen_areas.add(project.area)
+                area_order.append(project.area)
+            parent_id = project.parent_project_id
+            visible_parent = visible_projects_by_id.get(parent_id) if isinstance(parent_id, int) else None
+            if visible_parent is None or visible_parent.area != project.area:
+                roots_by_area.setdefault(project.area, []).append(project)
+                continue
+            children_by_parent.setdefault(visible_parent.id, []).append(project)
+
         new_rows: List[Row] = []
-        cur: Optional[str] = None
-        for p in projects:
-            if cur != p.area:
-                cur = p.area
-                new_rows.append(HeaderRow(cur))
-            new_rows.append(p)
+
+        def append_subtree(project: ProjectRow, depth: int, branch_ids: Optional[set[int]] = None) -> None:
+            seen_branch = branch_ids or set()
+            if project.id in seen_branch:
+                return
+            new_rows.append(project)
+            visible_depth_cache[project.id] = depth
+            for child in children_by_parent.get(project.id, []):
+                append_subtree(child, depth + 1, seen_branch | {project.id})
+
+        for area in area_order:
+            area_roots = roots_by_area.get(area, [])
+            if not area_roots:
+                continue
+            new_rows.append(HeaderRow(area))
+            for project in area_roots:
+                append_subtree(project, 0)
 
         self.beginResetModel()
+        self._project_depth_cache = visible_depth_cache
         self._rows = new_rows
         self.endResetModel()
 

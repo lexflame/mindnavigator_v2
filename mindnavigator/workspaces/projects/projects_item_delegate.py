@@ -343,8 +343,9 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     area = index.data(ProjectRoles.Area) or ""
                     if hasattr(model, "quick_add_project"):
                         typed_model = cast(ProjectsModel, model)
-                        typed_model.quick_add_project(area=area, title="Новый проект")
+                        project_id = typed_model.quick_add_project(area=area, title="Новый проект")
                         self._refresh_area_combo(area)
+                        self._focus_project(project_id)
                     return True
             return False
 
@@ -406,12 +407,13 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 area = index.data(ProjectRoles.Area) or ""
                 if isinstance(project_id, int) and hasattr(model, "quick_add_project"):
                     typed_model = cast(ProjectsModel, model)
-                    typed_model.quick_add_project(
+                    created_project_id = typed_model.quick_add_project(
                         area=area,
                         parent_project_id=project_id,
                         title="Новый подпроект",
                     )
                     self._refresh_area_combo(area)
+                    self._focus_project(created_project_id)
                 return True
 
         return False
@@ -622,6 +624,17 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             if hasattr(widget, "_refresh_area_combo"):
                 widget._refresh_area_combo(selected)
                 break
+            widget = widget.parent()
+
+    def _focus_project(self, project_id: int) -> None:
+        if not isinstance(project_id, int):
+            return
+        widget = self.parent()
+        while widget is not None:
+            focus_project = getattr(widget, "focus_project", None)
+            if callable(focus_project):
+                focus_project(project_id)
+                return
             widget = widget.parent()
 
     def _prio_color(self, p: str) -> QColor:

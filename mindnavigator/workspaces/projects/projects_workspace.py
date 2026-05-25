@@ -245,6 +245,16 @@ class ProjectsWorkspace(QWidget):
                 break
         return True
 
+    def focus_project(self, project_id: int) -> bool:
+        for row in range(self.model.rowCount()):
+            index = self.model.index(row, 0)
+            if index.data(ProjectRoles.ProjectId) != project_id:
+                continue
+            self.list.setCurrentIndex(index)
+            self.list.scrollTo(index)
+            return True
+        return False
+
     def _refresh_area_combo(self, selected: Optional[str] = None):
         """Обновляет список областей проектов."""
         current = selected or self.cmb_area.currentText()
@@ -265,7 +275,7 @@ class ProjectsWorkspace(QWidget):
 
         values = dialog.values()
         try:
-            self.model.add_project(
+            project_id = self.model.add_project(
                 area=values["area"],
                 title=values["title"],
                 updated=values["updated"],
@@ -282,6 +292,7 @@ class ProjectsWorkspace(QWidget):
                 repository_catalog=values["repository_catalog"],
             )
             self._refresh_area_combo(values["area"])
+            self.focus_project(project_id)
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
 
