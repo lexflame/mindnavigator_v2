@@ -19,11 +19,19 @@ class TasksWorkspace(BaseWorkspace):
     DASH_PULSE_DAYS = 6
     GANTT_DAY_START_HOUR = 8
     GANTT_DAY_END_HOUR = 22
+    BOARD_COLUMN_FORMAT_KANBAN = "kanban"
+    BOARD_COLUMN_FORMAT_IMPORTANCE = "importance"
     BOARD_COLUMN_ORDER = [
         (BOARD_COLUMN_DEFERRED, "Отложенные"),
         (BOARD_COLUMN_QUEUE, "В очереди"),
         (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
         (BOARD_COLUMN_COMPLETED, "Выполнена"),
+    ]
+    BOARD_IMPORTANCE_COLUMN_ORDER = [
+        (BOARD_COLUMN_DEFERRED, "В КОНЦЕ ДНЯ"),
+        (BOARD_COLUMN_QUEUE, "ВАЖНО"),
+        (BOARD_COLUMN_IN_PROGRESS, "ОЧЕНЬ ВАЖНО"),
+        (BOARD_COLUMN_COMPLETED, "ЕСТЬ СЛОЖНОСТИ"),
     ]
     BATCH_ACTION_OPTIONS = [
         ("", "Групповое действие"),
@@ -288,6 +296,7 @@ class TasksWorkspace(BaseWorkspace):
         self._theme_mode = "dark"
         self._focus_day = date.today()
         self._board_day_filter_enabled = True
+        self._board_column_format = self.BOARD_COLUMN_FORMAT_IMPORTANCE
         self._applying_filters = False
         self._gantt_mode = False
         self._board_mode = False
@@ -312,6 +321,7 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_board = None
         self.btn_dash = None
         self.board_day_filter_checkbox = None
+        self.board_column_format_combo = None
         self._project_quick_links_host = None
         self._project_quick_links_layout = None
         self._project_filter_clear_button = None
@@ -629,6 +639,7 @@ class TasksWorkspace(BaseWorkspace):
     def _build_board_page(self) -> QWidget:
         page = self._board_cast.build_page()
         self.board_day_filter_checkbox = self._board_cast.day_filter_checkbox
+        self.board_column_format_combo = self._board_cast.column_format_combo
         self.board_columns = self._board_cast.columns
         return page
         page = QWidget()
@@ -636,7 +647,7 @@ class TasksWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        board_hint = QLabel("Режим Board: канбан по выбранному дню с независимым статусом колонки.")
+        board_hint = QLabel("Режим Board: 4 локальные колонки важности на выбранный день, отдельно от приоритета задачи.")
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)
         layout.addWidget(board_hint)
@@ -1350,6 +1361,7 @@ class TasksWorkspace(BaseWorkspace):
             project_id = filters.get("project_id")
             priority = filters.get("priority")
             board_day_filter = filters.get("board_day_filter")
+            board_column_format = filters.get("board_column_format")
             secondary_mode_raw = filters.get("secondary_mode")
             secondary_mode = secondary_mode_raw if isinstance(secondary_mode_raw, str) else None
             if isinstance(focus_day, str):
@@ -1363,6 +1375,10 @@ class TasksWorkspace(BaseWorkspace):
                 self._set_board_day_filter_checked(board_day_filter)
             else:
                 self._set_board_day_filter_checked(True)
+            if isinstance(board_column_format, str):
+                self._set_board_column_format(board_column_format)
+            else:
+                self._set_board_column_format(self.BOARD_COLUMN_FORMAT_IMPORTANCE)
             self._apply_tab(tab, focus_day=focus_day)
             self.model.set_project_filter(project_id)
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
@@ -1748,6 +1764,30 @@ class TasksWorkspace(BaseWorkspace):
         if self._applying_filters:
             return
         self._remember_filter("board_day_filter", self._board_day_filter_enabled)
+        if self._board_mode:
+            self._refresh_board_day()
+
+    def board_column_order_for_format(self, format_key: str | None = None) -> List[tuple[str, str]]:
+        normalized = str(format_key or self._board_column_format).strip().lower()
+        if normalized == self.BOARD_COLUMN_FORMAT_IMPORTANCE:
+            return list(self.BOARD_IMPORTANCE_COLUMN_ORDER)
+        return list(self.BOARD_COLUMN_ORDER)
+
+    def _set_board_column_format(self, format_key: str) -> None:
+        normalized = str(format_key or "").strip().lower()
+        if normalized not in {
+            self.BOARD_COLUMN_FORMAT_KANBAN,
+            self.BOARD_COLUMN_FORMAT_IMPORTANCE,
+        }:
+            normalized = self.BOARD_COLUMN_FORMAT_IMPORTANCE
+        self._board_column_format = normalized
+        self._board_cast.set_column_format(normalized)
+
+    def _on_board_column_format_changed(self, format_key: str) -> None:
+        self._set_board_column_format(format_key)
+        if self._applying_filters:
+            return
+        self._remember_filter("board_column_format", self._board_column_format)
         if self._board_mode:
             self._refresh_board_day()
 

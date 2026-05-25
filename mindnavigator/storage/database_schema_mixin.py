@@ -1195,7 +1195,7 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN actual_minutes INTEGER NOT NULL DEFAULT 0;")
 
     def _ensure_task_board_column(self) -> None:
-        """Добавляет колонку board_column для канбан-статуса задач."""
+        """Добавляет колонку board_column для локальной сортировки задач в Board."""
         columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
         names = {row["name"] for row in columns}
         if "board_column" in names:
@@ -1205,10 +1205,7 @@ class DatabaseSchemaMixin:
             self._conn.execute(
                 f"""
                 UPDATE tasks
-                SET board_column = CASE
-                    WHEN {self._priority_normalize_sql('priority')} = '{DEFERRED_PRIORITY}' THEN '{BOARD_COLUMN_DEFERRED}'
-                    ELSE '{BOARD_COLUMN_QUEUE}'
-                END;
+                SET board_column = '{BOARD_COLUMN_QUEUE}';
                 """
             )
 
@@ -1668,8 +1665,7 @@ class DatabaseSchemaMixin:
             )
             SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
                    CASE
-                       WHEN {self._priority_normalize_sql("priority")} = '{DEFERRED_PRIORITY}' THEN '{BOARD_COLUMN_DEFERRED}'
-                       WHEN COALESCE({_source("board_column", "''")}, '') IN ('{BOARD_COLUMN_QUEUE}', '{BOARD_COLUMN_IN_PROGRESS}', '{BOARD_COLUMN_COMPLETED}') THEN {_source("board_column", "''")}
+                       WHEN COALESCE({_source("board_column", "''")}, '') IN ('{BOARD_COLUMN_DEFERRED}', '{BOARD_COLUMN_QUEUE}', '{BOARD_COLUMN_IN_PROGRESS}', '{BOARD_COLUMN_COMPLETED}') THEN {_source("board_column", "''")}
                        ELSE '{BOARD_COLUMN_QUEUE}'
                    END,
                    done, COALESCE({_source("completion_delay_minutes", "0")}, 0),

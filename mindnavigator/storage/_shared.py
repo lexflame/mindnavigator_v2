@@ -290,13 +290,9 @@ def normalize_priority(priority: str) -> str:
 
 
 def normalize_board_column(board_column: str, priority: str = "Medium") -> str:
-    normalized_priority = normalize_priority(priority)
+    _ = priority
     normalized = str(board_column or "").strip().lower()
-    if normalized_priority == DEFERRED_PRIORITY:
-        return BOARD_COLUMN_DEFERRED
     if normalized not in BOARD_COLUMNS:
-        return BOARD_COLUMN_QUEUE
-    if normalized == BOARD_COLUMN_DEFERRED:
         return BOARD_COLUMN_QUEUE
     return normalized
 

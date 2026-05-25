@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from shiboken6 import isValid
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
@@ -41,7 +42,16 @@ class _TaskDialogOutsideClickMinimizer(QObject):
     def enable(self) -> None:
         self._enabled = True
 
+    def _dialog_is_alive(self) -> bool:
+        try:
+            return bool(self._dialog is not None and isValid(self._dialog))
+        except RuntimeError:
+            return False
+
     def eventFilter(self, obj, event) -> bool:
+        if not self._dialog_is_alive():
+            self._cleanup()
+            return False
         if obj is self._dialog and event.type() in (QEvent.Type.WindowDeactivate, QEvent.Type.FocusOut):
             if self._enabled:
                 QTimer.singleShot(0, self._minimize_if_detached)
@@ -71,6 +81,9 @@ class _TaskDialogOutsideClickMinimizer(QObject):
         return False
 
     def _minimize_if_detached(self) -> None:
+        if not self._dialog_is_alive():
+            self._cleanup()
+            return
         if not self._enabled or not self._dialog.isVisible():
             return
         if self._has_transient_child():
@@ -105,7 +118,8 @@ class _TaskDialogOutsideClickMinimizer(QObject):
         if app is not None:
             app.removeEventFilter(self)
         try:
-            self._dialog.removeEventFilter(self)
+            if self._dialog_is_alive():
+                self._dialog.removeEventFilter(self)
         except RuntimeError:
             return
 

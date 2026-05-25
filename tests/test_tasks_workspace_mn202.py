@@ -357,10 +357,10 @@ def test_tasks_model_steps_board_stage_up_and_down_without_wrap(monkeypatch, uni
         assert model.index(row_idx, 0).data(TaskRoles.BoardColumn) == BOARD_COLUMN_QUEUE
 
         model.step_board_column_by_row(row_idx, -1)
-        model.set_filter_mode("Отложенные")
         row_idx = _find_task_row(model, created.id)
         assert row_idx >= 0
         assert model.index(row_idx, 0).data(TaskRoles.BoardColumn) == BOARD_COLUMN_DEFERRED
+        assert model.index(row_idx, 0).data(TaskRoles.Priority) == "Medium"
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -451,6 +451,13 @@ def test_tasks_delegate_priority_block_orders_icon_controls_and_stage_text() -> 
     assert rects["icon"].left() < rects["priority_arrows"].left()
     assert rects["priority_arrows"].right() < rects["value"].left()
     assert rects["value"].right() < rects["stage_arrows"].left()
+
+
+def test_tasks_delegate_uses_classic_kanban_stage_labels() -> None:
+    assert tasks_workspace.TasksItemDelegate._board_stage_label(BOARD_COLUMN_DEFERRED, "High") == "Отложенные"
+    assert tasks_workspace.TasksItemDelegate._board_stage_label(BOARD_COLUMN_QUEUE, "High") == "В очереди"
+    assert tasks_workspace.TasksItemDelegate._board_stage_label(BOARD_COLUMN_IN_PROGRESS, "High") == "Выполняется"
+    assert tasks_workspace.TasksItemDelegate._board_stage_label(BOARD_COLUMN_COMPLETED, "High") == "Выполнена"
 
 
 def test_tasks_delegate_plan_time_controls_place_arrows_right_of_time_text() -> None:
@@ -1337,19 +1344,64 @@ def test_tasks_workspace_restores_secondary_mode_from_filters(monkeypatch, uniqu
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_board_uses_kanban_columns_in_expected_order(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_board_defaults_to_importance_headers(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_board_columns_order", ".sqlite3")
     database = Database(path=db_path)
     monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
     workspace = tasks_workspace.TasksWorkspace()
     try:
+        assert workspace.BOARD_COLUMN_ORDER == [
+            (BOARD_COLUMN_DEFERRED, "Отложенные"),
+            (BOARD_COLUMN_QUEUE, "В очереди"),
+            (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
+            (BOARD_COLUMN_COMPLETED, "Выполнена"),
+        ]
+        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
+        assert workspace.board_column_format_combo.currentData() == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
+        assert [
+            workspace._board_cast.column_title_labels[column].text()
+            for column in (
+                BOARD_COLUMN_DEFERRED,
+                BOARD_COLUMN_QUEUE,
+                BOARD_COLUMN_IN_PROGRESS,
+                BOARD_COLUMN_COMPLETED,
+            )
+        ] == ["В КОНЦЕ ДНЯ", "ВАЖНО", "ОЧЕНЬ ВАЖНО", "ЕСТЬ СЛОЖНОСТИ"]
         assert list(workspace.board_columns.keys()) == [
             BOARD_COLUMN_DEFERRED,
             BOARD_COLUMN_QUEUE,
             BOARD_COLUMN_IN_PROGRESS,
             BOARD_COLUMN_COMPLETED,
         ]
+    finally:
+        workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_board_can_switch_to_importance_headers(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_board_column_format_switch", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = tasks_workspace.TasksWorkspace()
+    try:
+        workspace.board_column_format_combo.setCurrentIndex(
+            workspace.board_column_format_combo.findData(workspace.BOARD_COLUMN_FORMAT_KANBAN)
+        )
+
+        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_KANBAN
+        assert workspace._filters["board_column_format"] == workspace.BOARD_COLUMN_FORMAT_KANBAN
+        assert [
+            workspace._board_cast.column_title_labels[column].text()
+            for column in (
+                BOARD_COLUMN_DEFERRED,
+                BOARD_COLUMN_QUEUE,
+                BOARD_COLUMN_IN_PROGRESS,
+                BOARD_COLUMN_COMPLETED,
+            )
+        ] == ["Отложенные", "В очереди", "Выполняется", "Выполнена"]
     finally:
         workspace.deleteLater()
         database.close()
@@ -1573,7 +1625,7 @@ def test_tasks_board_defaults_to_queue_and_completed_is_not_done(monkeypatch, un
 
         fetched = {task.id: task for task in database.fetch_tasks()}
         assert fetched[queued_task.id].board_column == BOARD_COLUMN_QUEUE
-        assert fetched[deferred_task.id].board_column == BOARD_COLUMN_DEFERRED
+        assert fetched[deferred_task.id].board_column == BOARD_COLUMN_QUEUE
 
         workspace = tasks_workspace.TasksWorkspace()
         workspace._focus_day = date(2026, 3, 6)
@@ -1609,12 +1661,12 @@ def test_tasks_board_move_to_deferred_and_in_progress_persists(monkeypatch, uniq
         workspace._move_task_to_board_column(task.id, BOARD_COLUMN_DEFERRED)
         deferred_state = {item.id: item for item in database.fetch_tasks()}[task.id]
         assert deferred_state.board_column == BOARD_COLUMN_DEFERRED
-        assert deferred_state.priority == DEFERRED_PRIORITY
+        assert deferred_state.priority == "High"
 
         workspace._move_task_to_board_column(task.id, BOARD_COLUMN_IN_PROGRESS)
         active_state = {item.id: item for item in database.fetch_tasks()}[task.id]
         assert active_state.board_column == BOARD_COLUMN_IN_PROGRESS
-        assert active_state.priority == "Medium"
+        assert active_state.priority == "High"
         assert active_state.done is False
     finally:
         if workspace is not None:
@@ -1660,6 +1712,7 @@ def test_tasks_board_refresh_groups_tasks_by_board_column(monkeypatch, unique_te
         )
         database.set_task_board_column(in_progress_task.id, BOARD_COLUMN_IN_PROGRESS)
         database.set_task_board_column(completed_task.id, BOARD_COLUMN_COMPLETED)
+        database.set_task_board_column(deferred_task.id, BOARD_COLUMN_DEFERRED)
 
         workspace = tasks_workspace.TasksWorkspace()
         workspace._focus_day = date(2026, 3, 6)
