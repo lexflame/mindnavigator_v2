@@ -20,10 +20,10 @@ class TasksWorkspace(BaseWorkspace):
     GANTT_DAY_START_HOUR = 8
     GANTT_DAY_END_HOUR = 22
     BOARD_COLUMN_ORDER = [
-        (BOARD_COLUMN_DEFERRED, "Отложенные"),
-        (BOARD_COLUMN_QUEUE, "В очереди"),
-        (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
-        (BOARD_COLUMN_COMPLETED, "Выполнена"),
+        (BOARD_COLUMN_DEFERRED, "В КОНЦЕ ДНЯ"),
+        (BOARD_COLUMN_QUEUE, "ВАЖНО"),
+        (BOARD_COLUMN_IN_PROGRESS, "ОЧЕНЬ ВАЖНО"),
+        (BOARD_COLUMN_COMPLETED, "ЕСТЬ СЛОЖНОСТИ"),
     ]
     BATCH_ACTION_OPTIONS = [
         ("", "Групповое действие"),
@@ -636,7 +636,7 @@ class TasksWorkspace(BaseWorkspace):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        board_hint = QLabel("Режим Board: канбан по выбранному дню с независимым статусом колонки.")
+        board_hint = QLabel("Режим Board: 4 локальные колонки важности на выбранный день, отдельно от приоритета задачи.")
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)
         layout.addWidget(board_hint)

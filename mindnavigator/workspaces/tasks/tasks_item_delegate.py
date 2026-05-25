@@ -1202,22 +1202,22 @@ class TasksItemDelegate(QStyledItemDelegate):
     def _board_stage_label(board_column: str, priority: str) -> str:
         normalized = normalize_board_column(board_column, priority)
         if normalized == BOARD_COLUMN_DEFERRED:
-            return "Отложенные"
+            return "В конце дня"
         if normalized == BOARD_COLUMN_IN_PROGRESS:
-            return "Выполняется"
+            return "Очень важно"
         if normalized == BOARD_COLUMN_COMPLETED:
-            return "Выполнена"
-        return "В очереди"
+            return "Есть сложности"
+        return "Важно"
 
     def _board_stage_color(self, board_column: str, priority: str) -> QColor:
         normalized = normalize_board_column(board_column, priority)
         if normalized == BOARD_COLUMN_DEFERRED:
-            return self.C_DEFER
+            return QColor("#8a94a6")
         if normalized == BOARD_COLUMN_IN_PROGRESS:
-            return QColor("#5fb7d9")
+            return QColor("#d96a43")
         if normalized == BOARD_COLUMN_COMPLETED:
-            return QColor("#8f9cff")
-        return QColor("#d7dbe3")
+            return QColor("#6988d9")
+        return QColor("#d0a93e")
 
     @staticmethod
     def _is_overdue(d: date, done: bool, priority: str = "", is_plan_item: bool = False) -> bool:

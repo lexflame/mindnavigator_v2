@@ -71,7 +71,7 @@ class TasksBoardCast:
         layout.setSpacing(8)
 
         board_hint = QLabel(
-            "Режим Board: канбан по выбранному дню с независимым статусом колонки."
+            "Режим Board: 4 локальные колонки важности на выбранный день, отдельно от приоритета задачи."
         )
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)

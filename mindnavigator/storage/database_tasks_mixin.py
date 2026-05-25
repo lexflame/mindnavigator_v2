@@ -78,7 +78,7 @@ class DatabaseTasksMixin:
                     title=row["title"],
                     description=row["description"] or "",
                     priority=row["priority"],
-                    board_column=normalize_board_column(row["board_column"], row["priority"]),
+                    board_column=normalize_board_column(row["board_column"]),
                     done=bool(row["done"]),
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
                     gantt_estimate_minutes=max(0, int(row["gantt_estimate_minutes"] or 0)),
@@ -170,7 +170,7 @@ class DatabaseTasksMixin:
                         project_links.append((kind, int(ref_id)))
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        board_column = BOARD_COLUMN_DEFERRED if priority == DEFERRED_PRIORITY else BOARD_COLUMN_QUEUE
+        board_column = BOARD_COLUMN_QUEUE
         with self._conn:
             cur = self._conn.execute(
                 """
@@ -326,10 +326,7 @@ class DatabaseTasksMixin:
                         project_links.append((kind, int(ref_id)))
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        if priority == DEFERRED_PRIORITY:
-            board_column = BOARD_COLUMN_DEFERRED
-        else:
-            board_column = normalize_board_column(prev_board_column, priority)
+        board_column = normalize_board_column(prev_board_column)
         with self._conn:
             self._conn.execute(
                 """
@@ -535,7 +532,7 @@ class DatabaseTasksMixin:
                         next_day.isoformat(),
                         row["time_text"] or "",
                         row["priority"],
-                        BOARD_COLUMN_DEFERRED if row["priority"] == DEFERRED_PRIORITY else BOARD_COLUMN_QUEUE,
+                        normalize_board_column(row["board_column"]),
                         row["project_id"],
                         row["parent_id"],
                         recurrence_kind,
@@ -752,35 +749,20 @@ class DatabaseTasksMixin:
         return row is not None
 
     def set_task_board_column(self, task_id: int, board_column: str) -> None:
-        """Обновляет канбан-колонку задачи без изменения done-статуса."""
-        row = self._conn.execute(
-            "SELECT priority FROM tasks WHERE id = ?;",
-            (task_id,),
-        ).fetchone()
-        if row is None:
+        """Обновляет локальную board-колонку задачи без влияния на приоритет."""
+        if self._conn.execute("SELECT 1 FROM tasks WHERE id = ?;", (task_id,)).fetchone() is None:
             return
-        current_priority = normalize_priority(row["priority"])
         requested_board_column = str(board_column or "").strip().lower()
-        if requested_board_column == BOARD_COLUMN_DEFERRED:
-            normalized_board_column = BOARD_COLUMN_DEFERRED
-        elif requested_board_column in {BOARD_COLUMN_QUEUE, BOARD_COLUMN_IN_PROGRESS, BOARD_COLUMN_COMPLETED}:
-            normalized_board_column = requested_board_column
-        else:
-            normalized_board_column = BOARD_COLUMN_QUEUE
-        next_priority = (
-            DEFERRED_PRIORITY
-            if normalized_board_column == BOARD_COLUMN_DEFERRED
-            else ("Medium" if current_priority == DEFERRED_PRIORITY else current_priority)
-        )
+        normalized_board_column = normalize_board_column(requested_board_column)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._conn:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET priority = ?, board_column = ?, updated_at = ?
+                SET board_column = ?, updated_at = ?
                 WHERE id = ?;
                 """,
-                (next_priority, normalized_board_column, now, task_id),
+                (normalized_board_column, now, task_id),
             )
 
     def set_task_gantt_estimate(self, task_id: int, minutes: int, forecasted: bool = True) -> None:

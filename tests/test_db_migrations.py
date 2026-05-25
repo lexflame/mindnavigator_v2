@@ -865,7 +865,7 @@ def test_database_backfills_task_board_column_when_missing(unique_temp_path) -> 
             row["title"]: row["board_column"]
             for row in database._conn.execute("SELECT title, board_column FROM tasks;").fetchall()
         }
-        assert board_rows["Deferred legacy"] == BOARD_COLUMN_DEFERRED
+        assert board_rows["Deferred legacy"] == BOARD_COLUMN_QUEUE
         assert board_rows["Queued legacy"] == BOARD_COLUMN_QUEUE
     finally:
         database.close()
