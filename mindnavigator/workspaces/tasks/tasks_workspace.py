@@ -296,7 +296,7 @@ class TasksWorkspace(BaseWorkspace):
         self._theme_mode = "dark"
         self._focus_day = date.today()
         self._board_day_filter_enabled = True
-        self._board_column_format = self.BOARD_COLUMN_FORMAT_KANBAN
+        self._board_column_format = self.BOARD_COLUMN_FORMAT_IMPORTANCE
         self._applying_filters = False
         self._gantt_mode = False
         self._board_mode = False
@@ -1378,7 +1378,7 @@ class TasksWorkspace(BaseWorkspace):
             if isinstance(board_column_format, str):
                 self._set_board_column_format(board_column_format)
             else:
-                self._set_board_column_format(self.BOARD_COLUMN_FORMAT_KANBAN)
+                self._set_board_column_format(self.BOARD_COLUMN_FORMAT_IMPORTANCE)
             self._apply_tab(tab, focus_day=focus_day)
             self.model.set_project_filter(project_id)
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
@@ -1779,7 +1779,7 @@ class TasksWorkspace(BaseWorkspace):
             self.BOARD_COLUMN_FORMAT_KANBAN,
             self.BOARD_COLUMN_FORMAT_IMPORTANCE,
         }:
-            normalized = self.BOARD_COLUMN_FORMAT_KANBAN
+            normalized = self.BOARD_COLUMN_FORMAT_IMPORTANCE
         self._board_column_format = normalized
         self._board_cast.set_column_format(normalized)
 

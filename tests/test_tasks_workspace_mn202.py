@@ -1344,7 +1344,7 @@ def test_tasks_workspace_restores_secondary_mode_from_filters(monkeypatch, uniqu
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_board_uses_kanban_columns_in_expected_order(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_board_defaults_to_importance_headers(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_board_columns_order", ".sqlite3")
     database = Database(path=db_path)
@@ -1357,8 +1357,8 @@ def test_tasks_workspace_board_uses_kanban_columns_in_expected_order(monkeypatch
             (BOARD_COLUMN_IN_PROGRESS, "Выполняется"),
             (BOARD_COLUMN_COMPLETED, "Выполнена"),
         ]
-        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_KANBAN
-        assert workspace.board_column_format_combo.currentData() == workspace.BOARD_COLUMN_FORMAT_KANBAN
+        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
+        assert workspace.board_column_format_combo.currentData() == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
         assert [
             workspace._board_cast.column_title_labels[column].text()
             for column in (
@@ -1367,7 +1367,7 @@ def test_tasks_workspace_board_uses_kanban_columns_in_expected_order(monkeypatch
                 BOARD_COLUMN_IN_PROGRESS,
                 BOARD_COLUMN_COMPLETED,
             )
-        ] == ["Отложенные", "В очереди", "Выполняется", "Выполнена"]
+        ] == ["В КОНЦЕ ДНЯ", "ВАЖНО", "ОЧЕНЬ ВАЖНО", "ЕСТЬ СЛОЖНОСТИ"]
         assert list(workspace.board_columns.keys()) == [
             BOARD_COLUMN_DEFERRED,
             BOARD_COLUMN_QUEUE,
@@ -1388,11 +1388,11 @@ def test_tasks_workspace_board_can_switch_to_importance_headers(monkeypatch, uni
     workspace = tasks_workspace.TasksWorkspace()
     try:
         workspace.board_column_format_combo.setCurrentIndex(
-            workspace.board_column_format_combo.findData(workspace.BOARD_COLUMN_FORMAT_IMPORTANCE)
+            workspace.board_column_format_combo.findData(workspace.BOARD_COLUMN_FORMAT_KANBAN)
         )
 
-        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
-        assert workspace._filters["board_column_format"] == workspace.BOARD_COLUMN_FORMAT_IMPORTANCE
+        assert workspace._board_column_format == workspace.BOARD_COLUMN_FORMAT_KANBAN
+        assert workspace._filters["board_column_format"] == workspace.BOARD_COLUMN_FORMAT_KANBAN
         assert [
             workspace._board_cast.column_title_labels[column].text()
             for column in (
@@ -1401,7 +1401,7 @@ def test_tasks_workspace_board_can_switch_to_importance_headers(monkeypatch, uni
                 BOARD_COLUMN_IN_PROGRESS,
                 BOARD_COLUMN_COMPLETED,
             )
-        ] == ["В КОНЦЕ ДНЯ", "ВАЖНО", "ОЧЕНЬ ВАЖНО", "ЕСТЬ СЛОЖНОСТИ"]
+        ] == ["Отложенные", "В очереди", "Выполняется", "Выполнена"]
     finally:
         workspace.deleteLater()
         database.close()

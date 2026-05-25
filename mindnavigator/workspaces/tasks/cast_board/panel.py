@@ -153,7 +153,7 @@ class TasksBoardCast:
         if isinstance(self.column_format_combo, QComboBox):
             target_index = self.column_format_combo.findData(format_key)
             if target_index < 0:
-                target_index = self.column_format_combo.findData(self._workspace.BOARD_COLUMN_FORMAT_KANBAN)
+                target_index = self.column_format_combo.findData(self._workspace.BOARD_COLUMN_FORMAT_IMPORTANCE)
             self.column_format_combo.blockSignals(True)
             self.column_format_combo.setCurrentIndex(max(0, target_index))
             self.column_format_combo.blockSignals(False)
