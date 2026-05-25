@@ -705,6 +705,9 @@ def test_main_window_minimizes_top_task_dialog_when_app_becomes_inactive() -> No
         def _iter_visible_task_dialogs(self):
             return [dialog]
 
+        def _dialog_has_visible_child_dialog(self, current_dialog: QDialog) -> bool:
+            return MainWindow._dialog_has_visible_child_dialog(current_dialog)
+
         def _minimize_top_visible_task_dialog(self):
             return MainWindow._minimize_top_visible_task_dialog(self)
 
@@ -717,6 +720,47 @@ def test_main_window_minimizes_top_task_dialog_when_app_becomes_inactive() -> No
         assert window.calls == [(dialog, 131, True)]
     finally:
         dialog.deleteLater()
+
+
+def test_main_window_does_not_minimize_task_dialog_with_visible_child_dialog(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    host = QMainWindow()
+    host.show()
+    parent_dialog = QDialog(host)
+    parent_dialog.setProperty("task_dialog_minimizable", True)
+    parent_dialog.setProperty("task_dialog_id", 151)
+    parent_dialog.setProperty("task_dialog_kind", "edit")
+    child_dialog = QDialog(parent_dialog)
+    child_dialog.show()
+    parent_dialog.show()
+    QApplication.processEvents()
+
+    class _StateWindow:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def _iter_visible_task_dialogs(self):
+            return [parent_dialog]
+
+        def _dialog_has_visible_child_dialog(self, current_dialog: QDialog) -> bool:
+            return MainWindow._dialog_has_visible_child_dialog(current_dialog)
+
+        def _minimize_top_visible_task_dialog(self):
+            return MainWindow._minimize_top_visible_task_dialog(self)
+
+        def minimize_task_dialog(self, current_dialog: QWidget, task_id: int, is_edit_dialog: bool) -> None:
+            self.calls.append((current_dialog, task_id, is_edit_dialog))
+
+    monkeypatch.setattr(QApplication, "activeModalWidget", staticmethod(lambda: child_dialog))
+    window = _StateWindow()
+    try:
+        minimized = MainWindow._on_application_state_changed(window, Qt.ApplicationState.ApplicationInactive)
+        assert minimized is None
+        assert window.calls == []
+    finally:
+        child_dialog.deleteLater()
+        parent_dialog.deleteLater()
+        host.deleteLater()
 
 
 def test_show_dialog_standard_routes_minimizable_task_dialog_through_custom_runner(monkeypatch) -> None:

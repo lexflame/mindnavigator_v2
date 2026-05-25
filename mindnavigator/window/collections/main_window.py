@@ -451,6 +451,8 @@ class MainWindow(QMainWindow):
             parent_window = widget.parentWidget().window() if widget.parentWidget() is not None else None
             if parent_window is not self:
                 continue
+            if self._dialog_has_visible_child_dialog(widget):
+                continue
             dialogs.append(widget)
         dialogs.sort(key=lambda dialog: (dialog is QApplication.activeWindow(), dialog.isActiveWindow()))
         return dialogs
@@ -462,6 +464,30 @@ class MainWindow(QMainWindow):
             if current is dialog:
                 return True
             current = current.parentWidget()
+        return False
+
+    @staticmethod
+    def _dialog_has_visible_child_dialog(dialog: QDialog) -> bool:
+        app = QApplication.instance()
+        if app is None:
+            return False
+        active_modal = QApplication.activeModalWidget()
+        if (
+            isinstance(active_modal, QDialog)
+            and active_modal is not dialog
+            and active_modal.isVisible()
+            and MainWindow._widget_belongs_to_dialog(active_modal, dialog)
+        ):
+            return True
+        for widget in app.topLevelWidgets():
+            if widget is dialog:
+                continue
+            if not isinstance(widget, QDialog):
+                continue
+            if not widget.isVisible():
+                continue
+            if MainWindow._widget_belongs_to_dialog(widget, dialog):
+                return True
         return False
 
     def _maybe_minimize_task_dialog_from_app_click(self, global_pos: QPoint) -> bool:
@@ -498,7 +524,9 @@ class MainWindow(QMainWindow):
         return True
 
     def _minimize_top_visible_task_dialog(self) -> bool:
-        visible_dialogs = self._iter_visible_task_dialogs()
+        visible_dialogs = [
+            dialog for dialog in self._iter_visible_task_dialogs() if not self._dialog_has_visible_child_dialog(dialog)
+        ]
         if not visible_dialogs:
             return False
         target_dialog = visible_dialogs[-1]
