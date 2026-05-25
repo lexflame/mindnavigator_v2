@@ -112,6 +112,55 @@ def test_projects_model_attachment_summary_rolls_up_child_projects(monkeypatch, 
         db_path.unlink(missing_ok=True)
 
 
+def test_projects_model_keeps_child_rows_under_parent_and_promotes_orphans_in_search(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("projects_tree_order_visible_depth", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        root = database.create_project(
+            area="Area",
+            title="Alpha Root",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+        )
+        sibling = database.create_project(
+            area="Area",
+            title="Beta Root",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+        )
+        child = database.create_project(
+            area="Area",
+            title="Zulu Child",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+            parent_project_id=root.id,
+        )
+
+        monkeypatch.setattr(projects_workspace, "get_database", lambda: database)
+        model = projects_workspace.ProjectsModel()
+
+        visible_ids = [
+            model.index(row, 0).data(ProjectRoles.ProjectId)
+            for row in range(model.rowCount())
+            if model.index(row, 0).data(ProjectRoles.RowType) == "project"
+        ]
+        visible_ids = [project_id for project_id in visible_ids if project_id in {root.id, child.id, sibling.id}]
+        assert visible_ids == [root.id, child.id, sibling.id]
+
+        child_row = _find_project_row(model, child.id)
+        assert child_row >= 0
+        assert model.index(child_row, 0).data(ProjectRoles.Depth) == 1
+
+        model.set_search("Zulu")
+        child_row = _find_project_row(model, child.id)
+        assert child_row >= 0
+        assert model.index(child_row, 0).data(ProjectRoles.Depth) == 0
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_projects_workspace_adds_graph_button_after_import(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("projects_graph_button", ".sqlite3")

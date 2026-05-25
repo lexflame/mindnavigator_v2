@@ -614,7 +614,8 @@ class ProjectsModel(QAbstractListModel):
         def priority_key(priority: str) -> int:
             return priority_order[normalize_priority(priority)]
 
-        projects.sort(
+        sorted_projects = sorted(
+            projects,
             key=lambda x: (
                 x.area.lower(),
                 priority_key(x.priority),
@@ -623,15 +624,45 @@ class ProjectsModel(QAbstractListModel):
             )
         )
 
+        visible_projects_by_id = {project.id: project for project in projects}
+        visible_depth_cache: Dict[int, int] = {}
+        roots_by_area: Dict[str, List[ProjectRow]] = {}
+        children_by_parent: Dict[int, List[ProjectRow]] = {}
+        area_order: List[str] = []
+        seen_areas: set[str] = set()
+
+        for project in sorted_projects:
+            if project.area not in seen_areas:
+                seen_areas.add(project.area)
+                area_order.append(project.area)
+            parent_id = project.parent_project_id
+            visible_parent = visible_projects_by_id.get(parent_id) if isinstance(parent_id, int) else None
+            if visible_parent is None or visible_parent.area != project.area:
+                roots_by_area.setdefault(project.area, []).append(project)
+                continue
+            children_by_parent.setdefault(visible_parent.id, []).append(project)
+
         new_rows: List[Row] = []
-        cur: Optional[str] = None
-        for p in projects:
-            if cur != p.area:
-                cur = p.area
-                new_rows.append(HeaderRow(cur))
-            new_rows.append(p)
+
+        def append_subtree(project: ProjectRow, depth: int, branch_ids: Optional[set[int]] = None) -> None:
+            seen_branch = branch_ids or set()
+            if project.id in seen_branch:
+                return
+            new_rows.append(project)
+            visible_depth_cache[project.id] = depth
+            for child in children_by_parent.get(project.id, []):
+                append_subtree(child, depth + 1, seen_branch | {project.id})
+
+        for area in area_order:
+            area_roots = roots_by_area.get(area, [])
+            if not area_roots:
+                continue
+            new_rows.append(HeaderRow(area))
+            for project in area_roots:
+                append_subtree(project, 0)
 
         self.beginResetModel()
+        self._project_depth_cache = visible_depth_cache
         self._rows = new_rows
         self.endResetModel()
 
