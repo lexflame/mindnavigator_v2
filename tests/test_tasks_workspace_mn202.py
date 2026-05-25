@@ -932,6 +932,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
         assert dialog.header_edit_button.text() == "Редактировать"
+        assert dialog.close_button.height() == 40
+        assert dialog.edit_button.height() == 40
         assert dialog.summary_label.text() == "Без проекта • 2026-03-06 • Medium"
         assert empty_description is not None
         assert empty_description.text() == "Нет описания"

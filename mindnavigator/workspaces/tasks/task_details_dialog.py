@@ -176,11 +176,13 @@ class TaskDetailsDialog(QDialog):
 
         self.close_button = QPushButton("Закрыть", self.footer)
         self.close_button.setObjectName("TaskDetailsSecondaryButton")
+        self.close_button.setFixedHeight(40)
         self.close_button.clicked.connect(self.reject)
         footer_layout.addWidget(self.close_button)
 
         self.edit_button = QPushButton("Редактировать", self.footer)
         self.edit_button.setObjectName("TaskDetailsPrimaryButton")
+        self.edit_button.setFixedHeight(40)
         self.edit_button.clicked.connect(self._open_edit_dialog)
         footer_layout.addWidget(self.edit_button)
 
@@ -486,8 +488,10 @@ class TaskDetailsDialog(QDialog):
             QPushButton#TaskDetailsSecondaryButton,
             QPushButton#TaskDetailsPrimaryButton {{
                 border-radius: 9px;
-                padding: 8px 14px;
+                min-height: 40px;
+                padding: 0 14px;
                 font-weight: 600;
+                text-align: center;
             }}
             QToolButton#TaskDetailsCardAction,
             QToolButton#TaskDetailsHeaderEditButton,
