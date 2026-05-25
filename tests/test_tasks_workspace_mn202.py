@@ -3024,6 +3024,48 @@ def test_tasks_delegate_long_title_current_plan_badge_does_not_increase_height(m
         db_path.unlink(missing_ok=True)
 
 
+def test_task_details_dialog_badges_do_not_change_long_title_height(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_working_badge_title_wrap", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        long_title = (
+            "Очень длинный заголовок задачи для проверки того, что статус "
+            "в работе не вызывает лишний перенос строки в карточке задачи"
+        )
+        plan_task = database.create_task(
+            title=long_title,
+            description="",
+            day=date.today() + timedelta(days=1),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == plan_task.id))
+        dialog.resize(1042, 757)
+        dialog.show()
+        QApplication.processEvents()
+
+        assert dialog.status_badge.text() == "В работе"
+        assert dialog.plan_badge.isVisible() is True
+        title_height_with_badges = dialog.title_label.height()
+
+        dialog.plan_badge.hide()
+        dialog.status_badge.hide()
+        dialog.header_card.layout().activate()
+        QApplication.processEvents()
+
+        assert dialog.title_label.height() == title_height_with_badges
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_delegate_formats_plan_execution_text_for_completed_item() -> None:
     text = tasks_workspace.TasksItemDelegate._format_plan_execution_text(
         is_plan_item=True,

@@ -346,6 +346,53 @@ def test_task_edit_dialog_minimizes_itself_after_deactivate(monkeypatch) -> None
         window.deleteLater()
 
 
+def test_task_edit_dialog_does_not_minimize_while_child_dialog_is_open(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+    window = _MinimizeWindow()
+    central = QWidget(window)
+    window.setCentralWidget(central)
+    window.show()
+    monkeypatch.setattr(task_edit_dialog, "get_database", lambda: _TaskDialogDb())
+    dialog = task_edit_dialog.TaskEditDialog(
+        TaskRow(
+            id=94,
+            day=__import__("datetime").date(2026, 3, 6),
+            time_text="09:00",
+            title="Edit task",
+            description="",
+            priority="Medium",
+            done=False,
+        ),
+        parent=window,
+    )
+    dialog.show()
+    QApplication.processEvents()
+    calls: list[tuple[QDialog, QWidget | None]] = []
+
+    def _fake_show_dialog_standard(current_dialog: QDialog, current_parent: QWidget | None) -> int:
+        calls.append((current_dialog, current_parent))
+        assert dialog._child_dialog_depth == 1
+        monkeypatch.setattr(QApplication, "activeWindow", staticmethod(lambda: window))
+        monkeypatch.setattr(QApplication, "focusWidget", staticmethod(lambda: central))
+        monkeypatch.setattr(QApplication, "activePopupWidget", staticmethod(lambda: None))
+        monkeypatch.setattr(QApplication, "activeModalWidget", staticmethod(lambda: None))
+        dialog._maybe_auto_minimize_on_deactivate()
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(task_edit_dialog, "show_dialog_standard", _fake_show_dialog_standard)
+    child_dialog = QDialog(dialog)
+    try:
+        result = dialog._show_child_dialog(child_dialog)
+        assert result == QDialog.DialogCode.Rejected
+        assert calls == [(child_dialog, dialog)]
+        assert window.calls == []
+        assert dialog._child_dialog_depth == 0
+    finally:
+        child_dialog.deleteLater()
+        dialog.deleteLater()
+        window.deleteLater()
+
+
 def test_task_edit_dialog_show_event_prepares_minimizable_geometry(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     window = _MinimizeWindow()
