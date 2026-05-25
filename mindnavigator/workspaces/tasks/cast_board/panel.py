@@ -7,6 +7,7 @@ from typing import Dict, List
 from .._shared import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -61,8 +62,11 @@ class TasksBoardCast:
     def __init__(self, workspace) -> None:
         self._workspace = workspace
         self.page: QWidget | None = None
+        self.hint_label: QLabel | None = None
         self.day_filter_checkbox: QCheckBox | None = None
+        self.column_format_combo: QComboBox | None = None
         self.columns: Dict[str, QListWidget] = {}
+        self.column_title_labels: Dict[str, QLabel] = {}
 
     def build_page(self) -> QWidget:
         page = QWidget()
@@ -71,16 +75,23 @@ class TasksBoardCast:
         layout.setSpacing(8)
 
         board_hint = QLabel(
-            "Режим Board: 4 локальные колонки важности на выбранный день, отдельно от приоритета задачи."
+            "Режим Board: локальная сортировка задач по колонкам. Формат можно переключать без изменения приоритета задачи."
         )
         board_hint.setObjectName("TasksBoardHint")
         board_hint.setWordWrap(True)
         layout.addWidget(board_hint)
+        self.hint_label = board_hint
 
         board_options_row = QWidget(page)
         board_options_layout = QHBoxLayout(board_options_row)
         board_options_layout.setContentsMargins(0, 0, 0, 0)
         board_options_layout.setSpacing(8)
+        self.column_format_combo = QComboBox(board_options_row)
+        self.column_format_combo.setObjectName("TasksBoardFormatCombo")
+        self.column_format_combo.addItem("Канбан", self._workspace.BOARD_COLUMN_FORMAT_KANBAN)
+        self.column_format_combo.addItem("Важность дня", self._workspace.BOARD_COLUMN_FORMAT_IMPORTANCE)
+        self.column_format_combo.currentIndexChanged.connect(self._on_column_format_index_changed)
+        board_options_layout.addWidget(self.column_format_combo)
         self.day_filter_checkbox = QCheckBox("Фильтрация по дню", board_options_row)
         self.day_filter_checkbox.setObjectName("TasksBoardDayFilter")
         self.day_filter_checkbox.setChecked(bool(self._workspace._board_day_filter_enabled))
@@ -95,6 +106,7 @@ class TasksBoardCast:
         columns_layout.setSpacing(8)
 
         self.columns = {}
+        self.column_title_labels = {}
         for board_column, header in self._workspace.BOARD_COLUMN_ORDER:
             column_frame = QFrame(columns_host)
             column_frame.setObjectName("TasksBoardColumn")
@@ -105,6 +117,7 @@ class TasksBoardCast:
             label = QLabel(header)
             label.setObjectName("TasksBoardColumnTitle")
             column_layout.addWidget(label)
+            self.column_title_labels[board_column] = label
 
             list_widget = _BoardColumnListWidget(self._workspace, board_column, column_frame)
             column_layout.addWidget(list_widget, 1)
@@ -113,6 +126,7 @@ class TasksBoardCast:
 
         layout.addWidget(columns_host, 1)
         self.page = page
+        self.set_column_format(self._workspace._board_column_format)
         return page
 
     def is_day_filter_enabled(self) -> bool:
@@ -126,6 +140,26 @@ class TasksBoardCast:
             self.day_filter_checkbox.blockSignals(True)
             self.day_filter_checkbox.setChecked(self._workspace._board_day_filter_enabled)
             self.day_filter_checkbox.blockSignals(False)
+
+    def _on_column_format_index_changed(self, _index: int) -> None:
+        if not isinstance(self.column_format_combo, QComboBox):
+            return
+        selected = self.column_format_combo.currentData()
+        self._workspace._on_board_column_format_changed(
+            selected if isinstance(selected, str) else self._workspace.BOARD_COLUMN_FORMAT_KANBAN
+        )
+
+    def set_column_format(self, format_key: str) -> None:
+        if isinstance(self.column_format_combo, QComboBox):
+            target_index = self.column_format_combo.findData(format_key)
+            if target_index < 0:
+                target_index = self.column_format_combo.findData(self._workspace.BOARD_COLUMN_FORMAT_KANBAN)
+            self.column_format_combo.blockSignals(True)
+            self.column_format_combo.setCurrentIndex(max(0, target_index))
+            self.column_format_combo.blockSignals(False)
+        headers = dict(self._workspace.board_column_order_for_format(format_key))
+        for board_column, label in self.column_title_labels.items():
+            label.setText(headers.get(board_column, ""))
 
     def format_task_text(self, task) -> str:
         time_text = task.time_text or "—"
