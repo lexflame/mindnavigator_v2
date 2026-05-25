@@ -796,23 +796,34 @@ class TaskDetailsDialog(QDialog):
         if tasks_model is not None:
             row_idx = tasks_model.row_for_task_id(self._task.id)
             if row_idx >= 0:
+                update_kwargs = {
+                    "title": values["title"],
+                    "description": values["description"],
+                    "day": values["day"],
+                    "time_text": values["time_text"],
+                    "priority": values["priority"],
+                    "done": values["done"],
+                    "project_id": values["project_id"],
+                    "recurrence_kind": values["recurrence_kind"],
+                    "recurrence_interval": values["recurrence_interval"],
+                    "gantt_estimate_minutes": values.get("gantt_estimate_minutes"),
+                    "is_plan_task": values.get("is_plan_task", bool(self._task.is_plan_task)),
+                    "marker_color": values.get("marker_color", ""),
+                    "marker_theme": values.get("marker_theme", ""),
+                }
                 try:
-                    tasks_model.update_task_by_row(
-                        row_idx,
-                        title=values["title"],
-                        description=values["description"],
-                        day=values["day"],
-                        time_text=values["time_text"],
-                        priority=values["priority"],
-                        done=values["done"],
-                        project_id=values["project_id"],
-                        recurrence_kind=values["recurrence_kind"],
-                        recurrence_interval=values["recurrence_interval"],
-                        gantt_estimate_minutes=values.get("gantt_estimate_minutes"),
-                        is_plan_task=values.get("is_plan_task", bool(self._task.is_plan_task)),
-                        marker_color=values.get("marker_color", ""),
-                        marker_theme=values.get("marker_theme", ""),
-                    )
+                    tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                except TypeError as exc:
+                    if "gantt_estimate_minutes" not in str(exc):
+                        raise
+                    gantt_estimate_minutes = update_kwargs.pop("gantt_estimate_minutes", None)
+                    tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                    if gantt_estimate_minutes is not None:
+                        self._db.set_task_gantt_estimate(
+                            self._task.id,
+                            int(gantt_estimate_minutes),
+                            forecasted=True,
+                        )
                 except ValueError as exc:
                     QMessageBox.warning(self, "Проверка", str(exc))
                     return
