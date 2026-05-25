@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
         self._task_remind_next_at: dict[int, datetime] = {}
         self._tray_message_task_id: int | None = None
         self._minimize_on_focus_lost = True
+        self._focus_lost_tray_minimize_pending = False
         self._enabled_workspace_ids: set[str] = set()
         self._language_code = DEFAULT_LANGUAGE
         self._theme_mode = "dark"
@@ -667,11 +668,48 @@ class MainWindow(QMainWindow):
     def restore_from_notification(self) -> None:
         self._restore_from_notification()
 
+    def _active_owned_dialog(self) -> QDialog | None:
+        active_modal = QApplication.activeModalWidget()
+        if isinstance(active_modal, QDialog):
+            parent_window = active_modal.parentWidget().window() if active_modal.parentWidget() is not None else None
+            if parent_window is self:
+                return active_modal
+        active_window = QApplication.activeWindow()
+        if isinstance(active_window, QDialog):
+            parent_window = active_window.parentWidget().window() if active_window.parentWidget() is not None else None
+            if parent_window is self:
+                return active_window
+        return None
+
+    def _should_minimize_to_tray_on_focus_lost(self) -> bool:
+        if QApplication.applicationState() == Qt.ApplicationState.ApplicationActive:
+            return False
+        if not self._minimize_on_focus_lost or self._tray_icon is None:
+            return False
+        if not self.isVisible() or self.isHidden() or self.isMinimized():
+            return False
+        if self._active_owned_dialog() is not None:
+            return False
+        return True
+
+    def _schedule_tray_minimize_on_focus_lost(self) -> None:
+        if self._focus_lost_tray_minimize_pending:
+            return
+        self._focus_lost_tray_minimize_pending = True
+        QTimer.singleShot(0, self._maybe_minimize_to_tray_on_focus_lost)
+
+    def _maybe_minimize_to_tray_on_focus_lost(self) -> None:
+        self._focus_lost_tray_minimize_pending = False
+        if not self._should_minimize_to_tray_on_focus_lost():
+            return
+        self._minimize_to_tray()
+
     def _minimize_to_tray(self):
         """Сворачивает окно в трей."""
         # Если трей не создан, выходим без действий.
         if self._tray_icon is None:
             return
+        self._focus_lost_tray_minimize_pending = False
         self._was_maximized_before_minimize = self._was_maximized_before_minimize or self.isMaximized()
         if not self._was_maximized_before_minimize:
             geom = self.normalGeometry() if self.isMinimized() else self.geometry()
@@ -1374,16 +1412,8 @@ class MainWindow(QMainWindow):
             self._minimize_to_tray()
             return
         if event.type() == QEvent.Type.ActivationChange:
-            app_inactive = QApplication.applicationState() != Qt.ApplicationState.ApplicationActive
-            if (
-                app_inactive
-                and self._minimize_on_focus_lost
-                and self._tray_icon is not None
-                and self.isVisible()
-                and not self.isHidden()
-                and not self.isMinimized()
-            ):
-                self._minimize_to_tray()
+            if not self.isActiveWindow():
+                self._schedule_tray_minimize_on_focus_lost()
 
     def keyPressEvent(self, event):
         """Обрабатывает горячие клавиши окна."""

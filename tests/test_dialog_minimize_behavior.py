@@ -763,6 +763,34 @@ def test_main_window_does_not_minimize_task_dialog_with_visible_child_dialog(mon
         host.deleteLater()
 
 
+def test_main_window_focus_lost_does_not_tray_minimize_when_owned_dialog_is_active(monkeypatch) -> None:
+    class _FocusLostWindow:
+        def __init__(self, active_dialog: QDialog | None) -> None:
+            self._minimize_on_focus_lost = True
+            self._tray_icon = object()
+            self._active_dialog = active_dialog
+
+        def isVisible(self) -> bool:
+            return True
+
+        def isHidden(self) -> bool:
+            return False
+
+        def isMinimized(self) -> bool:
+            return False
+
+        def _active_owned_dialog(self) -> QDialog | None:
+            return self._active_dialog
+
+    owned_dialog = QDialog()
+    monkeypatch.setattr(QApplication, "applicationState", staticmethod(lambda: Qt.ApplicationState.ApplicationInactive))
+    try:
+        assert MainWindow._should_minimize_to_tray_on_focus_lost(_FocusLostWindow(owned_dialog)) is False
+        assert MainWindow._should_minimize_to_tray_on_focus_lost(_FocusLostWindow(None)) is True
+    finally:
+        owned_dialog.deleteLater()
+
+
 def test_show_dialog_standard_routes_minimizable_task_dialog_through_custom_runner(monkeypatch) -> None:
     class _SentinelDialog(QDialog):
         def exec(self) -> int:  # noqa: A003 - Qt API name
