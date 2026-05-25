@@ -245,7 +245,7 @@ class ProjectsModel(QAbstractListModel):
         marker_color: str = "",
         marker_theme: str = "",
         repository_catalog: str = "",
-    ):
+    ) -> int:
         """Добавляет новый проект и пересобирает список."""
         project = self._db.create_project(
             area=area,
@@ -282,16 +282,18 @@ class ProjectsModel(QAbstractListModel):
                 project.repository_catalog,
             )
         )
+        self._expand_project_parent_chain(project.parent_project_id)
         self._attachment_summary_dirty = True
         self._rebuild()
+        return int(project.id)
 
     def quick_add_project(
         self,
         area: str,
         parent_project_id: Optional[int] = None,
         title: str = "Новый проект",
-    ) -> None:
-        self.add_project(
+    ) -> int:
+        return self.add_project(
             area=area,
             title=title,
             updated=date.today(),
@@ -299,6 +301,28 @@ class ProjectsModel(QAbstractListModel):
             archived=False,
             parent_project_id=parent_project_id,
         )
+
+    def _expand_project_parent_chain(self, parent_project_id: Optional[int]) -> None:
+        if not isinstance(parent_project_id, int):
+            return
+        project_map = {
+            row.id: row for row in self._all_rows
+            if isinstance(row, ProjectRow)
+        }
+        changed = False
+        current_id: Optional[int] = parent_project_id
+        seen: set[int] = set()
+        while isinstance(current_id, int) and current_id not in seen:
+            seen.add(current_id)
+            if current_id in self._collapsed_project_ids:
+                self._collapsed_project_ids.remove(current_id)
+                changed = True
+            parent = project_map.get(current_id)
+            if parent is None:
+                break
+            current_id = parent.parent_project_id
+        if changed:
+            self._save_collapsed_state()
 
     def area_has_active(self, area: str) -> bool:
         """Проверяет наличие активных проектов в области."""

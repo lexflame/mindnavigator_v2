@@ -161,6 +161,44 @@ def test_projects_model_keeps_child_rows_under_parent_and_promotes_orphans_in_se
         db_path.unlink(missing_ok=True)
 
 
+def test_projects_model_add_project_expands_collapsed_parent_chain(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("projects_add_child_expands_parent", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        parent = database.create_project(
+            area="Area",
+            title="Parent",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+        )
+        monkeypatch.setattr(projects_workspace, "get_database", lambda: database)
+        model = projects_workspace.ProjectsModel()
+
+        parent_row = _find_project_row(model, parent.id)
+        assert parent_row >= 0
+        model.toggle_project_collapsed_by_row(parent_row)
+
+        child_id = model.add_project(
+            area="Area",
+            title="Child",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+            archived=False,
+            parent_project_id=parent.id,
+        )
+
+        parent_row = _find_project_row(model, parent.id)
+        child_row = _find_project_row(model, child_id)
+        assert parent_row >= 0
+        assert child_row >= 0
+        assert model.index(parent_row, 0).data(ProjectRoles.IsCollapsed) is False
+        assert model.index(child_row, 0).data(ProjectRoles.Depth) == 1
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_projects_workspace_adds_graph_button_after_import(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("projects_graph_button", ".sqlite3")
