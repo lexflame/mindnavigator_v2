@@ -216,13 +216,15 @@ class _IdeaDossierSourceDialog(QDialog):
     def __init__(self, db, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._db = db
+        self._theme_mode = "dark"
         self.setObjectName("IdeaDossierSourceDialog")
         self.setWindowTitle("Выбрать досье")
-        self.setMinimumWidth(520)
+        self.setProperty("dialog_category", "minimal_flex")
+        self.setFixedSize(480, 180)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -245,6 +247,10 @@ class _IdeaDossierSourceDialog(QDialog):
 
         self.search_edit.textChanged.connect(self._fill_dossiers)
         self._fill_dossiers()
+        if parent is not None and hasattr(parent, "_theme_mode"):
+            self.set_theme_mode(getattr(parent, "_theme_mode"))
+        else:
+            self.set_theme_mode("dark")
 
     def _fill_dossiers(self) -> None:
         self.dossier_combo.clear()
@@ -266,6 +272,56 @@ class _IdeaDossierSourceDialog(QDialog):
         if dossier is None:
             return ""
         return _dossier_source_label(dossier.title)
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
+        palette = get_theme_palette(self._theme_mode)
+        self.setStyleSheet(
+            f"""
+            QDialog#IdeaDossierSourceDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QDialog#IdeaDossierSourceDialog QLabel {{
+                color: {palette.text};
+            }}
+
+            QDialog#IdeaDossierSourceDialog QLineEdit,
+            QDialog#IdeaDossierSourceDialog QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+
+            QDialog#IdeaDossierSourceDialog QLineEdit:focus,
+            QDialog#IdeaDossierSourceDialog QComboBox:focus {{
+                border-color: {palette.accent};
+            }}
+
+            QDialog#IdeaDossierSourceDialog QComboBox QAbstractItemView {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                selection-background-color: {palette.selection_bg};
+                selection-color: {palette.selection_text};
+            }}
+
+            QDialog#IdeaDossierSourceDialog QDialogButtonBox QPushButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                padding: 6px 12px;
+                border-radius: 6px;
+            }}
+
+            QDialog#IdeaDossierSourceDialog QDialogButtonBox QPushButton:hover {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+            }}
+        """
+        )
 
 
 class IdeaRelationDialog(QDialog):
