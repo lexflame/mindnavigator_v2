@@ -272,6 +272,20 @@ class TasksItemDelegate(QStyledItemDelegate):
         quick_x = max(row_rect.left() + 8, anchor_left - quick_width - 4)
         return QRect(quick_x, row_rect.top(), quick_width, quick_height)
 
+    def _draw_task_quick_add_indicator(self, painter: QPainter, quick_rect: QRect) -> None:
+        painter.save()
+        quick_font = QFont(self._font)
+        quick_font.setBold(True)
+        quick_font.setPointSize(max(11, quick_font.pointSize()))
+        painter.setFont(quick_font)
+        painter.setPen(self.C_DIM)
+        painter.drawText(
+            quick_rect.adjusted(0, -1, 0, -1),
+            Qt.AlignmentFlag.AlignCenter,
+            "+",
+        )
+        painter.restore()
+
     def _marker_theme_asset_pixmap(self, marker_theme: str) -> QPixmap:
         theme_key = (marker_theme or "").strip().lower()
         if not theme_key:
@@ -752,16 +766,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setPen(self.C_BORDER)
             painter.drawLine(quick_rect.left(), quick_rect.top(), quick_rect.left(), quick_rect.bottom())
             painter.drawLine(quick_rect.right(), quick_rect.top(), quick_rect.right(), quick_rect.bottom())
-            icon_size = 12
-            self._icon_quick_add.paint(
-                painter,
-                QRect(
-                    quick_rect.center().x() - (icon_size // 2),
-                    quick_rect.center().y() - (icon_size // 2),
-                    icon_size,
-                    icon_size,
-                ),
-            )
+            self._draw_task_quick_add_indicator(painter, quick_rect)
 
 
         painter.restore()

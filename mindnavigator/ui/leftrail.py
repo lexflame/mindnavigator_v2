@@ -14,6 +14,7 @@ class LeftRail(QWidget):
     """Compact left rail with mode icons and hover expansion labels."""
 
     theme_toggled = Signal(str)
+    hotkeys_help_requested = Signal()
 
     WIDTH = 56
     HOVER_PANEL_WIDTH = 220
@@ -29,6 +30,7 @@ class LeftRail(QWidget):
         self._hover_panel: QFrame | None = None
         self._hover_animator: WidthExpandAnimator | None = None
         self._hover_labels: dict[str, QLabel] = {}
+        self._hover_buttons: dict[str, QToolButton] = {}
         self._hover_collapsed_width = 1
         self._is_hover_expanded = False
 
@@ -84,6 +86,28 @@ class LeftRail(QWidget):
             layout.addWidget(rail_button)
             return rail_button
 
+        def utility_btn(
+            icon_name: str,
+            tooltip: str,
+            *,
+            object_name: str,
+            checkable: bool = False,
+            in_group: bool = False,
+        ) -> QToolButton:
+            rail_button = QToolButton()
+            rail_button.setObjectName(object_name)
+            rail_button.setCheckable(checkable)
+            rail_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            rail_button.setToolTip(tooltip)
+            rail_button.setFixedSize(36, 36)
+            rail_button.setIconSize(QSize(20, 20))
+            rail_button.setProperty("qta_name", icon_name)
+            rail_button.setMouseTracking(True)
+            if in_group:
+                self.group.addButton(rail_button)
+            layout.addWidget(rail_button, 0, Qt.AlignmentFlag.AlignHCenter)
+            return rail_button
+
         self.btn_projects = btn(self._icons["Проекты"], "Проекты")
         self.btn_tasks = btn(self._icons["Задачи"], "Задачи")
         self.btn_concept_board = btn(self._icons["Концептборд"], "Смысловая доска поиска решения")
@@ -100,16 +124,28 @@ class LeftRail(QWidget):
 
         layout.addStretch(1)
 
-        self.btn_theme_toggle = QToolButton()
-        self.btn_theme_toggle.setObjectName("ThemeToggleSwitch")
-        self.btn_theme_toggle.setCheckable(True)
-        self.btn_theme_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_theme_toggle.setFixedHeight(36)
-        self.btn_theme_toggle.setIconSize(QSize(20, 20))
-        self.btn_theme_toggle.clicked.connect(self._on_theme_toggle_clicked)
-        layout.addWidget(self.btn_theme_toggle)
+        self.btn_hotkeys_help = utility_btn(
+            "fa5s.keyboard",
+            "Горячие клавиши",
+            object_name="LeftRailHotkeysButton",
+        )
+        self.btn_hotkeys_help.clicked.connect(lambda checked=False: self.hotkeys_help_requested.emit())
 
-        self.btn_settings = btn(self._icons["Настройки"], "Настройки")
+        self.btn_theme_toggle = utility_btn(
+            "fa5s.moon",
+            "Тёмная тема",
+            object_name="ThemeToggleSwitch",
+            checkable=True,
+        )
+        self.btn_theme_toggle.clicked.connect(self._on_theme_toggle_clicked)
+
+        self.btn_settings = utility_btn(
+            self._icons["Настройки"],
+            "Настройки",
+            object_name="LeftRailSettingsButton",
+            checkable=True,
+            in_group=True,
+        )
 
         self._mode_buttons = {
             "Проекты": self.btn_projects,
@@ -128,7 +164,12 @@ class LeftRail(QWidget):
             "Настройки": self.btn_settings,
         }
         self._mode_order_top = list(self._mode_buttons.keys())[:-1]
-        self._mode_order_bottom = [list(self._mode_buttons.keys())[-1]]
+        self._hover_buttons = {
+            **self._mode_buttons,
+            "Горячие клавиши": self.btn_hotkeys_help,
+            "__theme__": self.btn_theme_toggle,
+        }
+        self._mode_order_bottom = ["Горячие клавиши", "__theme__", "Настройки"]
 
         self.btn_tasks.setChecked(True)
 
@@ -146,6 +187,7 @@ class LeftRail(QWidget):
                 continue
             color = self._icon_color_active if button.isChecked() else self._icon_color
             button.setIcon(qta.icon(icon_name, color=color))
+        self.btn_hotkeys_help.setIcon(qta.icon("fa5s.keyboard", color=self._icon_color))
         self._refresh_theme_toggle_icon()
         self.refresh_hover_panel()
 
@@ -155,6 +197,7 @@ class LeftRail(QWidget):
         icon_color = self._icon_color_active if is_light else self._icon_color
         self.btn_theme_toggle.setIcon(qta.icon(icon_name, color=icon_color))
         self.btn_theme_toggle.setToolTip("Светлая тема" if is_light else "Тёмная тема")
+        self.refresh_hover_panel()
 
     def set_theme_mode(self, theme_mode: str) -> None:
         normalized = "light" if str(theme_mode).strip().lower() == "light" else "dark"
@@ -241,7 +284,7 @@ class LeftRail(QWidget):
         if self._hover_panel is None:
             return
         for mode_key, label in self._hover_labels.items():
-            button = self._mode_buttons.get(mode_key)
+            button = self._hover_buttons.get(mode_key)
             if button is None:
                 continue
             label.setVisible(button.isVisible())

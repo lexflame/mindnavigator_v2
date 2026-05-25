@@ -928,6 +928,7 @@ class MainWindow(QMainWindow):
         body_layout.addWidget(self.left_rail)
         self.left_rail.set_expand_host(body)
         self.left_rail.theme_toggled.connect(self._on_theme_toggled_from_rail)
+        self.left_rail.hotkeys_help_requested.connect(self._show_hotkeys_help)
 
         # Контейнер кнопки сворачивания навигации.
         self.nav_toggle_container = QWidget()
