@@ -104,6 +104,7 @@ class TaskEditDialog(QDialog):
         self._task = task
         self._is_plan_item = self._resolve_plan_item_state(task.id)
         self._auto_minimize_pending = False
+        self._child_dialog_depth = 0
         self._validation_widgets: tuple[QWidget, ...] = ()
         debug_task_dialog(
             f"task_edit_dialog init task_id={self.property('task_dialog_id')} parent={type(parent).__name__ if parent is not None else 'None'}"
@@ -836,6 +837,12 @@ class TaskEditDialog(QDialog):
         if not self.isVisible():
             debug_task_dialog(f"task_edit_dialog deactivate skipped invisible task_id={self.property('task_dialog_id')}")
             return
+        if self._child_dialog_depth > 0:
+            debug_task_dialog(
+                f"task_edit_dialog deactivate skipped child_dialog task_id={self.property('task_dialog_id')} "
+                f"depth={self._child_dialog_depth}"
+            )
+            return
         if QApplication.activePopupWidget() is not None and self._is_own_widget(QApplication.activePopupWidget()):
             return
         if QApplication.activeModalWidget() is not None and self._is_own_widget(QApplication.activeModalWidget()):
@@ -867,6 +874,13 @@ class TaskEditDialog(QDialog):
                 return True
             current = current.parentWidget()
         return False
+
+    def _show_child_dialog(self, dialog: QDialog) -> int:
+        self._child_dialog_depth += 1
+        try:
+            return show_dialog_standard(dialog, self)
+        finally:
+            self._child_dialog_depth = max(0, self._child_dialog_depth - 1)
 
     def _populate_projects(self, selected_id: Optional[int] = None) -> None:
         self.project_edit.blockSignals(True)
@@ -1467,7 +1481,7 @@ class TaskEditDialog(QDialog):
         from .task_details_dialog import TaskDetailsDialog
 
         dialog = TaskDetailsDialog(task, parent=self)
-        show_dialog_standard(dialog, self)
+        self._show_child_dialog(dialog)
         return True
 
     def _open_info_dialog(self, title: str, rows: List[Tuple[str, str]], wrap_rows: Optional[Set[str]] = None) -> None:
@@ -1507,7 +1521,7 @@ class TaskEditDialog(QDialog):
                 border-radius: 6px;
             }}
         """)
-        show_dialog_standard(dialog, self)
+        self._show_child_dialog(dialog)
 
     def _open_file_info(self, file_item) -> None:
         description = self._cloud_file_link_text(file_item)
@@ -1538,7 +1552,7 @@ class TaskEditDialog(QDialog):
             start_index=start_index,
             cloud_root=Path(cloud_root),
         )
-        show_dialog_standard(dialog, self)
+        self._show_child_dialog(dialog)
 
     def _resolve_plan_item_state(self, task_id: int) -> bool:
         fetch_tasks = getattr(self._db, "fetch_tasks", None)

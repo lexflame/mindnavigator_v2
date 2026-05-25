@@ -24,6 +24,8 @@ class TasksItemDelegate(QStyledItemDelegate):
     TAG_PAD_X = 8
     TAG_GAP = 6
     TAG_LINE_GAP = 6
+    EXECUTION_BADGE_PAD_X = 8
+    EXECUTION_BADGE_PAD_Y = 2
     PARENT_MOVE_BUTTON_H = 22
     PARENT_MOVE_BUTTON_PAD_X = 10
     PARENT_MOVE_BUTTON_GAP = 8
@@ -168,8 +170,6 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         tags = index.data(TaskRoles.AttachmentSummary) or []
         total_height = title_height + desc_height
-        if execution_text:
-            total_height += self.TEXT_GAP + desc_metrics.height()
         if description:
             total_height += self.TEXT_GAP
         if tags:
@@ -211,6 +211,35 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setPen(self.C_DIM)
             painter.drawText(rect.adjusted(self.TAG_PAD_X, 0, -self.TAG_PAD_X, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tag)
             x += tag_width + self.TAG_GAP
+
+    def _execution_badge_rect(self, title_rect: QRect, execution_text: str) -> QRect:
+        metrics = QFontMetrics(self._font_small)
+        badge_width = metrics.horizontalAdvance(execution_text) + self.EXECUTION_BADGE_PAD_X * 2
+        badge_height = metrics.height() + self.EXECUTION_BADGE_PAD_Y * 2
+        return QRect(
+            max(title_rect.left(), title_rect.right() - badge_width),
+            title_rect.top() + self.TEXT_V_PAD,
+            min(badge_width, title_rect.width()),
+            badge_height,
+        )
+
+    def _draw_execution_badge(self, painter: QPainter, badge_rect: QRect, execution_text: str, execution_color: QColor) -> None:
+        if badge_rect.isNull() or not execution_text:
+            return
+        badge_fill = QColor(execution_color)
+        badge_fill.setAlpha(38)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(execution_color)
+        painter.setBrush(badge_fill)
+        painter.drawRoundedRect(badge_rect, 8, 8)
+        painter.setFont(self._font_small)
+        painter.drawText(
+            badge_rect.adjusted(self.EXECUTION_BADGE_PAD_X, 0, -self.EXECUTION_BADGE_PAD_X, 0),
+            Qt.AlignmentFlag.AlignCenter,
+            execution_text,
+        )
+        painter.restore()
 
     def _header_quick_rect(
         self,
@@ -576,6 +605,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, display_title
             ).height()
             current_y = r.top() + self.TEXT_V_PAD + title_height
+            execution_badge_rect = QRect()
 
             if completion_delay_text:
                 delay_box = QRect(
@@ -588,20 +618,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(delay_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, completion_delay_text)
                 painter.setPen(title_color)
                 current_y += self.TEXT_GAP + title_metrics.height()
-
-            if execution_text:
-                execution_box = QRect(
-                    title_content_rect.left(),
-                    current_y + self.TEXT_GAP,
-                    title_content_rect.width(),
-                    QFontMetrics(self._font_small).height(),
-                )
-                painter.setFont(self._font_small)
-                painter.setPen(execution_color)
-                painter.drawText(execution_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, execution_text)
+            elif execution_text:
+                execution_badge_rect = self._execution_badge_rect(title_content_rect, execution_text)
+                self._draw_execution_badge(painter, execution_badge_rect, execution_text, execution_color)
                 painter.setFont(self._font)
                 painter.setPen(title_color)
-                current_y += self.TEXT_GAP + QFontMetrics(self._font_small).height()
 
             if description:
                 desc_box = QRect(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
-from PySide6.QtGui import QImage, QMouseEvent, QPainter, QPalette
+from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QScrollArea, QStyleOptionViewItem
 
@@ -2956,6 +2956,114 @@ def test_tasks_delegate_formats_plan_execution_text_for_current_item() -> None:
     )
 
     assert text == "В работе: 1ч 05м"
+
+
+def test_tasks_delegate_long_title_current_plan_badge_does_not_increase_height(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_delegate_working_badge_height", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        monkeypatch.setattr(tasks_workspace_impl.qta, "icon", lambda *args, **kwargs: QIcon())
+        root = database.create_task(
+            title="Plan root",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        long_title = (
+            "Очень длинный заголовок задачи для проверки того, "
+            "что бейдж статуса в работе не увеличивает высоту строки"
+        )
+        first = database.create_task(
+            title=long_title,
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:10",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        second = database.create_task(
+            title=long_title,
+            description="",
+            day=date(2026, 3, 6),
+            time_text="09:20",
+            priority="Medium",
+            parent_id=root.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        model.set_filter_mode("План")
+        delegate = tasks_workspace.TasksItemDelegate()
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+
+        first_row = _find_task_row(model, first.id)
+        second_row = _find_task_row(model, second.id)
+        assert first_row >= 0 and second_row >= 0
+        model.toggle_expanded_by_row(first_row)
+        model.toggle_expanded_by_row(second_row)
+
+        first_index = model.index(first_row, 0)
+        second_index = model.index(second_row, 0)
+        assert bool(first_index.data(TaskRoles.IsCurrentPlanItem)) is True
+        assert bool(second_index.data(TaskRoles.IsCurrentPlanItem)) is False
+
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 680, delegate.ROW_H)
+
+        current_height = delegate.sizeHint(option, first_index).height()
+        regular_height = delegate.sizeHint(option, second_index).height()
+
+        assert current_height == regular_height
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_badges_do_not_change_long_title_height(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_working_badge_title_wrap", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        long_title = (
+            "Очень длинный заголовок задачи для проверки того, что статус "
+            "в работе не вызывает лишний перенос строки в карточке задачи"
+        )
+        plan_task = database.create_task(
+            title=long_title,
+            description="",
+            day=date.today() + timedelta(days=1),
+            time_text="09:00",
+            priority="Medium",
+            is_plan_task=True,
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == plan_task.id))
+        dialog.resize(1042, 757)
+        dialog.show()
+        QApplication.processEvents()
+
+        assert dialog.status_badge.text() == "В работе"
+        assert dialog.plan_badge.isVisible() is True
+        title_height_with_badges = dialog.title_label.height()
+
+        dialog.plan_badge.hide()
+        dialog.status_badge.hide()
+        dialog.header_card.layout().activate()
+        QApplication.processEvents()
+
+        assert dialog.title_label.height() == title_height_with_badges
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
 
 
 def test_tasks_delegate_formats_plan_execution_text_for_completed_item() -> None:

@@ -193,54 +193,48 @@ class TaskDetailsDialog(QDialog):
     def _build_header(self) -> None:
         self.header_card = QFrame(self.content)
         self.header_card.setObjectName("TaskDetailsHeaderCard")
-        layout = QHBoxLayout(self.header_card)
+        layout = QVBoxLayout(self.header_card)
         layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(16)
+        layout.setSpacing(10)
 
-        title_column = QVBoxLayout()
-        title_column.setContentsMargins(0, 0, 0, 0)
-        title_column.setSpacing(8)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(12)
 
         self.title_label = QLabel("", self.header_card)
         self.title_label.setObjectName("TaskDetailsTitle")
         self.title_label.setWordWrap(True)
-        title_column.addWidget(self.title_label)
-
-        self.summary_label = QLabel("", self.header_card)
-        self.summary_label.setObjectName("TaskDetailsSummary")
-        self.summary_label.setWordWrap(True)
-        title_column.addWidget(self.summary_label)
-
-        layout.addLayout(title_column, 1)
-
-        actions_column = QVBoxLayout()
-        actions_column.setContentsMargins(0, 0, 0, 0)
-        actions_column.setSpacing(10)
-
-        badge_row = QHBoxLayout()
-        badge_row.setContentsMargins(0, 0, 0, 0)
-        badge_row.setSpacing(8)
-        badge_row.addStretch(1)
-
-        self.plan_badge = QLabel("План", self.header_card)
-        self.plan_badge.setObjectName("TaskDetailsBadge")
-        self.plan_badge.setVisible(False)
-        badge_row.addWidget(self.plan_badge)
-
-        self.status_badge = QLabel("", self.header_card)
-        self.status_badge.setObjectName("TaskDetailsBadge")
-        badge_row.addWidget(self.status_badge)
-
-        actions_column.addLayout(badge_row)
+        title_row.addWidget(self.title_label, 1)
 
         self.header_edit_button = QToolButton(self.header_card)
         self.header_edit_button.setObjectName("TaskDetailsHeaderEditButton")
         self.header_edit_button.setText("Редактировать")
         self.header_edit_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.header_edit_button.clicked.connect(self._open_edit_dialog)
-        actions_column.addWidget(self.header_edit_button, 0, Qt.AlignmentFlag.AlignRight)
+        title_row.addWidget(self.header_edit_button, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
-        layout.addLayout(actions_column)
+        layout.addLayout(title_row)
+
+        self.summary_label = QLabel("", self.header_card)
+        self.summary_label.setObjectName("TaskDetailsSummary")
+        self.summary_label.setWordWrap(True)
+        layout.addWidget(self.summary_label)
+
+        badge_row = QHBoxLayout()
+        badge_row.setContentsMargins(0, 0, 0, 0)
+        badge_row.setSpacing(8)
+
+        self.plan_badge = QLabel("План", self.header_card)
+        self.plan_badge.setObjectName("TaskDetailsBadge")
+        self.plan_badge.setVisible(False)
+        badge_row.addWidget(self.plan_badge, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.status_badge = QLabel("", self.header_card)
+        self.status_badge.setObjectName("TaskDetailsBadge")
+        badge_row.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignLeft)
+        badge_row.addStretch(1)
+
+        layout.addLayout(badge_row)
         self.content_layout.addWidget(self.header_card)
 
     def _build_description_section(self) -> None:
