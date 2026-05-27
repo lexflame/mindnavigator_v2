@@ -569,6 +569,7 @@ class ObjectWorkspace(QWidget):
         except ValueError as exc:
             QMessageBox.warning(self, "Объекты", str(exc))
             return
+        dialog.apply_pending_context_links(obj.id)
         self.model.add_object(obj)
         self._refresh_catalogs()
         row = self.model.row_for_object_id(obj.id)
