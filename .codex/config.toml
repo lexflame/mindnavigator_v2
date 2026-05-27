@@ -2,7 +2,6 @@
 # Active local defaults should stay safe-by-default and cross-platform.
 
 model = "gpt-5.3-codex"
-profile = "balanced"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 web_search = "live"
