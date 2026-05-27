@@ -28,6 +28,12 @@ class TaskData:
     actual_minutes: int = 0
     marker_color: str = ""
     marker_theme: str = ""
+    project_task_type_id: Optional[int] = None
+    project_task_type_title: str = ""
+    project_task_type_color: str = ""
+    project_task_type_theme: str = ""
+    postponed_reason: str = ""
+    postponed_by_project_task_type_id: Optional[int] = None
     is_plan_task: bool = False
     plan_order: int = 0
 

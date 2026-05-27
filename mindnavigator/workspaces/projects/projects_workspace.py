@@ -190,7 +190,33 @@ class ProjectsWorkspace(QWidget):
         )
         if not path:
             return
-        rows = export_projects_rows(self._db.fetch_projects())
+        projects = self._db.fetch_projects()
+        rows = export_projects_rows(projects)
+        for row, project in zip(rows, projects):
+            row["project_task_types_json"] = json.dumps(
+                [
+                    {
+                        "title": item.title,
+                        "color_marker": item.color_marker,
+                        "theme_marker": item.theme_marker,
+                        "active": item.active,
+                    }
+                    for item in self._db.fetch_project_task_types(project.id, include_inactive=True)
+                ],
+                ensure_ascii=False,
+            )
+            row["related_project_ids"] = "|".join(
+                str(item.related_project_id) for item in self._db.fetch_project_related_projects(project.id)
+            )
+            row["related_task_ids"] = "|".join(str(item.task_id) for item in self._db.fetch_project_related_tasks(project.id))
+            row["repository_links_json"] = json.dumps(
+                [{"title": item.title, "url": item.url} for item in self._db.fetch_project_repository_links(project.id)],
+                ensure_ascii=False,
+            )
+            row["wiki_links_json"] = json.dumps(
+                [{"title": item.title, "url": item.url} for item in self._db.fetch_project_wiki_links(project.id)],
+                ensure_ascii=False,
+            )
         if not rows:
             QMessageBox.information(self, "Projects", "Нет данных для экспорта.")
             return
@@ -291,6 +317,8 @@ class ProjectsWorkspace(QWidget):
                 marker_theme=values["marker_theme"],
                 repository_catalog=values["repository_catalog"],
             )
+            dialog.apply_project_properties(project_id)
+            self.model.refresh()
             self._refresh_area_combo(values["area"])
             self.focus_project(project_id)
         except ValueError as exc:

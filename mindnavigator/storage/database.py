@@ -5,6 +5,7 @@ from __future__ import annotations
 from .database_schema_mixin import DatabaseSchemaMixin
 from .database_tasks_mixin import DatabaseTasksMixin
 from .database_projects_mixin import DatabaseProjectsMixin
+from .database_project_properties_mixin import DatabaseProjectPropertiesMixin
 from .database_maps_mixin import DatabaseMapsMixin
 from .database_notes_ideas_mixin import DatabaseNotesIdeasMixin
 from .database_objects_characters_mixin import DatabaseObjectsCharactersMixin
@@ -20,6 +21,7 @@ class Database(
     DatabaseSchemaMixin,
     DatabaseTasksMixin,
     DatabaseProjectsMixin,
+    DatabaseProjectPropertiesMixin,
     DatabaseMapsMixin,
     DatabaseNotesIdeasMixin,
     DatabaseObjectsCharactersMixin,

@@ -33,12 +33,14 @@ class TasksModel(QAbstractListModel):
         self._expanded_task_ids: set[int] = set()
         self._collapsed_subtask_ids: set[int] = set()
         self._subtask_state_initialized: set[int] = set()
+        self._project_meta_cache: dict[int, str] = {}
         self._reload_from_db()
 
     def _reload_from_db(self):
         """Обновляет список задач из базы данных."""
         tasks = self._db.fetch_tasks()
         self._all_rows = [self._row_from_task_data(task) for task in tasks]
+        self._project_meta_cache.clear()
         self._recompute_plan_meta()
         self._prune_state()
         self._rebuild()
@@ -67,6 +69,12 @@ class TasksModel(QAbstractListModel):
             actual_minutes=task.actual_minutes,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
+            project_task_type_title=task.project_task_type_title,
+            project_task_type_color=task.project_task_type_color,
+            project_task_type_theme=task.project_task_type_theme,
+            postponed_reason=task.postponed_reason,
+            postponed_by_project_task_type_id=task.postponed_by_project_task_type_id,
             is_plan_task=task.is_plan_task,
             plan_order=task.plan_order,
         )
@@ -342,6 +350,14 @@ class TasksModel(QAbstractListModel):
             return r.marker_color
         if role == TaskRoles.MarkerTheme:
             return r.marker_theme
+        if role == TaskRoles.ProjectTaskTypeId:
+            return r.project_task_type_id
+        if role == TaskRoles.ProjectTaskTypeTitle:
+            return r.project_task_type_title
+        if role == TaskRoles.ProjectTaskTypeColor:
+            return r.project_task_type_color
+        if role == TaskRoles.ProjectTaskMetaSummary:
+            return self._project_meta_summary(r.project_id)
         if role == Qt.ItemDataRole.DisplayRole:
             return format_task_list_title(r.id, r.title)
         return None
@@ -364,6 +380,44 @@ class TasksModel(QAbstractListModel):
             flags |= Qt.ItemFlag.ItemIsDragEnabled
             flags |= Qt.ItemFlag.ItemIsDropEnabled
         return flags
+
+    def _project_meta_summary(self, project_id: Optional[int]) -> str:
+        if project_id is None:
+            return ""
+        project_id = int(project_id)
+        cached = self._project_meta_cache.get(project_id)
+        if cached is not None:
+            return cached
+        parts: list[str] = []
+        fetch_related_projects = getattr(self._db, "fetch_project_related_projects", None)
+        if callable(fetch_related_projects):
+            items = fetch_related_projects(project_id)
+            labels = [f"{item.title} {'Архив' if item.archived else 'Активен'}" for item in items[:2] if item.title]
+            if len(items) > 2:
+                labels.append(f"+{len(items) - 2}")
+            if labels:
+                parts.append(f"Проекты: {', '.join(labels)}")
+        fetch_related_tasks = getattr(self._db, "fetch_project_related_tasks", None)
+        if callable(fetch_related_tasks):
+            items = fetch_related_tasks(project_id)
+            labels = [f"MN-{item.task_id} {item.priority or ('Выполнена' if item.done else '')}".strip() for item in items[:2]]
+            if len(items) > 2:
+                labels.append(f"+{len(items) - 2}")
+            if labels:
+                parts.append(f"Задачи: {', '.join(labels)}")
+        for caption, fetch_name in (("Repo", "fetch_project_repository_links"), ("Wiki", "fetch_project_wiki_links")):
+            fetch_links = getattr(self._db, fetch_name, None)
+            if not callable(fetch_links):
+                continue
+            links = fetch_links(project_id)
+            labels = [(link.title or link.url) for link in links[:2] if (link.title or link.url)]
+            if len(links) > 2:
+                labels.append(f"+{len(links) - 2}")
+            if labels:
+                parts.append(f"{caption}: {', '.join(labels)}")
+        summary = "  ".join(parts)
+        self._project_meta_cache[project_id] = summary
+        return summary
 
     def set_filter_mode(self, mode: str):
         """Устанавливает фильтр по режиму и перестраивает список."""
@@ -409,6 +463,7 @@ class TasksModel(QAbstractListModel):
         is_plan_task: bool = False,
         marker_color: str = "",
         marker_theme: str = "",
+        project_task_type_id: Optional[int] = None,
     ):
         """Добавляет новую задачу и перестраивает текущий список."""
         task = self._db.create_task(
@@ -424,6 +479,7 @@ class TasksModel(QAbstractListModel):
             is_plan_task=is_plan_task,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            project_task_type_id=project_task_type_id,
         )
         self._all_rows.append(self._row_from_task_data(task))
         self._recompute_plan_meta()
@@ -449,6 +505,7 @@ class TasksModel(QAbstractListModel):
             recurrence_interval=1,
             marker_color=parent_task.marker_color,
             marker_theme=parent_task.marker_theme,
+            project_task_type_id=parent_task.project_task_type_id,
         )
 
     def quick_add_task_for_day(self, target_day: date) -> None:
@@ -513,6 +570,7 @@ class TasksModel(QAbstractListModel):
             "plan_order": task.plan_order,
             "marker_color": task.marker_color,
             "marker_theme": task.marker_theme,
+            "project_task_type_id": task.project_task_type_id,
         }
 
     def _apply_task_updates_by_ids(self, task_ids: List[int], update_builder) -> int:
@@ -548,6 +606,7 @@ class TasksModel(QAbstractListModel):
         is_plan_task: Optional[bool] = None,
         marker_color: str = "",
         marker_theme: str = "",
+        project_task_type_id: Optional[int] = None,
     ):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
@@ -578,6 +637,7 @@ class TasksModel(QAbstractListModel):
             plan_order=r.plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            project_task_type_id=project_task_type_id,
         )
         if gantt_estimate_minutes is not None:
             self._db.set_task_gantt_estimate(updated.id, gantt_estimate_minutes, forecasted=True)
@@ -679,6 +739,7 @@ class TasksModel(QAbstractListModel):
             recurrence_interval=task.recurrence_interval,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
         )
 
     def step_priority_by_row(self, row_idx: int, direction: int) -> None:
@@ -710,6 +771,7 @@ class TasksModel(QAbstractListModel):
             recurrence_interval=task.recurrence_interval,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
         )
 
     def can_step_plan_item_order(self, task_id: int, direction: int) -> bool:
@@ -885,6 +947,7 @@ class TasksModel(QAbstractListModel):
             plan_order=task.plan_order,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -946,6 +1009,7 @@ class TasksModel(QAbstractListModel):
             is_plan_task=task.is_plan_task,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
         )
         new_all: List[Row] = []
         for it in self._all_rows:
@@ -1040,6 +1104,7 @@ class TasksModel(QAbstractListModel):
             plan_order=task.plan_order,
             marker_color=task.marker_color,
             marker_theme=task.marker_theme,
+            project_task_type_id=task.project_task_type_id,
         )
         new_all: List[Row] = []
         for it in self._all_rows:

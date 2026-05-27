@@ -35,6 +35,9 @@ class DatabaseSchemaMixin:
                     plan_order INTEGER NOT NULL DEFAULT 0,
                     marker_color TEXT NOT NULL DEFAULT '',
                     marker_theme TEXT NOT NULL DEFAULT '',
+                    project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL,
+                    postponed_reason TEXT NOT NULL DEFAULT '',
+                    postponed_by_project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -62,6 +65,7 @@ class DatabaseSchemaMixin:
                 );
                 """
             )
+            self._ensure_project_property_schema()
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS maps (
@@ -649,6 +653,8 @@ class DatabaseSchemaMixin:
         self._ensure_priority_values()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
+        self._ensure_project_property_schema()
+        self._ensure_task_project_property_columns()
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
         self._ensure_idea_image_schema()
@@ -677,6 +683,8 @@ class DatabaseSchemaMixin:
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
+        self._ensure_project_property_schema()
+        self._ensure_task_project_property_columns()
 
     def apply_schema_updates(self) -> int:
         """Применяет все доступные миграции схемы и возвращает user_version."""
@@ -684,6 +692,8 @@ class DatabaseSchemaMixin:
         self._ensure_priority_values()
         self._ensure_project_extended_columns()
         self._ensure_project_marker_columns()
+        self._ensure_project_property_schema()
+        self._ensure_task_project_property_columns()
         self._ensure_task_plan_columns()
         self._ensure_task_execution_columns()
         self._ensure_dossier_schema()
@@ -711,6 +721,8 @@ class DatabaseSchemaMixin:
         self._ensure_priority_values()
         self._ensure_map_tiles_path_column()
         self._ensure_project_marker_columns()
+        self._ensure_project_property_schema()
+        self._ensure_task_project_property_columns()
 
     def _migration_v2_map_marker_and_attachment_schema(self, _connection: sqlite3.Connection) -> None:
         """Миграция v2: приведение структуры меток карты и вложений задач."""
@@ -1178,6 +1190,87 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_color TEXT NOT NULL DEFAULT '';")
             if "marker_theme" not in names:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
+
+    def _ensure_project_property_schema(self) -> None:
+        """Создает таблицы множественных свойств проекта."""
+        with self._conn:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_task_types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    color_marker TEXT NOT NULL DEFAULT '',
+                    theme_marker TEXT NOT NULL DEFAULT '',
+                    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(project_id, title)
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_related_projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    related_project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(project_id, related_project_id),
+                    CHECK(project_id <> related_project_id)
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_related_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(project_id, task_id)
+                );
+                """
+            )
+            for table_name in ("project_repository_links", "project_wiki_links"):
+                self._conn.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        title TEXT NOT NULL DEFAULT '',
+                        url TEXT NOT NULL,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_task_types_project ON project_task_types(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_related_projects_project ON project_related_projects(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_related_tasks_project ON project_related_tasks(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_repository_links_project ON project_repository_links(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_wiki_links_project ON project_wiki_links(project_id);")
+
+    def _ensure_task_project_property_columns(self) -> None:
+        """Добавляет колонки привязки задачи к проектному типу."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        with self._conn:
+            if "project_task_type_id" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL;"
+                )
+            if "postponed_reason" not in names:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN postponed_reason TEXT NOT NULL DEFAULT '';")
+            if "postponed_by_project_task_type_id" not in names:
+                self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN postponed_by_project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL;"
+                )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_task_type ON tasks(project_task_type_id);")
 
     def _ensure_task_completion_delay_column(self) -> None:
         """Добавляет колонку расхождения по времени выполнения, если она отсутствует."""
@@ -1673,6 +1766,9 @@ class DatabaseSchemaMixin:
                 plan_order INTEGER NOT NULL DEFAULT 0,
                 marker_color TEXT NOT NULL DEFAULT '',
                 marker_theme TEXT NOT NULL DEFAULT '',
+                project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL,
+                postponed_reason TEXT NOT NULL DEFAULT '',
+                postponed_by_project_task_type_id INTEGER REFERENCES project_task_types(id) ON DELETE SET NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -1682,7 +1778,8 @@ class DatabaseSchemaMixin:
             f"""
             INSERT INTO tasks (
                 id, title, description, day, time_text, priority, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
-                gantt_forecasted, started_at, finished_at, actual_minutes, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
+                gantt_forecasted, started_at, finished_at, actual_minutes, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order,
+                marker_color, marker_theme, project_task_type_id, postponed_reason, postponed_by_project_task_type_id, created_at, updated_at
             )
             SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
                    CASE
@@ -1695,7 +1792,11 @@ class DatabaseSchemaMixin:
                    {_source("project_id", "NULL")}, {_source("parent_id", "NULL")},
                    COALESCE({_source("recurrence_kind", "''")}, ''), COALESCE({_source("recurrence_interval", "1")}, 1),
                    COALESCE({_source("is_plan_task", "0")}, 0), COALESCE({_source("plan_order", "0")}, 0),
-                   COALESCE({_source("marker_color", "''")}, ''), COALESCE({_source("marker_theme", "''")}, ''), created_at, updated_at
+                   COALESCE({_source("marker_color", "''")}, ''), COALESCE({_source("marker_theme", "''")}, ''),
+                   {_source("project_task_type_id", "NULL")},
+                   COALESCE({_source("postponed_reason", "''")}, ''),
+                   {_source("postponed_by_project_task_type_id", "NULL")},
+                   created_at, updated_at
             FROM tasks_old;
             """
         )
@@ -1989,6 +2090,7 @@ class DatabaseSchemaMixin:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_day ON tasks(day);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_task_type ON tasks(project_task_type_id);")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);")
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_projects_parent_order ON projects(parent_project_id, sort_order, id);"

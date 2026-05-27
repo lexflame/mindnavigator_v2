@@ -613,6 +613,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                     marker_theme=values["marker_theme"],
                     repository_catalog=values["repository_catalog"],
                 )
+                dialog.apply_project_properties(project.id)
+                model.refresh()
                 self._refresh_area_combo(values["area"])
             except ValueError as exc:
                 QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))

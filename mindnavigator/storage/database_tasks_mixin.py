@@ -55,6 +55,12 @@ class DatabaseTasksMixin:
                 t.plan_order,
                 t.marker_color,
                 t.marker_theme,
+                t.project_task_type_id,
+                t.postponed_reason,
+                t.postponed_by_project_task_type_id,
+                ptt.title AS project_task_type_title,
+                ptt.color_marker AS project_task_type_color,
+                ptt.theme_marker AS project_task_type_theme,
                 CASE
                     WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
                     ELSE COALESCE(p.title, '')
@@ -65,7 +71,8 @@ class DatabaseTasksMixin:
                 t.recurrence_interval
             FROM tasks t
             LEFT JOIN projects p ON p.id = t.project_id
-            LEFT JOIN projects pp ON pp.id = p.parent_project_id;
+            LEFT JOIN projects pp ON pp.id = p.parent_project_id
+            LEFT JOIN project_task_types ptt ON ptt.id = t.project_task_type_id;
             """
         ).fetchall()
         tasks = []
@@ -96,6 +103,12 @@ class DatabaseTasksMixin:
                     plan_order=max(0, int(row["plan_order"] or 0)),
                     marker_color=(row["marker_color"] or "").strip(),
                     marker_theme=(row["marker_theme"] or "").strip(),
+                    project_task_type_id=row["project_task_type_id"],
+                    project_task_type_title=(row["project_task_type_title"] or "").strip(),
+                    project_task_type_color=(row["project_task_type_color"] or "").strip(),
+                    project_task_type_theme=(row["project_task_type_theme"] or "").strip(),
+                    postponed_reason=(row["postponed_reason"] or "").strip(),
+                    postponed_by_project_task_type_id=row["postponed_by_project_task_type_id"],
                 )
             )
         return tasks
@@ -103,6 +116,24 @@ class DatabaseTasksMixin:
     def _fetch_task_by_id(self, task_id: int) -> Optional[TaskData]:
         normalized_task_id = int(task_id)
         return next((task for task in self.fetch_tasks() if task.id == normalized_task_id), None)
+
+    def _normalize_task_project_type_id(
+        self,
+        project_id: Optional[int],
+        project_task_type_id: Optional[int],
+    ) -> Optional[int]:
+        if project_id is None or project_task_type_id is None:
+            return None
+        row = self._conn.execute(
+            """
+            SELECT id
+            FROM project_task_types
+            WHERE id = ? AND project_id = ? AND active = 1
+            LIMIT 1;
+            """,
+            (int(project_task_type_id), int(project_id)),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
 
     def create_task(
         self,
@@ -119,6 +150,7 @@ class DatabaseTasksMixin:
         plan_order: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
+        project_task_type_id: Optional[int] = None,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -130,6 +162,7 @@ class DatabaseTasksMixin:
         is_plan_task = bool(is_plan_task)
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
+        project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
         if plan_order is None:
@@ -176,9 +209,10 @@ class DatabaseTasksMixin:
                 """
                 INSERT INTO tasks (
                     title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                    recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
+                    recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
+                    project_task_type_id, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -195,6 +229,7 @@ class DatabaseTasksMixin:
                     plan_order,
                     marker_color,
                     marker_theme,
+                    project_task_type_id,
                     now,
                     now,
                 ),
@@ -234,6 +269,7 @@ class DatabaseTasksMixin:
             plan_order=plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            project_task_type_id=project_task_type_id,
         )
 
     def update_task(
@@ -253,10 +289,16 @@ class DatabaseTasksMixin:
         plan_order: Optional[int] = None,
         marker_color: str = "",
         marker_theme: str = "",
+        project_task_type_id: Optional[int] = None,
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
-            "SELECT priority, board_column, parent_id, is_plan_task, plan_order FROM tasks WHERE id = ?;",
+            """
+            SELECT priority, board_column, parent_id, is_plan_task, plan_order, postponed_reason,
+                   postponed_by_project_task_type_id
+            FROM tasks
+            WHERE id = ?;
+            """,
             (task_id,),
         ).fetchone()
         prev_priority = prev_row["priority"] if prev_row else priority
@@ -282,6 +324,12 @@ class DatabaseTasksMixin:
         plan_order = max(0, int(plan_order))
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
+        project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
+        postponed_reason = (prev_row["postponed_reason"] or "").strip() if prev_row else ""
+        postponed_by_type_id = prev_row["postponed_by_project_task_type_id"] if prev_row else None
+        if postponed_reason == "project_task_type_deactivated" and postponed_by_type_id is not None:
+            priority = DEFERRED_PRIORITY
+            board_column = BOARD_COLUMN_DEFERRED
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
 
@@ -332,7 +380,8 @@ class DatabaseTasksMixin:
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
-                    recurrence_kind = ?, recurrence_interval = ?, is_plan_task = ?, plan_order = ?, marker_color = ?, marker_theme = ?, updated_at = ?
+                    recurrence_kind = ?, recurrence_interval = ?, is_plan_task = ?, plan_order = ?, marker_color = ?, marker_theme = ?,
+                    project_task_type_id = ?, updated_at = ?
                 WHERE id = ?;
                 """,
                 (
@@ -351,6 +400,7 @@ class DatabaseTasksMixin:
                     plan_order,
                     marker_color,
                     marker_theme,
+                    project_task_type_id,
                     now,
                     task_id,
                 ),
@@ -413,6 +463,9 @@ class DatabaseTasksMixin:
             plan_order=plan_order,
             marker_color=marker_color,
             marker_theme=marker_theme,
+            project_task_type_id=project_task_type_id,
+            postponed_reason=postponed_reason,
+            postponed_by_project_task_type_id=postponed_by_type_id,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
@@ -422,6 +475,7 @@ class DatabaseTasksMixin:
             SELECT
                 id, title, description, day, time_text, priority, board_column, done, project_id, parent_id,
                 recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
+                project_task_type_id,
                 started_at, finished_at, actual_minutes, gantt_estimate_minutes, gantt_forecasted
             FROM tasks
             WHERE id = ?;
@@ -522,9 +576,10 @@ class DatabaseTasksMixin:
                     """
                     INSERT INTO tasks (
                         title, description, day, time_text, priority, board_column, done, project_id, parent_id,
-                        recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme, created_at, updated_at
+                        recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
+                        project_task_type_id, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         row["title"],
@@ -541,6 +596,7 @@ class DatabaseTasksMixin:
                         self._next_task_plan_order(row["parent_id"]),
                         row["marker_color"] or "",
                         row["marker_theme"] or "",
+                        row["project_task_type_id"],
                         now_utc,
                         now_utc,
                     ),
