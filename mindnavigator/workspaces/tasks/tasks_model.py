@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
+from .task_property_propagation import TASK_PROPAGATABLE_FIELDS, TaskPropertyPropagationResult
+
+
 class TasksModel(QAbstractListModel):
     task_moved = Signal(int)
 
@@ -121,6 +124,114 @@ class TasksModel(QAbstractListModel):
     def refresh(self) -> None:
         """Перезагружает данные задач из базы."""
         self._reload_from_db()
+
+    def has_task_children(self, task_id: int) -> bool:
+        return any(isinstance(row, TaskRow) and row.parent_id == int(task_id) for row in self._all_rows)
+
+    def has_task_descendants(self, task_id: int) -> bool:
+        return bool(self._collect_child_tasks(int(task_id), recursive=True))
+
+    def apply_task_property_to_children(
+        self,
+        parent_task_id: int,
+        property_name: str,
+        value: object,
+        recursive: bool = False,
+    ) -> TaskPropertyPropagationResult:
+        """Applies one task property to direct child tasks or all descendants."""
+        property_name = str(property_name or "").strip()
+        property_label = TASK_PROPAGATABLE_FIELDS.get(property_name, property_name)
+        if property_name not in TASK_PROPAGATABLE_FIELDS:
+            return TaskPropertyPropagationResult(
+                property_name=property_name,
+                property_label=property_label,
+                recursive=recursive,
+                error_count=1,
+                errors=("Свойство недоступно для применения.",),
+            )
+        parent_task = self.task_by_id(int(parent_task_id))
+        if parent_task is None:
+            return TaskPropertyPropagationResult(
+                property_name=property_name,
+                property_label=property_label,
+                recursive=recursive,
+                error_count=1,
+                errors=("Выберите задачу для редактирования.",),
+            )
+
+        targets = self._collect_child_tasks(parent_task.id, recursive=recursive)
+        if not targets:
+            return TaskPropertyPropagationResult(
+                property_name=property_name,
+                property_label=property_label,
+                recursive=recursive,
+            )
+
+        updated_count = 0
+        skipped_count = 0
+        errors: list[str] = []
+        for child in targets:
+            if self._task_property_value(child, property_name) == value:
+                skipped_count += 1
+                continue
+            payload = self._task_update_payload(child)
+            payload[property_name] = value
+            try:
+                self._db.update_task(task_id=child.id, **payload)
+            except Exception as exc:  # noqa: BLE001 - collect per-row save errors for the operation report
+                errors.append(f"MN-{child.id}: {exc}")
+                continue
+            updated_count += 1
+
+        if updated_count:
+            self._reload_from_db()
+        return TaskPropertyPropagationResult(
+            property_name=property_name,
+            property_label=property_label,
+            recursive=recursive,
+            target_count=len(targets),
+            updated_count=updated_count,
+            skipped_count=skipped_count,
+            error_count=len(errors),
+            errors=tuple(errors),
+        )
+
+    def _collect_child_tasks(self, parent_task_id: int, recursive: bool) -> list[TaskRow]:
+        by_parent: dict[Optional[int], list[TaskRow]] = {}
+        for row in self._all_rows:
+            if isinstance(row, TaskRow):
+                by_parent.setdefault(row.parent_id, []).append(row)
+        direct_children = list(by_parent.get(parent_task_id, []))
+        if not recursive:
+            return [child for child in direct_children if child.id != parent_task_id]
+
+        result: list[TaskRow] = []
+        visited = {parent_task_id}
+        stack = list(direct_children)
+        while stack:
+            child = stack.pop(0)
+            if child.id in visited:
+                continue
+            visited.add(child.id)
+            result.append(child)
+            stack.extend(by_parent.get(child.id, []))
+        return result
+
+    @staticmethod
+    def _task_property_value(task: TaskRow, property_name: str) -> object:
+        if property_name == "marker_color":
+            return task.marker_color
+        if property_name == "project_id":
+            return task.project_id
+        if property_name == "priority":
+            return task.priority
+        if property_name == "marker_theme":
+            return task.marker_theme
+        if property_name == "day":
+            return task.day
+        if property_name == "time_text":
+            return task.time_text
+        return None
 
     def _prune_state(self) -> None:
         """Очищает локальные состояния раскрытия для удаленных задач."""
