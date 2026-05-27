@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.tasks import task_edit_dialog, tasks_model
@@ -51,9 +51,11 @@ def test_tasks_model_applies_properties_to_children_and_descendants(monkeypatch,
         monkeypatch.setattr(tasks_model, "get_database", lambda: database)
         model = tasks_model.TasksModel()
 
-        direct_result = model.apply_task_property_to_children(parent.id, "marker_color", parent.marker_color)
+        direct_result = model.apply_task_property_to_children(parent.id, "marker_color", "#d68a2f")
         assert direct_result.updated_count == 1
-        assert model.task_by_id(child.id).marker_color == parent.marker_color
+        assert direct_result.parent_updated is True
+        assert model.task_by_id(parent.id).marker_color == "#d68a2f"
+        assert model.task_by_id(child.id).marker_color == "#d68a2f"
         assert model.task_by_id(grandchild.id).marker_color == "#2f9f63"
 
         for property_name, value in (
@@ -101,6 +103,49 @@ def test_tasks_model_reports_missing_children(monkeypatch, unique_temp_path) -> 
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_task_property_menu_has_only_apply_and_clear_actions(monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    labels: list[str] = []
+
+    class _FakeAction:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def setEnabled(self, _enabled: bool) -> None:
+            return None
+
+    class _FakeMenu:
+        def __init__(self, _parent=None) -> None:
+            return None
+
+        def addAction(self, label: str):
+            labels.append(label)
+            return _FakeAction(label)
+
+        def exec(self, _pos):
+            return None
+
+    monkeypatch.setattr(task_edit_dialog, "QMenu", _FakeMenu)
+    group = task_edit_dialog.TaskPropertyInputGroup(
+        "priority",
+        "Приоритет",
+        QLabel("High"),
+        has_children=True,
+        has_descendants=True,
+        clearable=True,
+    )
+
+    group._open_menu()
+
+    assert "Выбрать значение" not in labels
+    assert labels == [
+        "Применить к вложенным задачам",
+        "Применить к вложенным задачам рекурсивно",
+        "Очистить значение",
+    ]
+    group.deleteLater()
 
 
 def test_task_edit_dialog_builds_property_input_groups(monkeypatch, unique_temp_path) -> None:

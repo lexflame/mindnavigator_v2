@@ -159,17 +159,21 @@ class TasksModel(QAbstractListModel):
                 errors=("Выберите задачу для редактирования.",),
             )
 
-        targets = self._collect_child_tasks(parent_task.id, recursive=recursive)
-        if not targets:
-            return TaskPropertyPropagationResult(
-                property_name=property_name,
-                property_label=property_label,
-                recursive=recursive,
-            )
-
+        parent_updated = False
         updated_count = 0
         skipped_count = 0
         errors: list[str] = []
+        if self._task_property_value(parent_task, property_name) != value:
+            payload = self._task_update_payload(parent_task)
+            payload[property_name] = value
+            try:
+                self._db.update_task(task_id=parent_task.id, **payload)
+            except Exception as exc:  # noqa: BLE001 - collect save errors for the operation report
+                errors.append(f"MN-{parent_task.id}: {exc}")
+            else:
+                parent_updated = True
+
+        targets = self._collect_child_tasks(parent_task.id, recursive=recursive)
         for child in targets:
             if self._task_property_value(child, property_name) == value:
                 skipped_count += 1
@@ -183,7 +187,7 @@ class TasksModel(QAbstractListModel):
                 continue
             updated_count += 1
 
-        if updated_count:
+        if parent_updated or updated_count:
             self._reload_from_db()
         return TaskPropertyPropagationResult(
             property_name=property_name,
@@ -191,6 +195,7 @@ class TasksModel(QAbstractListModel):
             recursive=recursive,
             target_count=len(targets),
             updated_count=updated_count,
+            parent_updated=parent_updated,
             skipped_count=skipped_count,
             error_count=len(errors),
             errors=tuple(errors),

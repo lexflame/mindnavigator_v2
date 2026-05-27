@@ -99,7 +99,6 @@ class _TaskPropertyLabel(QLabel):
 
 
 class TaskPropertyInputGroup(QFrame):
-    choose_requested = Signal(str)
     apply_requested = Signal(str, bool)
     clear_requested = Signal(str)
 
@@ -180,7 +179,6 @@ class TaskPropertyInputGroup(QFrame):
 
     def _open_menu(self) -> None:
         menu = QMenu(self)
-        choose_action = menu.addAction("Выбрать значение")
         apply_action = menu.addAction("Применить к вложенным задачам")
         apply_action.setEnabled(self._has_children)
         recursive_action = menu.addAction("Применить к вложенным задачам рекурсивно")
@@ -188,9 +186,7 @@ class TaskPropertyInputGroup(QFrame):
         clear_action = menu.addAction("Очистить значение")
         clear_action.setEnabled(self._clearable)
         chosen = menu.exec(QCursor.pos())
-        if chosen == choose_action:
-            self.choose_requested.emit(self.property_name)
-        elif chosen == apply_action:
+        if chosen == apply_action:
             self.apply_requested.emit(self.property_name, False)
         elif chosen == recursive_action:
             self.apply_requested.emit(self.property_name, True)
@@ -896,7 +892,6 @@ class TaskEditDialog(QDialog):
             clearable=property_name in TASK_PROPAGATABLE_CLEARABLE_FIELDS,
             parent=self,
         )
-        group.choose_requested.connect(self._select_property_value)
         group.apply_requested.connect(self._apply_property_to_children)
         group.clear_requested.connect(self._clear_property_value)
         self.property_groups[property_name] = group
@@ -933,25 +928,6 @@ class TaskEditDialog(QDialog):
                 return model
             current = current.parent() if hasattr(current, "parent") else None
         return None
-
-    def _select_property_value(self, property_name: str) -> None:
-        widget = {
-            "project_id": self.project_edit,
-            "priority": self.priority_edit,
-            "marker_color": self.marker_color_edit,
-            "marker_theme": self.marker_theme_edit,
-            "day": self.day_edit,
-            "time_text": self.time_edit,
-        }.get(property_name)
-        if property_name == "time_text":
-            self.time_toggle.setChecked(True)
-        if isinstance(widget, QComboBox):
-            widget.setFocus(Qt.FocusReason.PopupFocusReason)
-            widget.showPopup()
-        elif widget is not None:
-            widget.setFocus(Qt.FocusReason.PopupFocusReason)
-            if hasattr(widget, "selectAll"):
-                widget.selectAll()
 
     def _clear_property_value(self, property_name: str) -> None:
         if property_name == "project_id":
@@ -1015,15 +991,21 @@ class TaskEditDialog(QDialog):
         self._notify_property_result(result)
 
     def _notify_property_result(self, result: TaskPropertyPropagationResult) -> None:
-        if result.error_count and not result.updated_count:
+        if result.error_count and not result.updated_count and not result.parent_updated:
             detail = result.errors[0] if result.errors else "Ошибка сохранения."
             QMessageBox.warning(self, "Свойства задачи", detail)
             return
         if result.target_count <= 0:
-            self._notify_property_message("Нет вложенных задач для применения свойства.")
+            if result.parent_updated:
+                self._notify_property_message(
+                    f"Свойство {result.property_label} применено к текущей задаче. Нет вложенных задач для применения свойства."
+                )
+            else:
+                self._notify_property_message("Нет вложенных задач для применения свойства.")
             return
         scope_text = " рекурсивно" if result.recursive else ""
-        message = f"Свойство {result.property_label} применено к {result.updated_count} вложенным задачам{scope_text}."
+        parent_text = "текущей задаче и " if result.parent_updated else ""
+        message = f"Свойство {result.property_label} применено к {parent_text}{result.updated_count} вложенным задачам{scope_text}."
         if result.error_count:
             message = f"Успешно: {result.updated_count} задач, ошибки: {result.error_count} задач."
         self._notify_property_message(message)

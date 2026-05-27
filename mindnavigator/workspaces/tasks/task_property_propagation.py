@@ -26,6 +26,7 @@ class TaskPropertyPropagationResult:
     recursive: bool
     target_count: int = 0
     updated_count: int = 0
+    parent_updated: bool = False
     skipped_count: int = 0
     error_count: int = 0
     errors: tuple[str, ...] = ()
@@ -43,4 +44,3 @@ def is_empty_task_property_value(property_name: str, value: Any) -> bool:
     if property_name == "priority":
         return not str(value or "").strip()
     return not str(value or "").strip()
-
