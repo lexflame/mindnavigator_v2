@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtCore import QEvent, QTimer
+from PySide6.QtWidgets import QSizePolicy
 from mindnavigator.ui.dialogs.frameless_patch import (
     ensure_minimizable_task_dialog_overlay,
     prepare_minimizable_task_dialog_for_show,
@@ -17,6 +18,11 @@ from .cast_gantt import TasksGanttCast
 from .gantt_duration_edit import GanttEstimateEdit
 from .quick_project_create_dialog import QuickProjectCreateDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
+from .task_property_propagation import (
+    TASK_PROPAGATABLE_CLEARABLE_FIELDS,
+    TaskPropertyPropagationResult,
+    is_empty_task_property_value,
+)
 
 
 class _TaskDialogHeader(QFrame):
@@ -79,6 +85,113 @@ class _TaskDialogHeader(QFrame):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
         self._dragging = False
         super().mouseReleaseEvent(event)
+
+
+class _TaskPropertyLabel(QLabel):
+    clicked = Signal()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
+class TaskPropertyInputGroup(QFrame):
+    apply_requested = Signal(str, bool)
+    clear_requested = Signal(str)
+
+    def __init__(
+        self,
+        property_name: str,
+        title: str,
+        editor: QWidget,
+        has_children: bool,
+        has_descendants: bool,
+        clearable: bool,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.property_name = property_name
+        self._has_children = has_children
+        self._has_descendants = has_descendants
+        self._clearable = clearable
+        self.setObjectName("TaskPropertyInputGroup")
+        self.setFixedHeight(32)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.label_button = _TaskPropertyLabel(title)
+        self.label_button.setObjectName("TaskPropertyInputLabel")
+        self.label_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.label_button.setFixedWidth(102)
+        self.label_button.setFixedHeight(32)
+        self.label_button.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.label_button.clicked.connect(self._open_menu)
+        layout.addWidget(self.label_button)
+
+        self.editor_host = QFrame()
+        self.editor_host.setObjectName("TaskPropertyInputEditor")
+        self.editor_host.setFixedHeight(32)
+        self.editor_host.setMinimumWidth(0)
+        self.editor_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        editor_layout = QHBoxLayout(self.editor_host)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(0)
+        self._stabilize_editor(editor)
+        editor_layout.addWidget(editor, 1)
+        layout.addWidget(self.editor_host, 1)
+
+        self.menu_button = QToolButton()
+        self.menu_button.setObjectName("TaskPropertyInputMenuButton")
+        self.menu_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.menu_button.setToolTip("Действия свойства")
+        self.menu_button.setIcon(self._menu_icon())
+        self.menu_button.setFixedSize(34, 32)
+        self.menu_button.clicked.connect(self._open_menu)
+        self.menu_button.setVisible(has_children)
+        layout.addWidget(self.menu_button)
+
+    @staticmethod
+    def _menu_icon():
+        try:
+            return qta.icon("fa6.square-caret-down", color="#cfcfcf")
+        except Exception:  # noqa: BLE001 - older QtAwesome uses the fa6s prefix
+            return qta.icon("fa6s.square-caret-down", color="#cfcfcf")
+
+    @staticmethod
+    def _stabilize_editor(editor: QWidget) -> None:
+        editor.setMinimumWidth(0)
+        editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        editor.setFixedHeight(32)
+        if isinstance(editor, QComboBox):
+            editor.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            editor.setMinimumContentsLength(8)
+
+    def set_child_state(self, has_children: bool, has_descendants: bool) -> None:
+        self._has_children = has_children
+        self._has_descendants = has_descendants
+        self.menu_button.setVisible(has_children)
+
+    def _open_menu(self) -> None:
+        menu = QMenu(self)
+        apply_action = menu.addAction("Применить к вложенным задачам")
+        apply_action.setEnabled(self._has_children)
+        recursive_action = menu.addAction("Применить к вложенным задачам рекурсивно")
+        recursive_action.setEnabled(self._has_descendants)
+        clear_action = menu.addAction("Очистить значение")
+        clear_action.setEnabled(self._clearable)
+        chosen = menu.exec(QCursor.pos())
+        if chosen == apply_action:
+            self.apply_requested.emit(self.property_name, False)
+        elif chosen == recursive_action:
+            self.apply_requested.emit(self.property_name, True)
+        elif chosen == clear_action:
+            self.clear_requested.emit(self.property_name)
 
 
 class TaskEditDialog(QDialog):
@@ -156,6 +269,11 @@ class TaskEditDialog(QDialog):
         self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
 
         self.project_edit = QComboBox()
+        self.project_edit.setMinimumWidth(0)
+        self.project_edit.setMinimumContentsLength(12)
+        self.project_edit.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.project_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.project_edit.setFixedHeight(32)
         self._populate_projects(task.project_id)
         self._project_autosuggest_enabled = False
         self._project_autosuggest_internal = False
@@ -164,7 +282,7 @@ class TaskEditDialog(QDialog):
 
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
-        self.project_create_btn.setFixedSize(38, 38)
+        self.project_create_btn.setFixedSize(32, 32)
         self.project_create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.project_create_btn.setToolTip("Создать проект")
         self.project_create_btn.clicked.connect(self._open_project_create_dialog)
@@ -173,17 +291,44 @@ class TaskEditDialog(QDialog):
         project_row_layout = QHBoxLayout(project_row)
         project_row_layout.setContentsMargins(0, 0, 0, 0)
         project_row_layout.setSpacing(8)
-        project_row_layout.addWidget(self.project_create_btn)
         project_row_layout.addWidget(self.project_edit, 1)
         self.plan_task_edit = QCheckBox("План")
         self.plan_task_edit.setChecked(bool(task.is_plan_task))
-        project_row_layout.addWidget(self.plan_task_edit)
+        self.plan_task_edit.setFixedHeight(32)
+
+        has_child_tasks = self._task_has_children(task.id)
+        has_descendant_tasks = self._task_has_descendants(task.id)
+        self.property_groups: dict[str, TaskPropertyInputGroup] = {}
+        self.project_property_group = self._create_property_group(
+            "project_id",
+            "Проект",
+            project_row,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
+        project_group_row = QWidget()
+        project_group_row.setFixedHeight(32)
+        project_group_row.setMinimumWidth(0)
+        project_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        project_group_layout = QHBoxLayout(project_group_row)
+        project_group_layout.setContentsMargins(0, 0, 0, 0)
+        project_group_layout.setSpacing(8)
+        project_group_layout.addWidget(self.project_create_btn, 0)
+        project_group_layout.addWidget(self.project_property_group, 1)
+        project_group_layout.addWidget(self.plan_task_edit, 0)
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
         self.day_edit.setDisplayFormat("yyyy-MM-dd")
         self.day_edit.setDate(QDate(task.day.year, task.day.month, task.day.day))
         self.day_edit.setKeyboardTracking(False)
+        self.day_property_group = self._create_property_group(
+            "day",
+            "Дата",
+            self.day_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
 
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat("HH:mm")
@@ -194,6 +339,7 @@ class TaskEditDialog(QDialog):
         self.time_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.time_toggle.setToolTip("Указать точное время")
         self.time_toggle.setFixedWidth(28)
+        self.time_toggle.setFixedHeight(32)
 
         if task.time_text:
             try:
@@ -208,14 +354,38 @@ class TaskEditDialog(QDialog):
         self.time_edit.setEnabled(self.time_toggle.isChecked())
         self.time_toggle.toggled.connect(self.time_edit.setEnabled)
 
-        time_block = QFrame()
-        time_block.setObjectName("TaskDateTimeBlock")
-        time_block_layout = QHBoxLayout(time_block)
-        time_block_layout.setContentsMargins(0, 0, 0, 0)
-        time_block_layout.setSpacing(8)
-        time_block_layout.addWidget(self.day_edit)
-        time_block_layout.addWidget(self.time_toggle)
-        time_block_layout.addWidget(self.time_edit)
+        time_row = QFrame()
+        time_row.setObjectName("TaskDateTimeBlock")
+        time_row_layout = QHBoxLayout(time_row)
+        time_row_layout.setContentsMargins(0, 0, 0, 0)
+        time_row_layout.setSpacing(8)
+        time_row_layout.addWidget(self.time_edit, 1)
+        self.time_property_group = self._create_property_group(
+            "time_text",
+            "Время",
+            time_row,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
+        time_group_row = QWidget()
+        time_group_row.setFixedHeight(32)
+        time_group_row.setMinimumWidth(0)
+        time_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        time_group_layout = QHBoxLayout(time_group_row)
+        time_group_layout.setContentsMargins(0, 0, 0, 0)
+        time_group_layout.setSpacing(8)
+        time_group_layout.addWidget(self.time_toggle, 0)
+        time_group_layout.addWidget(self.time_property_group, 1)
+
+        schedule_group_row = QWidget()
+        schedule_group_row.setFixedHeight(32)
+        schedule_group_row.setMinimumWidth(0)
+        schedule_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        schedule_group_layout = QHBoxLayout(schedule_group_row)
+        schedule_group_layout.setContentsMargins(0, 0, 0, 0)
+        schedule_group_layout.setSpacing(8)
+        schedule_group_layout.addWidget(self.day_property_group, 1)
+        schedule_group_layout.addWidget(time_group_row, 1)
 
         self.recurrence_toggle = QCheckBox("По расписанию")
         self.recurrence_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -240,6 +410,13 @@ class TaskEditDialog(QDialog):
         self.priority_edit = QComboBox()
         self.priority_edit.addItems(["High", "Medium", "Low", "Отложенная"])
         self.priority_edit.setCurrentText(task.priority or "Medium")
+        self.priority_property_group = self._create_property_group(
+            "priority",
+            "Приоритет",
+            self.priority_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
 
         self.marker_color_edit = QComboBox()
         self.marker_color_edit.addItem("Нет", "")
@@ -251,6 +428,13 @@ class TaskEditDialog(QDialog):
         marker_color_idx = self.marker_color_edit.findData((task.marker_color or "").strip())
         if marker_color_idx >= 0:
             self.marker_color_edit.setCurrentIndex(marker_color_idx)
+        self.marker_color_property_group = self._create_property_group(
+            "marker_color",
+            "Цвет",
+            self.marker_color_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
 
         self.marker_theme_edit = QComboBox()
         self.marker_theme_edit.addItem("Нет", "")
@@ -264,6 +448,13 @@ class TaskEditDialog(QDialog):
         marker_theme_idx = self.marker_theme_edit.findData((task.marker_theme or "").strip().lower())
         if marker_theme_idx >= 0:
             self.marker_theme_edit.setCurrentIndex(marker_theme_idx)
+        self.marker_theme_property_group = self._create_property_group(
+            "marker_theme",
+            "Тематика",
+            self.marker_theme_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
 
         self.done_edit = QCheckBox("Выполнено")
         self.done_edit.setChecked(task.done)
@@ -272,14 +463,6 @@ class TaskEditDialog(QDialog):
         self.gantt_estimate_edit = GanttEstimateEdit(default_gantt_minutes)
         self.gantt_estimate_edit.setObjectName("TaskGanttEstimateEdit")
         self.gantt_estimate_edit.setToolTip("Оценка длительности для режима GANTT в формате HH:MM.")
-
-        params_row = QWidget()
-        params_layout = QHBoxLayout(params_row)
-        params_layout.setContentsMargins(0, 0, 0, 0)
-        params_layout.setSpacing(8)
-        params_layout.addWidget(self.priority_edit, 1)
-        params_layout.addWidget(self.marker_color_edit, 1)
-        params_layout.addWidget(self.marker_theme_edit, 1)
 
         parent_row = None
         if task.parent_id is not None:
@@ -301,12 +484,14 @@ class TaskEditDialog(QDialog):
 
         form.addRow(self._make_form_label("Название"), self.title_edit)
         form.addRow(self._make_form_label("Описание"), self.description_edit)
-        form.addRow(self._make_form_label("Проект"), project_row)
+        form.addRow(self._make_form_label(""), project_group_row)
         if parent_row is not None:
             form.addRow(self._make_form_label("Родитель"), parent_row)
-        form.addRow(self._make_form_label("Дата и время"), time_block)
+        form.addRow(self._make_form_label(""), schedule_group_row)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
-        form.addRow(self._make_form_label("Параметры"), params_row)
+        form.addRow(self._make_form_label(""), self.priority_property_group)
+        form.addRow(self._make_form_label(""), self.marker_color_property_group)
+        form.addRow(self._make_form_label(""), self.marker_theme_property_group)
         form.addRow(self._make_form_label("GANTT"), self.gantt_estimate_edit)
         form.addRow(self._make_form_label(""), self.done_edit)
 
@@ -637,7 +822,205 @@ class TaskEditDialog(QDialog):
                 border: none;
                 padding: 4px;
             }}
+
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputGroup {{
+                background: transparent;
+                border: none;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskPropertyInputLabel {{
+                background: {palette.input_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-right: none;
+                border-top-left-radius: 6px;
+                border-bottom-left-radius: 6px;
+                padding: 0 8px;
+                min-height: 30px;
+                max-height: 30px;
+                font-weight: 600;
+            }}
+
+            QDialog#TaskEditDialog QLabel#TaskPropertyInputLabel:hover {{
+                background: {palette.elevated_bg};
+            }}
+
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor {{
+                background: transparent;
+                border: none;
+            }}
+
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QComboBox,
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QDateEdit,
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QTimeEdit {{
+                min-height: 28px;
+                max-height: 30px;
+                padding: 3px 8px;
+                border-radius: 0;
+            }}
+
+            QDialog#TaskEditDialog QToolButton#TaskPropertyInputMenuButton {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border_strong};
+                border-left: none;
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
+                min-height: 30px;
+                max-height: 30px;
+                padding: 0;
+            }}
+
+            QDialog#TaskEditDialog QToolButton#TaskPropertyInputMenuButton:hover {{
+                background: {palette.elevated_bg};
+            }}
         """)
+
+    def _create_property_group(
+        self,
+        property_name: str,
+        title: str,
+        editor: QWidget,
+        has_children: bool,
+        has_descendants: bool,
+    ) -> TaskPropertyInputGroup:
+        group = TaskPropertyInputGroup(
+            property_name,
+            title,
+            editor,
+            has_children=has_children,
+            has_descendants=has_descendants,
+            clearable=property_name in TASK_PROPAGATABLE_CLEARABLE_FIELDS,
+            parent=self,
+        )
+        group.apply_requested.connect(self._apply_property_to_children)
+        group.clear_requested.connect(self._clear_property_value)
+        self.property_groups[property_name] = group
+        return group
+
+    def _task_has_children(self, task_id: int) -> bool:
+        if int(task_id) <= 0:
+            return False
+        return any(task.parent_id == int(task_id) for task in self._safe_db_fetch("fetch_tasks"))
+
+    def _task_has_descendants(self, task_id: int) -> bool:
+        if int(task_id) <= 0:
+            return False
+        by_parent: dict[Optional[int], list[TaskRow]] = {}
+        for task in self._safe_db_fetch("fetch_tasks"):
+            by_parent.setdefault(task.parent_id, []).append(task)
+        visited = {int(task_id)}
+        stack = list(by_parent.get(int(task_id), []))
+        while stack:
+            child = stack.pop(0)
+            if child.id in visited:
+                continue
+            visited.add(child.id)
+            return True
+        return False
+
+    def _tasks_model(self):
+        current = self.parent()
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            model = getattr(current, "model", None)
+            if model is not None and hasattr(model, "apply_task_property_to_children"):
+                return model
+            current = current.parent() if hasattr(current, "parent") else None
+        return None
+
+    def _clear_property_value(self, property_name: str) -> None:
+        if property_name == "project_id":
+            self.project_edit.setCurrentIndex(0)
+        elif property_name == "marker_color":
+            self._set_combo_data(self.marker_color_edit, "")
+        elif property_name == "marker_theme":
+            self._set_combo_data(self.marker_theme_edit, "")
+        elif property_name == "time_text":
+            self.time_toggle.setChecked(False)
+        else:
+            self._notify_property_message("Свойство недоступно для очистки.")
+
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, value: object) -> None:
+        index = combo.findData(value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    def _current_property_value(self, property_name: str) -> object:
+        if property_name == "project_id":
+            return self.project_edit.currentData()
+        if property_name == "priority":
+            return self.priority_edit.currentText().strip() or "Medium"
+        if property_name == "marker_color":
+            return self.marker_color_edit.currentData() or ""
+        if property_name == "marker_theme":
+            return self.marker_theme_edit.currentData() or ""
+        if property_name == "day":
+            qd = self.day_edit.date()
+            return date(qd.year(), qd.month(), qd.day())
+        if property_name == "time_text":
+            return self._current_time_text()
+        return None
+
+    def _apply_property_to_children(self, property_name: str, recursive: bool) -> None:
+        model = self._tasks_model()
+        if model is None:
+            QMessageBox.warning(self, "Свойства задачи", "Выберите задачу для редактирования.")
+            return
+        value = self._current_property_value(property_name)
+        if is_empty_task_property_value(property_name, value):
+            dialog = ConfirmDialog(
+                "Применить свойство",
+                "Значение свойства пустое. Очистить это свойство у вложенных задач?",
+                parent=self,
+                confirm_text="Очистить",
+                cancel_text="Отмена",
+            )
+            if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
+                return
+        result = model.apply_task_property_to_children(
+            int(self._task_id),
+            property_name,
+            value,
+            recursive=recursive,
+        )
+        refreshed_task = model.task_by_id(int(self._task_id)) if hasattr(model, "task_by_id") else None
+        if refreshed_task is not None:
+            self._task = refreshed_task
+        self._notify_property_result(result)
+
+    def _notify_property_result(self, result: TaskPropertyPropagationResult) -> None:
+        if result.error_count and not result.updated_count and not result.parent_updated:
+            detail = result.errors[0] if result.errors else "Ошибка сохранения."
+            QMessageBox.warning(self, "Свойства задачи", detail)
+            return
+        if result.target_count <= 0:
+            if result.parent_updated:
+                self._notify_property_message(
+                    f"Свойство {result.property_label} применено к текущей задаче. Нет вложенных задач для применения свойства."
+                )
+            else:
+                self._notify_property_message("Нет вложенных задач для применения свойства.")
+            return
+        scope_text = " рекурсивно" if result.recursive else ""
+        parent_text = "текущей задаче и " if result.parent_updated else ""
+        message = f"Свойство {result.property_label} применено к {parent_text}{result.updated_count} вложенным задачам{scope_text}."
+        if result.error_count:
+            message = f"Успешно: {result.updated_count} задач, ошибки: {result.error_count} задач."
+        self._notify_property_message(message)
+
+    def _notify_property_message(self, message: str) -> None:
+        current = self.parent()
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            set_status = getattr(current, "set_status", None)
+            if callable(set_status):
+                set_status(message)
+                return
+            current = current.parent() if hasattr(current, "parent") else None
+        QMessageBox.information(self, "Свойства задачи", message)
 
     @classmethod
     def _make_form_label(cls, text: str) -> QLabel:
