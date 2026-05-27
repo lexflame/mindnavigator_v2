@@ -202,6 +202,21 @@ class DatabaseSchemaMixin:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS context_entity_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_type TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    target_type TEXT NOT NULL,
+                    target_id INTEGER NOT NULL,
+                    anchor_text TEXT NOT NULL DEFAULT '',
+                    source_field TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(source_type, source_id, target_type, target_id, anchor_text, source_field)
+                );
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS objects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -577,6 +592,12 @@ class DatabaseSchemaMixin:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_relations_idea_id ON idea_relations(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_idea_images_idea_id ON idea_images(idea_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_context_entity_links_source ON context_entity_links(source_type, source_id);"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_context_entity_links_target ON context_entity_links(target_type, target_id);"
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_catalog ON objects(catalog);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_object_images_object ON object_images(object_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_characters_name ON characters(name);")

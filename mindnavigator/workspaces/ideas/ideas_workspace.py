@@ -15,6 +15,7 @@ from .idea_image_preview_dialog import IdeaImagePreviewDialog
 from .image_utils import load_scaled_pixmap
 from mindnavigator.workspaces.concept_board.concept_board_card import CONCEPT_BOARD_KIND_IDEA, ConceptBoardCard
 from mindnavigator.workspaces.concept_board.concept_board_delegate import ConceptBoardDelegate
+from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 
@@ -698,6 +699,35 @@ class IdeasWorkspace(BaseWorkspace):
         self.summary_input.setPlaceholderText("Краткая формулировка идеи...")
         self.body_input = QPlainTextEdit()
         self.body_input.setPlaceholderText("Разверните идею, контекст и детали...")
+        self._context_link_controllers = [
+            attach_context_entity_linking(
+                self.title_input,
+                self._db,
+                source_type="idea",
+                source_id_getter=lambda: self._current_idea_id,
+                source_field="title",
+                notify=self._set_status,
+                refresh_callback=self.refresh_current_relations,
+            ),
+            attach_context_entity_linking(
+                self.summary_input,
+                self._db,
+                source_type="idea",
+                source_id_getter=lambda: self._current_idea_id,
+                source_field="summary",
+                notify=self._set_status,
+                refresh_callback=self.refresh_current_relations,
+            ),
+            attach_context_entity_linking(
+                self.body_input,
+                self._db,
+                source_type="idea",
+                source_id_getter=lambda: self._current_idea_id,
+                source_field="body_md",
+                notify=self._set_status,
+                refresh_callback=self.refresh_current_relations,
+            ),
+        ]
         self.project_input = QComboBox()
         self._populate_projects()
         self.type_input = QComboBox()

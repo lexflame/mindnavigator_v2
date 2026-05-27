@@ -1860,6 +1860,7 @@ class TasksWorkspace(BaseWorkspace):
         if self._secondary_view_includes_day(values["day"]):
             self._refresh_secondary_view()
         self._refresh_project_quick_links()
+        dialog.apply_pending_context_links(created.id)
         self.open_task_for_edit(created.id)
 
     def eventFilter(self, obj, event) -> bool:

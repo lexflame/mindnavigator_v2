@@ -24,6 +24,7 @@ from .idea_data import IdeaData
 from .idea_category_data import IdeaCategoryData
 from .idea_image_data import IdeaImageData
 from .idea_relation_data import IdeaRelationData
+from .context_entity_link_data import ContextEntityLinkData
 from .object_data import ObjectData
 from .object_image_data import ObjectImageData
 from .character_data import CharacterData

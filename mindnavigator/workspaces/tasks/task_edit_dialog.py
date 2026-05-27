@@ -13,6 +13,8 @@ from mindnavigator.ui.dialogs.frameless_patch import (
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
+from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
+from mindnavigator.context_entity_linking import ContextEntityLinkService, PendingContextLink
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, get_theme_palette
 from .cast_gantt import TasksGanttCast
 from .gantt_duration_edit import GanttEstimateEdit
@@ -219,6 +221,7 @@ class TaskEditDialog(QDialog):
         self._auto_minimize_pending = False
         self._child_dialog_depth = 0
         self._validation_widgets: tuple[QWidget, ...] = ()
+        self._pending_context_links: list[PendingContextLink] = []
         debug_task_dialog(
             f"task_edit_dialog init task_id={self.property('task_dialog_id')} parent={type(parent).__name__ if parent is not None else 'None'}"
         )
@@ -267,6 +270,26 @@ class TaskEditDialog(QDialog):
         self.description_edit.setPlaceholderText("Описание задачи...")
         self.description_edit.setFixedHeight(108)
         self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
+        self._context_link_controllers = [
+            attach_context_entity_linking(
+                self.title_edit,
+                self._db,
+                source_type="task",
+                source_id_getter=self._context_source_id,
+                source_field="title",
+                pending_sink=self._add_pending_context_link,
+                refresh_callback=self._refresh_attachments,
+            ),
+            attach_context_entity_linking(
+                self.description_edit,
+                self._db,
+                source_type="task",
+                source_id_getter=self._context_source_id,
+                source_field="description",
+                pending_sink=self._add_pending_context_link,
+                refresh_callback=self._refresh_attachments,
+            ),
+        ]
 
         self.project_edit = QComboBox()
         self.project_edit.setMinimumWidth(0)
@@ -1447,6 +1470,36 @@ class TaskEditDialog(QDialog):
             return []
         result = fetch_method(*args, **kwargs)
         return list(result or [])
+
+    def _context_source_id(self) -> Optional[int]:
+        task_id = int(getattr(self._task, "id", 0) or 0)
+        return task_id if task_id > 0 else None
+
+    def _add_pending_context_link(self, link: PendingContextLink) -> None:
+        duplicate = any(
+            existing.target_type == link.target_type
+            and existing.target_id == link.target_id
+            and existing.anchor_text == link.anchor_text
+            and existing.source_field == link.source_field
+            for existing in self._pending_context_links
+        )
+        if not duplicate:
+            self._pending_context_links.append(link)
+
+    def apply_pending_context_links(self, task_id: int) -> None:
+        if not self._pending_context_links:
+            return
+        service = ContextEntityLinkService(self._db)
+        for link in list(self._pending_context_links):
+            service.create_context_link(
+                "task",
+                int(task_id),
+                link.target_type,
+                link.target_id,
+                link.anchor_text,
+                link.source_field,
+            )
+        self._pending_context_links.clear()
 
     def _load_attachment_sources(self) -> None:
         tasks = self._safe_db_fetch("fetch_tasks")

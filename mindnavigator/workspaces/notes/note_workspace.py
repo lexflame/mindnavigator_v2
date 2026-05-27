@@ -6,6 +6,7 @@ from ._shared import *  # noqa: F401,F403
 from .notes_model import NotesModel
 from .notes_controller import NotesController
 from .note_card_delegate import NoteCardDelegate
+from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.styles import get_theme_palette
 
 class NoteWorkspace(QWidget):
@@ -387,6 +388,26 @@ class NoteWorkspace(QWidget):
         self.title_edit.textChanged.connect(self._update_note_title)
         self.tags_edit.textChanged.connect(self._update_note_tags)
         self.editor.textChanged.connect(self._update_note_body)
+        self._context_link_controllers = [
+            attach_context_entity_linking(
+                self.title_edit,
+                self._db,
+                source_type="note",
+                source_id_getter=lambda: self._state.selected_note_id,
+                source_field="title",
+                notify=self._set_context_link_status,
+                refresh_callback=self._refresh_current_note_relations,
+            ),
+            attach_context_entity_linking(
+                self.editor,
+                self._db,
+                source_type="note",
+                source_id_getter=lambda: self._state.selected_note_id,
+                source_field="preview",
+                notify=self._set_context_link_status,
+                refresh_callback=self._refresh_current_note_relations,
+            ),
+        ]
 
         self.controller.initialize()
         self.controller.start_autosave()
@@ -485,6 +506,8 @@ class NoteWorkspace(QWidget):
         self.title_edit.blockSignals(False)
         self.tags_edit.blockSignals(False)
         self.editor.blockSignals(False)
+        for controller in getattr(self, "_context_link_controllers", []):
+            controller.schedule_refresh()
 
     def _clear_note_relations(self) -> None:
         while self.relations_host_layout.count():
@@ -513,6 +536,8 @@ class NoteWorkspace(QWidget):
         buckets: dict[str, set[int]] = {
             "task": set(),
             "idea": set(),
+            "note": set(),
+            "object": set(),
             "dossier": set(),
             "marker": set(),
         }
@@ -529,6 +554,21 @@ class NoteWorkspace(QWidget):
             for relation in self._db.fetch_idea_relations(idea.id):
                 if (relation.entity_type or "").strip().lower() == "note" and int(relation.entity_id) == int(note_id):
                     buckets["idea"].add(idea.id)
+
+        fetch_context_links = getattr(self._db, "fetch_context_entity_links", None)
+        if callable(fetch_context_links):
+            for link in fetch_context_links(source_type="note", source_id=note_id):
+                target_type = (link.target_type or "").strip().lower()
+                if target_type in buckets and target_type != "note":
+                    buckets[target_type].add(int(link.target_id))
+                elif target_type == "note" and int(link.target_id) != int(note_id):
+                    buckets["note"].add(int(link.target_id))
+            for link in fetch_context_links(target_type="note", target_id=note_id):
+                source_type = (link.source_type or "").strip().lower()
+                if source_type in buckets and source_type != "note":
+                    buckets[source_type].add(int(link.source_id))
+                elif source_type == "note" and int(link.source_id) != int(note_id):
+                    buckets["note"].add(int(link.source_id))
 
         fetch_dossiers = getattr(self._db, "fetch_dossiers", None)
         fetch_dossier_links = getattr(self._db, "fetch_dossier_links", None)
@@ -547,6 +587,8 @@ class NoteWorkspace(QWidget):
         labels = {
             "task": "Задачи",
             "idea": "Идеи",
+            "note": "Заметки",
+            "object": "Объекты",
             "dossier": "Досье",
             "marker": "Метки",
         }
@@ -573,6 +615,8 @@ class NoteWorkspace(QWidget):
         handlers = {
             "task": ("MODE_TASKS", "page_tasks", "focus_task"),
             "idea": ("MODE_IDEAS", "page_ideas", "select_idea"),
+            "note": ("MODE_NOTES", "page_notes", "select_note"),
+            "object": ("MODE_OBJECTS", "page_objects", "select_object"),
             "dossier": ("MODE_DOSSIER", "page_dossier", "select_dossier"),
             "marker": ("MODE_MAPS", "page_maps", "select_marker"),
         }
@@ -627,6 +671,13 @@ class NoteWorkspace(QWidget):
 
     def _manual_save(self):
         self.autosave_label.setText("Автосохранение: сохранено")
+
+    def _set_context_link_status(self, text: str) -> None:
+        self.autosave_label.setText(text)
+
+    def _refresh_current_note_relations(self) -> None:
+        if self._state.selected_note_id:
+            self._refresh_note_relations(self._state.selected_note_id)
 
     def _set_quick_category(self, category: Optional[str]) -> None:
         normalized = normalize_note_category(category or "") if category else None
