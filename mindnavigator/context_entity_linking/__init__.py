@@ -287,7 +287,10 @@ class ContextEntityLinkService:
             target_type=normalized_target,
             target_id=int(target_id),
         )
-        if any(link.anchor_text == (anchor_text or "").strip() and link.source_field == (source_field or "").strip() for link in existing):
+        if any(
+            link.anchor_text == (anchor_text or "").strip() and link.source_field == (source_field or "").strip()
+            for link in existing
+        ):
             return ContextLinkResult(success=True, duplicate=True, message="Связь уже существует.")
         try:
             if normalized_source == "task":
@@ -316,7 +319,10 @@ class ContextEntityLinkService:
         if entity_type == "idea":
             active = self._safe_fetch("fetch_ideas", archived=False)
             active_ids = {int(idea.id) for idea in active}
-            ideas = [*active, *[idea for idea in self._safe_fetch("fetch_ideas", archived=True) if int(idea.id) not in active_ids]]
+            ideas = [
+                *active,
+                *[idea for idea in self._safe_fetch("fetch_ideas", archived=True) if int(idea.id) not in active_ids],
+            ]
             return any(int(idea.id) == int(entity_id) for idea in ideas)
         fetch = fetchers.get(entity_type)
         if fetch is None:
