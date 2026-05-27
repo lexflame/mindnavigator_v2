@@ -299,7 +299,6 @@ class TaskEditDialog(QDialog):
         self.plan_task_edit = QCheckBox("План")
         self.plan_task_edit.setChecked(bool(task.is_plan_task))
         self.plan_task_edit.setFixedHeight(32)
-        project_row_layout.addWidget(self.plan_task_edit)
 
         has_child_tasks = self._task_has_children(task.id)
         has_descendant_tasks = self._task_has_descendants(task.id)
@@ -320,6 +319,7 @@ class TaskEditDialog(QDialog):
         project_group_layout.setSpacing(8)
         project_group_layout.addWidget(self.project_create_btn, 0)
         project_group_layout.addWidget(self.project_property_group, 1)
+        project_group_layout.addWidget(self.plan_task_edit, 0)
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
