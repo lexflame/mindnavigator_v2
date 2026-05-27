@@ -139,6 +139,11 @@ class ProjectEditDialog(QDialog):
         self.related_tasks_edit = self._make_multiline_edit("ID связанных задач, по одному в строке")
         self.repository_links_edit = self._make_multiline_edit("MindNavigator Core | D:/_Branch/PROJECTS/mindnavigator")
         self.wiki_links_edit = self._make_multiline_edit("Project Wiki | https://docs.example.com/project")
+        task_types_row = self._make_property_editor(self.task_types_edit, [("Добавить", self._add_task_type_line)])
+        related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
+        related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
+        repository_links_row = self._make_property_editor(self.repository_links_edit, [("Добавить", self._add_repository_link_line)])
+        wiki_links_row = self._make_property_editor(self.wiki_links_edit, [("Добавить", self._add_wiki_link_line)])
         if project:
             self._load_project_properties(project.id)
 
@@ -156,11 +161,11 @@ class ProjectEditDialog(QDialog):
         form.addRow("Тема маркера", self.marker_theme_edit)
         form.addRow("Каталог репозитория", self.repository_catalog_edit)
         form.addRow("", self.archived_edit)
-        form.addRow("Типы задач", self.task_types_edit)
-        form.addRow("Связанные проекты", self.related_projects_edit)
-        form.addRow("Связанные задачи", self.related_tasks_edit)
-        form.addRow("Репозитории", self.repository_links_edit)
-        form.addRow("Wiki", self.wiki_links_edit)
+        form.addRow("Типы задач", task_types_row)
+        form.addRow("Связанные проекты", related_projects_row)
+        form.addRow("Связанные задачи", related_tasks_row)
+        form.addRow("Репозитории", repository_links_row)
+        form.addRow("Wiki", wiki_links_row)
 
         layout.addLayout(form)
 
@@ -227,6 +232,139 @@ class ProjectEditDialog(QDialog):
         edit.setPlaceholderText(placeholder)
         edit.setFixedHeight(64)
         return edit
+
+    def _make_property_editor(self, edit: QPlainTextEdit, actions: list[tuple[str, object]]) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(edit)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(6)
+        action_row.addStretch(1)
+        for text, callback in actions:
+            button = QToolButton()
+            button.setText(text)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(callback)
+            action_row.addWidget(button)
+        layout.addLayout(action_row)
+        return widget
+
+    def _append_line(self, edit: QPlainTextEdit, line: str) -> None:
+        line = (line or "").strip()
+        if not line:
+            return
+        text = edit.toPlainText().strip()
+        edit.setPlainText(f"{text}\n{line}" if text else line)
+
+    def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
+        for idx in range(source.count()):
+            target.addItem(source.itemText(idx), source.itemData(idx))
+
+    def _add_task_type_line(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Тип задач")
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        title_edit = QLineEdit()
+        title_edit.setPlaceholderText("DEV")
+        color_combo = QComboBox()
+        self._copy_combo_items(self.marker_color_edit, color_combo)
+        theme_combo = QComboBox()
+        self._copy_combo_items(self.marker_theme_edit, theme_combo)
+        active_edit = QCheckBox("Активен")
+        active_edit.setChecked(True)
+        form.addRow("Название", title_edit)
+        form.addRow("Цвет", color_combo)
+        form.addRow("Тема", theme_combo)
+        form.addRow("", active_edit)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        title = " ".join(title_edit.text().strip().upper().split())
+        if not title:
+            QMessageBox.warning(self, "Проверка", "Название типа задач не должно быть пустым.")
+            return
+        status = "active" if active_edit.isChecked() else "disabled"
+        self._append_line(
+            self.task_types_edit,
+            f"{title} | {color_combo.currentData() or ''} | {theme_combo.currentData() or ''} | {status}",
+        )
+
+    def _add_related_project_line(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Связанный проект")
+        layout = QVBoxLayout(dialog)
+        combo = QComboBox()
+        for project in self._db.fetch_projects():
+            if self._project and project.id == self._project.id:
+                continue
+            combo.addItem(f"{project.area} / {project.title}", project.id)
+        layout.addWidget(combo)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
+            self._append_line(self.related_projects_edit, str(combo.currentData()))
+
+    def _add_related_task_line(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Связанная задача")
+        layout = QVBoxLayout(dialog)
+        combo = QComboBox()
+        for task in self._db.fetch_tasks():
+            combo.addItem(f"MN-{task.id} {task.title}", task.id)
+        layout.addWidget(combo)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
+            self._append_line(self.related_tasks_edit, str(combo.currentData()))
+
+    def _add_repository_link_line(self) -> None:
+        self._add_link_line(self.repository_links_edit, "Репозиторий")
+
+    def _add_wiki_link_line(self) -> None:
+        self._add_link_line(self.wiki_links_edit, "Wiki")
+
+    def _add_link_line(self, edit: QPlainTextEdit, title: str) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        title_edit = QLineEdit()
+        url_edit = QLineEdit()
+        form.addRow("Текст", title_edit)
+        form.addRow("Ссылка", url_edit)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        url = url_edit.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Проверка", "Ссылка не должна быть пустой.")
+            return
+        link_title = title_edit.text().strip()
+        self._append_line(edit, f"{link_title} | {url}" if link_title else url)
 
     def _load_project_properties(self, project_id: int) -> None:
         task_type_lines = []
