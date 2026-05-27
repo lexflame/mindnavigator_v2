@@ -381,6 +381,16 @@ class TaskEditDialog(QDialog):
         time_group_layout.addWidget(self.time_toggle, 0)
         time_group_layout.addWidget(self.time_property_group, 1)
 
+        schedule_group_row = QWidget()
+        schedule_group_row.setFixedHeight(32)
+        schedule_group_row.setMinimumWidth(0)
+        schedule_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        schedule_group_layout = QHBoxLayout(schedule_group_row)
+        schedule_group_layout.setContentsMargins(0, 0, 0, 0)
+        schedule_group_layout.setSpacing(8)
+        schedule_group_layout.addWidget(self.day_property_group, 1)
+        schedule_group_layout.addWidget(time_group_row, 1)
+
         self.recurrence_toggle = QCheckBox("По расписанию")
         self.recurrence_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.recurrence_type_edit = QComboBox()
@@ -481,8 +491,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label(""), project_group_row)
         if parent_row is not None:
             form.addRow(self._make_form_label("Родитель"), parent_row)
-        form.addRow(self._make_form_label(""), self.day_property_group)
-        form.addRow(self._make_form_label(""), time_group_row)
+        form.addRow(self._make_form_label(""), schedule_group_row)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label(""), self.priority_property_group)
         form.addRow(self._make_form_label(""), self.marker_color_property_group)
