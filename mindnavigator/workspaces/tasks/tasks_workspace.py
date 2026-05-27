@@ -368,6 +368,12 @@ class TasksWorkspace(BaseWorkspace):
     def set_theme_mode(self, theme_mode: str) -> None:
         self._style_helper.apply_theme(theme_mode)
 
+    def set_status(self, text: str) -> None:
+        self.status_row.setText(text)
+        self.status_row.setProperty("error", False)
+        self.status_row.setStyleSheet("")
+        self._style_helper.apply_theme(self._theme_mode)
+
     def create_actions(self) -> dict[str, QAction]:
         action_export = QAction("Экспорт", self)
         action_export.triggered.connect(self._export_tasks_csv)
