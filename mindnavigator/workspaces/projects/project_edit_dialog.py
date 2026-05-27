@@ -139,7 +139,15 @@ class ProjectEditDialog(QDialog):
         self.related_tasks_edit = self._make_multiline_edit("ID связанных задач, по одному в строке")
         self.repository_links_edit = self._make_multiline_edit("MindNavigator Core | D:/_Branch/PROJECTS/mindnavigator")
         self.wiki_links_edit = self._make_multiline_edit("Project Wiki | https://docs.example.com/project")
-        task_types_row = self._make_property_editor(self.task_types_edit, [("Добавить", self._add_task_type_line)])
+        task_types_row = self._make_property_editor(
+            self.task_types_edit,
+            [
+                ("Добавить", self._add_task_type_line),
+                ("Изменить", self._edit_task_type_line),
+                ("Актив./деакт.", self._toggle_task_type_line),
+                ("Удалить", self._delete_task_type_line),
+            ],
+        )
         related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
         related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
         repository_links_row = self._make_property_editor(self.repository_links_edit, [("Добавить", self._add_repository_link_line)])
@@ -259,23 +267,110 @@ class ProjectEditDialog(QDialog):
         text = edit.toPlainText().strip()
         edit.setPlainText(f"{text}\n{line}" if text else line)
 
+    def _current_line_info(self, edit: QPlainTextEdit) -> tuple[list[str], int, str]:
+        lines = edit.toPlainText().splitlines()
+        if not lines:
+            return lines, -1, ""
+        cursor = edit.textCursor()
+        line_index = min(max(0, cursor.blockNumber()), len(lines) - 1)
+        return lines, line_index, lines[line_index].strip()
+
+    def _replace_line(self, edit: QPlainTextEdit, line_index: int, line: str) -> None:
+        lines = edit.toPlainText().splitlines()
+        if line_index < 0 or line_index >= len(lines):
+            return
+        lines[line_index] = line
+        edit.setPlainText("\n".join(lines))
+        cursor = edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.Start)
+        for _ in range(line_index):
+            cursor.movePosition(cursor.MoveOperation.Down)
+        edit.setTextCursor(cursor)
+
+    def _remove_line(self, edit: QPlainTextEdit, line_index: int) -> None:
+        lines = edit.toPlainText().splitlines()
+        if line_index < 0 or line_index >= len(lines):
+            return
+        del lines[line_index]
+        edit.setPlainText("\n".join(lines))
+
     def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
         for idx in range(source.count()):
             target.addItem(source.itemText(idx), source.itemData(idx))
 
     def _add_task_type_line(self) -> None:
+        values = self._task_type_dialog()
+        if values is None:
+            return
+        self._append_line(self.task_types_edit, self._format_task_type_line(values))
+
+    def _edit_task_type_line(self) -> None:
+        lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        updated = self._task_type_dialog(values)
+        if updated is None:
+            return
+        self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(updated))
+
+    def _toggle_task_type_line(self) -> None:
+        lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        values["active"] = not bool(values.get("active", True))
+        self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(values))
+
+    def _delete_task_type_line(self) -> None:
+        _lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        title = str(values.get("title") or "")
+        if self._project:
+            existing = next(
+                (
+                    item
+                    for item in self._db.fetch_project_task_types(self._project.id, include_inactive=True)
+                    if item.title == title
+                ),
+                None,
+            )
+            if existing is not None and self._db.project_task_type_in_use(existing.id):
+                QMessageBox.warning(
+                    self,
+                    "Тип задач",
+                    "Тип используется задачами. Деактивируйте тип вместо удаления.",
+                )
+                return
+        if QMessageBox.question(self, "Тип задач", f"Удалить тип {title}?") != QMessageBox.StandardButton.Yes:
+            return
+        self._remove_line(self.task_types_edit, line_index)
+
+    def _task_type_dialog(self, initial: Optional[dict[str, object]] = None) -> Optional[dict[str, object]]:
         dialog = QDialog(self)
         dialog.setWindowTitle("Тип задач")
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
         title_edit = QLineEdit()
         title_edit.setPlaceholderText("DEV")
+        if initial:
+            title_edit.setText(str(initial.get("title") or ""))
         color_combo = QComboBox()
         self._copy_combo_items(self.marker_color_edit, color_combo)
+        if initial:
+            color_idx = color_combo.findData(str(initial.get("color_marker") or ""))
+            if color_idx >= 0:
+                color_combo.setCurrentIndex(color_idx)
         theme_combo = QComboBox()
         self._copy_combo_items(self.marker_theme_edit, theme_combo)
+        if initial:
+            theme_idx = theme_combo.findData(str(initial.get("theme_marker") or ""))
+            if theme_idx >= 0:
+                theme_combo.setCurrentIndex(theme_idx)
         active_edit = QCheckBox("Активен")
-        active_edit.setChecked(True)
+        active_edit.setChecked(bool(initial.get("active", True)) if initial else True)
         form.addRow("Название", title_edit)
         form.addRow("Цвет", color_combo)
         form.addRow("Тема", theme_combo)
@@ -288,16 +383,35 @@ class ProjectEditDialog(QDialog):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+            return None
         title = " ".join(title_edit.text().strip().upper().split())
         if not title:
             QMessageBox.warning(self, "Проверка", "Название типа задач не должно быть пустым.")
-            return
-        status = "active" if active_edit.isChecked() else "disabled"
-        self._append_line(
-            self.task_types_edit,
-            f"{title} | {color_combo.currentData() or ''} | {theme_combo.currentData() or ''} | {status}",
-        )
+            return None
+        return {
+            "title": title,
+            "color_marker": color_combo.currentData() or "",
+            "theme_marker": theme_combo.currentData() or "",
+            "active": active_edit.isChecked(),
+        }
+
+    @staticmethod
+    def _format_task_type_line(values: dict[str, object]) -> str:
+        status = "active" if bool(values.get("active", True)) else "disabled"
+        title = " ".join(str(values.get("title") or "").strip().upper().split())
+        return f"{title} | {values.get('color_marker') or ''} | {values.get('theme_marker') or ''} | {status}"
+
+    @staticmethod
+    def _parse_task_type_line(line: str) -> dict[str, object]:
+        parts = [part.strip() for part in (line or "").split("|")]
+        title = " ".join((parts[0] if parts else "").strip().upper().split())
+        status = (parts[3] if len(parts) > 3 else "active").strip().lower()
+        return {
+            "title": title,
+            "color_marker": parts[1] if len(parts) > 1 else "",
+            "theme_marker": parts[2] if len(parts) > 2 else "",
+            "active": status not in {"disabled", "inactive", "off", "0", "false"},
+        }
 
     def _add_related_project_line(self) -> None:
         dialog = QDialog(self)
@@ -422,20 +536,19 @@ class ProjectEditDialog(QDialog):
             line = raw_line.strip()
             if not line:
                 continue
-            parts = [part.strip() for part in line.split("|")]
-            title = parts[0].upper()
+            values = self._parse_task_type_line(line)
+            title = str(values.get("title") or "")
             if not title:
                 raise ValueError("Название типа задач не должно быть пустым.")
             if title in seen:
                 raise ValueError(f"Дублирующий тип задач: {title}")
             seen.add(title)
-            status = (parts[3] if len(parts) > 3 else "active").strip().lower()
             result.append(
                 {
                     "title": title,
-                    "color_marker": parts[1] if len(parts) > 1 else "",
-                    "theme_marker": parts[2] if len(parts) > 2 else "",
-                    "active": status not in {"disabled", "inactive", "off", "0", "false"},
+                    "color_marker": str(values.get("color_marker") or ""),
+                    "theme_marker": str(values.get("theme_marker") or ""),
+                    "active": bool(values.get("active", True)),
                 }
             )
         return result
