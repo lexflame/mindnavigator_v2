@@ -425,6 +425,9 @@ class TaskEditDialog(QDialog):
         self.marker_color_edit.addItem("Оранжевый", "#d68a2f")
         self.marker_color_edit.addItem("Красный", "#b74a4a")
         self.marker_color_edit.addItem("Фиолетовый", "#6b5ad4")
+        self.marker_color_edit.addItem("Неоновый", "#20f5d2")
+        self.marker_color_edit.addItem("Голубой", "#4da3ff")
+        self.marker_color_edit.addItem("Коричневый", "#8b5a3c")
         marker_color_idx = self.marker_color_edit.findData((task.marker_color or "").strip())
         if marker_color_idx >= 0:
             self.marker_color_edit.setCurrentIndex(marker_color_idx)
@@ -445,6 +448,11 @@ class TaskEditDialog(QDialog):
         self.marker_theme_edit.addItem("Работа", "work")
         self.marker_theme_edit.addItem("Личное", "personal")
         self.marker_theme_edit.addItem("Разработка", "dev")
+        self.marker_theme_edit.addItem("Исследования", "researches")
+        self.marker_theme_edit.addItem("Анализ", "analysis")
+        self.marker_theme_edit.addItem("Разбор", "dissection")
+        self.marker_theme_edit.addItem("Решения", "solution")
+        self.marker_theme_edit.addItem("Отладка", "debug")
         marker_theme_idx = self.marker_theme_edit.findData((task.marker_theme or "").strip().lower())
         if marker_theme_idx >= 0:
             self.marker_theme_edit.setCurrentIndex(marker_theme_idx)

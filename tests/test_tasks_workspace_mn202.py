@@ -219,6 +219,24 @@ def test_tasks_workspace_shows_batch_bar_for_multi_selection(monkeypatch, unique
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_marker_options_include_new_values() -> None:
+    expected_colors = {
+        "Неоновый": "#20f5d2",
+        "Голубой": "#4da3ff",
+        "Коричневый": "#8b5a3c",
+    }
+    expected_themes = {
+        "Исследования": "researches",
+        "Анализ": "analysis",
+        "Разбор": "dissection",
+        "Решения": "solution",
+        "Отладка": "debug",
+    }
+
+    assert expected_colors.items() <= dict(tasks_workspace.TasksWorkspace.BATCH_MARKER_COLORS).items()
+    assert expected_themes.items() <= dict(tasks_workspace.TasksWorkspace.BATCH_MARKER_THEMES).items()
+
+
 def test_tasks_workspace_batch_action_defers_selected_tasks(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_batch_action_defer", ".sqlite3")
@@ -515,6 +533,26 @@ def test_task_priority_pickers_use_high_medium_low_deferred_order(monkeypatch, u
             "Low",
             "Отложенная",
         ]
+        dialog_colors = {
+            dialog.marker_color_edit.itemText(idx): dialog.marker_color_edit.itemData(idx)
+            for idx in range(dialog.marker_color_edit.count())
+        }
+        dialog_themes = {
+            dialog.marker_theme_edit.itemText(idx): dialog.marker_theme_edit.itemData(idx)
+            for idx in range(dialog.marker_theme_edit.count())
+        }
+        assert {
+            "Неоновый": "#20f5d2",
+            "Голубой": "#4da3ff",
+            "Коричневый": "#8b5a3c",
+        }.items() <= dialog_colors.items()
+        assert {
+            "Исследования": "researches",
+            "Анализ": "analysis",
+            "Разбор": "dissection",
+            "Решения": "solution",
+            "Отладка": "debug",
+        }.items() <= dialog_themes.items()
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1017,6 +1055,36 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         assert dialog.detail_type_card.value_label.text() == "Плановая задача"
         assert dialog.detail_marker_card.value_label.text() == "Оранжевый"
         assert dialog.detail_theme_card.value_label.text() == "Работа"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_shows_new_marker_labels(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_new_marker_labels", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        created = database.create_task(
+            title="New markers",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+            marker_color="#20f5d2",
+            marker_theme="analysis",
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(
+            next(item for item in database.fetch_tasks() if item.id == created.id)
+        )
+
+        assert dialog.detail_marker_card.value_label.text() == "Неоновый"
+        assert dialog.detail_theme_card.value_label.text() == "Анализ"
     finally:
         if dialog is not None:
             dialog.deleteLater()

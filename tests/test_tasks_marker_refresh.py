@@ -218,6 +218,15 @@ def test_marker_theme_asset_pixmap_loads_from_project_assets() -> None:
     assert pixmap.isNull() is False
 
 
+def test_new_marker_theme_asset_pixmaps_load_from_project_assets() -> None:
+    _app = QApplication.instance() or QApplication([])
+    delegate = tasks_workspace.TasksItemDelegate()
+
+    for theme_key in ("researches", "analysis", "dissection", "solution", "debug"):
+        pixmap = delegate._marker_theme_asset_pixmap(theme_key)
+        assert pixmap.isNull() is False
+
+
 def test_marker_theme_overlay_rect_spans_full_task_row_width() -> None:
     _app = QApplication.instance() or QApplication([])
     delegate = tasks_workspace.TasksItemDelegate()

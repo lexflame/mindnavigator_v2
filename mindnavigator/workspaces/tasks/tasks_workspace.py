@@ -53,6 +53,9 @@ class TasksWorkspace(BaseWorkspace):
         ("Оранжевый", "#d68a2f"),
         ("Красный", "#b74a4a"),
         ("Фиолетовый", "#6b5ad4"),
+        ("Неоновый", "#20f5d2"),
+        ("Голубой", "#4da3ff"),
+        ("Коричневый", "#8b5a3c"),
     ]
     BATCH_MARKER_THEMES = [
         ("Нет", ""),
@@ -63,6 +66,11 @@ class TasksWorkspace(BaseWorkspace):
         ("Работа", "work"),
         ("Личное", "personal"),
         ("Разработка", "dev"),
+        ("Исследования", "researches"),
+        ("Анализ", "analysis"),
+        ("Разбор", "dissection"),
+        ("Решения", "solution"),
+        ("Отладка", "debug"),
     ]
 
     class _BoardColumnListWidget(QListWidget):
