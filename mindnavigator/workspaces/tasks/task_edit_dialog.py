@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtCore import QEvent, QTimer
+from PySide6.QtWidgets import QSizePolicy
 from mindnavigator.ui.dialogs.frameless_patch import (
     ensure_minimizable_task_dialog_overlay,
     prepare_minimizable_task_dialog_for_show,
@@ -118,6 +119,9 @@ class TaskPropertyInputGroup(QFrame):
         self._has_descendants = has_descendants
         self._clearable = clearable
         self.setObjectName("TaskPropertyInputGroup")
+        self.setFixedHeight(32)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -126,15 +130,20 @@ class TaskPropertyInputGroup(QFrame):
         self.label_button.setObjectName("TaskPropertyInputLabel")
         self.label_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.label_button.setFixedWidth(102)
+        self.label_button.setFixedHeight(32)
         self.label_button.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self.label_button.clicked.connect(self._open_menu)
         layout.addWidget(self.label_button)
 
         self.editor_host = QFrame()
         self.editor_host.setObjectName("TaskPropertyInputEditor")
+        self.editor_host.setFixedHeight(32)
+        self.editor_host.setMinimumWidth(0)
+        self.editor_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         editor_layout = QHBoxLayout(self.editor_host)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(0)
+        self._stabilize_editor(editor)
         editor_layout.addWidget(editor, 1)
         layout.addWidget(self.editor_host, 1)
 
@@ -143,7 +152,7 @@ class TaskPropertyInputGroup(QFrame):
         self.menu_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.menu_button.setToolTip("Действия свойства")
         self.menu_button.setIcon(self._menu_icon())
-        self.menu_button.setFixedWidth(38)
+        self.menu_button.setFixedSize(34, 32)
         self.menu_button.clicked.connect(self._open_menu)
         self.menu_button.setVisible(has_children)
         layout.addWidget(self.menu_button)
@@ -154,6 +163,15 @@ class TaskPropertyInputGroup(QFrame):
             return qta.icon("fa6.square-caret-down", color="#cfcfcf")
         except Exception:  # noqa: BLE001 - older QtAwesome uses the fa6s prefix
             return qta.icon("fa6s.square-caret-down", color="#cfcfcf")
+
+    @staticmethod
+    def _stabilize_editor(editor: QWidget) -> None:
+        editor.setMinimumWidth(0)
+        editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        editor.setFixedHeight(32)
+        if isinstance(editor, QComboBox):
+            editor.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            editor.setMinimumContentsLength(8)
 
     def set_child_state(self, has_children: bool, has_descendants: bool) -> None:
         self._has_children = has_children
@@ -255,6 +273,11 @@ class TaskEditDialog(QDialog):
         self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
 
         self.project_edit = QComboBox()
+        self.project_edit.setMinimumWidth(0)
+        self.project_edit.setMinimumContentsLength(12)
+        self.project_edit.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.project_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.project_edit.setFixedHeight(32)
         self._populate_projects(task.project_id)
         self._project_autosuggest_enabled = False
         self._project_autosuggest_internal = False
@@ -263,7 +286,7 @@ class TaskEditDialog(QDialog):
 
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
-        self.project_create_btn.setFixedSize(38, 38)
+        self.project_create_btn.setFixedSize(32, 32)
         self.project_create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.project_create_btn.setToolTip("Создать проект")
         self.project_create_btn.clicked.connect(self._open_project_create_dialog)
@@ -272,10 +295,10 @@ class TaskEditDialog(QDialog):
         project_row_layout = QHBoxLayout(project_row)
         project_row_layout.setContentsMargins(0, 0, 0, 0)
         project_row_layout.setSpacing(8)
-        project_row_layout.addWidget(self.project_create_btn)
         project_row_layout.addWidget(self.project_edit, 1)
         self.plan_task_edit = QCheckBox("План")
         self.plan_task_edit.setChecked(bool(task.is_plan_task))
+        self.plan_task_edit.setFixedHeight(32)
         project_row_layout.addWidget(self.plan_task_edit)
 
         has_child_tasks = self._task_has_children(task.id)
@@ -288,6 +311,15 @@ class TaskEditDialog(QDialog):
             has_child_tasks,
             has_descendant_tasks,
         )
+        project_group_row = QWidget()
+        project_group_row.setFixedHeight(32)
+        project_group_row.setMinimumWidth(0)
+        project_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        project_group_layout = QHBoxLayout(project_group_row)
+        project_group_layout.setContentsMargins(0, 0, 0, 0)
+        project_group_layout.setSpacing(8)
+        project_group_layout.addWidget(self.project_create_btn, 0)
+        project_group_layout.addWidget(self.project_property_group, 1)
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
@@ -311,6 +343,7 @@ class TaskEditDialog(QDialog):
         self.time_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.time_toggle.setToolTip("Указать точное время")
         self.time_toggle.setFixedWidth(28)
+        self.time_toggle.setFixedHeight(32)
 
         if task.time_text:
             try:
@@ -330,7 +363,6 @@ class TaskEditDialog(QDialog):
         time_row_layout = QHBoxLayout(time_row)
         time_row_layout.setContentsMargins(0, 0, 0, 0)
         time_row_layout.setSpacing(8)
-        time_row_layout.addWidget(self.time_toggle)
         time_row_layout.addWidget(self.time_edit, 1)
         self.time_property_group = self._create_property_group(
             "time_text",
@@ -339,6 +371,15 @@ class TaskEditDialog(QDialog):
             has_child_tasks,
             has_descendant_tasks,
         )
+        time_group_row = QWidget()
+        time_group_row.setFixedHeight(32)
+        time_group_row.setMinimumWidth(0)
+        time_group_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        time_group_layout = QHBoxLayout(time_group_row)
+        time_group_layout.setContentsMargins(0, 0, 0, 0)
+        time_group_layout.setSpacing(8)
+        time_group_layout.addWidget(self.time_toggle, 0)
+        time_group_layout.addWidget(self.time_property_group, 1)
 
         self.recurrence_toggle = QCheckBox("По расписанию")
         self.recurrence_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -365,7 +406,7 @@ class TaskEditDialog(QDialog):
         self.priority_edit.setCurrentText(task.priority or "Medium")
         self.priority_property_group = self._create_property_group(
             "priority",
-            "Маркер",
+            "Приоритет",
             self.priority_edit,
             has_child_tasks,
             has_descendant_tasks,
@@ -437,11 +478,11 @@ class TaskEditDialog(QDialog):
 
         form.addRow(self._make_form_label("Название"), self.title_edit)
         form.addRow(self._make_form_label("Описание"), self.description_edit)
-        form.addRow(self._make_form_label(""), self.project_property_group)
+        form.addRow(self._make_form_label(""), project_group_row)
         if parent_row is not None:
             form.addRow(self._make_form_label("Родитель"), parent_row)
         form.addRow(self._make_form_label(""), self.day_property_group)
-        form.addRow(self._make_form_label(""), self.time_property_group)
+        form.addRow(self._make_form_label(""), time_group_row)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label(""), self.priority_property_group)
         form.addRow(self._make_form_label(""), self.marker_color_property_group)
@@ -787,10 +828,11 @@ class TaskEditDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border_strong};
                 border-right: none;
-                border-top-left-radius: 8px;
-                border-bottom-left-radius: 8px;
-                padding: 0 10px;
-                min-height: 38px;
+                border-top-left-radius: 6px;
+                border-bottom-left-radius: 6px;
+                padding: 0 8px;
+                min-height: 30px;
+                max-height: 30px;
                 font-weight: 600;
             }}
 
@@ -803,13 +845,24 @@ class TaskEditDialog(QDialog):
                 border: none;
             }}
 
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QComboBox,
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QDateEdit,
+            QDialog#TaskEditDialog QFrame#TaskPropertyInputEditor QTimeEdit {{
+                min-height: 28px;
+                max-height: 30px;
+                padding: 3px 8px;
+                border-radius: 0;
+            }}
+
             QDialog#TaskEditDialog QToolButton#TaskPropertyInputMenuButton {{
                 background: {palette.input_alt_bg};
                 border: 1px solid {palette.border_strong};
                 border-left: none;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
-                min-height: 38px;
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
+                min-height: 30px;
+                max-height: 30px;
+                padding: 0;
             }}
 
             QDialog#TaskEditDialog QToolButton#TaskPropertyInputMenuButton:hover {{
