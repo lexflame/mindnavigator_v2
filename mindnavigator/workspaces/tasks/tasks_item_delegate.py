@@ -57,6 +57,11 @@ class TasksItemDelegate(QStyledItemDelegate):
             "work": "main.png",
             "personal": "main.png",
             "dev": "develop.png",
+            "researches": "n_researches.png",
+            "analysis": "n_analysis.png",
+            "dissection": "n_dissection.png",
+            "solution": "n_solution.png",
+            "debug": "n_debug.png",
         }
         self._marker_theme_pixmap_cache: Dict[str, QPixmap] = {}
 
@@ -117,6 +122,11 @@ class TasksItemDelegate(QStyledItemDelegate):
             "work": qta.icon("fa5s.briefcase", color="#5fb7d9"),
             "personal": qta.icon("fa5s.user", color="#d98f5f"),
             "dev": qta.icon("fa5s.code", color="#8f9cff"),
+            "researches": qta.icon("fa5s.search", color="#20f5d2"),
+            "analysis": qta.icon("fa5s.chart-line", color="#4da3ff"),
+            "dissection": qta.icon("fa5s.project-diagram", color="#d0a93e"),
+            "solution": qta.icon("fa5s.lightbulb", color="#57ffe6"),
+            "debug": qta.icon("fa5s.bug", color="#c95656"),
         }
 
     @staticmethod

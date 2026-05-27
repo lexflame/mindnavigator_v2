@@ -98,6 +98,9 @@ class TaskDetailsDialog(QDialog):
         "#d68a2f": "Оранжевый",
         "#b74a4a": "Красный",
         "#6b5ad4": "Фиолетовый",
+        "#20f5d2": "Неоновый",
+        "#4da3ff": "Голубой",
+        "#8b5a3c": "Коричневый",
     }
     _MARKER_THEME_LABELS = {
         "": "Нет",
@@ -108,6 +111,11 @@ class TaskDetailsDialog(QDialog):
         "work": "Работа",
         "personal": "Личное",
         "dev": "Разработка",
+        "researches": "Исследования",
+        "analysis": "Анализ",
+        "dissection": "Разбор",
+        "solution": "Решения",
+        "debug": "Отладка",
     }
     _RECURRENCE_LABELS = {
         "daily": "Ежедневно",
