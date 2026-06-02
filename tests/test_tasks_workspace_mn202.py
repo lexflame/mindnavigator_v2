@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QToolButton
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -1014,6 +1014,9 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
     dialog = None
     try:
         task = database.create_task("Inline source", "Old body", date(2026, 3, 6), "", "Medium")
+        project = database.create_project("Area", "Inline project", date(2026, 3, 6), "Medium")
+        note = database.create_note("Navigator note", "", [], "")
+        database.add_task_attachment(task.id, "note", note.id)
         monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
         dialog = task_details_dialog.TaskDetailsDialog(task)
 
@@ -1026,6 +1029,9 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         dialog.status_inline.begin_edit()
         dialog.status_inline.editor.setCurrentIndex(1)
         dialog.status_inline.commit()
+        dialog.project_inline.begin_edit()
+        dialog.project_inline.editor.setCurrentIndex(dialog.project_inline.editor.findData(project.id))
+        dialog.project_inline.commit()
         dialog._begin_description_inline_edit()
         description_editor = dialog.findChild(QPlainTextEdit, "TaskDetailsDescriptionInlineEdit")
         assert description_editor is not None
@@ -1036,7 +1042,10 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         assert updated.title == "Inline title"
         assert updated.importance == 5
         assert updated.done is True
+        assert updated.project_id == project.id
         assert updated.description == "Inline body"
+        nodes = dialog.findChildren(QToolButton, "TaskConceptBoardNode")
+        assert any("Navigator note" in node.text() for node in nodes)
     finally:
         if dialog is not None:
             dialog.deleteLater()

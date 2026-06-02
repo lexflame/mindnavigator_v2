@@ -429,6 +429,15 @@ class TaskDetailsDialog(QDialog):
 
         self.detail_id_card = _InfoCard("ID", self.details_card)
         self.detail_project_card = _InfoCard("Проект", self.details_card)
+        self.project_inline = InlineEditableField(QComboBox(self.detail_project_card), self.detail_project_card)
+        self.project_inline.editor.addItem("Без проекта", None)
+        for project in self._db.fetch_projects():
+            if project.archived:
+                continue
+            label = f"{project.area} • {project.title}" if project.area else project.title
+            self.project_inline.editor.addItem(label, project.id)
+        self.project_inline.value_committed.connect(lambda value: self._save_inline_updates(project_id=value))
+        self.detail_project_card.set_inline_editor(self.project_inline)
         self.detail_parent_card = _InfoCard("Родительская задача", self.details_card)
         self.detail_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
         self.detail_type_card = _InfoCard("Тип", self.details_card)
@@ -536,6 +545,11 @@ class TaskDetailsDialog(QDialog):
         self.concept_board_summary.setObjectName("TaskDetailsLinksEmpty")
         self.concept_board_summary.setWordWrap(True)
         self.concept_board_card.layout().addWidget(self.concept_board_summary)
+        self.concept_board_host = QWidget(self.concept_board_card)
+        self.concept_board_layout = QHBoxLayout(self.concept_board_host)
+        self.concept_board_layout.setContentsMargins(0, 0, 0, 0)
+        self.concept_board_layout.setSpacing(6)
+        self.concept_board_card.layout().addWidget(self.concept_board_host)
         self.right_column.addWidget(self.concept_board_card)
 
     @staticmethod
@@ -610,6 +624,17 @@ class TaskDetailsDialog(QDialog):
             }}
             QToolButton#TaskDetailsCollapseButton:hover,
             QToolButton#TaskDetailsImageButton:hover {{
+                border-color: {palette.accent};
+                color: {palette.accent};
+            }}
+            QToolButton#TaskConceptBoardNode {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 8px;
+            }}
+            QToolButton#TaskConceptBoardNode:hover {{
                 border-color: {palette.accent};
                 color: {palette.accent};
             }}
@@ -804,6 +829,7 @@ class TaskDetailsDialog(QDialog):
         marker_theme_text = self._marker_theme_text()
         self.detail_id_card.set_value(str(self._task.id))
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
+        self.project_inline.set_value(self._task.project_id, project_text)
         self.detail_parent_card.set_value(parent_text, muted=parent_text == "—")
         self.detail_parent_card.set_action_visible(self._parent_schedule_mismatch())
         self.detail_type_card.set_value(self._task_type_text())
@@ -1198,6 +1224,7 @@ class TaskDetailsDialog(QDialog):
         self._clear_layout(self.images_layout)
         relation_attachments = [attachment for attachment in self._attachments if attachment.kind != "image"]
         image_attachments = [attachment for attachment in self._attachments if attachment.kind == "image"]
+        self._refresh_concept_board_navigator(relation_attachments)
         if not relation_attachments:
             empty = QLabel("Нет связанных элементов", self.links_host)
             empty.setObjectName("TaskDetailsLinksEmpty")
@@ -1233,6 +1260,18 @@ class TaskDetailsDialog(QDialog):
             button.setToolTip("Открыть изображение")
             button.clicked.connect(lambda _checked=False, att=attachment: self._open_attachment(att))
             self.images_layout.addWidget(button, 1)
+
+    def _refresh_concept_board_navigator(self, attachments: List) -> None:
+        self._clear_layout(self.concept_board_layout)
+        navigable = [attachment for attachment in attachments if attachment.kind in {"idea", "note", "task", "object", "map", "marker"}]
+        self.concept_board_summary.setVisible(not navigable)
+        for attachment in navigable[:4]:
+            button = QToolButton(self.concept_board_host)
+            button.setObjectName("TaskConceptBoardNode")
+            button.setText(f"{attachment_kind_label(attachment.kind)}: {self._attachment_display_text(attachment)}")
+            button.setToolTip("Открыть связанную сущность")
+            button.clicked.connect(lambda _checked=False, att=attachment: self._open_attachment(att))
+            self.concept_board_layout.addWidget(button, 1)
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:
