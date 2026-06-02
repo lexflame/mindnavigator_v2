@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from ._shared import *  # noqa: F401,F403
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QPersistentModelIndex, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QPen
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import build_popup_menu_stylesheet, get_theme_palette
@@ -1033,7 +1033,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             self._open_task_view(index)
             return
         if chosen == act_edit:
-            self._edit_task(index)
+            self._schedule_task_edit(index)
             return
         attachment = attachment_actions.get(chosen)
         if attachment is not None:
@@ -1065,6 +1065,13 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         if tasks_model is not None:
             tasks_model.delete_task_by_row(index.row())
+
+    def _schedule_task_edit(self, index: QModelIndex) -> None:
+        persistent_index = QPersistentModelIndex(index)
+        QTimer.singleShot(
+            0,
+            lambda: self._edit_task(persistent_index) if persistent_index.isValid() else None,
+        )
 
     @staticmethod
     def _attachment_display_name(attachment: TaskAttachmentData) -> str:
