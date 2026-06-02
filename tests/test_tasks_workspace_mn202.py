@@ -971,10 +971,10 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
 
         empty_description = dialog.findChild(QLabel, "TaskDetailsDescriptionEmpty")
         empty_links = dialog.findChild(QLabel, "TaskDetailsLinksEmpty")
-        assert dialog.minimumWidth() == 1100
-        assert dialog.minimumHeight() == 700
-        assert dialog.width() == 1200
-        assert dialog.height() == 780
+        assert dialog.minimumWidth() == 1180
+        assert dialog.minimumHeight() == 720
+        assert dialog.width() == 1360
+        assert dialog.height() == 820
         assert dialog.links_title.text() == "Связи"
         assert dialog.images_title.text() == "Изображения"
         assert dialog.links_host.isHidden()
@@ -996,8 +996,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
-        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
-        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 2
+        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 7
+        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
         assert dialog._columns_for_width(1000, dialog._DETAIL_BREAKPOINTS, default=6) == 3
     finally:
@@ -1053,7 +1053,7 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         db_path.unlink(missing_ok=True)
 
 
-def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_temp_path) -> None:
+def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_dialog_edit_refresh", ".sqlite3")
     database = Database(path=db_path)
@@ -1068,33 +1068,31 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         )
         monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
 
-        class _AcceptedEditDialog(QDialog):
-            def __init__(self, _task, parent=None) -> None:
-                super().__init__(parent)
-
-            def exec(self) -> int:  # noqa: A003 - Qt API name
-                return int(QDialog.DialogCode.Accepted)
-
-            def values(self) -> dict[str, object]:
-                return {
-                    "title": "Updated task",
-                    "description": "Updated description",
-                    "day": date(2026, 3, 7),
-                    "time_text": "18:00",
-                    "priority": "High",
-                    "done": True,
-                    "project_id": None,
-                    "recurrence_kind": "weekly",
-                    "recurrence_interval": 1,
-                    "is_plan_task": True,
-                    "marker_color": "#d68a2f",
-                    "marker_theme": "work",
-                }
-
-        monkeypatch.setattr(task_details_dialog, "TaskEditDialog", _AcceptedEditDialog)
-
         dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == created.id))
 
+        dialog._open_edit_dialog()
+        assert dialog._form_editing is True
+        assert dialog.header_close_button.text() == "Отменить"
+        assert dialog.header_edit_button.text() == "Сохранить"
+        assert dialog.links_add_button.isEnabled() is True
+        assert dialog.images_add_button.isEnabled() is True
+        assert not dialog.links_host.isHidden()
+        assert not dialog.images_host.isHidden()
+        dialog.title_inline.editor.setText("Discarded title")
+        dialog._cancel_or_close()
+        assert dialog._form_editing is False
+        assert dialog.title_label.text() == "Original task"
+        dialog._open_edit_dialog()
+        dialog.title_inline.editor.setText("Updated task")
+        assert dialog.description_editor is not None
+        dialog.description_editor.setPlainText("Updated description")
+        dialog.date_inline.set_value(date(2026, 3, 7))
+        dialog.time_inline.editor.setText("18:00")
+        dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("High"))
+        dialog.status_inline.editor.setCurrentIndex(dialog.status_inline.editor.findData(True))
+        dialog.recurrence_inline.editor.setCurrentIndex(dialog.recurrence_inline.editor.findData("weekly"))
+        dialog.marker_color_inline.editor.setCurrentIndex(dialog.marker_color_inline.editor.findData("#d68a2f"))
+        dialog.marker_theme_inline.editor.setCurrentIndex(dialog.marker_theme_inline.editor.findData("work"))
         dialog._open_edit_dialog()
 
         reloaded = next(item for item in database.fetch_tasks() if item.id == created.id)
@@ -1105,14 +1103,14 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         assert reloaded.priority == "High"
         assert reloaded.done is True
         assert reloaded.recurrence_kind == "weekly"
-        assert reloaded.is_plan_task is True
+        assert reloaded.is_plan_task is False
         assert reloaded.marker_color == "#d68a2f"
         assert reloaded.marker_theme == "work"
         assert dialog.title_label.text() == "Updated task"
         assert dialog.summary_label.text() == "Без проекта • 2026-03-07 • 18:00 • High"
         assert dialog.status_badge.text() == "Выполнено"
         assert dialog.recurrence_card.value_label.text() == "Еженедельно"
-        assert dialog.detail_type_card.value_label.text() == "Плановая задача"
+        assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.detail_marker_card.value_label.text() == "Оранжевый"
         assert dialog.detail_theme_card.value_label.text() == "Работа"
     finally:
