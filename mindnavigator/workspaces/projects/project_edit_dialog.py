@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtWidgets import QPlainTextEdit
+
 from ._shared import *  # noqa: F401,F403
 
 class ProjectEditDialog(QDialog):
@@ -14,7 +16,7 @@ class ProjectEditDialog(QDialog):
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(640, 660)
+        self.setFixedSize(780, 860)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -130,6 +132,29 @@ class ProjectEditDialog(QDialog):
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
 
+        self.task_types_edit = self._make_multiline_edit(
+            "DEV | #4C78D0 | dev | active\nMUSIC | #8A63D2 | music | active"
+        )
+        self.related_projects_edit = self._make_multiline_edit("ID связанных проектов, по одному в строке")
+        self.related_tasks_edit = self._make_multiline_edit("ID связанных задач, по одному в строке")
+        self.repository_links_edit = self._make_multiline_edit("MindNavigator Core | D:/_Branch/PROJECTS/mindnavigator")
+        self.wiki_links_edit = self._make_multiline_edit("Project Wiki | https://docs.example.com/project")
+        task_types_row = self._make_property_editor(
+            self.task_types_edit,
+            [
+                ("Добавить", self._add_task_type_line),
+                ("Изменить", self._edit_task_type_line),
+                ("Актив./деакт.", self._toggle_task_type_line),
+                ("Удалить", self._delete_task_type_line),
+            ],
+        )
+        related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
+        related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
+        repository_links_row = self._make_property_editor(self.repository_links_edit, [("Добавить", self._add_repository_link_line)])
+        wiki_links_row = self._make_property_editor(self.wiki_links_edit, [("Добавить", self._add_wiki_link_line)])
+        if project:
+            self._load_project_properties(project.id)
+
         form.addRow("Область", self.area_edit)
         form.addRow("Название", self.title_edit)
         form.addRow("Дата обновления", self.updated_edit)
@@ -144,6 +169,11 @@ class ProjectEditDialog(QDialog):
         form.addRow("Тема маркера", self.marker_theme_edit)
         form.addRow("Каталог репозитория", self.repository_catalog_edit)
         form.addRow("", self.archived_edit)
+        form.addRow("Типы задач", task_types_row)
+        form.addRow("Связанные проекты", related_projects_row)
+        form.addRow("Связанные задачи", related_tasks_row)
+        form.addRow("Репозитории", repository_links_row)
+        form.addRow("Wiki", wiki_links_row)
 
         layout.addLayout(form)
 
@@ -171,7 +201,8 @@ class ProjectEditDialog(QDialog):
 
             QDialog#ProjectEditDialog QLineEdit,
             QDialog#ProjectEditDialog QComboBox,
-            QDialog#ProjectEditDialog QDateEdit {{
+            QDialog#ProjectEditDialog QDateEdit,
+            QDialog#ProjectEditDialog QPlainTextEdit {{
                 background: #202127;
                 color: #e6e6e6;
                 border: 1px solid #2a2b2f;
@@ -204,17 +235,356 @@ class ProjectEditDialog(QDialog):
             }}
         """)
 
+    def _make_multiline_edit(self, placeholder: str) -> QPlainTextEdit:
+        edit = QPlainTextEdit()
+        edit.setPlaceholderText(placeholder)
+        edit.setFixedHeight(64)
+        return edit
+
+    def _make_property_editor(self, edit: QPlainTextEdit, actions: list[tuple[str, object]]) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(edit)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(6)
+        action_row.addStretch(1)
+        for text, callback in actions:
+            button = QToolButton()
+            button.setText(text)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(callback)
+            action_row.addWidget(button)
+        layout.addLayout(action_row)
+        return widget
+
+    def _append_line(self, edit: QPlainTextEdit, line: str) -> None:
+        line = (line or "").strip()
+        if not line:
+            return
+        text = edit.toPlainText().strip()
+        edit.setPlainText(f"{text}\n{line}" if text else line)
+
+    def _current_line_info(self, edit: QPlainTextEdit) -> tuple[list[str], int, str]:
+        lines = edit.toPlainText().splitlines()
+        if not lines:
+            return lines, -1, ""
+        cursor = edit.textCursor()
+        line_index = min(max(0, cursor.blockNumber()), len(lines) - 1)
+        return lines, line_index, lines[line_index].strip()
+
+    def _replace_line(self, edit: QPlainTextEdit, line_index: int, line: str) -> None:
+        lines = edit.toPlainText().splitlines()
+        if line_index < 0 or line_index >= len(lines):
+            return
+        lines[line_index] = line
+        edit.setPlainText("\n".join(lines))
+        cursor = edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.Start)
+        for _ in range(line_index):
+            cursor.movePosition(cursor.MoveOperation.Down)
+        edit.setTextCursor(cursor)
+
+    def _remove_line(self, edit: QPlainTextEdit, line_index: int) -> None:
+        lines = edit.toPlainText().splitlines()
+        if line_index < 0 or line_index >= len(lines):
+            return
+        del lines[line_index]
+        edit.setPlainText("\n".join(lines))
+
+    def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
+        for idx in range(source.count()):
+            target.addItem(source.itemText(idx), source.itemData(idx))
+
+    def _add_task_type_line(self) -> None:
+        values = self._task_type_dialog()
+        if values is None:
+            return
+        self._append_line(self.task_types_edit, self._format_task_type_line(values))
+
+    def _edit_task_type_line(self) -> None:
+        lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        updated = self._task_type_dialog(values)
+        if updated is None:
+            return
+        self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(updated))
+
+    def _toggle_task_type_line(self) -> None:
+        lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        values["active"] = not bool(values.get("active", True))
+        self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(values))
+
+    def _delete_task_type_line(self) -> None:
+        _lines, line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index < 0 or not line:
+            return
+        values = self._parse_task_type_line(line)
+        title = str(values.get("title") or "")
+        if self._project:
+            existing = next(
+                (
+                    item
+                    for item in self._db.fetch_project_task_types(self._project.id, include_inactive=True)
+                    if item.title == title
+                ),
+                None,
+            )
+            if existing is not None and self._db.project_task_type_in_use(existing.id):
+                QMessageBox.warning(
+                    self,
+                    "Тип задач",
+                    "Тип используется задачами. Деактивируйте тип вместо удаления.",
+                )
+                return
+        if QMessageBox.question(self, "Тип задач", f"Удалить тип {title}?") != QMessageBox.StandardButton.Yes:
+            return
+        self._remove_line(self.task_types_edit, line_index)
+
+    def _task_type_dialog(self, initial: Optional[dict[str, object]] = None) -> Optional[dict[str, object]]:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Тип задач")
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        title_edit = QLineEdit()
+        title_edit.setPlaceholderText("DEV")
+        if initial:
+            title_edit.setText(str(initial.get("title") or ""))
+        color_combo = QComboBox()
+        self._copy_combo_items(self.marker_color_edit, color_combo)
+        if initial:
+            color_idx = color_combo.findData(str(initial.get("color_marker") or ""))
+            if color_idx >= 0:
+                color_combo.setCurrentIndex(color_idx)
+        theme_combo = QComboBox()
+        self._copy_combo_items(self.marker_theme_edit, theme_combo)
+        if initial:
+            theme_idx = theme_combo.findData(str(initial.get("theme_marker") or ""))
+            if theme_idx >= 0:
+                theme_combo.setCurrentIndex(theme_idx)
+        active_edit = QCheckBox("Активен")
+        active_edit.setChecked(bool(initial.get("active", True)) if initial else True)
+        form.addRow("Название", title_edit)
+        form.addRow("Цвет", color_combo)
+        form.addRow("Тема", theme_combo)
+        form.addRow("", active_edit)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        title = " ".join(title_edit.text().strip().upper().split())
+        if not title:
+            QMessageBox.warning(self, "Проверка", "Название типа задач не должно быть пустым.")
+            return None
+        return {
+            "title": title,
+            "color_marker": color_combo.currentData() or "",
+            "theme_marker": theme_combo.currentData() or "",
+            "active": active_edit.isChecked(),
+        }
+
+    @staticmethod
+    def _format_task_type_line(values: dict[str, object]) -> str:
+        status = "active" if bool(values.get("active", True)) else "disabled"
+        title = " ".join(str(values.get("title") or "").strip().upper().split())
+        return f"{title} | {values.get('color_marker') or ''} | {values.get('theme_marker') or ''} | {status}"
+
+    @staticmethod
+    def _parse_task_type_line(line: str) -> dict[str, object]:
+        parts = [part.strip() for part in (line or "").split("|")]
+        title = " ".join((parts[0] if parts else "").strip().upper().split())
+        status = (parts[3] if len(parts) > 3 else "active").strip().lower()
+        return {
+            "title": title,
+            "color_marker": parts[1] if len(parts) > 1 else "",
+            "theme_marker": parts[2] if len(parts) > 2 else "",
+            "active": status not in {"disabled", "inactive", "off", "0", "false"},
+        }
+
+    def _add_related_project_line(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Связанный проект")
+        layout = QVBoxLayout(dialog)
+        combo = QComboBox()
+        for project in self._db.fetch_projects():
+            if self._project and project.id == self._project.id:
+                continue
+            combo.addItem(f"{project.area} / {project.title}", project.id)
+        layout.addWidget(combo)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
+            self._append_line(self.related_projects_edit, str(combo.currentData()))
+
+    def _add_related_task_line(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Связанная задача")
+        layout = QVBoxLayout(dialog)
+        combo = QComboBox()
+        for task in self._db.fetch_tasks():
+            combo.addItem(f"MN-{task.id} {task.title}", task.id)
+        layout.addWidget(combo)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
+            self._append_line(self.related_tasks_edit, str(combo.currentData()))
+
+    def _add_repository_link_line(self) -> None:
+        self._add_link_line(self.repository_links_edit, "Репозиторий")
+
+    def _add_wiki_link_line(self) -> None:
+        self._add_link_line(self.wiki_links_edit, "Wiki")
+
+    def _add_link_line(self, edit: QPlainTextEdit, title: str) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        title_edit = QLineEdit()
+        url_edit = QLineEdit()
+        form.addRow("Текст", title_edit)
+        form.addRow("Ссылка", url_edit)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(dialog)
+        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        url = url_edit.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Проверка", "Ссылка не должна быть пустой.")
+            return
+        link_title = title_edit.text().strip()
+        self._append_line(edit, f"{link_title} | {url}" if link_title else url)
+
+    def _load_project_properties(self, project_id: int) -> None:
+        task_type_lines = []
+        for item in self._db.fetch_project_task_types(project_id, include_inactive=True):
+            status = "active" if item.active else "disabled"
+            task_type_lines.append(f"{item.title} | {item.color_marker} | {item.theme_marker} | {status}")
+        self.task_types_edit.setPlainText("\n".join(task_type_lines))
+        self.related_projects_edit.setPlainText(
+            "\n".join(str(item.related_project_id) for item in self._db.fetch_project_related_projects(project_id))
+        )
+        self.related_tasks_edit.setPlainText(
+            "\n".join(str(item.task_id) for item in self._db.fetch_project_related_tasks(project_id))
+        )
+        self.repository_links_edit.setPlainText(self._format_links(self._db.fetch_project_repository_links(project_id)))
+        self.wiki_links_edit.setPlainText(self._format_links(self._db.fetch_project_wiki_links(project_id)))
+
+    @staticmethod
+    def _format_links(links) -> str:
+        return "\n".join(f"{item.title} | {item.url}" if item.title else item.url for item in links)
+
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
         try:
             validate_area(self.area_edit.text())
             validate_title(self.title_edit.text(), field_name="Название проекта")
             normalize_priority(self.priority_edit.currentText())
+            self._parse_project_task_types()
+            self._parse_int_lines(self.related_projects_edit.toPlainText(), "Связанные проекты")
+            self._parse_int_lines(self.related_tasks_edit.toPlainText(), "Связанные задачи")
+            self._parse_links(self.repository_links_edit.toPlainText())
+            self._parse_links(self.wiki_links_edit.toPlainText())
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
 
         self.accept()
+
+    def apply_project_properties(self, project_id: int) -> None:
+        self._db.replace_project_task_types(project_id, self._parse_project_task_types())
+        self._db.replace_project_related_projects(
+            project_id,
+            self._parse_int_lines(self.related_projects_edit.toPlainText(), "Связанные проекты"),
+        )
+        self._db.replace_project_related_tasks(
+            project_id,
+            self._parse_int_lines(self.related_tasks_edit.toPlainText(), "Связанные задачи"),
+        )
+        self._db.replace_project_repository_links(project_id, self._parse_links(self.repository_links_edit.toPlainText()))
+        self._db.replace_project_wiki_links(project_id, self._parse_links(self.wiki_links_edit.toPlainText()))
+
+    def _parse_project_task_types(self) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for raw_line in self.task_types_edit.toPlainText().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            values = self._parse_task_type_line(line)
+            title = str(values.get("title") or "")
+            if not title:
+                raise ValueError("Название типа задач не должно быть пустым.")
+            if title in seen:
+                raise ValueError(f"Дублирующий тип задач: {title}")
+            seen.add(title)
+            result.append(
+                {
+                    "title": title,
+                    "color_marker": str(values.get("color_marker") or ""),
+                    "theme_marker": str(values.get("theme_marker") or ""),
+                    "active": bool(values.get("active", True)),
+                }
+            )
+        return result
+
+    @staticmethod
+    def _parse_int_lines(text: str, field_name: str) -> list[int]:
+        result: list[int] = []
+        seen: set[int] = set()
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                item_id = int(line)
+            except ValueError as exc:
+                raise ValueError(f"{field_name}: ожидается числовой ID, получено {line!r}.") from exc
+            if item_id not in seen:
+                seen.add(item_id)
+                result.append(item_id)
+        return result
+
+    @staticmethod
+    def _parse_links(text: str) -> list[dict[str, str]]:
+        links: list[dict[str, str]] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if "|" in line:
+                title, url = [part.strip() for part in line.split("|", 1)]
+            else:
+                title, url = "", line
+            if not url:
+                raise ValueError("Ссылка repository/wiki не должна быть пустой.")
+            links.append({"title": title, "url": url})
+        return links
 
     def values(self) -> dict:
         """Возвращает значения формы проекта."""

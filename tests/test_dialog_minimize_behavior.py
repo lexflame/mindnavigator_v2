@@ -658,6 +658,50 @@ def test_tasks_delegate_applies_late_accept_after_exec_returns_rejected(monkeypa
         view.deleteLater()
 
 
+def test_tasks_delegate_defers_row_menu_edit_until_popup_cycle_finishes(monkeypatch) -> None:
+    _app = QApplication.instance() or QApplication([])
+
+    class _OneRowModel(QAbstractListModel):
+        def rowCount(self, _parent=None) -> int:  # noqa: N802 - Qt API
+            return 1
+
+    class _Menu:
+        def __init__(self) -> None:
+            self.actions: list[object] = []
+
+        def setStyleSheet(self, _stylesheet: str) -> None:  # noqa: N802 - Qt API
+            return None
+
+        def addAction(self, _label: str):  # noqa: N802 - Qt API
+            action = object()
+            self.actions.append(action)
+            return action
+
+        def addSeparator(self) -> None:  # noqa: N802 - Qt API
+            return None
+
+        def exec(self, _pos):
+            return self.actions[1]
+
+    callbacks: list[object] = []
+    edited_rows: list[int] = []
+    monkeypatch.setattr(tasks_item_delegate, "QMenu", _Menu)
+    monkeypatch.setattr(tasks_item_delegate.QTimer, "singleShot", lambda _delay, callback: callbacks.append(callback))
+    model = _OneRowModel()
+    delegate = tasks_item_delegate.TasksItemDelegate()
+    monkeypatch.setattr(delegate, "_tasks_model", lambda _model: None)
+    monkeypatch.setattr(delegate, "_edit_task", lambda index: edited_rows.append(index.row()))
+    try:
+        delegate._show_row_menu(model.index(0, 0))
+        assert edited_rows == []
+        assert len(callbacks) == 1
+
+        callbacks[0]()
+        assert edited_rows == [0]
+    finally:
+        delegate.deleteLater()
+
+
 def test_main_window_app_click_fallback_minimizes_visible_task_dialog(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
     dialog = QDialog()

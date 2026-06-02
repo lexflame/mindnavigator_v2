@@ -303,6 +303,14 @@ class TaskEditDialog(QDialog):
         self._project_autosuggest_active = True
         self.project_edit.currentIndexChanged.connect(self._on_project_selection_changed)
 
+        self.project_task_type_edit = QComboBox()
+        self.project_task_type_edit.setMinimumWidth(0)
+        self.project_task_type_edit.setMinimumContentsLength(10)
+        self.project_task_type_edit.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.project_task_type_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.project_task_type_edit.setFixedHeight(32)
+        self._populate_project_task_types(task.project_task_type_id)
+
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
         self.project_create_btn.setFixedSize(32, 32)
@@ -516,6 +524,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label("Название"), self.title_edit)
         form.addRow(self._make_form_label("Описание"), self.description_edit)
         form.addRow(self._make_form_label(""), project_group_row)
+        form.addRow(self._make_form_label("Тип проекта"), self.project_task_type_edit)
         if parent_row is not None:
             form.addRow(self._make_form_label("Родитель"), parent_row)
         form.addRow(self._make_form_label(""), schedule_group_row)
@@ -1086,6 +1095,8 @@ class TaskEditDialog(QDialog):
         self.project_edit.setToolTip(inherit_tip)
         self.project_create_btn.setEnabled(False)
         self.project_create_btn.setToolTip(inherit_tip)
+        self.project_task_type_edit.setEnabled(False)
+        self.project_task_type_edit.setToolTip(inherit_tip)
         self.priority_edit.setEnabled(False)
         self.priority_edit.setToolTip(inherit_tip)
 
@@ -1346,9 +1357,33 @@ class TaskEditDialog(QDialog):
         if self._project_autosuggest_internal:
             return
         if not self._project_autosuggest_enabled:
+            self._populate_project_task_types()
             return
         current_project_id = self.project_edit.currentData()
         self._project_autosuggest_active = current_project_id is None
+        self._populate_project_task_types()
+
+    def _populate_project_task_types(self, selected_id: Optional[int] = None) -> None:
+        self.project_task_type_edit.blockSignals(True)
+        self.project_task_type_edit.clear()
+        self.project_task_type_edit.addItem("Без типа", None)
+        project_id = self.project_edit.currentData()
+        if project_id is None:
+            self.project_task_type_edit.setEnabled(False)
+            self.project_task_type_edit.blockSignals(False)
+            return
+        fetch_types = getattr(self._db, "fetch_project_task_types", None)
+        if callable(fetch_types):
+            for task_type in fetch_types(int(project_id), include_inactive=True):
+                if not task_type.active and task_type.id != selected_id:
+                    continue
+                status = "" if task_type.active else " · отключен"
+                self.project_task_type_edit.addItem(f"{task_type.title}{status}", task_type.id)
+        selected_idx = self.project_task_type_edit.findData(selected_id)
+        if selected_idx >= 0:
+            self.project_task_type_edit.setCurrentIndex(selected_idx)
+        self.project_task_type_edit.setEnabled(self.project_task_type_edit.count() > 1)
+        self.project_task_type_edit.blockSignals(False)
 
     def _best_project_index_for_title(self, title: str) -> Optional[int]:
         title_tokens = set(_tokenize_text_for_match(title))
@@ -2022,6 +2057,7 @@ class TaskEditDialog(QDialog):
             "priority": self.priority_edit.currentText().strip() or "Medium",
             "done": self.done_edit.isChecked(),
             "project_id": self.project_edit.currentData(),
+            "project_task_type_id": self.project_task_type_edit.currentData(),
             "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
             "recurrence_interval": 1,
             "gantt_estimate_minutes": self.gantt_estimate_edit.minutes(),
@@ -2033,7 +2069,7 @@ class TaskEditDialog(QDialog):
             f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
             f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
             f"priority={payload['priority']!r} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
-            f"project_id={payload['project_id']} "
+            f"project_id={payload['project_id']} project_task_type_id={payload['project_task_type_id']} "
             f"recurrence={payload['recurrence_kind']!r} is_plan_task={payload['is_plan_task']} marker_color={payload['marker_color']!r} "
             f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
         )
@@ -2048,7 +2084,8 @@ class TaskEditDialog(QDialog):
             f"title={title!r} day={day} time={self._current_time_text()!r} "
             f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
             f"gantt={self.gantt_estimate_edit.minutes()} "
-            f"project_id={self.project_edit.currentData()} is_plan_task={self.plan_task_edit.isChecked()} "
+            f"project_id={self.project_edit.currentData()} project_task_type_id={self.project_task_type_edit.currentData()} "
+            f"is_plan_task={self.plan_task_edit.isChecked()} "
             f"recurrence_enabled={self.recurrence_toggle.isChecked()} "
             f"recurrence={self.recurrence_type_edit.currentData()!r} marker_color={self.marker_color_edit.currentData()!r} "
             f"marker_theme={self.marker_theme_edit.currentData()!r} description_len={len(description)}"

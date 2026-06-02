@@ -30,6 +30,7 @@ TASKS_CSV_FIELDS: tuple[str, ...] = (
     "recurrence_interval",
     "marker_color",
     "marker_theme",
+    "project_task_type",
 )
 
 PROJECTS_CSV_FIELDS: tuple[str, ...] = (
@@ -47,6 +48,12 @@ PROJECTS_CSV_FIELDS: tuple[str, ...] = (
     "linked_object_id",
     "marker_color",
     "marker_theme",
+    "repository_catalog",
+    "project_task_types_json",
+    "related_project_ids",
+    "related_task_ids",
+    "repository_links_json",
+    "wiki_links_json",
 )
 
 NOTES_CSV_FIELDS: tuple[str, ...] = (
@@ -128,6 +135,7 @@ def export_tasks_rows(tasks: Sequence[TaskData]) -> list[dict[str, object]]:
             "recurrence_interval": task.recurrence_interval,
             "marker_color": task.marker_color,
             "marker_theme": task.marker_theme,
+            "project_task_type": task.project_task_type_title,
         }
         for task in tasks
     ]
@@ -150,6 +158,12 @@ def export_projects_rows(projects: Sequence[ProjectData]) -> list[dict[str, obje
             "linked_object_id": project.linked_object_id if project.linked_object_id is not None else "",
             "marker_color": project.marker_color,
             "marker_theme": project.marker_theme,
+            "repository_catalog": project.repository_catalog,
+            "project_task_types_json": "",
+            "related_project_ids": "",
+            "related_task_ids": "",
+            "repository_links_json": "",
+            "wiki_links_json": "",
         }
         for project in projects
     ]
@@ -255,6 +269,7 @@ def import_tasks_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
         row_day = _parse_date(row.get("day"), default=date.today())
         project_title = _text(row.get("project_title"))
         project_id = project_map.get(_norm(project_title)) if project_title else None
+        project_task_type_id = _project_task_type_id_by_title(db, project_id, _text(row.get("project_task_type")))
         recurrence_interval = _parse_int(row.get("recurrence_interval"), default=1, minimum=1)
         done = _parse_bool(row.get("done"), default=False)
         source_id = _parse_optional_int(row.get("id"))
@@ -271,6 +286,7 @@ def import_tasks_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
                 recurrence_interval=recurrence_interval,
                 marker_color=_text(row.get("marker_color")),
                 marker_theme=_text(row.get("marker_theme")).lower(),
+                project_task_type_id=project_task_type_id,
             )
         except ValueError:
             skipped += 1
@@ -301,6 +317,7 @@ def import_tasks_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResult:
                 recurrence_interval=created.recurrence_interval,
                 marker_color=created.marker_color,
                 marker_theme=created.marker_theme,
+                project_task_type_id=created.project_task_type_id,
             )
         except ValueError:
             skipped += 1
@@ -329,6 +346,12 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
                 "linked_object_id": _parse_optional_int(row.get("linked_object_id")),
                 "marker_color": _text(row.get("marker_color")),
                 "marker_theme": _text(row.get("marker_theme")).lower(),
+                "repository_catalog": _text(row.get("repository_catalog")),
+                "project_task_types": _parse_json_list(row.get("project_task_types_json")),
+                "related_project_source_ids": _parse_pipe_ints(row.get("related_project_ids")),
+                "related_task_ids": _parse_pipe_ints(row.get("related_task_ids")),
+                "repository_links": _parse_json_list(row.get("repository_links_json")),
+                "wiki_links": _parse_json_list(row.get("wiki_links_json")),
             }
         )
 
@@ -363,6 +386,7 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
                     linked_object_id=row["linked_object_id"],
                     marker_color=str(row["marker_color"]),
                     marker_theme=str(row["marker_theme"]),
+                    repository_catalog=str(row["repository_catalog"]),
                 )
             except ValueError:
                 skipped += 1
@@ -372,6 +396,7 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
             source_id = row["source_id"]
             if isinstance(source_id, int):
                 source_to_created_id[source_id] = created.id
+            _apply_imported_project_properties(db, created.id, row, source_to_created_id)
             progressed = True
         if not progressed:
             break
@@ -379,7 +404,7 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
 
     for row in pending:
         try:
-            db.create_project(
+            created = db.create_project(
                 area=str(row["area"]),
                 title=str(row["title"]),
                 updated=row["updated"],
@@ -393,7 +418,9 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
                 linked_object_id=row["linked_object_id"],
                 marker_color=str(row["marker_color"]),
                 marker_theme=str(row["marker_theme"]),
+                repository_catalog=str(row["repository_catalog"]),
             )
+            _apply_imported_project_properties(db, created.id, row, source_to_created_id)
             imported += 1
         except ValueError:
             skipped += 1
@@ -686,6 +713,64 @@ def _parse_json_mapping(value: object) -> Optional[dict[str, object]]:
     except json.JSONDecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _parse_json_list(value: object) -> list[dict[str, object]]:
+    text = _text(value)
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
+
+
+def _parse_pipe_ints(value: object) -> list[int]:
+    text = _text(value)
+    if not text:
+        return []
+    result: list[int] = []
+    for part in text.replace(",", "|").split("|"):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            result.append(int(part))
+        except ValueError:
+            continue
+    return result
+
+
+def _project_task_type_id_by_title(db, project_id: Optional[int], title: str) -> Optional[int]:
+    if project_id is None or not title:
+        return None
+    fetch_types = getattr(db, "fetch_project_task_types", None)
+    if not callable(fetch_types):
+        return None
+    normalized = " ".join(title.strip().upper().split())
+    for item in fetch_types(int(project_id), include_inactive=False):
+        if item.title == normalized:
+            return item.id
+    return None
+
+
+def _apply_imported_project_properties(db, project_id: int, row: Mapping[str, object], source_to_created_id: Mapping[int, int]) -> None:
+    try:
+        db.replace_project_task_types(project_id, list(row.get("project_task_types") or []))
+        related_project_ids = [
+            source_to_created_id[source_id]
+            for source_id in row.get("related_project_source_ids", [])
+            if source_id in source_to_created_id
+        ]
+        db.replace_project_related_projects(project_id, related_project_ids)
+        db.replace_project_related_tasks(project_id, list(row.get("related_task_ids") or []))
+        db.replace_project_repository_links(project_id, list(row.get("repository_links") or []))
+        db.replace_project_wiki_links(project_id, list(row.get("wiki_links") or []))
+    except ValueError:
+        return
 
 
 def _normalize_recurrence(value: str) -> str:

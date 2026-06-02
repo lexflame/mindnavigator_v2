@@ -787,6 +787,7 @@ class TaskDetailsDialog(QDialog):
                 plan_order=int(self._task.plan_order or 0),
                 marker_color=self._task.marker_color,
                 marker_theme=self._task.marker_theme,
+                project_task_type_id=self._task.project_task_type_id,
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
@@ -816,14 +817,26 @@ class TaskDetailsDialog(QDialog):
                     "is_plan_task": values.get("is_plan_task", bool(self._task.is_plan_task)),
                     "marker_color": values.get("marker_color", ""),
                     "marker_theme": values.get("marker_theme", ""),
+                    "project_task_type_id": values.get("project_task_type_id"),
                 }
                 try:
                     tasks_model.update_task_by_row(row_idx, **update_kwargs)
                 except TypeError as exc:
                     if "gantt_estimate_minutes" not in str(exc):
-                        raise
+                        if "project_task_type_id" not in str(exc):
+                            raise
+                        update_kwargs.pop("project_task_type_id", None)
+                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                        self._refresh_view()
+                        return
                     gantt_estimate_minutes = update_kwargs.pop("gantt_estimate_minutes", None)
-                    tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                    try:
+                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                    except TypeError as second_exc:
+                        if "project_task_type_id" not in str(second_exc):
+                            raise
+                        update_kwargs.pop("project_task_type_id", None)
+                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
                     if gantt_estimate_minutes is not None:
                         self._db.set_task_gantt_estimate(
                             self._task.id,
@@ -852,6 +865,7 @@ class TaskDetailsDialog(QDialog):
                 plan_order=int(self._task.plan_order or 0),
                 marker_color=values.get("marker_color", ""),
                 marker_theme=values.get("marker_theme", ""),
+                project_task_type_id=values.get("project_task_type_id"),
             )
             self._db.set_task_gantt_estimate(self._task.id, values.get("gantt_estimate_minutes", 0), forecasted=True)
         except ValueError as exc:

@@ -39,5 +39,9 @@ class TaskRoles:
     ActualMinutes = Qt.ItemDataRole.UserRole + 32
     HeaderTotalMinutes = Qt.ItemDataRole.UserRole + 33
     HeaderOverrunMinutes = Qt.ItemDataRole.UserRole + 34
+    ProjectTaskTypeId = Qt.ItemDataRole.UserRole + 35
+    ProjectTaskTypeTitle = Qt.ItemDataRole.UserRole + 36
+    ProjectTaskTypeColor = Qt.ItemDataRole.UserRole + 37
+    ProjectTaskMetaSummary = Qt.ItemDataRole.UserRole + 38
 
 __all__ = ["TaskRoles"]

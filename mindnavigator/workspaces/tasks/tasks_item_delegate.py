@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 
 from ._shared import *  # noqa: F401,F403
-from PySide6.QtGui import QPen
+from PySide6.QtCore import QPersistentModelIndex, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QPen
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import build_popup_menu_stylesheet, get_theme_palette
 from .task_details_dialog import TaskDetailsDialog
@@ -467,6 +468,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         description: str = index.data(TaskRoles.Description) or ""
         project_title: str = index.data(TaskRoles.ProjectTitle) or ""
         project_area: str = index.data(TaskRoles.ProjectArea) or ""
+        project_task_type_title: str = (index.data(TaskRoles.ProjectTaskTypeTitle) or "").strip()
+        project_task_type_color: str = (index.data(TaskRoles.ProjectTaskTypeColor) or "").strip()
+        project_meta_summary: str = (index.data(TaskRoles.ProjectTaskMetaSummary) or "").strip()
         recurrence_kind: str = (index.data(TaskRoles.RecurrenceKind) or "").strip().lower()
         marker_color: str = (index.data(TaskRoles.MarkerColor) or "").strip()
         marker_theme: str = (index.data(TaskRoles.MarkerTheme) or "").strip()
@@ -575,16 +579,40 @@ class TasksItemDelegate(QStyledItemDelegate):
             painter.setFont(self._font_small)
             painter.setPen(self.C_DIM)
             display_project = f"{project_area} / {project_title}" if project_area else project_title
+            if project_task_type_title:
+                display_project = f"{display_project} · {project_task_type_title}"
             if recurrence_kind in {"daily", "weekly", "monthly"}:
                 display_project = f"{display_project} · REC"
             if marker_theme:
                 display_project = f"{display_project} · {marker_theme.upper()}"
+            text_rect = QRect(project_rect)
+            if project_task_type_color and QColor(project_task_type_color).isValid():
+                bracket_rect = QRect(project_rect.left(), project_rect.center().y() - 10, 4, 20)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(project_task_type_color))
+                painter.drawRoundedRect(bracket_rect, 2, 2)
+                painter.setPen(self.C_DIM)
+                text_rect.setLeft(text_rect.left() + 12)
             elided_project = QFontMetrics(self._font_small).elidedText(
                 display_project,
                 Qt.TextElideMode.ElideRight,
-                project_rect.width(),
+                text_rect.width(),
             )
-            painter.drawText(project_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_project)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_project)
+
+        if project_meta_summary:
+            meta_rect = QRect(layout["title"])
+            meta_rect.setTop(meta_rect.bottom() - 15)
+            meta_font = QFont(self._font_small)
+            meta_font.setPointSize(max(7, meta_font.pointSize() - 1))
+            painter.setFont(meta_font)
+            painter.setPen(QColor("#7dd3fc"))
+            elided_meta = QFontMetrics(meta_font).elidedText(
+                project_meta_summary,
+                Qt.TextElideMode.ElideRight,
+                meta_rect.width(),
+            )
+            painter.drawText(meta_rect, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, elided_meta)
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
@@ -971,6 +999,8 @@ class TasksItemDelegate(QStyledItemDelegate):
         menu.addSeparator()
         act_edit = menu.addAction("Редактировать")
         attachment_actions: Dict[QAction, TaskAttachmentData] = {}
+        project_link_actions: Dict[QAction, str] = {}
+        project_task_actions: Dict[QAction, int] = {}
         tasks_model = self._tasks_model(index.model())
         task = tasks_model.task_at_row(index.row()) if tasks_model is not None else None
         if task is not None:
@@ -984,6 +1014,18 @@ class TasksItemDelegate(QStyledItemDelegate):
                     )
                     attachment_actions[action] = attachment
                 menu.addSeparator()
+            if task.project_id is not None:
+                db = get_database()
+                project_menu = menu.addMenu("Проектная информация")
+                for related_task in db.fetch_project_related_tasks(task.project_id)[:8]:
+                    action = project_menu.addAction(f"Задача: MN-{related_task.task_id} {related_task.title}")
+                    project_task_actions[action] = related_task.task_id
+                for caption, fetch_name in (("Repo", "fetch_project_repository_links"), ("Wiki", "fetch_project_wiki_links")):
+                    for link in getattr(db, fetch_name)(task.project_id)[:8]:
+                        action = project_menu.addAction(f"{caption}: {link.title or link.url}")
+                        project_link_actions[action] = link.url
+                if project_menu.isEmpty():
+                    project_menu.setEnabled(False)
         act_del = menu.addAction("Удалить")
 
         chosen = menu.exec(QCursor.pos())
@@ -991,11 +1033,19 @@ class TasksItemDelegate(QStyledItemDelegate):
             self._open_task_view(index)
             return
         if chosen == act_edit:
-            self._edit_task(index)
+            self._schedule_task_edit(index)
             return
         attachment = attachment_actions.get(chosen)
         if attachment is not None:
             self._open_attachment_preview(attachment)
+            return
+        linked_task_id = project_task_actions.get(chosen)
+        if linked_task_id is not None:
+            self._open_linked_project_task(linked_task_id)
+            return
+        linked_url = project_link_actions.get(chosen)
+        if linked_url:
+            QDesktopServices.openUrl(QUrl.fromUserInput(linked_url))
             return
         if chosen != act_del:
             return
@@ -1015,6 +1065,13 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         if tasks_model is not None:
             tasks_model.delete_task_by_row(index.row())
+
+    def _schedule_task_edit(self, index: QModelIndex) -> None:
+        persistent_index = QPersistentModelIndex(index)
+        QTimer.singleShot(
+            0,
+            lambda: self._edit_task(persistent_index) if persistent_index.isValid() else None,
+        )
 
     @staticmethod
     def _attachment_display_name(attachment: TaskAttachmentData) -> str:
@@ -1195,6 +1252,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 ),
                 marker_color=values.get("marker_color", ""),
                 marker_theme=values.get("marker_theme", ""),
+                project_task_type_id=values.get("project_task_type_id"),
             )
             dialog.setProperty("_task_edit_result_applied", True)
             debug_task_dialog(
@@ -1214,6 +1272,14 @@ class TasksItemDelegate(QStyledItemDelegate):
         if tasks_model is None:
             return
         task = tasks_model.task_at_row(index.row())
+        if task is None:
+            return
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        dialog = TaskDetailsDialog(task, parent=parent)
+        exec_with_overlay(dialog, parent)
+
+    def _open_linked_project_task(self, task_id: int) -> None:
+        task = next((item for item in get_database().fetch_tasks() if item.id == int(task_id)), None)
         if task is None:
             return
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
