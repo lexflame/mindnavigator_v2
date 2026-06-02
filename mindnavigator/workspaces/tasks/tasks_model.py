@@ -54,6 +54,7 @@ class TasksModel(QAbstractListModel):
             title=task.title,
             description=task.description,
             priority=task.priority,
+            importance=task.importance,
             done=task.done,
             board_column=task.board_column,
             project_id=task.project_id,
@@ -238,6 +239,8 @@ class TasksModel(QAbstractListModel):
             return task.project_id
         if property_name == "priority":
             return task.priority
+        if property_name == "importance":
+            return task.importance
         if property_name == "marker_theme":
             return task.marker_theme
         if property_name == "day":
@@ -464,6 +467,7 @@ class TasksModel(QAbstractListModel):
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: int = 3,
     ):
         """Добавляет новую задачу и перестраивает текущий список."""
         task = self._db.create_task(
@@ -480,6 +484,7 @@ class TasksModel(QAbstractListModel):
             marker_color=marker_color,
             marker_theme=marker_theme,
             project_task_type_id=project_task_type_id,
+            importance=importance,
         )
         self._all_rows.append(self._row_from_task_data(task))
         self._recompute_plan_meta()
@@ -561,6 +566,7 @@ class TasksModel(QAbstractListModel):
             "day": task.day,
             "time_text": task.time_text,
             "priority": task.priority,
+            "importance": task.importance,
             "done": task.done,
             "project_id": task.project_id,
             "parent_id": task.parent_id,
@@ -607,6 +613,7 @@ class TasksModel(QAbstractListModel):
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: Optional[int] = None,
     ):
         """Обновляет задачу по индексу строки."""
         r = self.task_at_row(row_idx)
@@ -638,6 +645,7 @@ class TasksModel(QAbstractListModel):
             marker_color=marker_color,
             marker_theme=marker_theme,
             project_task_type_id=project_task_type_id,
+            importance=r.importance if importance is None else importance,
         )
         if gantt_estimate_minutes is not None:
             self._db.set_task_gantt_estimate(updated.id, gantt_estimate_minutes, forecasted=True)

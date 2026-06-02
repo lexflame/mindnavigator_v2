@@ -38,6 +38,9 @@ class TaskCreateDialog(TaskEditDialog):
         attachments_frame = self.findChild(QFrame, "TaskAttachments")
         if attachments_frame is not None:
             attachments_frame.hide()
+        images_frame = self.findChild(QFrame, "TaskImages")
+        if images_frame is not None:
+            images_frame.hide()
         buttons = self.findChild(QDialogButtonBox)
         if buttons is not None:
             save_button = buttons.button(QDialogButtonBox.StandardButton.Save)

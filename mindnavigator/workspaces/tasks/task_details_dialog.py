@@ -87,7 +87,7 @@ class _InfoCard(QFrame):
 
 
 class TaskDetailsDialog(QDialog):
-    _DEFAULT_SIZE = QSize(1042, 757)
+    _DEFAULT_SIZE = QSize(1200, 780)
     _PARAM_BREAKPOINTS = ((960, 4), (0, 2))
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
@@ -131,7 +131,7 @@ class TaskDetailsDialog(QDialog):
         self.setProperty("task_dialog_id", int(task.id))
         self.setProperty("task_dialog_kind", "details")
         self.setProperty("dialog_category", "keep_size")
-        self.setMinimumSize(1042, 757)
+        self.setMinimumSize(1100, 700)
         self.resize(self._DEFAULT_SIZE)
 
         self._db = get_database()
@@ -168,12 +168,30 @@ class TaskDetailsDialog(QDialog):
         self.content_layout.setSpacing(12)
 
         self._build_header()
+
+        self.body_columns = QWidget(self.content)
+        body_layout = QHBoxLayout(self.body_columns)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(12)
+        self.left_column = QVBoxLayout()
+        self.left_column.setContentsMargins(0, 0, 0, 0)
+        self.left_column.setSpacing(12)
+        self.right_column = QVBoxLayout()
+        self.right_column.setContentsMargins(0, 0, 0, 0)
+        self.right_column.setSpacing(12)
+        body_layout.addLayout(self.left_column, 1)
+        body_layout.addLayout(self.right_column, 1)
+        self.content_layout.addWidget(self.body_columns, 1)
+
         self._build_description_section()
         self._build_key_params_section()
         self._build_details_section()
         self._build_links_section()
+        self._build_images_section()
+        self._build_concept_board_section()
 
-        self.content_layout.addStretch(1)
+        self.left_column.addStretch(1)
+        self.right_column.addStretch(1)
 
         self.footer = QFrame(self)
         self.footer.setObjectName("TaskDetailsFooter")
@@ -255,7 +273,7 @@ class TaskDetailsDialog(QDialog):
         self.description_body_layout.setContentsMargins(0, 0, 0, 0)
         self.description_body_layout.setSpacing(0)
         self.description_card.layout().addWidget(self.description_body)
-        self.content_layout.addWidget(self.description_card)
+        self.left_column.addWidget(self.description_card, 1)
 
     def _build_key_params_section(self) -> None:
         self.params_card = self._build_section_card("Ключевые параметры")
@@ -267,6 +285,7 @@ class TaskDetailsDialog(QDialog):
         self.date_card = _InfoCard("Дата", self.params_card)
         self.time_card = _InfoCard("Время", self.params_card)
         self.priority_card = _InfoCard("Приоритет", self.params_card)
+        self.importance_card = _InfoCard("Важность", self.params_card)
         self.recurrence_card = _InfoCard("Повтор", self.params_card)
         self.gantt_card = _InfoCard("GANTT", self.params_card)
         self.gantt_edit = GanttEstimateEdit(parent=self.gantt_card)
@@ -278,13 +297,14 @@ class TaskDetailsDialog(QDialog):
             self.date_card,
             self.time_card,
             self.priority_card,
+            self.importance_card,
             self.recurrence_card,
             self.gantt_card,
         ]
         for card in self._param_cards:
             self.params_grid.addWidget(card)
         self.params_card.layout().addLayout(self.params_grid)
-        self.content_layout.addWidget(self.params_card)
+        self.right_column.addWidget(self.params_card)
 
     def _build_details_section(self) -> None:
         self.details_card = self._build_section_card("Детали")
@@ -311,7 +331,7 @@ class TaskDetailsDialog(QDialog):
         for card in self._detail_cards:
             self.details_grid.addWidget(card)
         self.details_card.layout().addLayout(self.details_grid)
-        self.content_layout.addWidget(self.details_card)
+        self.right_column.addWidget(self.details_card)
 
     def _build_links_section(self) -> None:
         self.links_card = QFrame(self.content)
@@ -338,14 +358,68 @@ class TaskDetailsDialog(QDialog):
 
         layout.addLayout(header_layout)
 
+        self.links_toggle = QToolButton(self.links_card)
+        self.links_toggle.setObjectName("TaskDetailsCollapseButton")
+        self.links_toggle.setText("⌄")
+        self.links_toggle.setToolTip("Развернуть связи")
+        self.links_toggle.clicked.connect(lambda: self._toggle_section(self.links_host, self.links_toggle))
+        header_layout.addWidget(self.links_toggle)
+
         self.links_host = QWidget(self.links_card)
         self.links_host.setObjectName("TaskDetailsLinksHost")
         self.attachments_list = QVBoxLayout(self.links_host)
         self.attachments_list.setContentsMargins(0, 0, 0, 0)
         self.attachments_list.setSpacing(8)
         layout.addWidget(self.links_host)
+        self.links_host.setVisible(False)
 
-        self.content_layout.addWidget(self.links_card)
+        self.left_column.addWidget(self.links_card)
+
+    def _build_images_section(self) -> None:
+        self.images_card = QFrame(self.content)
+        self.images_card.setObjectName("TaskDetailsSectionCard")
+        layout = QVBoxLayout(self.images_card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        header_layout = QHBoxLayout()
+        self.images_title = QLabel("Изображения", self.images_card)
+        self.images_title.setObjectName("TaskDetailsSectionTitle")
+        header_layout.addWidget(self.images_title)
+        header_layout.addStretch(1)
+        self.images_toggle = QToolButton(self.images_card)
+        self.images_toggle.setObjectName("TaskDetailsCollapseButton")
+        self.images_toggle.setText("⌄")
+        self.images_toggle.setToolTip("Развернуть изображения")
+        header_layout.addWidget(self.images_toggle)
+        layout.addLayout(header_layout)
+
+        self.images_host = QWidget(self.images_card)
+        self.images_layout = QHBoxLayout(self.images_host)
+        self.images_layout.setContentsMargins(0, 0, 0, 0)
+        self.images_layout.setSpacing(8)
+        layout.addWidget(self.images_host)
+        self.images_host.setVisible(False)
+        self.images_toggle.clicked.connect(lambda: self._toggle_section(self.images_host, self.images_toggle))
+        self.left_column.addWidget(self.images_card)
+
+    def _build_concept_board_section(self) -> None:
+        self.concept_board_card = self._build_section_card("Навигатор концептборда")
+        self.concept_board_summary = QLabel(
+            "Связанные идеи, заметки и объекты образуют маршрут задачи.",
+            self.concept_board_card,
+        )
+        self.concept_board_summary.setObjectName("TaskDetailsLinksEmpty")
+        self.concept_board_summary.setWordWrap(True)
+        self.concept_board_card.layout().addWidget(self.concept_board_summary)
+        self.right_column.addWidget(self.concept_board_card)
+
+    @staticmethod
+    def _toggle_section(body: QWidget, button: QToolButton) -> None:
+        expanded = not body.isVisible()
+        body.setVisible(expanded)
+        button.setText("⌃" if expanded else "⌄")
+        button.setToolTip("Свернуть блок" if expanded else "Развернуть блок")
 
     def _build_section_card(self, title: str) -> QFrame:
         section = QFrame(self.content)
@@ -401,6 +475,19 @@ class TaskDetailsDialog(QDialog):
                 background: {palette.elevated_bg};
                 border: 1px solid {palette.border};
                 border-radius: 10px;
+            }}
+            QToolButton#TaskDetailsCollapseButton,
+            QToolButton#TaskDetailsImageButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 6px 10px;
+            }}
+            QToolButton#TaskDetailsCollapseButton:hover,
+            QToolButton#TaskDetailsImageButton:hover {{
+                border-color: {palette.accent};
+                color: {palette.accent};
             }}
             QLabel {{
                 color: {palette.text};
@@ -570,6 +657,8 @@ class TaskDetailsDialog(QDialog):
         self.time_card.set_value(self._format_empty(self._task.time_text), muted=not bool((self._task.time_text or "").strip()))
         priority_text = self._format_empty(self._task.priority)
         self.priority_card.set_value(priority_text, muted=priority_text == "—")
+        importance = max(1, min(5, int(getattr(self._task, "importance", 3) or 3)))
+        self.importance_card.set_value(f"{'★' * importance}{'☆' * (5 - importance)}")
         recurrence_text = self._format_recurrence()
         self.recurrence_card.set_value(recurrence_text, muted=recurrence_text == "—")
 
@@ -809,6 +898,7 @@ class TaskDetailsDialog(QDialog):
                     "day": values["day"],
                     "time_text": values["time_text"],
                     "priority": values["priority"],
+                    "importance": values.get("importance", int(getattr(self._task, "importance", 3) or 3)),
                     "done": values["done"],
                     "project_id": values["project_id"],
                     "recurrence_kind": values["recurrence_kind"],
@@ -820,27 +910,29 @@ class TaskDetailsDialog(QDialog):
                     "project_task_type_id": values.get("project_task_type_id"),
                 }
                 try:
-                    tasks_model.update_task_by_row(row_idx, **update_kwargs)
-                except TypeError as exc:
-                    if "gantt_estimate_minutes" not in str(exc):
-                        if "project_task_type_id" not in str(exc):
-                            raise
-                        update_kwargs.pop("project_task_type_id", None)
-                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
-                        self._refresh_view()
-                        return
-                    gantt_estimate_minutes = update_kwargs.pop("gantt_estimate_minutes", None)
-                    try:
-                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
-                    except TypeError as second_exc:
-                        if "project_task_type_id" not in str(second_exc):
-                            raise
-                        update_kwargs.pop("project_task_type_id", None)
-                        tasks_model.update_task_by_row(row_idx, **update_kwargs)
-                    if gantt_estimate_minutes is not None:
+                    removed_gantt_minutes = None
+                    while True:
+                        try:
+                            tasks_model.update_task_by_row(row_idx, **update_kwargs)
+                            break
+                        except TypeError as exc:
+                            unsupported = next(
+                                (
+                                    field
+                                    for field in ("gantt_estimate_minutes", "project_task_type_id", "importance")
+                                    if field in str(exc) and field in update_kwargs
+                                ),
+                                None,
+                            )
+                            if unsupported is None:
+                                raise
+                            removed_value = update_kwargs.pop(unsupported, None)
+                            if unsupported == "gantt_estimate_minutes":
+                                removed_gantt_minutes = removed_value
+                    if removed_gantt_minutes is not None:
                         self._db.set_task_gantt_estimate(
                             self._task.id,
-                            int(gantt_estimate_minutes),
+                            int(removed_gantt_minutes),
                             forecasted=True,
                         )
                 except ValueError as exc:
@@ -856,6 +948,7 @@ class TaskDetailsDialog(QDialog):
                 day=values["day"],
                 time_text=values["time_text"],
                 priority=values["priority"],
+                importance=values.get("importance", int(getattr(self._task, "importance", 3) or 3)),
                 done=values["done"],
                 project_id=values["project_id"],
                 parent_id=self._task.parent_id,
@@ -909,12 +1002,14 @@ class TaskDetailsDialog(QDialog):
         self._load_attachment_sources()
         self._attachments = self._db.fetch_task_attachments(self._task.id)
         self._clear_layout(self.attachments_list)
-        if not self._attachments:
+        self._clear_layout(self.images_layout)
+        relation_attachments = [attachment for attachment in self._attachments if attachment.kind != "image"]
+        image_attachments = [attachment for attachment in self._attachments if attachment.kind == "image"]
+        if not relation_attachments:
             empty = QLabel("Нет связанных элементов", self.links_host)
             empty.setObjectName("TaskDetailsLinksEmpty")
             self.attachments_list.addWidget(empty)
-            return
-        for attachment in self._attachments:
+        for attachment in relation_attachments:
             row = QFrame(self.links_host)
             row.setObjectName("TaskAttachmentRow")
             row_layout = QHBoxLayout(row)
@@ -933,6 +1028,18 @@ class TaskDetailsDialog(QDialog):
             row_layout.addWidget(kind_label)
             row_layout.addWidget(link_label, 1)
             self.attachments_list.addWidget(row)
+        if not image_attachments:
+            empty = QLabel("Изображения не прикреплены", self.images_host)
+            empty.setObjectName("TaskDetailsLinksEmpty")
+            self.images_layout.addWidget(empty)
+        for attachment in image_attachments:
+            file_item = self._cloud_files_by_id.get(attachment.ref_id)
+            button = QToolButton(self.images_host)
+            button.setObjectName("TaskDetailsImageButton")
+            button.setText(self._attachment_display_text(attachment))
+            button.setToolTip("Открыть изображение")
+            button.clicked.connect(lambda _checked=False, att=attachment: self._open_attachment(att))
+            self.images_layout.addWidget(button, 1)
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:
@@ -1006,20 +1113,7 @@ class TaskDetailsDialog(QDialog):
             self._open_image_preview(file_item)
             return
         if attachment.kind == "task":
-            task = self._tasks_by_id.get(attachment.ref_id)
-            if not task:
-                QMessageBox.warning(self, "Связи", "Задача не найдена.")
-                return
-            rows = [
-                ("Название", task.title),
-                ("Проект", task.project_title or "—"),
-                ("Дата", task.day.isoformat()),
-                ("Время", task.time_text or "—"),
-                ("Приоритет", task.priority),
-                ("Статус", "Выполнена" if task.done else "Активна"),
-                ("Описание", task.description or "—"),
-            ]
-            self._open_info_dialog("Задача", rows, wrap_rows={"Описание"})
+            self._open_linked_task(attachment.ref_id)
             return
         if attachment.kind == "file":
             file_item = self._cloud_files_by_id.get(attachment.ref_id)

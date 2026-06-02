@@ -42,6 +42,7 @@ class DatabaseTasksMixin:
                 t.title,
                 t.description,
                 t.priority,
+                t.importance,
                 t.board_column,
                 t.done,
                 t.completion_delay_minutes,
@@ -85,6 +86,7 @@ class DatabaseTasksMixin:
                     title=row["title"],
                     description=row["description"] or "",
                     priority=row["priority"],
+                    importance=max(1, min(5, int(row["importance"] or 3))),
                     board_column=normalize_board_column(row["board_column"]),
                     done=bool(row["done"]),
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
@@ -151,6 +153,7 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: int = 3,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -163,6 +166,7 @@ class DatabaseTasksMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
+        importance = max(1, min(5, int(importance or 3)))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
         if plan_order is None:
@@ -208,11 +212,11 @@ class DatabaseTasksMixin:
             cur = self._conn.execute(
                 """
                 INSERT INTO tasks (
-                    title, description, day, time_text, priority, board_column, done, project_id, parent_id,
+                    title, description, day, time_text, priority, importance, board_column, done, project_id, parent_id,
                     recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
                     project_task_type_id, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -220,6 +224,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    importance,
                     board_column,
                     project_id,
                     parent_id,
@@ -251,6 +256,7 @@ class DatabaseTasksMixin:
             title=title,
             description=description,
             priority=priority,
+            importance=importance,
             done=False,
             board_column=board_column,
             project_id=project_id,
@@ -290,11 +296,12 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: Optional[int] = None,
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
             """
-            SELECT priority, board_column, parent_id, is_plan_task, plan_order, postponed_reason,
+            SELECT priority, importance, board_column, parent_id, is_plan_task, plan_order, postponed_reason,
                    postponed_by_project_task_type_id
             FROM tasks
             WHERE id = ?;
@@ -302,6 +309,7 @@ class DatabaseTasksMixin:
             (task_id,),
         ).fetchone()
         prev_priority = prev_row["priority"] if prev_row else priority
+        prev_importance = int(prev_row["importance"] or 3) if prev_row else 3
         prev_board_column = prev_row["board_column"] if prev_row else BOARD_COLUMN_QUEUE
         prev_parent_id = prev_row["parent_id"] if prev_row else parent_id
         prev_plan_root_id = self._plan_root_id_for_parent(prev_parent_id)
@@ -311,6 +319,9 @@ class DatabaseTasksMixin:
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
+        if importance is None:
+            importance = prev_importance
+        importance = max(1, min(5, int(importance or 3)))
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
         if is_plan_task is None:
@@ -379,7 +390,7 @@ class DatabaseTasksMixin:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, importance = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
                     recurrence_kind = ?, recurrence_interval = ?, is_plan_task = ?, plan_order = ?, marker_color = ?, marker_theme = ?,
                     project_task_type_id = ?, updated_at = ?
                 WHERE id = ?;
@@ -390,6 +401,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    importance,
                     board_column,
                     int(done),
                     project_id,
@@ -445,6 +457,7 @@ class DatabaseTasksMixin:
             title=title,
             description=description,
             priority=priority,
+            importance=importance,
             done=bool(done),
             board_column=board_column,
             project_id=project_id,

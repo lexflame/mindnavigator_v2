@@ -200,7 +200,7 @@ class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
     _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
     _USE_SAVED_SIZE = False
-    _DEFAULT_SIZE = QSize(1042, 757)
+    _DEFAULT_SIZE = QSize(1200, 780)
     _LABEL_WIDTH = 138
 
     def __init__(self, task: TaskRow, parent=None):
@@ -214,7 +214,7 @@ class TaskEditDialog(QDialog):
         self.setProperty("task_dialog_id", int(task.id))
         self.setProperty("task_dialog_kind", "edit")
         self.setProperty("dialog_category", "keep_size")
-        self.setMinimumSize(640, 520)
+        self.setMinimumSize(1100, 700)
         self._db = get_database()
         self._task = task
         self._is_plan_item = self._resolve_plan_item_state(task.id)
@@ -449,6 +449,19 @@ class TaskEditDialog(QDialog):
             has_descendant_tasks,
         )
 
+        self.importance_edit = QComboBox()
+        for importance in range(1, 6):
+            self.importance_edit.addItem(f"{'★' * importance}{'☆' * (5 - importance)}", importance)
+        importance_idx = self.importance_edit.findData(max(1, min(5, int(getattr(task, "importance", 3) or 3))))
+        self.importance_edit.setCurrentIndex(max(0, importance_idx))
+        self.importance_property_group = self._create_property_group(
+            "importance",
+            "Важность",
+            self.importance_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
+
         self.marker_color_edit = QComboBox()
         self.marker_color_edit.addItem("Нет", "")
         self.marker_color_edit.addItem("Синий", "#2f6edb")
@@ -530,6 +543,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label(""), schedule_group_row)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label(""), self.priority_property_group)
+        form.addRow(self._make_form_label(""), self.importance_property_group)
         form.addRow(self._make_form_label(""), self.marker_color_property_group)
         form.addRow(self._make_form_label(""), self.marker_theme_property_group)
         form.addRow(self._make_form_label("GANTT"), self.gantt_estimate_edit)
@@ -580,6 +594,33 @@ class TaskEditDialog(QDialog):
         attachments_scroll.setWidget(attachments_host)
         attachments_layout.addWidget(attachments_scroll)
         layout.addWidget(attachments_frame)
+
+        images_frame = QFrame()
+        images_frame.setObjectName("TaskImages")
+        images_layout = QVBoxLayout(images_frame)
+        images_layout.setContentsMargins(12, 10, 12, 10)
+        images_layout.setSpacing(8)
+
+        images_header = QHBoxLayout()
+        images_title = QLabel("Изображения")
+        images_title.setObjectName("TaskAttachmentsTitle")
+        self.images_add_btn = QToolButton()
+        self.images_add_btn.setText("+ Прикрепить")
+        self.images_add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.images_add_btn.clicked.connect(self._open_attachment_dialog)
+        images_header.addWidget(images_title)
+        images_header.addStretch(1)
+        images_header.addWidget(self.images_add_btn)
+        images_layout.addLayout(images_header)
+
+        images_host = QWidget()
+        images_host.setObjectName("TaskImagesHost")
+        self.images_list = QVBoxLayout(images_host)
+        self.images_list.setContentsMargins(0, 0, 0, 0)
+        self.images_list.setSpacing(6)
+        self.images_list.setAlignment(Qt.AlignmentFlag.AlignTop)
+        images_layout.addWidget(images_host)
+        layout.addWidget(images_frame)
 
         self._load_attachment_sources()
         self._refresh_attachments()
@@ -823,7 +864,8 @@ class TaskEditDialog(QDialog):
                 color: #ffffff;
             }}
 
-            QDialog#TaskEditDialog QFrame#TaskAttachments {{
+            QDialog#TaskEditDialog QFrame#TaskAttachments,
+            QDialog#TaskEditDialog QFrame#TaskImages {{
                 background: #1c1d22;
                 border: 1px solid {palette.border};
                 border-radius: 10px;
@@ -835,7 +877,8 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QScrollArea#TaskAttachmentsScroll,
-            QDialog#TaskEditDialog QWidget#TaskAttachmentsHost {{
+            QDialog#TaskEditDialog QWidget#TaskAttachmentsHost,
+            QDialog#TaskEditDialog QWidget#TaskImagesHost {{
                 background: transparent;
             }}
 
@@ -992,6 +1035,8 @@ class TaskEditDialog(QDialog):
             return self.project_edit.currentData()
         if property_name == "priority":
             return self.priority_edit.currentText().strip() or "Medium"
+        if property_name == "importance":
+            return int(self.importance_edit.currentData() or 3)
         if property_name == "marker_color":
             return self.marker_color_edit.currentData() or ""
         if property_name == "marker_theme":
@@ -1559,11 +1604,17 @@ class TaskEditDialog(QDialog):
         self._load_attachment_sources()
         self._attachments = self._db.fetch_task_attachments(self._task_id)
         self._clear_layout(self.attachments_list)
-        if not self._attachments:
+        self._clear_layout(self.images_list)
+        relation_attachments = [attachment for attachment in self._attachments if attachment.kind != "image"]
+        image_attachments = [attachment for attachment in self._attachments if attachment.kind == "image"]
+        if not relation_attachments:
             empty = QLabel("Нет связанных элементов")
             empty.setStyleSheet("color: #8a8a8a;")
             self.attachments_list.addWidget(empty)
-            return
+        if not image_attachments:
+            empty = QLabel("Изображения не прикреплены")
+            empty.setStyleSheet("color: #8a8a8a;")
+            self.images_list.addWidget(empty)
         for attachment in self._attachments:
             row = QFrame()
             row.setObjectName("TaskAttachmentRow")
@@ -1589,7 +1640,8 @@ class TaskEditDialog(QDialog):
             row_layout.addWidget(kind_label)
             row_layout.addWidget(link_label, 1)
             row_layout.addWidget(remove_btn)
-            self.attachments_list.addWidget(row)
+            target_layout = self.images_list if attachment.kind == "image" else self.attachments_list
+            target_layout.addWidget(row)
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:
@@ -1846,20 +1898,7 @@ class TaskEditDialog(QDialog):
             self._open_image_preview(file_item)
             return
         if attachment.kind == "task":
-            task = self._tasks_by_id.get(attachment.ref_id)
-            if not task:
-                QMessageBox.warning(self, "Связи", "Задача не найдена.")
-                return
-            rows = [
-                ("Название", task.title),
-                ("Проект", task.project_title or "—"),
-                ("Дата", task.day.isoformat()),
-                ("Время", task.time_text or "—"),
-                ("Приоритет", task.priority),
-                ("Статус", "Выполнена" if task.done else "Активна"),
-                ("Описание", task.description or "—"),
-            ]
-            self._open_info_dialog("Задача", rows, wrap_rows={"Описание"})
+            self._open_linked_task(attachment.ref_id)
             return
         if attachment.kind == "file":
             file_item = self._cloud_files_by_id.get(attachment.ref_id)
@@ -2055,6 +2094,7 @@ class TaskEditDialog(QDialog):
             "day": day,
             "time_text": time_text,
             "priority": self.priority_edit.currentText().strip() or "Medium",
+            "importance": int(self.importance_edit.currentData() or 3),
             "done": self.done_edit.isChecked(),
             "project_id": self.project_edit.currentData(),
             "project_task_type_id": self.project_task_type_edit.currentData(),
@@ -2068,7 +2108,7 @@ class TaskEditDialog(QDialog):
         debug_task_dialog(
             f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
             f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
-            f"priority={payload['priority']!r} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
+            f"priority={payload['priority']!r} importance={payload['importance']} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
             f"project_id={payload['project_id']} project_task_type_id={payload['project_task_type_id']} "
             f"recurrence={payload['recurrence_kind']!r} is_plan_task={payload['is_plan_task']} marker_color={payload['marker_color']!r} "
             f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
@@ -2082,7 +2122,7 @@ class TaskEditDialog(QDialog):
         day = date(qd.year(), qd.month(), qd.day()).isoformat()
         return (
             f"title={title!r} day={day} time={self._current_time_text()!r} "
-            f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
+            f"priority={self.priority_edit.currentText()!r} importance={self.importance_edit.currentData()!r} done={self.done_edit.isChecked()} "
             f"gantt={self.gantt_estimate_edit.minutes()} "
             f"project_id={self.project_edit.currentData()} project_task_type_id={self.project_task_type_edit.currentData()} "
             f"is_plan_task={self.plan_task_edit.isChecked()} "

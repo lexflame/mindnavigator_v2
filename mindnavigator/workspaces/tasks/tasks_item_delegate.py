@@ -1241,6 +1241,10 @@ class TasksItemDelegate(QStyledItemDelegate):
                 day=values["day"],
                 time_text=values["time_text"],
                 priority=values["priority"],
+                importance=values.get(
+                    "importance",
+                    int(getattr(current_task, "importance", 3) or 3) if current_task is not None else 3,
+                ),
                 done=values["done"],
                 project_id=values["project_id"],
                 recurrence_kind=values["recurrence_kind"],

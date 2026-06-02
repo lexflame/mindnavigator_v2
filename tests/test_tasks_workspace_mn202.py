@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QScrollArea, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QScrollArea, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -760,19 +760,22 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
         attachments_title = dialog.findChild(QLabel, "TaskAttachmentsTitle")
         buttons = dialog.findChild(QDialogButtonBox)
         content_scroll = dialog.findChild(QScrollArea, "TaskDialogScroll")
+        images_frame = dialog.findChild(QFrame, "TaskImages")
         assert attachments_title is not None
         assert buttons is not None
         assert content_scroll is not None
-        assert dialog.minimumWidth() == 640
-        assert dialog.minimumHeight() == 520
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert images_frame is not None
+        assert dialog.minimumWidth() == 1100
+        assert dialog.minimumHeight() == 700
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
         assert dialog.minimumSizeHint().height() <= dialog._DEFAULT_SIZE.height()
         assert dialog.header_bar.title_label.text() == "Задача"
         assert dialog.plan_task_edit.text() == "План"
         assert dialog.time_toggle.text() == ""
         assert attachments_title.text() == "Связи"
         assert dialog.attachments_add_btn.text() == "+ Добавить"
+        assert dialog.images_add_btn.text() == "+ Прикрепить"
         assert buttons.button(QDialogButtonBox.StandardButton.Save).text() == "Сохранить"
         assert buttons.button(QDialogButtonBox.StandardButton.Cancel).text() == "Отмена"
     finally:
@@ -962,11 +965,15 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
 
         empty_description = dialog.findChild(QLabel, "TaskDetailsDescriptionEmpty")
         empty_links = dialog.findChild(QLabel, "TaskDetailsLinksEmpty")
-        assert dialog.minimumWidth() == 1042
-        assert dialog.minimumHeight() == 757
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert dialog.minimumWidth() == 1100
+        assert dialog.minimumHeight() == 700
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
         assert dialog.links_title.text() == "Связи"
+        assert dialog.images_title.text() == "Изображения"
+        assert dialog.links_host.isHidden()
+        assert dialog.images_host.isHidden()
+        assert dialog.concept_board_summary.text() == "Связанные идеи, заметки и объекты образуют маршрут задачи."
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
         assert dialog.header_edit_button.text() == "Редактировать"
@@ -978,6 +985,7 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert empty_links is not None
         assert empty_links.text() == "Нет связанных элементов"
         assert dialog.time_card.value_label.text() == "—"
+        assert dialog.importance_card.value_label.text() == "★★★☆☆"
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.links_add_button.isEnabled() is False
@@ -1111,8 +1119,8 @@ def test_task_edit_dialog_ignores_saved_shared_size_setting(monkeypatch, unique_
 
         dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
 
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1162,8 +1170,8 @@ def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, un
 
         dialog = tasks_workspace.TaskCreateDialog()
 
-        assert dialog.width() == 820
-        assert dialog.height() == 610
+        assert dialog.width() == 1100
+        assert dialog.height() == 700
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1183,7 +1191,7 @@ def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch
         dialog.resize(790, 600)
         dialog.close()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "790x600"
+        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1204,7 +1212,7 @@ def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monk
         dialog.title_edit.setText("Accepted task")
         dialog._on_accept()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "680x560"
+        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
     finally:
         if dialog is not None:
             dialog.deleteLater()

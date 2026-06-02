@@ -292,8 +292,8 @@ def test_task_edit_dialog_is_clamped_to_compact_max_size() -> None:
     dialog.resize(1450, 812)
     try:
         _fit_minimizable_task_dialog_size(dialog, window)
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
     finally:
         dialog.deleteLater()
         window.deleteLater()
@@ -484,10 +484,10 @@ def test_task_details_dialog_uses_larger_non_minimizable_geometry(monkeypatch) -
         dialog.show()
         QApplication.processEvents()
         assert dialog.property("task_dialog_minimizable") is False
-        assert dialog.minimumWidth() == 1042
-        assert dialog.minimumHeight() == 757
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert dialog.minimumWidth() == 1100
+        assert dialog.minimumHeight() == 700
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
     finally:

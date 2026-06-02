@@ -14,6 +14,7 @@ class TaskData:
     priority: str
     done: bool
     board_column: str = "queue"
+    importance: int = 3
     project_id: Optional[int] = None
     project_title: str = ""
     project_area: str = ""

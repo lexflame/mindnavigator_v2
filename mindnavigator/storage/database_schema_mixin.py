@@ -19,6 +19,7 @@ class DatabaseSchemaMixin:
                     day TEXT NOT NULL,
                     time_text TEXT NOT NULL DEFAULT '',
                     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                    importance INTEGER NOT NULL DEFAULT 3 CHECK (importance BETWEEN 1 AND 5),
                     board_column TEXT NOT NULL DEFAULT 'queue' CHECK (board_column IN ('deferred', 'queue', 'in_progress', 'completed')),
                     done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                     completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
@@ -680,11 +681,13 @@ class DatabaseSchemaMixin:
             MigrationStep(10, "idea_category_schema", self._migration_v10_idea_category_schema),
             MigrationStep(11, "concept_board_schema", self._migration_v11_concept_board_schema),
             MigrationStep(12, "idea_relation_kind_schema", self._migration_v12_idea_relation_kind_schema),
+            MigrationStep(13, "task_importance_schema", self._migration_v13_task_importance_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
         self._ensure_project_property_schema()
         self._ensure_task_project_property_columns()
+        self._ensure_task_importance_column()
 
     def apply_schema_updates(self) -> int:
         """Применяет все доступные миграции схемы и возвращает user_version."""
@@ -770,6 +773,10 @@ class DatabaseSchemaMixin:
     def _migration_v12_idea_relation_kind_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds typed relation semantics to idea links without breaking legacy rows."""
         self._ensure_idea_relation_schema()
+
+    def _migration_v13_task_importance_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds the independent task importance rating."""
+        self._ensure_task_importance_column()
 
     def _migration_v10_idea_category_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds editable idea categories and removes the fixed status CHECK."""
@@ -1190,6 +1197,14 @@ class DatabaseSchemaMixin:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_color TEXT NOT NULL DEFAULT '';")
             if "marker_theme" not in names:
                 self._conn.execute("ALTER TABLE tasks ADD COLUMN marker_theme TEXT NOT NULL DEFAULT '';")
+
+    def _ensure_task_importance_column(self) -> None:
+        """Adds the independent task importance rating if it is absent."""
+        columns = self._conn.execute("PRAGMA table_info(tasks);").fetchall()
+        names = {row["name"] for row in columns}
+        if "importance" not in names:
+            with self._conn:
+                self._conn.execute("ALTER TABLE tasks ADD COLUMN importance INTEGER NOT NULL DEFAULT 3;")
 
     def _ensure_project_property_schema(self) -> None:
         """Создает таблицы множественных свойств проекта."""
@@ -1750,6 +1765,7 @@ class DatabaseSchemaMixin:
                 day TEXT NOT NULL,
                 time_text TEXT NOT NULL DEFAULT '',
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Отложенная')),
+                importance INTEGER NOT NULL DEFAULT 3 CHECK (importance BETWEEN 1 AND 5),
                 board_column TEXT NOT NULL DEFAULT 'queue' CHECK (board_column IN ('deferred', 'queue', 'in_progress', 'completed')),
                 done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
                 completion_delay_minutes INTEGER NOT NULL DEFAULT 0 CHECK (completion_delay_minutes >= 0),
@@ -1777,11 +1793,12 @@ class DatabaseSchemaMixin:
         self._conn.execute(
             f"""
             INSERT INTO tasks (
-                id, title, description, day, time_text, priority, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
+                id, title, description, day, time_text, priority, importance, board_column, done, completion_delay_minutes, gantt_estimate_minutes,
                 gantt_forecasted, started_at, finished_at, actual_minutes, project_id, parent_id, recurrence_kind, recurrence_interval, is_plan_task, plan_order,
                 marker_color, marker_theme, project_task_type_id, postponed_reason, postponed_by_project_task_type_id, created_at, updated_at
             )
             SELECT id, title, {_source("description", "''")}, day, time_text, {self._priority_normalize_sql("priority")},
+                   MIN(5, MAX(1, COALESCE({_source("importance", "3")}, 3))),
                    CASE
                        WHEN COALESCE({_source("board_column", "''")}, '') IN ('{BOARD_COLUMN_DEFERRED}', '{BOARD_COLUMN_QUEUE}', '{BOARD_COLUMN_IN_PROGRESS}', '{BOARD_COLUMN_COMPLETED}') THEN {_source("board_column", "''")}
                        ELSE '{BOARD_COLUMN_QUEUE}'
