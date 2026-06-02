@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QScrollArea, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -776,6 +776,12 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
         assert attachments_title.text() == "Связи"
         assert dialog.attachments_add_btn.text() == "+ Добавить"
         assert dialog.images_add_btn.text() == "+ Прикрепить"
+        dialog.description_edit.setPlainText("format")
+        cursor = dialog.description_edit.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        dialog.description_edit.setTextCursor(cursor)
+        dialog._wrap_description_selection("**", "**")
+        assert dialog.description_edit.toPlainText() == "**format**"
         assert buttons.button(QDialogButtonBox.StandardButton.Save).text() == "Сохранить"
         assert buttons.button(QDialogButtonBox.StandardButton.Cancel).text() == "Отмена"
     finally:
@@ -994,6 +1000,43 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 2
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
         assert dialog._columns_for_width(1000, dialog._DETAIL_BREAKPOINTS, default=6) == 3
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_inline_edit", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task("Inline source", "Old body", date(2026, 3, 6), "", "Medium")
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        dialog = task_details_dialog.TaskDetailsDialog(task)
+
+        dialog.title_inline.begin_edit()
+        dialog.title_inline.editor.setText("Inline title")
+        dialog.title_inline.commit()
+        dialog.importance_inline.begin_edit()
+        dialog.importance_inline.editor.setCurrentIndex(4)
+        dialog.importance_inline.commit()
+        dialog.status_inline.begin_edit()
+        dialog.status_inline.editor.setCurrentIndex(1)
+        dialog.status_inline.commit()
+        dialog._begin_description_inline_edit()
+        description_editor = dialog.findChild(QPlainTextEdit, "TaskDetailsDescriptionInlineEdit")
+        assert description_editor is not None
+        description_editor.setPlainText("Inline body")
+        dialog._save_inline_updates(description=description_editor.toPlainText())
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.title == "Inline title"
+        assert updated.importance == 5
+        assert updated.done is True
+        assert updated.description == "Inline body"
     finally:
         if dialog is not None:
             dialog.deleteLater()

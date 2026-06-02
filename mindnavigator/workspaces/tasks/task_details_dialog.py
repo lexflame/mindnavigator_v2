@@ -15,6 +15,81 @@ from .task_edit_dialog import TaskEditDialog
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
 
+class _InlineViewLabel(QLabel):
+    edit_requested = Signal()
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.edit_requested.emit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+class InlineEditableField(QStackedWidget):
+    value_committed = Signal(object)
+
+    def __init__(self, editor: QWidget, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("TaskInlineEditableField")
+        self.view_label = _InlineViewLabel("", self)
+        self.view_label.setObjectName("TaskInlineViewLabel")
+        self.view_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.view_label.edit_requested.connect(self.begin_edit)
+        self.editor = editor
+
+        edit_host = QWidget(self)
+        edit_layout = QHBoxLayout(edit_host)
+        edit_layout.setContentsMargins(0, 0, 0, 0)
+        edit_layout.setSpacing(6)
+        edit_layout.addWidget(editor, 1)
+        save_button = QToolButton(edit_host)
+        save_button.setText("✓")
+        save_button.setToolTip("Сохранить")
+        save_button.clicked.connect(self.commit)
+        edit_layout.addWidget(save_button)
+        cancel_button = QToolButton(edit_host)
+        cancel_button.setText("×")
+        cancel_button.setToolTip("Отменить")
+        cancel_button.clicked.connect(self.cancel)
+        edit_layout.addWidget(cancel_button)
+
+        self.addWidget(self.view_label)
+        self.addWidget(edit_host)
+        self.setCurrentIndex(0)
+
+    def set_value(self, value: object, display_text: str | None = None) -> None:
+        if isinstance(self.editor, QLineEdit):
+            self.editor.setText(str(value or ""))
+        elif isinstance(self.editor, QComboBox):
+            index = self.editor.findData(value)
+            if index >= 0:
+                self.editor.setCurrentIndex(index)
+        elif isinstance(self.editor, QDateEdit) and isinstance(value, date):
+            self.editor.setDate(QDate(value.year, value.month, value.day))
+        self.view_label.setText(display_text if display_text is not None else str(value or "—"))
+
+    def begin_edit(self) -> None:
+        self.setCurrentIndex(1)
+        self.editor.setFocus()
+
+    def cancel(self) -> None:
+        self.setCurrentIndex(0)
+
+    def commit(self) -> None:
+        if isinstance(self.editor, QLineEdit):
+            value: object = self.editor.text().strip()
+        elif isinstance(self.editor, QComboBox):
+            value = self.editor.currentData()
+        elif isinstance(self.editor, QDateEdit):
+            selected = self.editor.date()
+            value = date(selected.year(), selected.month(), selected.day())
+        else:
+            return
+        self.value_committed.emit(value)
+        self.setCurrentIndex(0)
+
+
 class _InfoCard(QFrame):
     def __init__(self, title: str, parent: QWidget | None = None, *, accent_dot: bool = False) -> None:
         super().__init__(parent)
@@ -55,20 +130,25 @@ class _InfoCard(QFrame):
         self.value_label.setWordWrap(True)
         value_row.addWidget(self.value_label, 1)
         value_row.addStretch(0)
+        self._custom_value_widget = False
 
         layout.addLayout(value_row)
 
     def set_value(self, value: str, *, muted: bool = False) -> None:
         self.value_label.setText(value)
-        self.value_label.setVisible(True)
+        self.value_label.setVisible(not self._custom_value_widget)
         self.value_label.setProperty("muted", bool(muted))
         self.value_label.style().unpolish(self.value_label)
         self.value_label.style().polish(self.value_label)
         self.value_label.update()
 
     def set_value_widget(self, widget: QWidget) -> None:
+        self._custom_value_widget = True
         self.value_label.hide()
         self.value_row.insertWidget(1, widget, 1)
+
+    def set_inline_editor(self, field: InlineEditableField) -> None:
+        self.set_value_widget(field)
 
     def set_dot_color(self, color: str) -> None:
         normalized = (color or "").strip()
@@ -229,10 +309,13 @@ class TaskDetailsDialog(QDialog):
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(12)
 
-        self.title_label = QLabel("", self.header_card)
-        self.title_label.setObjectName("TaskDetailsTitle")
-        self.title_label.setWordWrap(True)
-        title_row.addWidget(self.title_label, 1)
+        self.title_inline = InlineEditableField(QLineEdit(self.header_card), self.header_card)
+        self.title_inline.setObjectName("TaskDetailsTitleInline")
+        self.title_inline.view_label.setObjectName("TaskDetailsTitle")
+        self.title_inline.view_label.setWordWrap(True)
+        self.title_label = self.title_inline.view_label
+        self.title_inline.value_committed.connect(lambda value: self._save_inline_updates(title=str(value)))
+        title_row.addWidget(self.title_inline, 1)
 
         self.header_edit_button = QToolButton(self.header_card)
         self.header_edit_button.setObjectName("TaskDetailsHeaderEditButton")
@@ -287,6 +370,36 @@ class TaskDetailsDialog(QDialog):
         self.priority_card = _InfoCard("Приоритет", self.params_card)
         self.importance_card = _InfoCard("Важность", self.params_card)
         self.recurrence_card = _InfoCard("Повтор", self.params_card)
+        self.status_card = _InfoCard("Статус", self.params_card)
+        self.priority_inline = InlineEditableField(QComboBox(self.priority_card), self.priority_card)
+        for label, value in (("Высокий", "High"), ("Средний", "Medium"), ("Низкий", "Low"), ("Отложенная", DEFERRED_PRIORITY)):
+            self.priority_inline.editor.addItem(label, value)
+        self.priority_inline.value_committed.connect(lambda value: self._save_inline_updates(priority=str(value)))
+        self.priority_card.set_inline_editor(self.priority_inline)
+        self.importance_inline = InlineEditableField(QComboBox(self.importance_card), self.importance_card)
+        for value in range(1, 6):
+            self.importance_inline.editor.addItem(f"{'★' * value}{'☆' * (5 - value)}", value)
+        self.importance_inline.value_committed.connect(lambda value: self._save_inline_updates(importance=int(value)))
+        self.importance_card.set_inline_editor(self.importance_inline)
+        date_editor = QDateEdit(self.date_card)
+        date_editor.setCalendarPopup(True)
+        self.date_inline = InlineEditableField(date_editor, self.date_card)
+        self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
+        self.date_card.set_inline_editor(self.date_inline)
+        self.time_inline = InlineEditableField(QLineEdit(self.time_card), self.time_card)
+        self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
+        self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
+        self.time_card.set_inline_editor(self.time_inline)
+        self.recurrence_inline = InlineEditableField(QComboBox(self.recurrence_card), self.recurrence_card)
+        for label, value in (("Без повтора", ""), ("Ежедневно", "daily"), ("Еженедельно", "weekly"), ("Ежемесячно", "monthly")):
+            self.recurrence_inline.editor.addItem(label, value)
+        self.recurrence_inline.value_committed.connect(lambda value: self._save_inline_updates(recurrence_kind=str(value)))
+        self.recurrence_card.set_inline_editor(self.recurrence_inline)
+        self.status_inline = InlineEditableField(QComboBox(self.status_card), self.status_card)
+        self.status_inline.editor.addItem("Активна", False)
+        self.status_inline.editor.addItem("Выполнена", True)
+        self.status_inline.value_committed.connect(lambda value: self._save_inline_updates(done=bool(value)))
+        self.status_card.set_inline_editor(self.status_inline)
         self.gantt_card = _InfoCard("GANTT", self.params_card)
         self.gantt_edit = GanttEstimateEdit(parent=self.gantt_card)
         self.gantt_edit.setObjectName("TaskDetailsGanttEdit")
@@ -299,6 +412,7 @@ class TaskDetailsDialog(QDialog):
             self.priority_card,
             self.importance_card,
             self.recurrence_card,
+            self.status_card,
             self.gantt_card,
         ]
         for card in self._param_cards:
@@ -320,6 +434,16 @@ class TaskDetailsDialog(QDialog):
         self.detail_type_card = _InfoCard("Тип", self.details_card)
         self.detail_marker_card = _InfoCard("Маркер", self.details_card, accent_dot=True)
         self.detail_theme_card = _InfoCard("Тема маркера", self.details_card)
+        self.marker_color_inline = InlineEditableField(QComboBox(self.detail_marker_card), self.detail_marker_card)
+        for value, label in self._MARKER_COLOR_LABELS.items():
+            self.marker_color_inline.editor.addItem(label, value)
+        self.marker_color_inline.value_committed.connect(lambda value: self._save_inline_updates(marker_color=str(value)))
+        self.detail_marker_card.set_inline_editor(self.marker_color_inline)
+        self.marker_theme_inline = InlineEditableField(QComboBox(self.detail_theme_card), self.detail_theme_card)
+        for value, label in self._MARKER_THEME_LABELS.items():
+            self.marker_theme_inline.editor.addItem(label, value)
+        self.marker_theme_inline.value_committed.connect(lambda value: self._save_inline_updates(marker_theme=str(value)))
+        self.detail_theme_card.set_inline_editor(self.marker_theme_inline)
         self._detail_cards = [
             self.detail_id_card,
             self.detail_project_card,
@@ -648,19 +772,30 @@ class TaskDetailsDialog(QDialog):
     def _refresh_view(self) -> None:
         self._refresh_task_data()
         title = self._format_title()
-        self.title_label.setText(title)
+        self.title_inline.set_value(title, title)
         self.setWindowTitle(title)
         self.summary_label.setText(self._build_summary_line())
         self._apply_status_badges()
         self._refresh_description()
-        self.date_card.set_value(self._task.day.isoformat() if isinstance(self._task.day, date) else "—")
-        self.time_card.set_value(self._format_empty(self._task.time_text), muted=not bool((self._task.time_text or "").strip()))
+        date_text = self._task.day.isoformat() if isinstance(self._task.day, date) else "—"
+        self.date_card.set_value(date_text)
+        self.date_inline.set_value(self._task.day, date_text)
+        time_text = self._format_empty(self._task.time_text)
+        self.time_card.set_value(time_text, muted=not bool((self._task.time_text or "").strip()))
+        self.time_inline.set_value(self._task.time_text, time_text)
         priority_text = self._format_empty(self._task.priority)
         self.priority_card.set_value(priority_text, muted=priority_text == "—")
+        self.priority_inline.set_value(self._task.priority, priority_text)
         importance = max(1, min(5, int(getattr(self._task, "importance", 3) or 3)))
-        self.importance_card.set_value(f"{'★' * importance}{'☆' * (5 - importance)}")
+        importance_text = f"{'★' * importance}{'☆' * (5 - importance)}"
+        self.importance_card.set_value(importance_text)
+        self.importance_inline.set_value(importance, importance_text)
         recurrence_text = self._format_recurrence()
         self.recurrence_card.set_value(recurrence_text, muted=recurrence_text == "—")
+        self.recurrence_inline.set_value(self._task.recurrence_kind, recurrence_text)
+        status_text = "Выполнена" if self._task.done else "Активна"
+        self.status_card.set_value(status_text)
+        self.status_inline.set_value(bool(self._task.done), status_text)
 
         project_text = self._project_text(fallback="Без проекта")
         self.gantt_edit.set_minutes(self._effective_gantt_estimate_minutes())
@@ -675,6 +810,8 @@ class TaskDetailsDialog(QDialog):
         self.detail_marker_card.set_value(marker_text, muted=marker_text == "Нет")
         self.detail_marker_card.set_dot_color((self._task.marker_color or "").strip())
         self.detail_theme_card.set_value(marker_theme_text, muted=marker_theme_text == "Нет")
+        self.marker_color_inline.set_value(self._task.marker_color, marker_text)
+        self.marker_theme_inline.set_value(self._task.marker_theme, marker_theme_text)
 
         self._refresh_attachments()
         self._reflow_cards()
@@ -765,12 +902,68 @@ class TaskDetailsDialog(QDialog):
             empty = QLabel("Нет описания", self.description_body)
             empty.setObjectName("TaskDetailsDescriptionEmpty")
             empty.setContentsMargins(14, 14, 14, 14)
+            empty.installEventFilter(self)
             self.description_body_layout.addWidget(empty)
             return
         preview = _build_markdown_preview_widget(description, self.description_body, self._open_linked_task)
         preview.setContentsMargins(14, 14, 14, 14)
         preview.setMaximumHeight(112)
+        preview.installEventFilter(self)
         self.description_body_layout.addWidget(preview)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if (
+            event.type() == QEvent.Type.MouseButtonDblClick
+            and watched.parent() is self.description_body
+        ):
+            self._begin_description_inline_edit()
+            return True
+        return super().eventFilter(watched, event)
+
+    def _begin_description_inline_edit(self) -> None:
+        self._clear_layout(self.description_body_layout)
+        editor = QPlainTextEdit(self._task.description or "", self.description_body)
+        editor.setObjectName("TaskDetailsDescriptionInlineEdit")
+        editor.setMinimumHeight(112)
+        self.description_body_layout.addWidget(editor)
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        cancel_button = QPushButton("Отмена", self.description_body)
+        cancel_button.clicked.connect(self._refresh_description)
+        button_row.addWidget(cancel_button)
+        save_button = QPushButton("Сохранить", self.description_body)
+        save_button.clicked.connect(lambda: self._save_inline_updates(description=editor.toPlainText().strip()))
+        button_row.addWidget(save_button)
+        self.description_body_layout.addLayout(button_row)
+        editor.setFocus()
+
+    def _save_inline_updates(self, **changes) -> None:
+        payload = {
+            "title": self._task.title,
+            "description": self._task.description,
+            "day": self._task.day,
+            "time_text": self._task.time_text,
+            "priority": self._task.priority,
+            "done": self._task.done,
+            "project_id": self._task.project_id,
+            "parent_id": self._task.parent_id,
+            "recurrence_kind": self._task.recurrence_kind,
+            "recurrence_interval": self._task.recurrence_interval,
+            "is_plan_task": self._task.is_plan_task,
+            "plan_order": self._task.plan_order,
+            "marker_color": self._task.marker_color,
+            "marker_theme": self._task.marker_theme,
+            "project_task_type_id": self._task.project_task_type_id,
+            "importance": self._task.importance,
+        }
+        payload.update(changes)
+        try:
+            self._db.update_task(task_id=self._task.id, **payload)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Проверка", str(exc))
+            return
+        self._refresh_view()
+        self._refresh_parent_workspace()
 
     def _project_text(self, *, fallback: str = "—") -> str:
         if self._task.project_title:
@@ -1272,6 +1465,11 @@ class TaskDetailsDialog(QDialog):
             images=images,
             start_index=start_index,
             cloud_root=Path(cloud_root),
+            comments_by_file_id={
+                int(attachment.ref_id): attachment.comment
+                for attachment in self._attachments
+                if attachment.kind == "image"
+            },
         )
         show_dialog_standard(dialog, self)
 

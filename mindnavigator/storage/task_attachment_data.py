@@ -11,6 +11,7 @@ class TaskAttachmentData:
     kind: str
     ref_id: int
     created_at: str
+    comment: str = ""
 
     SUPPORTED_KINDS: ClassVar[tuple[str, ...]] = (
         "task",
@@ -39,6 +40,7 @@ class TaskAttachmentData:
             kind=cls.normalize_kind(str(row["kind"])),
             ref_id=int(row["ref_id"]),
             created_at=str(row["created_at"]),
+            comment=str(row["comment"] or ""),
         )
 
     @classmethod
@@ -49,6 +51,7 @@ class TaskAttachmentData:
             kind=cls.normalize_kind(str(payload["kind"])),
             ref_id=int(payload["ref_id"]),
             created_at=str(payload.get("created_at", "")),
+            comment=str(payload.get("comment", "") or ""),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -58,6 +61,7 @@ class TaskAttachmentData:
             "kind": self.kind,
             "ref_id": int(self.ref_id),
             "created_at": self.created_at,
+            "comment": self.comment,
         }
 
 __all__ = ["TaskAttachmentData"]

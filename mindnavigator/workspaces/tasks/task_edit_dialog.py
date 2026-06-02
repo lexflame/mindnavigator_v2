@@ -269,6 +269,31 @@ class TaskEditDialog(QDialog):
         self.description_edit = QPlainTextEdit(task.description)
         self.description_edit.setPlaceholderText("Описание задачи...")
         self.description_edit.setFixedHeight(108)
+        description_editor = QWidget()
+        description_editor_layout = QVBoxLayout(description_editor)
+        description_editor_layout.setContentsMargins(0, 0, 0, 0)
+        description_editor_layout.setSpacing(6)
+        description_toolbar = QHBoxLayout()
+        description_toolbar.setSpacing(4)
+        for label, tooltip, prefix, suffix in (
+            ("B", "Жирный текст", "**", "**"),
+            ("I", "Курсив", "_", "_"),
+            ("H2", "Подзаголовок", "## ", ""),
+            ("•", "Маркированный список", "- ", ""),
+            (">", "Цитата", "> ", ""),
+            ("Link", "Ссылка", "[", "](https://)"),
+        ):
+            button = QToolButton(description_editor)
+            button.setText(label)
+            button.setToolTip(tooltip)
+            button.setFixedHeight(26)
+            button.clicked.connect(
+                lambda _checked=False, start=prefix, end=suffix: self._wrap_description_selection(start, end)
+            )
+            description_toolbar.addWidget(button)
+        description_toolbar.addStretch(1)
+        description_editor_layout.addLayout(description_toolbar)
+        description_editor_layout.addWidget(self.description_edit)
         self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
         self._context_link_controllers = [
             attach_context_entity_linking(
@@ -535,7 +560,7 @@ class TaskEditDialog(QDialog):
             parent_layout.addWidget(self.parent_schedule_button, 0)
 
         form.addRow(self._make_form_label("Название"), self.title_edit)
-        form.addRow(self._make_form_label("Описание"), self.description_edit)
+        form.addRow(self._make_form_label("Описание"), description_editor)
         form.addRow(self._make_form_label(""), project_group_row)
         form.addRow(self._make_form_label("Тип проекта"), self.project_task_type_edit)
         if parent_row is not None:
@@ -1119,6 +1144,13 @@ class TaskEditDialog(QDialog):
         QShortcut(QKeySequence("Ctrl+Return"), self, self._on_accept)
         QShortcut(QKeySequence("Ctrl+Enter"), self, self._on_accept)
         QShortcut(QKeySequence("Esc"), self, self.reject)
+
+    def _wrap_description_selection(self, prefix: str, suffix: str) -> None:
+        cursor = self.description_edit.textCursor()
+        selected = cursor.selectedText()
+        cursor.insertText(f"{prefix}{selected}{suffix}")
+        self.description_edit.setTextCursor(cursor)
+        self.description_edit.setFocus()
 
     def _setup_error_reset_handlers(self) -> None:
         self.title_edit.textChanged.connect(lambda *_: self._apply_error_state(self.title_edit, False))
@@ -2069,8 +2101,28 @@ class TaskEditDialog(QDialog):
             images=images,
             start_index=start_index,
             cloud_root=Path(cloud_root),
+            comments_by_file_id={
+                int(attachment.ref_id): attachment.comment
+                for attachment in self._attachments
+                if attachment.kind == "image"
+            },
+            save_comment=self._save_image_comment,
         )
         self._show_child_dialog(dialog)
+
+    def _save_image_comment(self, file_id: int, comment: str) -> None:
+        attachment = next(
+            (
+                item
+                for item in self._attachments
+                if item.kind == "image" and int(item.ref_id) == int(file_id)
+            ),
+            None,
+        )
+        if attachment is None:
+            raise ValueError("Привязанное изображение не найдено.")
+        self._db.update_task_attachment_comment(attachment.id, comment)
+        self._refresh_attachments()
 
     def _resolve_plan_item_state(self, task_id: int) -> bool:
         fetch_tasks = getattr(self._db, "fetch_tasks", None)

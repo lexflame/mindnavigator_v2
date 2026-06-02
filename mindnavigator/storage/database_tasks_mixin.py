@@ -894,7 +894,7 @@ class DatabaseTasksMixin:
         task_id = int(task_id)
         rows = self._conn.execute(
             """
-            SELECT id, task_id, kind, ref_id, created_at
+            SELECT id, task_id, kind, ref_id, created_at, comment
             FROM task_attachments
             WHERE task_id = ?
             ORDER BY created_at ASC;
@@ -956,12 +956,31 @@ class DatabaseTasksMixin:
             )
         row = self._conn.execute(
             """
-            SELECT id, task_id, kind, ref_id, created_at
+            SELECT id, task_id, kind, ref_id, created_at, comment
             FROM task_attachments
             WHERE task_id = ? AND kind = ? AND ref_id = ?;
             """,
             (task_id, kind, ref_id),
         ).fetchone()
+        return TaskAttachmentData.from_row(row)
+
+    def update_task_attachment_comment(self, attachment_id: int, comment: str) -> TaskAttachmentData:
+        """Updates the comment stored for one attachment inside its task."""
+        attachment_id = int(attachment_id)
+        if attachment_id <= 0:
+            raise ValueError("Идентификатор вложения должен быть положительным.")
+        comment = (comment or "").strip()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE task_attachments SET comment = ? WHERE id = ?;",
+                (comment, attachment_id),
+            )
+        row = self._conn.execute(
+            "SELECT id, task_id, kind, ref_id, created_at, comment FROM task_attachments WHERE id = ?;",
+            (attachment_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Вложение задачи не найдено.")
         return TaskAttachmentData.from_row(row)
 
     def delete_task_attachment(self, attachment_id: int) -> None:
