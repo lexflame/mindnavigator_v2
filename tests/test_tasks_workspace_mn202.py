@@ -996,8 +996,15 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
-        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 7
-        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 4
+        assert [card.title_label.text() for card in dialog._param_cards] == [
+            "Название задачи",
+            "Проект",
+            "Срок выполнения",
+            "Приоритет",
+            "Важность задачи",
+        ]
+        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 5
+        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 5
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
         assert dialog._columns_for_width(1000, dialog._DETAIL_BREAKPOINTS, default=6) == 3
     finally:
