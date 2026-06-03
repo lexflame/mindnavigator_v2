@@ -1317,9 +1317,51 @@ class TaskDetailsDialog(QDialog):
         self.marker_color_inline.set_value(self._task.marker_color, marker_text)
         self.marker_theme_inline.set_value(self._task.marker_theme, marker_theme_text)
         self._refresh_property_propagation_actions()
+        self._refresh_additional_properties()
 
         self._refresh_attachments()
         self._reflow_cards()
+
+    def _clear_layout(self, layout: QVBoxLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _refresh_additional_properties(self) -> None:
+        self._clear_layout(self.additional_properties_layout)
+        if self._task.project_task_type_title:
+            value = self._task.project_task_type_value or self._task.project_task_type_title
+            self.additional_properties_layout.addWidget(
+                self._additional_property_row("Тип задачи", f"{self._task.project_task_type_title} · {value}", self._task.project_task_type_color)
+            )
+        project_id = self._task.project_id
+        if project_id is not None:
+            fetch_display = getattr(self._db, "fetch_project_display_properties", None)
+            if callable(fetch_display):
+                for item in fetch_display(int(project_id))[:4]:
+                    label = item.url if item.display_mode == "url_text" else item.name
+                    self.additional_properties_layout.addWidget(self._additional_property_row(item.name, label, "#20f5d2"))
+        self.additional_properties_host.setVisible(self.additional_properties_layout.count() > 0)
+
+    def _additional_property_row(self, name: str, value: str, color: str = "") -> QFrame:
+        row = QFrame(self.additional_properties_host)
+        row.setObjectName("TaskDetailsAdditionalPropertyRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(8)
+        name_label = QLabel(f"{name}:", row)
+        name_label.setObjectName("TaskDetailsAdditionalPropertyName")
+        value_label = QLabel(value, row)
+        value_label.setObjectName("TaskDetailsAdditionalPropertyBadge")
+        value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if color and QColor(color).isValid():
+            value_label.setStyleSheet(f"border-color: {color}; color: {color};")
+        layout.addWidget(name_label, 0)
+        layout.addWidget(value_label, 0)
+        layout.addStretch(1)
+        return row
 
     def _refresh_footer_metadata(self) -> None:
         created_text = self._format_task_timestamp(getattr(self._task, "created_at", ""))

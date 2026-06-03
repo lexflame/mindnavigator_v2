@@ -47,7 +47,13 @@ from ._shared import (
 )
 from .task_data import TaskData
 from .project_data import ProjectData
-from .project_property_data import ProjectLinkData, ProjectRelatedProjectData, ProjectRelatedTaskData, ProjectTaskTypeData
+from .project_property_data import (
+    ProjectDisplayPropertyData,
+    ProjectLinkData,
+    ProjectRelatedProjectData,
+    ProjectRelatedTaskData,
+    ProjectTaskTypeData,
+)
 from .map_data import MapData
 from .map_marker_data import MapMarkerData
 from .map_overlay_data import MapOverlayData

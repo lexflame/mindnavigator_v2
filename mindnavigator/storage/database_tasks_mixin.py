@@ -62,8 +62,13 @@ class DatabaseTasksMixin:
                 t.created_at,
                 t.updated_at,
                 ptt.title AS project_task_type_title,
+                ptt.value AS project_task_type_value,
                 ptt.color_marker AS project_task_type_color,
                 ptt.theme_marker AS project_task_type_theme,
+                ptt.priority AS project_task_type_priority,
+                ptt.importance AS project_task_type_importance,
+                ptt.is_plan_task AS project_task_type_is_plan_task,
+                ptt.concept_board_id AS project_task_type_concept_board_id,
                 CASE
                     WHEN pp.id IS NOT NULL THEN COALESCE(pp.title, '') || ' / ' || COALESCE(p.title, '')
                     ELSE COALESCE(p.title, '')
@@ -109,8 +114,13 @@ class DatabaseTasksMixin:
                     marker_theme=(row["marker_theme"] or "").strip(),
                     project_task_type_id=row["project_task_type_id"],
                     project_task_type_title=(row["project_task_type_title"] or "").strip(),
+                    project_task_type_value=(row["project_task_type_value"] or "").strip().upper(),
                     project_task_type_color=(row["project_task_type_color"] or "").strip(),
                     project_task_type_theme=(row["project_task_type_theme"] or "").strip(),
+                    project_task_type_priority=(row["project_task_type_priority"] or "").strip(),
+                    project_task_type_importance=max(1, min(5, int(row["project_task_type_importance"] or 3))),
+                    project_task_type_is_plan_task=bool(row["project_task_type_is_plan_task"]),
+                    project_task_type_concept_board_id=row["project_task_type_concept_board_id"],
                     postponed_reason=(row["postponed_reason"] or "").strip(),
                     postponed_by_project_task_type_id=row["postponed_by_project_task_type_id"],
                     created_at=(row["created_at"] or "").strip(),
@@ -140,6 +150,44 @@ class DatabaseTasksMixin:
             (int(project_task_type_id), int(project_id)),
         ).fetchone()
         return int(row["id"]) if row is not None else None
+
+    def _project_task_type_defaults(self, project_task_type_id: Optional[int]) -> dict[str, object]:
+        if project_task_type_id is None:
+            return {}
+        row = self._conn.execute(
+            """
+            SELECT color_marker, theme_marker, priority, importance, is_plan_task, concept_board_id
+            FROM project_task_types
+            WHERE id = ? AND active = 1;
+            """,
+            (int(project_task_type_id),),
+        ).fetchone()
+        if row is None:
+            return {}
+        result: dict[str, object] = {
+            "importance": max(1, min(5, int(row["importance"] or 3))),
+            "is_plan_task": bool(row["is_plan_task"]),
+        }
+        if (row["color_marker"] or "").strip():
+            result["marker_color"] = (row["color_marker"] or "").strip()
+        if (row["theme_marker"] or "").strip():
+            result["marker_theme"] = (row["theme_marker"] or "").strip().lower()
+        if (row["priority"] or "").strip():
+            result["priority"] = normalize_priority(row["priority"])
+        if row["concept_board_id"] is not None:
+            result["concept_board_id"] = int(row["concept_board_id"])
+        return result
+
+    def _attach_project_task_type_concept_board(
+        self,
+        task_id: int,
+        project_task_type_id: Optional[int],
+    ) -> None:
+        defaults = self._project_task_type_defaults(project_task_type_id)
+        concept_board_id = defaults.get("concept_board_id")
+        if concept_board_id is None:
+            return
+        self.attach_concept_board_item(int(concept_board_id), "task", int(task_id))
 
     def create_task(
         self,
@@ -171,6 +219,12 @@ class DatabaseTasksMixin:
         marker_theme = (marker_theme or "").strip().lower()
         project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
         importance = max(1, min(5, int(importance or 3)))
+        type_defaults = self._project_task_type_defaults(project_task_type_id)
+        priority = str(type_defaults.get("priority", priority))
+        marker_color = str(type_defaults.get("marker_color", marker_color))
+        marker_theme = str(type_defaults.get("marker_theme", marker_theme))
+        importance = int(type_defaults.get("importance", importance))
+        is_plan_task = bool(type_defaults.get("is_plan_task", is_plan_task))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
         if plan_order is None:
@@ -245,6 +299,7 @@ class DatabaseTasksMixin:
             )
         for kind, ref_id in project_links:
             self.add_task_attachment(cur.lastrowid, kind, ref_id)
+        self._attach_project_task_type_concept_board(cur.lastrowid, project_task_type_id)
         self._sync_task_text_attachments(cur.lastrowid, title, description)
         plan_root_id = self._plan_root_id_for_parent(parent_id)
         if plan_root_id is not None:
@@ -342,6 +397,12 @@ class DatabaseTasksMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
+        type_defaults = self._project_task_type_defaults(project_task_type_id)
+        priority = str(type_defaults.get("priority", priority))
+        marker_color = str(type_defaults.get("marker_color", marker_color))
+        marker_theme = str(type_defaults.get("marker_theme", marker_theme))
+        importance = int(type_defaults.get("importance", importance))
+        is_plan_task = bool(type_defaults.get("is_plan_task", is_plan_task))
         postponed_reason = (prev_row["postponed_reason"] or "").strip() if prev_row else ""
         postponed_by_type_id = prev_row["postponed_by_project_task_type_id"] if prev_row else None
         if postponed_reason == "project_task_type_deactivated" and postponed_by_type_id is not None:
@@ -445,6 +506,7 @@ class DatabaseTasksMixin:
                 )
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
+        self._attach_project_task_type_concept_board(task_id, project_task_type_id)
         self._sync_task_text_attachments(task_id, title, description)
         new_plan_root_id = self._plan_root_id_for_parent(parent_id)
         if new_plan_root_id is not None:

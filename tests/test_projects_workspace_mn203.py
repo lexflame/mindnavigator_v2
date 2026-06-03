@@ -62,6 +62,90 @@ def test_project_storage_persists_repository_catalog(unique_temp_path) -> None:
         db_path.unlink(missing_ok=True)
 
 
+def test_project_custom_task_type_inherits_task_defaults_and_display_properties(unique_temp_path) -> None:
+    db_path = unique_temp_path("project_custom_task_type_defaults", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project(
+            area="Area",
+            title="Typed project",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+        )
+        board = database.create_concept_board("Core board")
+        task_type = database.add_project_task_type(
+            project_id=project.id,
+            title="Разработка",
+            value="dev",
+            color_marker="#20f5d2",
+            theme_marker="debug",
+            priority="High",
+            importance=5,
+            is_plan_task=True,
+            concept_board_id=board.id,
+        )
+        database.replace_project_display_properties(
+            project.id,
+            [
+                {"name": "wiki", "url": "https://docs.example.com", "display_mode": "name_link"},
+                {"name": "repo", "url": "https://github.com/lexflame/mindnavigator", "display_mode": "url_text"},
+            ],
+        )
+
+        created = database.create_task(
+            title="Typed task",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Low",
+            project_id=project.id,
+            marker_color="",
+            marker_theme="",
+            project_task_type_id=task_type.id,
+            importance=1,
+        )
+
+        assert created.project_task_type_id == task_type.id
+        assert created.priority == "High"
+        assert created.importance == 5
+        assert created.marker_color == "#20f5d2"
+        assert created.marker_theme == "debug"
+        assert created.is_plan_task is True
+
+        fetched_type = database.fetch_project_task_type(task_type.id)
+        assert fetched_type is not None
+        assert fetched_type.value == "DEV"
+        assert fetched_type.concept_board_id == board.id
+        board_items = database.fetch_concept_board_items(board.id)
+        assert [(item.entity_kind, item.entity_id) for item in board_items] == [("task", created.id)]
+
+        display = database.fetch_project_display_properties(project.id)
+        assert [(item.name, item.display_mode) for item in display] == [("WIKI", "name_link"), ("REPO", "url_text")]
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_display_properties_limit_is_four(unique_temp_path) -> None:
+    db_path = unique_temp_path("project_display_property_limit", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Display props", date(2026, 3, 6), "Medium")
+        too_many = [
+            {"name": f"PROP{idx}", "url": f"https://example.com/{idx}", "display_mode": "name_link"}
+            for idx in range(5)
+        ]
+        try:
+            database.replace_project_display_properties(project.id, too_many)
+        except ValueError as exc:
+            assert "4" in str(exc)
+        else:
+            raise AssertionError("Expected display property limit validation")
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_projects_model_exposes_repository_catalog_role(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("project_repository_model_role", ".sqlite3")

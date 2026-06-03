@@ -31,8 +31,13 @@ class TaskData:
     marker_theme: str = ""
     project_task_type_id: Optional[int] = None
     project_task_type_title: str = ""
+    project_task_type_value: str = ""
     project_task_type_color: str = ""
     project_task_type_theme: str = ""
+    project_task_type_priority: str = ""
+    project_task_type_importance: int = 3
+    project_task_type_is_plan_task: bool = False
+    project_task_type_concept_board_id: Optional[int] = None
     postponed_reason: str = ""
     postponed_by_project_task_type_id: Optional[int] = None
     is_plan_task: bool = False
