@@ -508,7 +508,8 @@ class TaskDetailsDialog(QDialog):
             self.project_inline.editor.addItem(label, project.id)
         self.project_inline.value_committed.connect(lambda value: self._save_inline_updates(project_id=value))
         self.detail_project_card.set_inline_editor(self.project_inline)
-        self.deadline_card = _InfoCard("Срок выполнения", self.params_card)
+        self.header_parent_card = _InfoCard("Родительская задача", self.params_card)
+        self.header_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
         self.priority_card = _InfoCard("Приоритет", self.params_card)
         self.importance_card = _InfoCard("Важность задачи", self.params_card)
         self.priority_inline = InlineEditableField(QComboBox(self.priority_card), self.priority_card)
@@ -521,36 +522,9 @@ class TaskDetailsDialog(QDialog):
             self.importance_inline.editor.addItem(label, value)
         self.importance_inline.value_committed.connect(lambda value: self._save_inline_updates(importance=int(value)))
         self.importance_card.set_inline_editor(self.importance_inline)
-        deadline_host = QWidget(self.deadline_card)
-        deadline_host.setObjectName("TaskDetailsDeadlineEditor")
-        deadline_layout = QHBoxLayout(deadline_host)
-        deadline_layout.setContentsMargins(0, 0, 0, 0)
-        deadline_layout.setSpacing(8)
-        date_editor = QDateEdit(deadline_host)
-        date_editor.setObjectName("TaskDetailsDeadlineDateEdit")
-        date_editor.setCalendarPopup(True)
-        date_editor.setDisplayFormat("dd.MM.yyyy")
-        date_editor.setMinimumWidth(96)
-        self.date_inline = InlineEditableField(date_editor, deadline_host)
-        self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
-        self.date_inline.setMinimumWidth(150)
-        self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
-        deadline_layout.addWidget(self.date_inline, 3)
-        self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
-        self.time_inline.setObjectName("TaskDetailsDeadlineTimeInline")
-        self.time_inline.setMinimumWidth(90)
-        self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
-        self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
-        self.time_inline.editor.setMinimumWidth(54)
-        self.time_inline.editor.setInputMask("99:99;_")
-        self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
-        deadline_layout.addWidget(self.time_inline, 2)
-        self.deadline_card.set_value_widget(deadline_host)
-        self.date_card = self.deadline_card
-        self.time_card = self.deadline_card
         self._param_cards = [
             self.detail_project_card,
-            self.deadline_card,
+            self.header_parent_card,
             self.priority_card,
             self.importance_card,
         ]
@@ -583,13 +557,39 @@ class TaskDetailsDialog(QDialog):
         self.details_list.setSpacing(0)
 
         self.detail_id_card = _PropertyRow("ID", self.details_card)
-        self.detail_parent_card = _PropertyRow("Родительская задача", self.details_card)
-        self.detail_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
+        self.deadline_card = _PropertyRow("Срок выполнения", self.details_card)
         self.detail_type_card = _PropertyRow("Тип", self.details_card)
         self.detail_marker_card = _PropertyRow("Маркер", self.details_card, accent_dot=True)
         self.detail_theme_card = _PropertyRow("Тема маркера", self.details_card)
         self.status_card = _PropertyRow("Статус", self.details_card)
         self.recurrence_card = _PropertyRow("Повтор", self.details_card)
+        deadline_host = QWidget(self.deadline_card)
+        deadline_host.setObjectName("TaskDetailsDeadlineEditor")
+        deadline_layout = QHBoxLayout(deadline_host)
+        deadline_layout.setContentsMargins(0, 0, 0, 0)
+        deadline_layout.setSpacing(8)
+        date_editor = QDateEdit(deadline_host)
+        date_editor.setObjectName("TaskDetailsDeadlineDateEdit")
+        date_editor.setCalendarPopup(True)
+        date_editor.setDisplayFormat("dd.MM.yyyy")
+        date_editor.setMinimumWidth(96)
+        self.date_inline = InlineEditableField(date_editor, deadline_host)
+        self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
+        self.date_inline.setMinimumWidth(150)
+        self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
+        deadline_layout.addWidget(self.date_inline, 3)
+        self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
+        self.time_inline.setObjectName("TaskDetailsDeadlineTimeInline")
+        self.time_inline.setMinimumWidth(90)
+        self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
+        self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
+        self.time_inline.editor.setMinimumWidth(54)
+        self.time_inline.editor.setInputMask("99:99;_")
+        self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
+        deadline_layout.addWidget(self.time_inline, 2)
+        self.deadline_card.set_value_widget(deadline_host)
+        self.date_card = self.deadline_card
+        self.time_card = self.deadline_card
         self.recurrence_inline = InlineEditableField(QComboBox(self.recurrence_card), self.recurrence_card)
         for label, value in (("Без повтора", ""), ("Ежедневно", "daily"), ("Еженедельно", "weekly"), ("Ежемесячно", "monthly")):
             self.recurrence_inline.editor.addItem(label, value)
@@ -613,7 +613,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_theme_card.set_inline_editor(self.marker_theme_inline)
         self._detail_cards = [
             self.detail_id_card,
-            self.detail_parent_card,
+            self.deadline_card,
             self.detail_type_card,
             self.detail_marker_card,
             self.detail_theme_card,
@@ -1249,8 +1249,8 @@ class TaskDetailsDialog(QDialog):
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
         self.project_inline.set_value(self._task.project_id, project_text)
         self._refresh_gantt_progress()
-        self.detail_parent_card.set_value(parent_text, muted=parent_text == "—")
-        self.detail_parent_card.set_action_visible(self._parent_schedule_mismatch())
+        self.header_parent_card.set_value(parent_text, muted=parent_text == "—")
+        self.header_parent_card.set_action_visible(self._parent_schedule_mismatch())
         self.detail_type_card.set_value(self._task_type_text())
         self.detail_marker_card.set_value(marker_text, muted=marker_text == "Нет")
         self.detail_marker_card.set_dot_color((self._task.marker_color or "").strip())

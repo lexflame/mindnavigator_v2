@@ -78,14 +78,14 @@ def test_task_details_dialog_updates_child_schedule_from_parent(monkeypatch, uni
         dialog.show()
         app.processEvents()
 
-        assert dialog.detail_parent_card.action_button.isVisible()
+        assert dialog.header_parent_card.action_button.isVisible()
 
         dialog._sync_schedule_to_parent()
 
         refreshed = next(item for item in database.fetch_tasks() if item.id == child.id)
         assert refreshed.day == parent.day
         assert refreshed.time_text == parent.time_text
-        assert not dialog.detail_parent_card.action_button.isVisible()
+        assert not dialog.header_parent_card.action_button.isVisible()
     finally:
         if dialog is not None:
             dialog.deleteLater()

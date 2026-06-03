@@ -1108,18 +1108,18 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.detail_id_card._custom_value_widget is False
-        assert dialog.detail_parent_card._custom_value_widget is False
+        assert dialog.header_parent_card._custom_value_widget is False
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
         assert [card.title_label.text() for card in dialog._param_cards] == [
             "Проект",
-            "Срок выполнения",
+            "Родительская задача",
             "Приоритет",
             "Важность задачи",
         ]
         assert [card.title_label.text() for card in dialog._detail_cards] == [
             "ID",
-            "Родительская задача",
+            "Срок выполнения",
             "Тип",
             "Маркер",
             "Тема маркера",
@@ -1127,12 +1127,13 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
             "Повтор",
         ]
         dialog._reflow_params_grid(4)
-        deadline_index = dialog.params_grid.indexOf(dialog.deadline_card)
-        assert deadline_index >= 0
-        deadline_row, deadline_column, _, deadline_column_span = dialog.params_grid.getItemPosition(deadline_index)
-        assert deadline_row == 0
-        assert deadline_column == 1
-        assert deadline_column_span == 1
+        parent_index = dialog.params_grid.indexOf(dialog.header_parent_card)
+        assert parent_index >= 0
+        parent_row, parent_column, _, parent_column_span = dialog.params_grid.getItemPosition(parent_index)
+        assert parent_row == 0
+        assert parent_column == 1
+        assert parent_column_span == 1
+        assert dialog.details_list.indexOf(dialog.deadline_card) == 1
         assert dialog.date_inline.minimumWidth() == 150
         assert dialog.time_inline.minimumWidth() == 90
         assert dialog.time_inline.editor.inputMask() == "99:99;_"
