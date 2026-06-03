@@ -1134,8 +1134,11 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert parent_column == 1
         assert parent_column_span == 1
         assert dialog.details_list.indexOf(dialog.deadline_card) == 1
+        assert dialog.deadline_card.height() == 66
         assert dialog.date_inline.minimumWidth() == 150
         assert dialog.time_inline.minimumWidth() == 90
+        assert dialog.date_inline.height() == 34
+        assert dialog.time_inline.height() == 34
         assert dialog.time_inline.editor.inputMask() == "99:99;_"
         assert dialog.time_inline.current_value() == ""
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4

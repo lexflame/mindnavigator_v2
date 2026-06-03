@@ -558,6 +558,8 @@ class TaskDetailsDialog(QDialog):
 
         self.detail_id_card = _PropertyRow("ID", self.details_card)
         self.deadline_card = _PropertyRow("Срок выполнения", self.details_card)
+        self.deadline_card.setFixedHeight(66)
+        self.deadline_card.layout().setContentsMargins(12, 8, 10, 8)
         self.detail_type_card = _PropertyRow("Тип", self.details_card)
         self.detail_marker_card = _PropertyRow("Маркер", self.details_card, accent_dot=True)
         self.detail_theme_card = _PropertyRow("Тема маркера", self.details_card)
@@ -565,6 +567,7 @@ class TaskDetailsDialog(QDialog):
         self.recurrence_card = _PropertyRow("Повтор", self.details_card)
         deadline_host = QWidget(self.deadline_card)
         deadline_host.setObjectName("TaskDetailsDeadlineEditor")
+        deadline_host.setMinimumHeight(50)
         deadline_layout = QHBoxLayout(deadline_host)
         deadline_layout.setContentsMargins(0, 0, 0, 0)
         deadline_layout.setSpacing(8)
@@ -573,9 +576,11 @@ class TaskDetailsDialog(QDialog):
         date_editor.setCalendarPopup(True)
         date_editor.setDisplayFormat("dd.MM.yyyy")
         date_editor.setMinimumWidth(96)
+        date_editor.setFixedHeight(34)
         self.date_inline = InlineEditableField(date_editor, deadline_host)
         self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
         self.date_inline.setMinimumWidth(150)
+        self.date_inline.setFixedHeight(34)
         self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
         deadline_layout.addWidget(self.date_inline, 3)
         self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
@@ -584,7 +589,9 @@ class TaskDetailsDialog(QDialog):
         self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
         self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
         self.time_inline.editor.setMinimumWidth(54)
+        self.time_inline.editor.setFixedHeight(34)
         self.time_inline.editor.setInputMask("99:99;_")
+        self.time_inline.setFixedHeight(34)
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
         deadline_layout.addWidget(self.time_inline, 2)
         self.deadline_card.set_value_widget(deadline_host)
@@ -962,12 +969,16 @@ class TaskDetailsDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border};
                 border-radius: 8px;
-                padding: 6px 6px;
+                padding: 4px 6px;
                 min-width: 96px;
-                min-height: 34px;
+                min-height: 28px;
+                max-height: 34px;
             }}
             QLineEdit#TaskDetailsDeadlineTimeEdit {{
                 min-width: 54px;
+                min-height: 28px;
+                max-height: 34px;
+                padding: 4px 6px;
             }}
             QToolButton#TaskInlineCommitButton {{
                 background: transparent;
