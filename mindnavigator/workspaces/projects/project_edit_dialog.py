@@ -8,6 +8,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QGridLayout, QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QPlainTextEdit
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.ui.styles import get_theme_palette
 
 class ProjectEditDialog(QDialog):
     def __init__(self, project: Optional[ProjectRow] = None, parent=None):
@@ -17,6 +18,7 @@ class ProjectEditDialog(QDialog):
         self._project = project
         self._db = get_database()
         self._edit_mode = is_new
+        self._palette = get_theme_palette("dark")
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
@@ -343,62 +345,63 @@ class ProjectEditDialog(QDialog):
 
         self._set_edit_mode(self._edit_mode)
 
+        palette = self._palette
         self.setStyleSheet(f"""
             QDialog#ProjectEditDialog {{
-                {MATH_PHYS_BACKGROUND}
+                background: {palette.window_bg};
             }}
 
             QFrame#ProjectDialogShell {{
-                background: rgba(15, 28, 47, 0.96);
-                border: 1px solid #21324a;
+                background: {palette.panel_bg};
+                border: 1px solid {palette.border};
                 border-radius: 14px;
             }}
 
             QDialog#ProjectEditDialog QLabel {{
-                color: #d7dce7;
+                color: {palette.text};
             }}
 
             QDialog#ProjectEditDialog QLabel#DialogTitle {{
-                color: #f6f8fb;
+                color: {palette.selection_text};
                 font-size: 26px;
                 font-weight: 600;
             }}
 
             QLabel#ProjectDialogMode {{
-                color: #b7c1d5;
+                color: {palette.dim_text};
                 font-size: 14px;
             }}
 
             QFrame#ProjectDialogMetric,
             QFrame#ProjectDialogSection {{
-                background: rgba(17, 31, 52, 0.78);
-                border: 1px solid #263a56;
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
                 border-radius: 8px;
             }}
 
             QLabel#ProjectDialogSectionTitle {{
-                color: #f1f5fb;
+                color: {palette.selection_text};
                 font-size: 16px;
                 font-weight: 600;
             }}
 
             QLabel#ProjectDialogMetricTitle {{
-                color: #aeb8cb;
+                color: {palette.dim_text};
                 font-size: 12px;
             }}
 
             QLabel#ProjectDialogInfo {{
-                color: #b8c3d8;
-                background: rgba(28, 47, 78, 0.62);
-                border: 1px solid #2c4a74;
+                color: {palette.text};
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 7px;
                 padding: 9px 11px;
             }}
 
             QLabel#ProjectDialogValue {{
-                color: #edf2fb;
-                background: rgba(9, 18, 31, 0.44);
-                border: 1px solid #223650;
+                color: {palette.text};
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
                 border-radius: 6px;
                 padding: 8px 10px;
                 min-height: 28px;
@@ -417,9 +420,9 @@ class ProjectEditDialog(QDialog):
             QDialog#ProjectEditDialog QComboBox,
             QDialog#ProjectEditDialog QDateEdit,
             QDialog#ProjectEditDialog QPlainTextEdit {{
-                background: rgba(9, 18, 31, 0.72);
-                color: #edf2fb;
-                border: 1px solid #2a405f;
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
                 padding: 7px 10px;
                 border-radius: 6px;
                 min-height: 28px;
@@ -429,13 +432,13 @@ class ProjectEditDialog(QDialog):
             QDialog#ProjectEditDialog QComboBox:disabled,
             QDialog#ProjectEditDialog QDateEdit:disabled,
             QDialog#ProjectEditDialog QPlainTextEdit:disabled {{
-                color: #dce5f4;
-                background: rgba(9, 18, 31, 0.44);
-                border: 1px solid #223650;
+                color: {palette.text};
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
             }}
 
             QDialog#ProjectEditDialog QCheckBox {{
-                color: #d7dce7;
+                color: {palette.text};
                 padding: 4px 0;
             }}
 
@@ -446,9 +449,9 @@ class ProjectEditDialog(QDialog):
 
             QDialog#ProjectEditDialog QPushButton,
             QDialog#ProjectEditDialog QToolButton {{
-                background: rgba(33, 48, 70, 0.86);
-                color: #e6e6e6;
-                border: 1px solid #344b6b;
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
@@ -456,13 +459,13 @@ class ProjectEditDialog(QDialog):
 
             QDialog#ProjectEditDialog QPushButton:hover,
             QDialog#ProjectEditDialog QToolButton:hover {{
-                background: rgba(45, 64, 91, 0.95);
+                background: {palette.selection_bg};
             }}
 
             QPushButton#ProjectDialogPrimaryButton {{
-                background: #5227ff;
-                border: 1px solid #6541ff;
-                color: #ffffff;
+                background: {palette.accent};
+                border: 1px solid {palette.accent_hover};
+                color: {palette.selection_text};
                 font-weight: 600;
                 min-width: 132px;
             }}
@@ -531,10 +534,11 @@ class ProjectEditDialog(QDialog):
         if not lines:
             return escape(empty_text)
         chips = []
+        palette = self._palette
         for line in lines:
             chips.append(
-                "<span style='display:inline-block; color:#cdb7ff; background:#1b2340; "
-                "border:1px solid #34416f; border-radius:6px; padding:3px 8px; margin:2px;'>"
+                f"<span style='display:inline-block; color:{palette.text}; background:{palette.chip_bg}; "
+                f"border:1px solid {palette.chip_border}; border-radius:6px; padding:3px 8px; margin:2px;'>"
                 f"{escape(line)}</span>"
             )
         return " ".join(chips)
@@ -544,15 +548,16 @@ class ProjectEditDialog(QDialog):
         if not lines:
             return escape("Типы задач не настроены")
         chips = []
+        palette = self._palette
         for line in lines:
             values = self._parse_task_type_line(line)
             title = str(values.get("title") or "")
-            color = str(values.get("color_marker") or "#34416f")
+            color = str(values.get("color_marker") or palette.chip_border)
             theme = str(values.get("theme_marker") or "")
             suffix = f" · {theme}" if theme else ""
             opacity = "1.0" if bool(values.get("active", True)) else "0.55"
             chips.append(
-                "<span style='display:inline-block; color:#eef2ff; background:#17213a; "
+                f"<span style='display:inline-block; color:{palette.text}; background:{palette.chip_bg}; "
                 f"border:1px solid {escape(color)}; border-radius:6px; padding:3px 8px; margin:2px; opacity:{opacity};'>"
                 f"{escape(title + suffix)}</span>"
             )

@@ -3,7 +3,9 @@ from __future__ import annotations
 import subprocess
 from datetime import date
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QEvent, QPointF, QRect, Qt
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.projects import project_edit_dialog
@@ -159,5 +161,54 @@ def test_project_dialog_opens_existing_project_in_preview_mode(monkeypatch, uniq
     finally:
         if dialog is not None:
             dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_folder_double_click_opens_project_dialog(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_folder_double_click", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        project = database.create_project(
+            area="SPACE",
+            title="MindNavigator v2",
+            updated=date(2026, 1, 6),
+            priority="High",
+        )
+        monkeypatch.setattr(projects_workspace, "get_database", lambda: database)
+        workspace = projects_workspace.ProjectsWorkspace()
+        row = _find_project_row(workspace.model, project.id)
+        assert row >= 0
+        index = workspace.model.index(row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 1200, workspace.delegate.ROW_H)
+        option.widget = workspace.list
+        folder_rect = workspace.delegate._project_folder_rect(option.rect)
+        click_point = folder_rect.center()
+        opened_project_ids: list[int] = []
+
+        def _capture_edit(project_index) -> None:
+            value = project_index.data(ProjectRoles.ProjectId)
+            if isinstance(value, int):
+                opened_project_ids.append(value)
+
+        monkeypatch.setattr(workspace.delegate, "_edit_project", _capture_edit)
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonDblClick,
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        assert workspace.delegate.editorEvent(event, workspace.model, option, index) is True
+        assert opened_project_ids == [project.id]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
