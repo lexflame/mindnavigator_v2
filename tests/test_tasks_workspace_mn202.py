@@ -16,7 +16,7 @@ from mindnavigator.storage import (
     Database,
 )
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
-from mindnavigator.workspaces.tasks import task_details_dialog, task_edit_dialog
+from mindnavigator.workspaces.tasks import task_attachment_selector, task_details_dialog, task_edit_dialog
 from mindnavigator.workspaces.tasks._shared import normalize_task_text_quotes
 from mindnavigator.workspaces.tasks.cast_board import TasksBoardCast
 from mindnavigator.workspaces.tasks.cast_dash import TasksDashCast
@@ -731,6 +731,108 @@ def test_task_edit_dialog_attachment_dialog_opens_file_picker_for_file_kind(monk
         assert item_combo.currentData() is not None
         selected = database.fetch_cloud_files()[0]
         assert item_combo.currentData() == selected.id
+    finally:
+        if attachment_dialog is not None:
+            attachment_dialog.deleteLater()
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_attachment_selector_uses_shared_candidate_labels(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_selector_labels", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Main task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        linked = database.create_task(
+            title="Linked task",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Medium",
+            project_id=database.create_project("Area", "Selector Project", date(2026, 3, 6), "Medium").id,
+        )
+        note = database.create_note(
+            title="Selector note",
+            preview="",
+            tags=[],
+            project="Notes Project",
+        )
+
+        sources = task_attachment_selector.load_task_attachment_sources(database)
+
+        task_items = task_attachment_selector.attachment_candidate_items(
+            sources,
+            "task",
+            current_task_id=task.id,
+        )
+        note_items = task_attachment_selector.attachment_candidate_items(
+            sources,
+            "note",
+            current_task_id=task.id,
+        )
+
+        assert (f"{linked.title} · Selector Project", linked.id) in task_items
+        assert all(ref_id != task.id for _label, ref_id in task_items)
+        assert ("Selector note · Notes Project", note.id) in note_items
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_attachment_dialog_uses_shared_filterable_selector(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_attachment_selector", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    attachment_dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        note = database.create_note(
+            title="Details note",
+            preview="",
+            tags=[],
+            project="",
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        def fake_exec(self) -> int:
+            nonlocal attachment_dialog
+            if self.objectName() == "TaskAttachmentDialog":
+                attachment_dialog = self
+                kind_combo = self.findChildren(QComboBox)[0]
+                kind_combo.setCurrentIndex(kind_combo.findData("note"))
+                item_combo = self.findChild(FilterableComboBox)
+                assert item_combo is not None
+                item_combo.setCurrentIndex(item_combo.findData(note.id))
+                return int(QDialog.DialogCode.Accepted)
+            return int(QDialog.DialogCode.Rejected)
+
+        monkeypatch.setattr(QDialog, "exec", fake_exec)
+
+        dialog._open_attachment_dialog()
+
+        fetched = database.fetch_task_attachments(task.id)
+        assert len(fetched) == 1
+        assert fetched[0].kind == "note"
+        assert fetched[0].ref_id == note.id
+        assert attachment_dialog is not None
+        assert attachment_dialog.findChild(FilterableComboBox) is not None
     finally:
         if attachment_dialog is not None:
             attachment_dialog.deleteLater()

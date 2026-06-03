@@ -7,10 +7,17 @@ from datetime import date
 from PySide6.QtWidgets import QGridLayout, QPushButton
 
 from mindnavigator.storage import DEFERRED_PRIORITY
+from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND, get_theme_palette
 
 from ._shared import *  # noqa: F401,F403
 from .gantt_duration_edit import GanttEstimateEdit
+from .task_attachment_selector import (
+    attachment_candidate_items,
+    cloud_file_link_text,
+    create_task_attachment_dialog,
+    load_task_attachment_sources,
+)
 from .task_image_preview_dialog import TaskImagePreviewDialog
 
 
@@ -1286,66 +1293,25 @@ class TaskDetailsDialog(QDialog):
         return True
 
     def _load_attachment_sources(self) -> None:
-        tasks = self._db.fetch_tasks()
-        notes = self._db.fetch_notes()
-        ideas_active = self._db.fetch_ideas(archived=False)
-        active_ids = {idea.id for idea in ideas_active}
-        ideas_archived = [idea for idea in self._db.fetch_ideas(archived=True) if idea.id not in active_ids]
-        ideas = ideas_active + ideas_archived
-        objects = self._db.fetch_objects()
-        maps = self._db.fetch_maps()
-        markers = self._db.fetch_map_markers()
-        cloud_files = self._db.fetch_cloud_files()
-        self._tasks_by_id = {task.id: task for task in tasks}
-        self._notes_by_id = {note.id: note for note in notes}
-        self._ideas_by_id = {idea.id: idea for idea in ideas}
-        self._objects_by_id = {item.id: item for item in objects}
-        self._maps_by_id = {item.id: item for item in maps}
-        self._markers_by_id = {item.id: item for item in markers}
-        self._cloud_files_by_id = {item.id: item for item in cloud_files}
+        sources = load_task_attachment_sources(self._db)
+        self._tasks_by_id = sources.tasks_by_id
+        self._notes_by_id = sources.notes_by_id
+        self._ideas_by_id = sources.ideas_by_id
+        self._objects_by_id = sources.objects_by_id
+        self._maps_by_id = sources.maps_by_id
+        self._markers_by_id = sources.markers_by_id
+        self._cloud_files_by_id = sources.cloud_files_by_id
 
     def _open_attachment_dialog(self, *, kind: str | None = None) -> None:
         self._load_attachment_sources()
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Добавить связь")
-        dialog.setObjectName("TaskAttachmentDialog")
-        dialog.setFixedSize(550, 180)
-        layout = QVBoxLayout(dialog)
-        form = QFormLayout()
-        kind_combo = QComboBox(dialog)
-        for label, key in (
-            ("Задача", "task"),
-            ("Заметка", "note"),
-            ("Идея", "idea"),
-            ("Объект", "object"),
-            ("Карта", "map"),
-            ("Метка карты", "marker"),
-            ("Файл", "file"),
-            ("Изображение", "image"),
-        ):
-            if kind is None or key == kind:
-                kind_combo.addItem(label, key)
-        item_combo = QComboBox(dialog)
-
-        def refresh_items() -> None:
-            item_combo.clear()
-            for label, ref_id in self._attachment_candidates(str(kind_combo.currentData() or "")):
-                item_combo.addItem(label, ref_id)
-            if item_combo.count() == 0:
-                item_combo.addItem("— нет доступных —", None)
-
-        kind_combo.currentIndexChanged.connect(refresh_items)
-        refresh_items()
-        form.addRow("Тип", kind_combo)
-        form.addRow("Элемент", item_combo)
-        layout.addLayout(form)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=dialog,
+        sources = load_task_attachment_sources(self._db)
+        dialog, kind_combo, item_combo = create_task_attachment_dialog(
+            self,
+            sources,
+            current_task_id=self._task.id,
+            kind=kind,
+            file_picker_factory=AttachFileSelectNav,
         )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         ref_id = item_combo.currentData()
@@ -1356,31 +1322,8 @@ class TaskDetailsDialog(QDialog):
         self._refresh_attachments()
 
     def _attachment_candidates(self, kind: str) -> list[tuple[str, int]]:
-        if kind == "task":
-            return sorted(
-                ((task.title, task.id) for task in self._tasks_by_id.values() if task.id != self._task.id),
-                key=lambda item: item[0].lower(),
-            )
-        if kind == "note":
-            return sorted(((item.title, item.id) for item in self._notes_by_id.values()), key=lambda item: item[0].lower())
-        if kind == "idea":
-            return sorted(((item.title, item.id) for item in self._ideas_by_id.values()), key=lambda item: item[0].lower())
-        if kind == "object":
-            return sorted(((item.title, item.id) for item in self._objects_by_id.values()), key=lambda item: item[0].lower())
-        if kind == "map":
-            return sorted(((item.title, item.id) for item in self._maps_by_id.values()), key=lambda item: item[0].lower())
-        if kind == "marker":
-            return sorted(((item.name, item.id) for item in self._markers_by_id.values()), key=lambda item: item[0].lower())
-        if kind in {"file", "image"}:
-            return sorted(
-                (
-                    (self._cloud_file_link_text(item), item.id)
-                    for item in self._cloud_files_by_id.values()
-                    if item.is_image == (kind == "image")
-                ),
-                key=lambda item: item[0].lower(),
-            )
-        return []
+        sources = load_task_attachment_sources(self._db)
+        return attachment_candidate_items(sources, kind, current_task_id=self._task.id)
 
     def _remove_attachment(self, attachment) -> None:
         self._db.delete_task_attachment(attachment.id)
@@ -1472,17 +1415,7 @@ class TaskDetailsDialog(QDialog):
 
     @staticmethod
     def _cloud_file_link_text(file_item) -> str:
-        description = (file_item.description or "").strip()
-        if description:
-            try:
-                payload = json.loads(description)
-            except json.JSONDecodeError:
-                return description
-            if isinstance(payload, dict):
-                text = (payload.get("text") or "").strip()
-                if text:
-                    return text
-        return file_item.name
+        return cloud_file_link_text(file_item)
 
     def _attachment_display_text(self, attachment) -> str:
         if attachment.kind == "task":
