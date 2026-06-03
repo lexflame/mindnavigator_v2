@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtWidgets import QGridLayout, QPushButton
+from PySide6.QtWidgets import QGridLayout, QPushButton, QSizePolicy
 
 from mindnavigator.storage import DEFERRED_PRIORITY
 from mindnavigator.ui.dialogs import AttachFileSelectNav
@@ -109,10 +109,12 @@ class _InfoCard(QFrame):
     def __init__(self, title: str, parent: QWidget | None = None, *, accent_dot: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("TaskDetailsInfoCard")
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(4)
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -120,6 +122,7 @@ class _InfoCard(QFrame):
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("TaskDetailsCardTitle")
+        self.title_label.setWordWrap(False)
         title_row.addWidget(self.title_label)
         title_row.addStretch(1)
 
@@ -148,6 +151,7 @@ class _InfoCard(QFrame):
         self._custom_value_widget = False
 
         layout.addLayout(value_row)
+        self.setFixedHeight(62)
 
     def set_value(self, value: str, *, muted: bool = False) -> None:
         self.value_label.setText(value)
@@ -183,7 +187,7 @@ class _InfoCard(QFrame):
 
 class TaskDetailsDialog(QDialog):
     _DEFAULT_SIZE = QSize(1360, 820)
-    _PARAM_BREAKPOINTS = ((0, 5),)
+    _PARAM_BREAKPOINTS = ((0, 4),)
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
     _MARKER_COLOR_LABELS = {
@@ -253,16 +257,19 @@ class TaskDetailsDialog(QDialog):
         self.scroll = QScrollArea(self)
         self.scroll.setObjectName("TaskDetailsScroll")
         self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         root_layout.addWidget(self.scroll, 1)
 
         self.content = QWidget(self.scroll)
         self.content.setObjectName("TaskDetailsContent")
+        self.content.setMinimumWidth(0)
+        self.content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.scroll.setWidget(self.content)
 
         self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(26, 18, 26, 16)
-        self.content_layout.setSpacing(14)
+        self.content_layout.setContentsMargins(24, 16, 24, 14)
+        self.content_layout.setSpacing(10)
 
         self._build_header()
 
@@ -320,17 +327,20 @@ class TaskDetailsDialog(QDialog):
         self.header_card = QFrame(self.content)
         self.header_card.setObjectName("TaskDetailsHeaderCard")
         layout = QVBoxLayout(self.header_card)
-        layout.setContentsMargins(10, 6, 10, 4)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(12)
 
-        self.title_label = QLabel("", self.header_card)
-        self.title_label.setObjectName("TaskDetailsTitle")
-        self.title_label.setWordWrap(True)
-        title_row.addWidget(self.title_label, 1)
+        self.title_inline = InlineEditableField(QLineEdit(self.header_card), self.header_card)
+        self.title_inline.setObjectName("TaskDetailsTitleInline")
+        self.title_inline.view_label.setObjectName("TaskDetailsTitle")
+        self.title_inline.view_label.setWordWrap(True)
+        self.title_inline.value_committed.connect(lambda value: self._save_inline_updates(title=str(value)))
+        self.title_label = self.title_inline.view_label
+        title_row.addWidget(self.title_inline, 1)
 
         self.header_close_button = QToolButton(self.header_card)
         self.header_close_button.setObjectName("TaskDetailsHeaderCloseButton")
@@ -352,6 +362,7 @@ class TaskDetailsDialog(QDialog):
         self.summary_label.setObjectName("TaskDetailsSummary")
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
+        self.summary_label.hide()
 
         badge_row = QHBoxLayout()
         badge_row.setContentsMargins(0, 0, 0, 0)
@@ -368,6 +379,7 @@ class TaskDetailsDialog(QDialog):
         badge_row.addStretch(1)
 
         layout.addLayout(badge_row)
+        self.status_badge.hide()
         self.content_layout.addWidget(self.header_card)
 
     def _build_description_section(self) -> None:
@@ -381,17 +393,31 @@ class TaskDetailsDialog(QDialog):
         self.left_column.addWidget(self.description_card, 1)
 
     def _build_key_params_section(self) -> None:
-        self.params_card = self._build_section_card("Ключевые параметры")
+        self.params_card = QFrame(self.header_card)
+        self.params_card.setObjectName("TaskDetailsHeaderParams")
+        params_layout = QHBoxLayout(self.params_card)
+        params_layout.setContentsMargins(0, 0, 0, 0)
+        params_layout.setSpacing(12)
+
+        self.header_add_button = QToolButton(self.params_card)
+        self.header_add_button.setObjectName("TaskDetailsHeaderAddButton")
+        self.header_add_button.setText("+")
+        self.header_add_button.setToolTip("Добавить связь")
+        self.header_add_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header_add_button.setFixedSize(52, 62)
+        self.header_add_button.clicked.connect(lambda _checked=False: self._open_attachment_dialog())
+        self.header_add_button.setEnabled(False)
+        params_layout.addWidget(self.header_add_button, 0, Qt.AlignmentFlag.AlignTop)
+
+        self.params_host = QWidget(self.params_card)
+        self.params_host.setObjectName("TaskDetailsHeaderParamsHost")
+        params_layout.addWidget(self.params_host, 1)
         self.params_grid = QGridLayout()
         self.params_grid.setContentsMargins(0, 0, 0, 0)
-        self.params_grid.setHorizontalSpacing(10)
-        self.params_grid.setVerticalSpacing(10)
+        self.params_grid.setHorizontalSpacing(12)
+        self.params_grid.setVerticalSpacing(8)
+        self.params_host.setLayout(self.params_grid)
 
-        self.title_card = _InfoCard("Название задачи", self.params_card)
-        self.title_inline = InlineEditableField(QLineEdit(self.title_card), self.title_card)
-        self.title_inline.setObjectName("TaskDetailsTitleInline")
-        self.title_inline.value_committed.connect(lambda value: self._save_inline_updates(title=str(value)))
-        self.title_card.set_inline_editor(self.title_inline)
         self.detail_project_card = _InfoCard("Проект", self.params_card)
         self.project_inline = InlineEditableField(QComboBox(self.detail_project_card), self.detail_project_card)
         self.project_inline.editor.addItem("Без проекта", None)
@@ -432,7 +458,6 @@ class TaskDetailsDialog(QDialog):
         self.date_card = self.deadline_card
         self.time_card = self.deadline_card
         self._param_cards = [
-            self.title_card,
             self.detail_project_card,
             self.deadline_card,
             self.priority_card,
@@ -440,8 +465,7 @@ class TaskDetailsDialog(QDialog):
         ]
         for card in self._param_cards:
             self.params_grid.addWidget(card)
-        self.params_card.layout().addLayout(self.params_grid)
-        self.content_layout.insertWidget(1, self.params_card)
+        self.header_card.layout().addWidget(self.params_card)
 
     def _build_details_section(self) -> None:
         self.details_card = self._build_section_card("Детали")
@@ -637,6 +661,10 @@ class TaskDetailsDialog(QDialog):
                 background: transparent;
                 border: none;
             }}
+            QFrame#TaskDetailsHeaderParams {{
+                background: transparent;
+                border: none;
+            }}
             QFrame#TaskDetailsSectionCard,
             QFrame#TaskDetailsFooter {{
                 background: {palette.panel_bg};
@@ -654,6 +682,23 @@ class TaskDetailsDialog(QDialog):
                 background: {palette.elevated_bg};
                 border: 1px solid {palette.border};
                 border-radius: 8px;
+            }}
+            QToolButton#TaskDetailsHeaderAddButton {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                font-size: 28px;
+                font-weight: 300;
+            }}
+            QToolButton#TaskDetailsHeaderAddButton:hover {{
+                border-color: {palette.accent};
+                color: {palette.accent};
+            }}
+            QToolButton#TaskDetailsHeaderAddButton:disabled {{
+                color: {palette.dim_text};
+                background: {palette.panel_alt_bg};
+                border: 1px solid {palette.border};
             }}
             QToolButton#TaskDetailsCollapseButton,
             QToolButton#TaskDetailsImageButton {{
@@ -684,7 +729,7 @@ class TaskDetailsDialog(QDialog):
             }}
             QLabel#TaskDetailsTitle {{
                 color: #f2f5ff;
-                font-size: 21px;
+                font-size: 22px;
                 font-weight: 700;
             }}
             QLabel#TaskDetailsSummary {{
@@ -703,7 +748,7 @@ class TaskDetailsDialog(QDialog):
             }}
             QLabel#TaskDetailsCardValue {{
                 color: {palette.text};
-                font-size: 14px;
+                font-size: 15px;
                 font-weight: 600;
             }}
             QDialog#TaskDetailsDialog QLineEdit,
@@ -775,8 +820,8 @@ class TaskDetailsDialog(QDialog):
             QPushButton#TaskDetailsSecondaryButton,
             QPushButton#TaskDetailsPrimaryButton {{
                 border-radius: 9px;
-                min-height: 40px;
-                padding: 0 14px;
+                min-height: 36px;
+                padding: 0 18px;
                 font-weight: 600;
                 text-align: center;
             }}
@@ -833,8 +878,9 @@ class TaskDetailsDialog(QDialog):
         self._reflow_cards()
 
     def _reflow_cards(self) -> None:
-        content_width = max(0, self.scroll.viewport().width() - 44)
-        self._reflow_grid(self.params_grid, self._param_cards, self._columns_for_width(content_width, self._PARAM_BREAKPOINTS, default=4))
+        content_width = max(0, self.scroll.viewport().width() - 48)
+        params_width = max(0, content_width - self.header_add_button.width() - 12)
+        self._reflow_grid(self.params_grid, self._param_cards, self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=4))
         self._reflow_grid(self.details_grid, self._detail_cards, self._columns_for_width(content_width, self._DETAIL_BREAKPOINTS, default=3))
 
     @staticmethod
@@ -846,6 +892,8 @@ class TaskDetailsDialog(QDialog):
             row = index // columns
             column = index % columns
             layout.addWidget(widget, row, column)
+        for column in range(columns):
+            layout.setColumnStretch(column, 1)
 
     @staticmethod
     def _columns_for_width(width: int, breakpoints: tuple[tuple[int, int], ...], *, default: int) -> int:
@@ -1243,6 +1291,7 @@ class TaskDetailsDialog(QDialog):
             self.header_edit_button.setText("Сохранить")
             self.links_add_button.setEnabled(True)
             self.images_add_button.setEnabled(True)
+            self.header_add_button.setEnabled(True)
             if self.links_host.isHidden():
                 self._toggle_section(self.links_host, self.links_toggle)
             if self.images_host.isHidden():
@@ -1253,6 +1302,7 @@ class TaskDetailsDialog(QDialog):
         self.header_edit_button.setText("Редактировать")
         self.links_add_button.setEnabled(False)
         self.images_add_button.setEnabled(False)
+        self.header_add_button.setEnabled(False)
         self._refresh_view()
 
     def _cancel_or_close(self) -> None:

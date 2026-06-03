@@ -1085,9 +1085,14 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
         assert dialog.header_edit_button.text() == "Редактировать"
+        assert dialog.header_add_button.text() == "+"
+        assert dialog.header_add_button.isEnabled() is False
+        assert dialog.header_add_button.width() == 52
+        assert dialog.header_add_button.height() == 62
+        assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         assert dialog.close_button.height() == 40
         assert dialog.edit_button.height() == 40
-        assert dialog.summary_label.text() == "Без проекта • 2026-03-06 • Medium"
+        assert dialog.summary_label.isHidden()
         assert empty_description is not None
         assert empty_description.text() == "Нет описания"
         assert empty_links is not None
@@ -1099,14 +1104,13 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
         assert [card.title_label.text() for card in dialog._param_cards] == [
-            "Название задачи",
             "Проект",
             "Срок выполнения",
             "Приоритет",
             "Важность задачи",
         ]
-        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 5
-        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 5
+        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
+        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
         assert dialog._columns_for_width(1000, dialog._DETAIL_BREAKPOINTS, default=6) == 3
     finally:
