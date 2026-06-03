@@ -352,6 +352,15 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         if row_type != "project":
             return False
 
+        if event.type() == QEvent.Type.MouseButtonDblClick and isinstance(event, QMouseEvent):
+            if event.button() != Qt.MouseButton.LeftButton:
+                return False
+            pos = event.position().toPoint()
+            opt = cast(Any, option)
+            if self.project_folder_rect(opt.rect).contains(pos):
+                self.open_project_editor(index)
+                return True
+
         if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent):
             if event.button() != Qt.MouseButton.LeftButton:
                 return False
@@ -360,11 +369,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             r = opt.rect
             cy = r.center().y()
 
+            box_rect = self.project_archive_rect(r)
             x = r.left() + 10
             x += 22
-            box_side = max(18, r.height())
-            box_rect = QRect(x, r.top(), box_side, r.height())
-            x += box_side + 8
+            x += 22
             x += 22
             depth: int = int(index.data(ProjectRoles.Depth) or 0)
             depth = max(0, min(depth, 6))
@@ -417,6 +425,24 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 return True
 
         return False
+
+    @staticmethod
+    def project_folder_rect(row_rect: QRect) -> QRect:
+        x = row_rect.left() + 10
+        x += 22
+        x += 22
+        cy = row_rect.center().y()
+        return QRect(x, cy - 8, 16, 16).adjusted(-4, -4, 4, 4)
+
+    @staticmethod
+    def project_archive_rect(row_rect: QRect) -> QRect:
+        x = row_rect.left() + 10
+        x += 22
+        cy = row_rect.center().y()
+        return QRect(x, cy - 7, 14, 14).adjusted(-4, -4, 4, 4)
+
+    def open_project_editor(self, index: QModelIndex) -> None:
+        self._edit_project(index)
 
     def _show_row_menu(self, index: QModelIndex):
         """Показывает контекстное меню проекта."""

@@ -22,6 +22,22 @@ class _ProjectsListView(QListView):
         self._pressed_project_id = project_id if isinstance(project_id, int) else None
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            point = event.position().toPoint()
+            index = self.indexAt(point)
+            if index.isValid() and index.data(ProjectRoles.RowType) == "project":
+                delegate = self.itemDelegate()
+                folder_rect = getattr(delegate, "project_folder_rect", None)
+                open_project_editor = getattr(delegate, "open_project_editor", None)
+                if callable(folder_rect) and callable(open_project_editor):
+                    rect = folder_rect(self.visualRect(index))
+                    if rect.contains(point):
+                        open_project_editor(index)
+                        event.accept()
+                        return
+        super().mouseDoubleClickEvent(event)
+
     def startDrag(self, supported_actions):
         if isinstance(self._pressed_project_id, int):
             self._drag_source_project_id = self._pressed_project_id
