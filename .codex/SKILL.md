@@ -5,6 +5,15 @@ Primary execution workflow for routine repository work in `mindnavigator_v2`.
 Use this file together with `.codex/AGENTS.md`; if there is a conflict, `.codex/AGENTS.md`
 takes precedence.
 
+This file consolidates the practical rules from:
+- `.codex/rules/APP_DEVEL_AGENTS.md`
+- `.codex/rules/APP_DEVEL_SKILL.md`
+- `.codex/rules/10-project-scope.md`
+- `.codex/rules/20-validation-gates.md`
+- `.codex/CHECKLIST.md`
+- `.codex/COMMANDS.md`
+- `.codex/skills/mindnavigator-routine/SKILL.md`
+
 This skill is based on the current project workflow plus lessons from the recent task branches:
 - `feat/remastering_edit_window_project`
 - `feat/remaster-task-window`
@@ -114,9 +123,11 @@ If the gate exposes missing input that would materially change implementation, a
 ## Git And Change Hygiene
 - Keep one focused branch per task.
 - Keep commits task-focused; do not mix prototype data, code changes, and unrelated docs unless requested.
+- Do not create intentional broken-state commits unless explicitly requested for debugging or forensics.
 - Never revert user changes unless explicitly requested.
 - If untracked task materials are present, leave them untracked unless the user asks to add them.
 - Use non-interactive git commands.
+- Use keys from `.codex/git_key/` when authenticated Git operations are required by repository policy.
 - Do not push, merge, rebase, or create PRs without explicit user request and successful validation.
 
 ## Validation Gates
@@ -144,6 +155,11 @@ If the gate exposes missing input that would materially change implementation, a
 - Syntax check: `python -m compileall mindnavigator main.py`
 - Focused tests: `python -m pytest tests -k <scope> -q`
 - Full tests, env-safe: `python -m pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+- Full tests, headless Qt: `PYTHONPATH=. QT_QPA_PLATFORM=offscreen pytest tests -p no:cacheprovider --basetemp .pytest_dir/run_tmp`
+
+### Build Triggers
+- `b_start`: build, compile, place into `C:\Program Portable\MindNavigator\`, then run.
+- `b_build`: build, compile, place into `C:\Program Portable\MindNavigator\`, without run.
 
 ### Git Hygiene
 - Status: `git status --short --branch`
@@ -179,6 +195,7 @@ Apply when build, packaging, or release delivery is in scope.
 - `local_data`
 - `lang`
 - `defenition`
+- Ensure the packaged root remains minimal and includes the DB cleanup script when release packaging is in scope.
 - For deployment target `C:\Program Portable\MindNavigator\`, use `assets/icon.ico`.
 
 ## Finish Checklist
@@ -187,6 +204,8 @@ Apply when build, packaging, or release delivery is in scope.
 - Existing behavior and public contracts were preserved unless explicitly changed.
 - UI changes use application theme tokens and tested interaction paths.
 - Storage changes include migration plus read/write validation.
+- Windows-specific logic remains guarded by `sys.platform == "win32"`.
+- Build or packaging changes include explicit build-script and packaging validation notes.
 - `python -m compileall mindnavigator main.py` passed for code changes.
 - Focused tests passed, or the limitation is documented.
 - Final summary includes changed files, validation results, residual risks, and final status.
