@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QToolButton
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QTextEdit, QToolButton
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -1077,8 +1077,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.minimumHeight() == 720
         assert dialog.width() == 1360
         assert dialog.height() == 820
-        assert dialog.links_title.text() == "Связи"
-        assert dialog.images_title.text() == "Изображения"
+        assert dialog.links_title.text() == "☍  Связи"
+        assert dialog.images_title.text() == "▧  Изображения"
         assert dialog.links_host.isHidden()
         assert dialog.images_host.isHidden()
         assert dialog.concept_board_summary.text() == "Связанные идеи, заметки и объекты образуют маршрут задачи."
@@ -1098,7 +1098,7 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert empty_links is not None
         assert empty_links.text() == "Нет связанных элементов"
         assert dialog.time_card.value_label.text() == "—"
-        assert dialog.importance_card.value_label.text() == "★★★☆☆"
+        assert dialog.importance_card.value_label.text() == "Важно"
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
         assert dialog.links_add_button.isEnabled() is False
@@ -1146,10 +1146,11 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         dialog.project_inline.editor.setCurrentIndex(dialog.project_inline.editor.findData(project.id))
         dialog.project_inline.commit()
         dialog._begin_description_inline_edit()
-        description_editor = dialog.findChild(QPlainTextEdit, "TaskDetailsDescriptionInlineEdit")
+        description_editor = dialog.findChild(QTextEdit, "TaskDetailsDescriptionInlineEdit")
         assert description_editor is not None
+        assert dialog.findChild(QToolButton, "TaskDetailsDescriptionTool") is not None
         description_editor.setPlainText("Inline body")
-        dialog._save_inline_updates(description=description_editor.toPlainText())
+        dialog._save_inline_updates(description=dialog._description_editor_text())
 
         updated = next(item for item in database.fetch_tasks() if item.id == task.id)
         assert updated.title == "Inline title"

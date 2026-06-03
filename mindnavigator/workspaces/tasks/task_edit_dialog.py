@@ -27,6 +27,7 @@ from .task_attachment_selector import (
     safe_fetch,
 )
 from .task_image_preview_dialog import TaskImagePreviewDialog
+from .task_importance_labels import normalize_task_importance, task_importance_combo_items
 from .task_property_propagation import (
     TASK_PROPAGATABLE_CLEARABLE_FIELDS,
     TaskPropertyPropagationResult,
@@ -482,9 +483,9 @@ class TaskEditDialog(QDialog):
         )
 
         self.importance_edit = QComboBox()
-        for importance in range(1, 6):
-            self.importance_edit.addItem(f"{'★' * importance}{'☆' * (5 - importance)}", importance)
-        importance_idx = self.importance_edit.findData(max(1, min(5, int(getattr(task, "importance", 3) or 3))))
+        for label, importance in task_importance_combo_items():
+            self.importance_edit.addItem(label, importance)
+        importance_idx = self.importance_edit.findData(normalize_task_importance(getattr(task, "importance", 3)))
         self.importance_edit.setCurrentIndex(max(0, importance_idx))
         self.importance_property_group = self._create_property_group(
             "importance",

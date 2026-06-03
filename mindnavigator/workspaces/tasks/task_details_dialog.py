@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtWidgets import QGridLayout, QPushButton, QSizePolicy
+from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
 
 from mindnavigator.storage import DEFERRED_PRIORITY
+from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND, get_theme_palette
 
@@ -19,6 +21,7 @@ from .task_attachment_selector import (
     load_task_attachment_sources,
 )
 from .task_image_preview_dialog import TaskImagePreviewDialog
+from .task_importance_labels import normalize_task_importance, task_importance_combo_items, task_importance_label
 
 
 class _InlineViewLabel(QLabel):
@@ -248,7 +251,7 @@ class TaskDetailsDialog(QDialog):
         self._param_cards: list[_InfoCard] = []
         self._detail_cards: list[_InfoCard] = []
         self._form_editing = False
-        self.description_editor: QPlainTextEdit | None = None
+        self.description_editor: QTextEdit | None = None
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -276,13 +279,13 @@ class TaskDetailsDialog(QDialog):
         self.body_columns = QWidget(self.content)
         body_layout = QHBoxLayout(self.body_columns)
         body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(12)
+        body_layout.setSpacing(14)
         self.left_column = QVBoxLayout()
         self.left_column.setContentsMargins(0, 0, 0, 0)
-        self.left_column.setSpacing(12)
+        self.left_column.setSpacing(10)
         self.right_column = QVBoxLayout()
         self.right_column.setContentsMargins(0, 0, 0, 0)
-        self.right_column.setSpacing(12)
+        self.right_column.setSpacing(10)
         body_layout.addLayout(self.left_column, 1)
         body_layout.addLayout(self.right_column, 1)
         self.content_layout.addWidget(self.body_columns, 1)
@@ -383,13 +386,16 @@ class TaskDetailsDialog(QDialog):
         self.content_layout.addWidget(self.header_card)
 
     def _build_description_section(self) -> None:
-        self.description_card = self._build_section_card("Описание")
+        self.description_card = self._build_section_card("Описание", icon="▤")
         self.description_body = QWidget(self.description_card)
         self.description_body.setObjectName("TaskDetailsDescriptionBody")
         self.description_body_layout = QVBoxLayout(self.description_body)
         self.description_body_layout.setContentsMargins(0, 0, 0, 0)
         self.description_body_layout.setSpacing(0)
         self.description_card.layout().addWidget(self.description_body)
+        self.description_counter = QLabel("", self.description_card)
+        self.description_counter.setObjectName("TaskDetailsDescriptionCounter")
+        self.description_card.layout().addWidget(self.description_counter, 0, Qt.AlignmentFlag.AlignRight)
         self.left_column.addWidget(self.description_card, 1)
 
     def _build_key_params_section(self) -> None:
@@ -437,8 +443,8 @@ class TaskDetailsDialog(QDialog):
         self.priority_inline.value_committed.connect(lambda value: self._save_inline_updates(priority=str(value)))
         self.priority_card.set_inline_editor(self.priority_inline)
         self.importance_inline = InlineEditableField(QComboBox(self.importance_card), self.importance_card)
-        for value in range(1, 6):
-            self.importance_inline.editor.addItem(f"{'★' * value}{'☆' * (5 - value)}", value)
+        for label, value in task_importance_combo_items():
+            self.importance_inline.editor.addItem(label, value)
         self.importance_inline.value_committed.connect(lambda value: self._save_inline_updates(importance=int(value)))
         self.importance_card.set_inline_editor(self.importance_inline)
         deadline_host = QWidget(self.deadline_card)
@@ -468,7 +474,7 @@ class TaskDetailsDialog(QDialog):
         self.header_card.layout().addWidget(self.params_card)
 
     def _build_details_section(self) -> None:
-        self.details_card = self._build_section_card("Детали")
+        self.details_card = self._build_section_card("Свойства", icon="☷")
         self.details_grid = QGridLayout()
         self.details_grid.setContentsMargins(0, 0, 0, 0)
         self.details_grid.setHorizontalSpacing(10)
@@ -482,7 +488,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_theme_card = _InfoCard("Тема маркера", self.details_card)
         self.recurrence_card = _InfoCard("Повтор", self.details_card)
         self.status_card = _InfoCard("Статус", self.details_card)
-        self.gantt_card = _InfoCard("GANTT", self.details_card)
+        self.gantt_card = _InfoCard("GANTT / Время", self.details_card)
         self.recurrence_inline = InlineEditableField(QComboBox(self.recurrence_card), self.recurrence_card)
         for label, value in (("Без повтора", ""), ("Ежедневно", "daily"), ("Еженедельно", "weekly"), ("Ежемесячно", "monthly")):
             self.recurrence_inline.editor.addItem(label, value)
@@ -498,6 +504,11 @@ class TaskDetailsDialog(QDialog):
         self.gantt_edit.setToolTip("Оценка длительности для режима GANTT в формате HH:MM.")
         self.gantt_edit.minutesCommitted.connect(self._on_gantt_estimate_committed)
         self.gantt_card.set_value_widget(self.gantt_edit)
+        self.gantt_progress = QProgressBar(self.gantt_card)
+        self.gantt_progress.setObjectName("TaskDetailsGanttProgress")
+        self.gantt_progress.setRange(0, 100)
+        self.gantt_progress.setTextVisible(True)
+        self.gantt_card.layout().addWidget(self.gantt_progress)
         self.marker_color_inline = InlineEditableField(QComboBox(self.detail_marker_card), self.detail_marker_card)
         for value, label in self._MARKER_COLOR_LABELS.items():
             self.marker_color_inline.editor.addItem(label, value)
@@ -534,7 +545,7 @@ class TaskDetailsDialog(QDialog):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(10)
 
-        self.links_title = QLabel("Связи", self.links_card)
+        self.links_title = QLabel("☍  Связи", self.links_card)
         self.links_title.setObjectName("TaskDetailsSectionTitle")
         header_layout.addWidget(self.links_title)
         header_layout.addStretch(1)
@@ -574,7 +585,7 @@ class TaskDetailsDialog(QDialog):
         layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        self.images_title = QLabel("Изображения", self.images_card)
+        self.images_title = QLabel("▧  Изображения", self.images_card)
         self.images_title.setObjectName("TaskDetailsSectionTitle")
         header_layout.addWidget(self.images_title)
         header_layout.addStretch(1)
@@ -601,7 +612,7 @@ class TaskDetailsDialog(QDialog):
         self.left_column.addWidget(self.images_card)
 
     def _build_concept_board_section(self) -> None:
-        self.concept_board_card = self._build_section_card("Навигатор концептборда")
+        self.concept_board_card = self._build_section_card("Навигатор концептборда", icon="⌘")
         self.concept_board_summary = QLabel(
             "Связанные идеи, заметки и объекты образуют маршрут задачи.",
             self.concept_board_card,
@@ -623,14 +634,15 @@ class TaskDetailsDialog(QDialog):
         button.setText("⌃" if expanded else "⌄")
         button.setToolTip("Свернуть блок" if expanded else "Развернуть блок")
 
-    def _build_section_card(self, title: str) -> QFrame:
+    def _build_section_card(self, title: str, *, icon: str = "") -> QFrame:
         section = QFrame(self.content)
         section.setObjectName("TaskDetailsSectionCard")
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
 
-        title_label = QLabel(title, section)
+        title_text = f"{icon}  {title}" if icon else title
+        title_label = QLabel(title_text, section)
         title_label.setObjectName("TaskDetailsSectionTitle")
         layout.addWidget(title_label)
         return section
@@ -671,7 +683,7 @@ class TaskDetailsDialog(QDialog):
                 border: 1px solid {palette.border};
             }}
             QFrame#TaskDetailsSectionCard {{
-                border-radius: 10px;
+                border-radius: 8px;
             }}
             QFrame#TaskDetailsFooter {{
                 border-left: none;
@@ -679,9 +691,9 @@ class TaskDetailsDialog(QDialog):
                 border-bottom: none;
             }}
             QFrame#TaskDetailsInfoCard {{
-                background: {palette.elevated_bg};
-                border: 1px solid {palette.border};
-                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.025);
+                border: 1px solid rgba(255, 255, 255, 0.055);
+                border-radius: 7px;
             }}
             QToolButton#TaskDetailsHeaderAddButton {{
                 color: {palette.text};
@@ -715,14 +727,21 @@ class TaskDetailsDialog(QDialog):
             }}
             QToolButton#TaskConceptBoardNode {{
                 color: {palette.text};
-                background: {palette.elevated_bg};
-                border: 1px solid {palette.border};
+                background: {palette.chip_bg};
+                border: 1px solid {palette.chip_border};
                 border-radius: 8px;
-                padding: 8px;
+                padding: 10px 12px;
+                min-height: 42px;
+                text-align: left;
             }}
             QToolButton#TaskConceptBoardNode:hover {{
                 border-color: {palette.accent};
                 color: {palette.accent};
+            }}
+            QLabel#TaskConceptBoardArrow {{
+                color: {palette.dim_text};
+                font-size: 18px;
+                padding: 0 2px;
             }}
             QLabel {{
                 color: {palette.text};
@@ -781,9 +800,9 @@ class TaskDetailsDialog(QDialog):
                 font-weight: 600;
             }}
             QWidget#TaskDetailsDescriptionBody {{
-                background: {palette.elevated_bg};
-                border: 1px solid {palette.border};
-                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.025);
+                border: 1px solid rgba(255, 255, 255, 0.055);
+                border-radius: 8px;
             }}
             QWidget#TaskDetailsDescriptionBody QLabel {{
                 color: {palette.text};
@@ -793,6 +812,47 @@ class TaskDetailsDialog(QDialog):
                 font-style: italic;
                 padding: 4px 2px;
             }}
+            QLabel#TaskDetailsDescriptionCounter {{
+                color: {palette.dim_text};
+                font-size: 12px;
+            }}
+            QWidget#TaskDetailsDescriptionToolbar {{
+                background: transparent;
+                border: none;
+            }}
+            QToolButton#TaskDetailsDescriptionTool {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                min-width: 30px;
+                min-height: 26px;
+                padding: 0 8px;
+                font-weight: 700;
+            }}
+            QToolButton#TaskDetailsDescriptionTool:hover {{
+                border-color: {palette.accent};
+                color: {palette.accent};
+            }}
+            QTextEdit#TaskDetailsDescriptionInlineEdit {{
+                background: transparent;
+                color: {palette.text};
+                border: none;
+                padding: 8px 10px;
+                selection-background-color: {palette.selection_bg};
+            }}
+            QProgressBar#TaskDetailsGanttProgress {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 7px;
+                min-height: 18px;
+                text-align: center;
+            }}
+            QProgressBar#TaskDetailsGanttProgress::chunk {{
+                background: {palette.accent};
+                border-radius: 6px;
+            }}
             QLabel#TaskAttachmentKind {{
                 color: {palette.dim_text};
                 font-weight: 600;
@@ -801,16 +861,16 @@ class TaskDetailsDialog(QDialog):
                 color: #6ecbe0;
             }}
             QFrame#TaskAttachmentRow {{
-                background: {palette.elevated_bg};
+                background: rgba(255, 255, 255, 0.025);
                 border: 1px solid {palette.border};
-                border-radius: 9px;
+                border-radius: 8px;
             }}
             QLabel#TaskDetailsLinksEmpty {{
                 color: {palette.dim_text};
-                background: {palette.elevated_bg};
+                background: rgba(255, 255, 255, 0.025);
                 border: 1px dashed {palette.border_strong};
-                border-radius: 10px;
-                padding: 18px 14px;
+                border-radius: 8px;
+                padding: 16px 14px;
             }}
             QToolButton#TaskDetailsCardAction,
             QToolButton#TaskDetailsHeaderCloseButton,
@@ -920,8 +980,8 @@ class TaskDetailsDialog(QDialog):
         priority_text = self._format_empty(self._task.priority)
         self.priority_card.set_value(priority_text, muted=priority_text == "—")
         self.priority_inline.set_value(self._task.priority, priority_text)
-        importance = max(1, min(5, int(getattr(self._task, "importance", 3) or 3)))
-        importance_text = f"{'★' * importance}{'☆' * (5 - importance)}"
+        importance = normalize_task_importance(getattr(self._task, "importance", 3))
+        importance_text = task_importance_label(importance)
         self.importance_card.set_value(importance_text)
         self.importance_inline.set_value(importance, importance_text)
         recurrence_text = self._format_recurrence()
@@ -939,6 +999,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_id_card.set_value(str(self._task.id))
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
         self.project_inline.set_value(self._task.project_id, project_text)
+        self._refresh_gantt_progress()
         self.detail_parent_card.set_value(parent_text, muted=parent_text == "—")
         self.detail_parent_card.set_action_visible(self._parent_schedule_mismatch())
         self.detail_type_card.set_value(self._task_type_text())
@@ -963,6 +1024,13 @@ class TaskDetailsDialog(QDialog):
         from .cast_gantt import TasksGanttCast
 
         return max(5, int(TasksGanttCast.estimate_task_minutes(self._task)))
+
+    def _refresh_gantt_progress(self) -> None:
+        planned = max(0, int(self._effective_gantt_estimate_minutes()))
+        spent = max(0, int(getattr(self._task, "time_spent_minutes", 0) or 0))
+        progress = 0 if planned <= 0 else min(100, round(spent / planned * 100))
+        self.gantt_progress.setValue(progress)
+        self.gantt_progress.setFormat(f"{progress}%")
 
     def _on_gantt_estimate_committed(self, minutes: int) -> None:
         if (
@@ -1034,16 +1102,17 @@ class TaskDetailsDialog(QDialog):
         self.description_editor = None
         self._clear_layout(self.description_body_layout)
         description = (self._task.description or "").strip()
+        self.description_counter.setText(f"{len(description)} / 2000")
         if not description:
             empty = QLabel("Нет описания", self.description_body)
             empty.setObjectName("TaskDetailsDescriptionEmpty")
-            empty.setContentsMargins(14, 14, 14, 14)
+            empty.setContentsMargins(16, 16, 16, 16)
             empty.installEventFilter(self)
             self.description_body_layout.addWidget(empty)
             return
         preview = _build_markdown_preview_widget(description, self.description_body, self._open_linked_task)
-        preview.setContentsMargins(14, 14, 14, 14)
-        preview.setMaximumHeight(112)
+        preview.setContentsMargins(16, 16, 16, 16)
+        preview.setMinimumHeight(260)
         preview.installEventFilter(self)
         self.description_body_layout.addWidget(preview)
 
@@ -1058,10 +1127,23 @@ class TaskDetailsDialog(QDialog):
 
     def _begin_description_inline_edit(self, *, form_editing: bool = False) -> None:
         self._clear_layout(self.description_body_layout)
-        editor = QPlainTextEdit(self._task.description or "", self.description_body)
+        toolbar = self._build_description_toolbar()
+        self.description_body_layout.addWidget(toolbar)
+        editor = QTextEdit(self.description_body)
         editor.setObjectName("TaskDetailsDescriptionInlineEdit")
-        editor.setMinimumHeight(112)
+        editor.setAcceptRichText(True)
+        editor.setMinimumHeight(260)
+        self._set_description_editor_text(editor, self._task.description or "")
+        editor.textChanged.connect(lambda: self.description_counter.setText(f"{len(editor.toPlainText().strip())} / 2000"))
         self.description_editor = editor
+        attach_context_entity_linking(
+            editor,
+            self._db,
+            source_type="task",
+            source_id_getter=lambda: int(self._task.id),
+            source_field="description",
+            refresh_callback=self._refresh_attachments,
+        )
         self.description_body_layout.addWidget(editor)
         if form_editing:
             return
@@ -1071,9 +1153,70 @@ class TaskDetailsDialog(QDialog):
         cancel_button.clicked.connect(self._refresh_description)
         button_row.addWidget(cancel_button)
         save_button = QPushButton("Сохранить", self.description_body)
-        save_button.clicked.connect(lambda: self._save_inline_updates(description=editor.toPlainText().strip()))
+        save_button.clicked.connect(lambda: self._save_inline_updates(description=self._description_editor_text()))
         button_row.addWidget(save_button)
         self.description_body_layout.addLayout(button_row)
+        editor.setFocus()
+
+    def _build_description_toolbar(self) -> QWidget:
+        toolbar = QWidget(self.description_body)
+        toolbar.setObjectName("TaskDetailsDescriptionToolbar")
+        layout = QHBoxLayout(toolbar)
+        layout.setContentsMargins(8, 8, 8, 0)
+        layout.setSpacing(6)
+        actions = (
+            ("B", "Жирный", lambda: self._toggle_description_format("bold")),
+            ("I", "Курсив", lambda: self._toggle_description_format("italic")),
+            ("H2", "Подзаголовок", lambda: self._insert_description_prefix("## ")),
+            ("•", "Список", lambda: self._insert_description_prefix("- ")),
+            ("1.", "Нумерованный список", lambda: self._insert_description_prefix("1. ")),
+            (">", "Цитата", lambda: self._insert_description_prefix("> ")),
+        )
+        for label, tooltip, handler in actions:
+            button = QToolButton(toolbar)
+            button.setObjectName("TaskDetailsDescriptionTool")
+            button.setText(label)
+            button.setToolTip(tooltip)
+            button.clicked.connect(handler)
+            layout.addWidget(button)
+        layout.addStretch(1)
+        return toolbar
+
+    @staticmethod
+    def _set_description_editor_text(editor: QTextEdit, text: str) -> None:
+        if "<" in text and ">" in text:
+            editor.setHtml(text)
+            return
+        editor.setMarkdown(text)
+
+    def _description_editor_text(self) -> str:
+        if self.description_editor is None:
+            return self._task.description
+        to_markdown = getattr(self.description_editor, "toMarkdown", None)
+        if callable(to_markdown):
+            return str(to_markdown()).strip()
+        return self.description_editor.toPlainText().strip()
+
+    def _toggle_description_format(self, mode: str) -> None:
+        editor = self.description_editor
+        if editor is None:
+            return
+        if mode == "bold":
+            normal = int(QFont.Weight.Normal)
+            bold = int(QFont.Weight.Bold)
+            editor.setFontWeight(normal if editor.fontWeight() > normal else bold)
+        elif mode == "italic":
+            editor.setFontItalic(not editor.fontItalic())
+        editor.setFocus()
+
+    def _insert_description_prefix(self, prefix: str) -> None:
+        editor = self.description_editor
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+        cursor.insertText(prefix)
+        editor.setTextCursor(cursor)
         editor.setFocus()
 
     def _save_inline_updates(self, **changes) -> bool:
@@ -1312,7 +1455,7 @@ class TaskDetailsDialog(QDialog):
         self.reject()
 
     def _save_form_updates(self) -> None:
-        description = self.description_editor.toPlainText().strip() if self.description_editor is not None else self._task.description
+        description = self._description_editor_text() if self.description_editor is not None else self._task.description
         if not self._save_inline_updates(
             title=str(self.title_inline.current_value() or ""),
             description=description,
@@ -1443,13 +1586,19 @@ class TaskDetailsDialog(QDialog):
         self._clear_layout(self.concept_board_layout)
         navigable = [attachment for attachment in attachments if attachment.kind in {"idea", "note", "task", "object", "map", "marker"}]
         self.concept_board_summary.setVisible(not navigable)
-        for attachment in navigable[:4]:
+        visible_items = navigable[:4]
+        for index, attachment in enumerate(visible_items):
             button = QToolButton(self.concept_board_host)
             button.setObjectName("TaskConceptBoardNode")
-            button.setText(f"{attachment_kind_label(attachment.kind)}: {self._attachment_display_text(attachment)}")
+            button.setText(f"{attachment_kind_label(attachment.kind)}\n{self._attachment_display_text(attachment)}")
             button.setToolTip("Открыть связанную сущность")
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
             button.clicked.connect(lambda _checked=False, att=attachment: self._open_attachment(att))
             self.concept_board_layout.addWidget(button, 1)
+            if index < len(visible_items) - 1:
+                arrow = QLabel("→", self.concept_board_host)
+                arrow.setObjectName("TaskConceptBoardArrow")
+                self.concept_board_layout.addWidget(arrow, 0, Qt.AlignmentFlag.AlignVCenter)
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:
