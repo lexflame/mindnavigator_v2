@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QPlainTextEdit
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import QGridLayout, QPushButton, QScrollArea, QSizePolicy, QPlainTextEdit
 
 from ._shared import *  # noqa: F401,F403
 
@@ -13,24 +14,12 @@ class ProjectEditDialog(QDialog):
         is_new = project is None
         self._project = project
         self._db = get_database()
+        self._edit_mode = is_new
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.setFixedSize(780, 860)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(14)
-
-        title_label = QLabel("Создание проекта" if is_new else "Редактирование проекта")
-        title_label.setObjectName("DialogTitle")
-        layout.addWidget(title_label)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
-        form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(12)
+        self.resize(1220, 780)
+        self.setMinimumSize(1100, 700)
 
         self.area_edit = QLineEdit(project.area if project else "")
         self.area_edit.setPlaceholderText("Область проекта")
@@ -155,64 +144,237 @@ class ProjectEditDialog(QDialog):
         if project:
             self._load_project_properties(project.id)
 
-        form.addRow("Область", self.area_edit)
-        form.addRow("Название", self.title_edit)
-        form.addRow("Дата обновления", self.updated_edit)
-        form.addRow("Приоритет", self.priority_edit)
-        form.addRow("Parent project", self.parent_project_edit)
-        form.addRow("Task priority preset", self.default_task_priority_edit)
-        form.addRow("Force recurrence", self.force_recurrence_kind_edit)
-        form.addRow("Linked map", self.linked_map_edit)
-        form.addRow("Linked note", self.linked_note_edit)
-        form.addRow("Linked object", self.linked_object_edit)
-        form.addRow("Маркер (цвет)", self.marker_color_edit)
-        form.addRow("Тема маркера", self.marker_theme_edit)
-        form.addRow("Каталог репозитория", self.repository_catalog_edit)
-        form.addRow("", self.archived_edit)
-        form.addRow("Типы задач", task_types_row)
-        form.addRow("Связанные проекты", related_projects_row)
-        form.addRow("Связанные задачи", related_tasks_row)
-        form.addRow("Репозитории", repository_links_row)
-        form.addRow("Wiki", wiki_links_row)
+        self._editor_controls = [
+            self.area_edit,
+            self.title_edit,
+            self.updated_edit,
+            self.priority_edit,
+            self.parent_project_edit,
+            self.default_task_priority_edit,
+            self.force_recurrence_kind_edit,
+            self.linked_map_edit,
+            self.linked_note_edit,
+            self.linked_object_edit,
+            self.marker_color_edit,
+            self.marker_theme_edit,
+            self.repository_catalog_edit,
+            self.archived_edit,
+            self.task_types_edit,
+            self.related_projects_edit,
+            self.related_tasks_edit,
+            self.repository_links_edit,
+            self.wiki_links_edit,
+        ]
+        self._edit_action_buttons: list[QWidget] = []
+        for row in (task_types_row, related_projects_row, related_tasks_row, repository_links_row, wiki_links_row):
+            self._edit_action_buttons.extend(row.findChildren(QToolButton))
 
-        layout.addLayout(form)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(0)
 
-        buttons = QDialogButtonBox(self)
-        buttons.addButton(QDialogButtonBox.StandardButton.Save)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.shell = QFrame(self)
+        self.shell.setObjectName("ProjectDialogShell")
+        root.addWidget(self.shell, 1)
+        shell_layout = QVBoxLayout(self.shell)
+        shell_layout.setContentsMargins(24, 20, 24, 16)
+        shell_layout.setSpacing(14)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(12)
+        title_box = QVBoxLayout()
+        title_box.setContentsMargins(0, 0, 0, 0)
+        title_box.setSpacing(4)
+        self.title_label = QLabel(project.title if project else "Новый проект")
+        self.title_label.setObjectName("DialogTitle")
+        self.mode_label = QLabel("Редактирование проекта" if is_new else "Просмотр проекта")
+        self.mode_label.setObjectName("ProjectDialogMode")
+        title_box.addWidget(self.title_label)
+        title_box.addWidget(self.mode_label)
+        header_row.addLayout(title_box, 1)
+        self.close_button = QPushButton("Закрыть")
+        self.close_button.setObjectName("ProjectDialogSecondaryButton")
+        self.edit_button = QPushButton("Редактировать")
+        self.edit_button.setObjectName("ProjectDialogPrimaryButton")
+        self.save_button = QPushButton("Сохранить")
+        self.save_button.setObjectName("ProjectDialogPrimaryButton")
+        self.cancel_button = QPushButton("Отменить")
+        self.cancel_button.setObjectName("ProjectDialogSecondaryButton")
+        self.close_button.clicked.connect(self.reject)
+        self.edit_button.clicked.connect(lambda: self._set_edit_mode(True))
+        self.save_button.clicked.connect(self._on_accept)
+        self.cancel_button.clicked.connect(self.reject)
+        header_row.addWidget(self.close_button)
+        header_row.addWidget(self.edit_button)
+        header_row.addWidget(self.cancel_button)
+        header_row.addWidget(self.save_button)
+        shell_layout.addLayout(header_row)
+
+        metrics_grid = QGridLayout()
+        metrics_grid.setContentsMargins(0, 0, 0, 0)
+        metrics_grid.setHorizontalSpacing(10)
+        metrics_grid.setVerticalSpacing(10)
+        metrics_grid.addWidget(self._metric_card("Область", self.area_edit), 0, 0)
+        metrics_grid.addWidget(self._metric_card("Дата обновления", self.updated_edit), 0, 1)
+        metrics_grid.addWidget(self._metric_card("Приоритет", self.priority_edit), 0, 2)
+        metrics_grid.addWidget(self._metric_card("Parent project", self.parent_project_edit), 0, 3)
+        shell_layout.addLayout(metrics_grid)
+
+        scroll = QScrollArea(self.shell)
+        scroll.setObjectName("ProjectDialogScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setObjectName("ProjectDialogContent")
+        scroll.setWidget(content)
+        content_layout = QGridLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setHorizontalSpacing(12)
+        content_layout.setVerticalSpacing(12)
+
+        main_card = self._section_card("Основное")
+        main_form = self._section_form(main_card)
+        main_form.addRow("Название", self.title_edit)
+        main_form.addRow("Каталог репозитория", self.repository_catalog_edit)
+        main_form.addRow("Репозитории", repository_links_row)
+        main_form.addRow("Wiki", wiki_links_row)
+
+        links_card = self._section_card("Связи")
+        links_form = self._section_form(links_card)
+        links_form.addRow("Связанные проекты", related_projects_row)
+        links_form.addRow("Связанные задачи", related_tasks_row)
+        links_form.addRow("Linked map", self.linked_map_edit)
+        links_form.addRow("Linked note", self.linked_note_edit)
+        links_form.addRow("Linked object", self.linked_object_edit)
+
+        types_card = self._section_card("Типы задач")
+        types_form = self._section_form(types_card)
+        types_form.addRow("", task_types_row)
+
+        properties_card = self._section_card("Свойства")
+        properties_form = self._section_form(properties_card)
+        properties_form.addRow("Task priority preset", self.default_task_priority_edit)
+        properties_form.addRow("Force recurrence", self.force_recurrence_kind_edit)
+        properties_form.addRow("Маркер (цвет)", self.marker_color_edit)
+        properties_form.addRow("Тема маркера", self.marker_theme_edit)
+        properties_form.addRow("Архивирован", self.archived_edit)
+
+        hierarchy_card = self._section_card("Иерархия и правила")
+        hierarchy_form = self._section_form(hierarchy_card)
+        hierarchy_form.addRow("Parent project", QLabel(self.parent_project_edit.currentText()))
+        preset_note = QLabel("Настройки поведения задач, повторяемости, напоминаний и другие правила наследуются из родительского проекта или глобальных параметров системы.")
+        preset_note.setObjectName("ProjectDialogInfo")
+        preset_note.setWordWrap(True)
+        hierarchy_form.addRow("Поведение задач по умолчанию", QLabel("Preset не задан"))
+        hierarchy_form.addRow("", preset_note)
+
+        stats_card = self._section_card("Статистика")
+        stats_layout = stats_card.layout()
+        if isinstance(stats_layout, QVBoxLayout):
+            stats_layout.addLayout(self._statistics_row())
+
+        content_layout.addWidget(main_card, 0, 0)
+        content_layout.addWidget(properties_card, 0, 1)
+        content_layout.addWidget(links_card, 1, 0)
+        content_layout.addWidget(hierarchy_card, 1, 1)
+        content_layout.addWidget(types_card, 2, 0)
+        content_layout.addWidget(stats_card, 2, 1)
+        content_layout.setColumnStretch(0, 1)
+        content_layout.setColumnStretch(1, 1)
+        shell_layout.addWidget(scroll, 1)
+
+        QShortcut(QKeySequence("Ctrl+E"), self, activated=lambda: self._set_edit_mode(True))
+        QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save_shortcut)
+        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_accept)
+        QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_accept)
+
+        self._set_edit_mode(self._edit_mode)
 
         self.setStyleSheet(f"""
             QDialog#ProjectEditDialog {{
                 {MATH_PHYS_BACKGROUND}
             }}
 
+            QFrame#ProjectDialogShell {{
+                background: rgba(15, 28, 47, 0.96);
+                border: 1px solid #21324a;
+                border-radius: 14px;
+            }}
+
             QDialog#ProjectEditDialog QLabel {{
-                color: #cfcfcf;
+                color: #d7dce7;
             }}
 
             QDialog#ProjectEditDialog QLabel#DialogTitle {{
-                color: #f2f2f2;
-                font-size: 18px;
+                color: #f6f8fb;
+                font-size: 26px;
                 font-weight: 600;
+            }}
+
+            QLabel#ProjectDialogMode {{
+                color: #b7c1d5;
+                font-size: 14px;
+            }}
+
+            QFrame#ProjectDialogMetric,
+            QFrame#ProjectDialogSection {{
+                background: rgba(17, 31, 52, 0.78);
+                border: 1px solid #263a56;
+                border-radius: 8px;
+            }}
+
+            QLabel#ProjectDialogSectionTitle {{
+                color: #f1f5fb;
+                font-size: 16px;
+                font-weight: 600;
+            }}
+
+            QLabel#ProjectDialogMetricTitle {{
+                color: #aeb8cb;
+                font-size: 12px;
+            }}
+
+            QLabel#ProjectDialogInfo {{
+                color: #b8c3d8;
+                background: rgba(28, 47, 78, 0.62);
+                border: 1px solid #2c4a74;
+                border-radius: 7px;
+                padding: 9px 11px;
+            }}
+
+            QScrollArea#ProjectDialogScroll {{
+                background: transparent;
+                border: none;
+            }}
+
+            QWidget#ProjectDialogContent {{
+                background: transparent;
             }}
 
             QDialog#ProjectEditDialog QLineEdit,
             QDialog#ProjectEditDialog QComboBox,
             QDialog#ProjectEditDialog QDateEdit,
             QDialog#ProjectEditDialog QPlainTextEdit {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 8px 10px;
+                background: rgba(9, 18, 31, 0.72);
+                color: #edf2fb;
+                border: 1px solid #2a405f;
+                padding: 7px 10px;
                 border-radius: 6px;
                 min-height: 28px;
             }}
 
+            QDialog#ProjectEditDialog QLineEdit:disabled,
+            QDialog#ProjectEditDialog QComboBox:disabled,
+            QDialog#ProjectEditDialog QDateEdit:disabled,
+            QDialog#ProjectEditDialog QPlainTextEdit:disabled {{
+                color: #dce5f4;
+                background: rgba(9, 18, 31, 0.44);
+                border: 1px solid #223650;
+            }}
+
             QDialog#ProjectEditDialog QCheckBox {{
-                color: #cfcfcf;
+                color: #d7dce7;
                 padding: 4px 0;
             }}
 
@@ -221,19 +383,130 @@ class ProjectEditDialog(QDialog):
                 width: 18px;
             }}
 
-            QDialog#ProjectEditDialog QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
+            QDialog#ProjectEditDialog QPushButton,
+            QDialog#ProjectEditDialog QToolButton {{
+                background: rgba(33, 48, 70, 0.86);
                 color: #e6e6e6;
-                border: 1px solid #3a3b40;
+                border: 1px solid #344b6b;
                 padding: 8px 14px;
                 border-radius: 6px;
                 min-width: 90px;
             }}
 
-            QDialog#ProjectEditDialog QDialogButtonBox QPushButton:hover {{
-                background: #34363b;
+            QDialog#ProjectEditDialog QPushButton:hover,
+            QDialog#ProjectEditDialog QToolButton:hover {{
+                background: rgba(45, 64, 91, 0.95);
+            }}
+
+            QPushButton#ProjectDialogPrimaryButton {{
+                background: #5227ff;
+                border: 1px solid #6541ff;
+                color: #ffffff;
+                font-weight: 600;
+                min-width: 132px;
+            }}
+
+            QPushButton#ProjectDialogSecondaryButton {{
+                min-width: 118px;
             }}
         """)
+
+    def _metric_card(self, title: str, editor: QWidget) -> QFrame:
+        card = QFrame()
+        card.setObjectName("ProjectDialogMetric")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(10)
+        text_box = QVBoxLayout()
+        text_box.setContentsMargins(0, 0, 0, 0)
+        text_box.setSpacing(4)
+        label = QLabel(title)
+        label.setObjectName("ProjectDialogMetricTitle")
+        text_box.addWidget(label)
+        text_box.addWidget(editor)
+        layout.addLayout(text_box, 1)
+        return card
+
+    def _section_card(self, title: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("ProjectDialogSection")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 12, 14, 14)
+        card_layout.setSpacing(10)
+        label = QLabel(title)
+        label.setObjectName("ProjectDialogSectionTitle")
+        card_layout.addWidget(label)
+        return card
+
+    def _section_form(self, card: QFrame) -> QFormLayout:
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(9)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        layout = card.layout()
+        if isinstance(layout, QVBoxLayout):
+            layout.addLayout(form)
+        return form
+
+    def _statistics_row(self) -> QHBoxLayout:
+        stats = self._project_statistics()
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        for title, value in (
+            ("Задач", stats["total"]),
+            ("Активных", stats["active"]),
+            ("Готово", stats["done"]),
+            ("Связей", stats["links"]),
+        ):
+            row.addWidget(self._stat_card(title, value))
+        return row
+
+    def _stat_card(self, title: str, value: int) -> QFrame:
+        card = QFrame()
+        card.setObjectName("ProjectDialogMetric")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(3)
+        label = QLabel(title)
+        label.setObjectName("ProjectDialogMetricTitle")
+        number = QLabel(str(value))
+        number.setObjectName("ProjectDialogSectionTitle")
+        layout.addWidget(label)
+        layout.addWidget(number)
+        return card
+
+    def _project_statistics(self) -> dict[str, int]:
+        if self._project is None:
+            return {"total": 0, "active": 0, "done": 0, "links": 0}
+        project_id = self._project.id
+        tasks = [task for task in self._db.fetch_tasks() if getattr(task, "project_id", None) == project_id]
+        done = sum(1 for task in tasks if bool(getattr(task, "done", False)))
+        links = len(self._parse_int_lines(self.related_projects_edit.toPlainText(), "Связанные проекты"))
+        links += len(self._parse_int_lines(self.related_tasks_edit.toPlainText(), "Связанные задачи"))
+        return {"total": len(tasks), "active": len(tasks) - done, "done": done, "links": links}
+
+    def _set_edit_mode(self, enabled: bool) -> None:
+        self._edit_mode = enabled
+        for control in self._editor_controls:
+            control.setEnabled(enabled)
+        for button in self._edit_action_buttons:
+            button.setVisible(enabled)
+            button.setEnabled(enabled)
+        if hasattr(self, "title_label"):
+            self.title_label.setText(self.title_edit.text().strip() or "Новый проект")
+        self.mode_label.setText("Редактирование проекта" if enabled else "Просмотр проекта")
+        self.close_button.setVisible(not enabled)
+        self.edit_button.setVisible(not enabled)
+        self.cancel_button.setVisible(enabled)
+        self.save_button.setVisible(enabled)
+
+    def _save_shortcut(self) -> None:
+        if self._edit_mode:
+            self._on_accept()
 
     def _make_multiline_edit(self, placeholder: str) -> QPlainTextEdit:
         edit = QPlainTextEdit()

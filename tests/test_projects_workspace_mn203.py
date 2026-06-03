@@ -131,3 +131,33 @@ def test_project_dialog_task_priority_preset_uses_high_medium_low_order(monkeypa
             dialog.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_opens_existing_project_in_preview_mode(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_preview_mode", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    existing = database.create_project(
+        area="SPACE",
+        title="MindNavigator v2",
+        updated=date(2026, 1, 6),
+        priority="High",
+    )
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog(existing)
+        assert dialog._edit_mode is False
+        assert dialog.title_edit.isEnabled() is False
+        assert dialog.edit_button.isHidden() is False
+        assert dialog.save_button.isHidden() is True
+
+        dialog._set_edit_mode(True)
+        assert dialog._edit_mode is True
+        assert dialog.title_edit.isEnabled() is True
+        assert dialog.save_button.isHidden() is False
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
