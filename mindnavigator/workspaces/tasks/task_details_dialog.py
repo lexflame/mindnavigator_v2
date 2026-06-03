@@ -68,6 +68,12 @@ class InlineEditableField(QStackedWidget):
         self.addWidget(self.view_label)
         self.addWidget(edit_host)
         self.setCurrentIndex(0)
+        self._commit_controls_enabled = True
+
+    def set_commit_controls_enabled(self, enabled: bool) -> None:
+        self._commit_controls_enabled = bool(enabled)
+        self.save_button.setVisible(self._commit_controls_enabled)
+        self.cancel_button.setVisible(self._commit_controls_enabled)
 
     def set_value(self, value: object, display_text: str | None = None) -> None:
         if isinstance(self.editor, QLineEdit):
@@ -85,8 +91,8 @@ class InlineEditableField(QStackedWidget):
         self.editor.setFocus()
 
     def set_form_editing(self, enabled: bool) -> None:
-        self.save_button.setVisible(not enabled)
-        self.cancel_button.setVisible(not enabled)
+        self.save_button.setVisible(self._commit_controls_enabled and not enabled)
+        self.cancel_button.setVisible(self._commit_controls_enabled and not enabled)
         self.setCurrentIndex(1 if enabled else 0)
 
     def cancel(self) -> None:
@@ -581,6 +587,8 @@ class TaskDetailsDialog(QDialog):
         self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
         self.date_inline.setMinimumWidth(150)
         self.date_inline.setFixedHeight(34)
+        self.date_inline.set_commit_controls_enabled(False)
+        self.date_inline.view_label.edit_requested.connect(self._begin_deadline_inline_edit)
         self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
         deadline_layout.addWidget(self.date_inline, 3)
         self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
@@ -591,9 +599,25 @@ class TaskDetailsDialog(QDialog):
         self.time_inline.editor.setMinimumWidth(54)
         self.time_inline.editor.setFixedHeight(34)
         self.time_inline.editor.setInputMask("99:99;_")
+        self.time_inline.set_commit_controls_enabled(False)
+        self.time_inline.view_label.edit_requested.connect(self._begin_deadline_inline_edit)
         self.time_inline.setFixedHeight(34)
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
         deadline_layout.addWidget(self.time_inline, 2)
+        self.deadline_save_button = QToolButton(deadline_host)
+        self.deadline_save_button.setObjectName("TaskDeadlineCommitButton")
+        self.deadline_save_button.setText("✓")
+        self.deadline_save_button.setToolTip("Сохранить срок")
+        self.deadline_save_button.clicked.connect(self._commit_deadline_inline_edit)
+        self.deadline_save_button.hide()
+        deadline_layout.addWidget(self.deadline_save_button, 0)
+        self.deadline_cancel_button = QToolButton(deadline_host)
+        self.deadline_cancel_button.setObjectName("TaskDeadlineCommitButton")
+        self.deadline_cancel_button.setText("×")
+        self.deadline_cancel_button.setToolTip("Отменить")
+        self.deadline_cancel_button.clicked.connect(self._cancel_deadline_inline_edit)
+        self.deadline_cancel_button.hide()
+        deadline_layout.addWidget(self.deadline_cancel_button, 0)
         self.deadline_card.set_value_widget(deadline_host)
         self.date_card = self.deadline_card
         self.time_card = self.deadline_card
@@ -980,7 +1004,8 @@ class TaskDetailsDialog(QDialog):
                 max-height: 34px;
                 padding: 4px 6px;
             }}
-            QToolButton#TaskInlineCommitButton {{
+            QToolButton#TaskInlineCommitButton,
+            QToolButton#TaskDeadlineCommitButton {{
                 background: transparent;
                 border: 1px solid transparent;
                 border-radius: 6px;
@@ -990,7 +1015,8 @@ class TaskDetailsDialog(QDialog):
                 min-height: 30px;
                 padding: 0;
             }}
-            QToolButton#TaskInlineCommitButton:hover {{
+            QToolButton#TaskInlineCommitButton:hover,
+            QToolButton#TaskDeadlineCommitButton:hover {{
                 background: {palette.elevated_bg};
                 border-color: {palette.border};
             }}
@@ -1232,6 +1258,7 @@ class TaskDetailsDialog(QDialog):
         time_text = self._format_empty(self._task.time_text)
         self.time_card.set_value(time_text, muted=not bool((self._task.time_text or "").strip()))
         self.time_inline.set_value(self._task.time_text, time_text)
+        self._set_deadline_commit_buttons_visible(False)
         priority_text = self._format_empty(self._task.priority)
         self.priority_card.set_value(priority_text, muted=priority_text == "—")
         self.priority_inline.set_value(self._task.priority, priority_text)
@@ -1527,6 +1554,32 @@ class TaskDetailsDialog(QDialog):
         editor.setTextCursor(cursor)
         editor.setFocus()
 
+    def _set_deadline_commit_buttons_visible(self, visible: bool) -> None:
+        if hasattr(self, "deadline_save_button"):
+            self.deadline_save_button.setVisible(bool(visible) and not self._form_editing)
+        if hasattr(self, "deadline_cancel_button"):
+            self.deadline_cancel_button.setVisible(bool(visible) and not self._form_editing)
+
+    def _begin_deadline_inline_edit(self) -> None:
+        self.date_inline.setCurrentIndex(1)
+        self.time_inline.setCurrentIndex(1)
+        self._set_deadline_commit_buttons_visible(True)
+
+    def _cancel_deadline_inline_edit(self) -> None:
+        self.date_inline.setCurrentIndex(0)
+        self.time_inline.setCurrentIndex(0)
+        self._set_deadline_commit_buttons_visible(False)
+        self.date_inline.set_value(self._task.day, self._task.day.isoformat())
+        time_text = self._format_empty(self._task.time_text)
+        self.time_inline.set_value(self._task.time_text, time_text)
+
+    def _commit_deadline_inline_edit(self) -> None:
+        if self._save_inline_updates(
+            day=self.date_inline.current_value(),
+            time_text=str(self.time_inline.current_value() or ""),
+        ):
+            self._set_deadline_commit_buttons_visible(False)
+
     def _save_inline_updates(self, **changes) -> bool:
         payload = {
             "title": self._task.title,
@@ -1737,6 +1790,7 @@ class TaskDetailsDialog(QDialog):
         for field in self._editable_fields():
             field.set_form_editing(enabled)
         self.footer_status_combo.setEnabled(enabled)
+        self._set_deadline_commit_buttons_visible(False)
         if enabled:
             self._begin_description_inline_edit(form_editing=True)
             self.header_close_button.setText("Отменить")

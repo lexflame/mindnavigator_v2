@@ -1141,6 +1141,13 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.time_inline.height() == 34
         assert dialog.time_inline.editor.inputMask() == "99:99;_"
         assert dialog.time_inline.current_value() == ""
+        dialog._begin_deadline_inline_edit()
+        assert dialog.deadline_save_button.isHidden() is False
+        assert dialog.deadline_cancel_button.isHidden() is False
+        assert dialog.date_inline.save_button.isHidden() is True
+        assert dialog.time_inline.save_button.isHidden() is True
+        dialog._cancel_deadline_inline_edit()
+        assert dialog.deadline_save_button.isHidden() is True
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 2
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
