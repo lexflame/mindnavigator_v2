@@ -1169,12 +1169,12 @@ class TaskDetailsDialog(QDialog):
         super().resizeEvent(event)
         self._reflow_cards()
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        self._reflow_cards()
+
     def _reflow_cards(self) -> None:
-        content_width = max(0, self.scroll.viewport().width() - 48)
-        params_width = max(0, content_width - self.header_add_button.width() - 12)
-        self._reflow_params_grid(
-            self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=4)
-        )
+        self._reflow_params_grid(4)
 
     def _reflow_params_grid(self, columns: int) -> None:
         while self.params_grid.count():
