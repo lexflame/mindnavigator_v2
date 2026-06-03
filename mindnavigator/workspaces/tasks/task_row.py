@@ -16,6 +16,7 @@ class TaskRow:
     priority: str   # Low | Medium | High
     done: bool
     board_column: str = "queue"
+    importance: int = 3
     project_id: Optional[int] = None
     project_title: str = ""
     project_area: str = ""
@@ -37,5 +38,7 @@ class TaskRow:
     postponed_by_project_task_type_id: Optional[int] = None
     is_plan_task: bool = False
     plan_order: int = 0
+    created_at: str = ""
+    updated_at: str = ""
 
 __all__ = ["TaskRow"]

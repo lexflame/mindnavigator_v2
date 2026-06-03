@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import date
 
+from PySide6.QtWidgets import QApplication, QTextEdit
+
 from mindnavigator.context_entity_linking import (
     ContextEntityLinkService,
     ContextEntitySearchService,
     extract_capitalized_words,
+    normalize_context_word,
 )
 from mindnavigator.storage import Database
+from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 
 
 def test_extract_capitalized_words_skips_urls_emails_and_tags() -> None:
@@ -68,4 +72,29 @@ def test_context_link_service_writes_task_attachment_and_metadata(tmp_path) -> N
         assert len(links) == 1
         assert links[0].anchor_text == "MindNavigator"
     finally:
+        db.close()
+
+
+def test_context_linking_highlights_capitalized_words_in_text_edit(tmp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db = Database(tmp_path / "mind.db")
+    editor = QTextEdit()
+    try:
+        task = db.create_task("Источник", "", date.today(), "", "Medium")
+        db.create_note("MindNavigator", "Описание", [], "Inbox")
+        editor.setPlainText("Связать MindNavigator с задачей.")
+
+        controller = attach_context_entity_linking(
+            editor,
+            db,
+            source_type="task",
+            source_id_getter=lambda: task.id,
+            source_field="description",
+        )
+        controller.refresh_now()
+
+        assert normalize_context_word("MindNavigator") in controller._ranges_by_word
+        assert controller._ranges_by_word[normalize_context_word("MindNavigator")]
+    finally:
+        editor.deleteLater()
         db.close()

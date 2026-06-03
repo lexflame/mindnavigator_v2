@@ -11,6 +11,7 @@ TASK_PROPAGATABLE_FIELDS: dict[str, str] = {
     "marker_color": "Цвет",
     "project_id": "Проект",
     "priority": "Маркер",
+    "importance": "Важность",
     "marker_theme": "Тематика",
     "day": "Дата",
     "time_text": "Время",

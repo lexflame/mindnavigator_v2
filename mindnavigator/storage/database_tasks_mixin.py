@@ -42,6 +42,7 @@ class DatabaseTasksMixin:
                 t.title,
                 t.description,
                 t.priority,
+                t.importance,
                 t.board_column,
                 t.done,
                 t.completion_delay_minutes,
@@ -58,6 +59,8 @@ class DatabaseTasksMixin:
                 t.project_task_type_id,
                 t.postponed_reason,
                 t.postponed_by_project_task_type_id,
+                t.created_at,
+                t.updated_at,
                 ptt.title AS project_task_type_title,
                 ptt.color_marker AS project_task_type_color,
                 ptt.theme_marker AS project_task_type_theme,
@@ -85,6 +88,7 @@ class DatabaseTasksMixin:
                     title=row["title"],
                     description=row["description"] or "",
                     priority=row["priority"],
+                    importance=max(1, min(5, int(row["importance"] or 3))),
                     board_column=normalize_board_column(row["board_column"]),
                     done=bool(row["done"]),
                     completion_delay_minutes=max(0, int(row["completion_delay_minutes"] or 0)),
@@ -109,6 +113,8 @@ class DatabaseTasksMixin:
                     project_task_type_theme=(row["project_task_type_theme"] or "").strip(),
                     postponed_reason=(row["postponed_reason"] or "").strip(),
                     postponed_by_project_task_type_id=row["postponed_by_project_task_type_id"],
+                    created_at=(row["created_at"] or "").strip(),
+                    updated_at=(row["updated_at"] or "").strip(),
                 )
             )
         return tasks
@@ -151,6 +157,7 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: int = 3,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
@@ -163,6 +170,7 @@ class DatabaseTasksMixin:
         marker_color = (marker_color or "").strip()
         marker_theme = (marker_theme or "").strip().lower()
         project_task_type_id = self._normalize_task_project_type_id(project_id, project_task_type_id)
+        importance = max(1, min(5, int(importance or 3)))
         if not isinstance(day, date):
             raise ValueError("Дата задачи некорректна.")
         if plan_order is None:
@@ -208,11 +216,11 @@ class DatabaseTasksMixin:
             cur = self._conn.execute(
                 """
                 INSERT INTO tasks (
-                    title, description, day, time_text, priority, board_column, done, project_id, parent_id,
+                    title, description, day, time_text, priority, importance, board_column, done, project_id, parent_id,
                     recurrence_kind, recurrence_interval, is_plan_task, plan_order, marker_color, marker_theme,
                     project_task_type_id, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     title,
@@ -220,6 +228,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    importance,
                     board_column,
                     project_id,
                     parent_id,
@@ -251,6 +260,7 @@ class DatabaseTasksMixin:
             title=title,
             description=description,
             priority=priority,
+            importance=importance,
             done=False,
             board_column=board_column,
             project_id=project_id,
@@ -270,6 +280,8 @@ class DatabaseTasksMixin:
             marker_color=marker_color,
             marker_theme=marker_theme,
             project_task_type_id=project_task_type_id,
+            created_at=now,
+            updated_at=now,
         )
 
     def update_task(
@@ -290,11 +302,12 @@ class DatabaseTasksMixin:
         marker_color: str = "",
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
+        importance: Optional[int] = None,
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
             """
-            SELECT priority, board_column, parent_id, is_plan_task, plan_order, postponed_reason,
+            SELECT priority, importance, board_column, parent_id, is_plan_task, plan_order, postponed_reason,
                    postponed_by_project_task_type_id
             FROM tasks
             WHERE id = ?;
@@ -302,6 +315,7 @@ class DatabaseTasksMixin:
             (task_id,),
         ).fetchone()
         prev_priority = prev_row["priority"] if prev_row else priority
+        prev_importance = int(prev_row["importance"] or 3) if prev_row else 3
         prev_board_column = prev_row["board_column"] if prev_row else BOARD_COLUMN_QUEUE
         prev_parent_id = prev_row["parent_id"] if prev_row else parent_id
         prev_plan_root_id = self._plan_root_id_for_parent(prev_parent_id)
@@ -311,6 +325,9 @@ class DatabaseTasksMixin:
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
+        if importance is None:
+            importance = prev_importance
+        importance = max(1, min(5, int(importance or 3)))
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
         if is_plan_task is None:
@@ -379,7 +396,7 @@ class DatabaseTasksMixin:
             self._conn.execute(
                 """
                 UPDATE tasks
-                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
+                SET title = ?, description = ?, day = ?, time_text = ?, priority = ?, importance = ?, board_column = ?, done = ?, project_id = ?, parent_id = ?,
                     recurrence_kind = ?, recurrence_interval = ?, is_plan_task = ?, plan_order = ?, marker_color = ?, marker_theme = ?,
                     project_task_type_id = ?, updated_at = ?
                 WHERE id = ?;
@@ -390,6 +407,7 @@ class DatabaseTasksMixin:
                     day.isoformat(),
                     time_text,
                     priority,
+                    importance,
                     board_column,
                     int(done),
                     project_id,
@@ -445,6 +463,7 @@ class DatabaseTasksMixin:
             title=title,
             description=description,
             priority=priority,
+            importance=importance,
             done=bool(done),
             board_column=board_column,
             project_id=project_id,
@@ -466,6 +485,7 @@ class DatabaseTasksMixin:
             project_task_type_id=project_task_type_id,
             postponed_reason=postponed_reason,
             postponed_by_project_task_type_id=postponed_by_type_id,
+            updated_at=now,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:
@@ -881,7 +901,7 @@ class DatabaseTasksMixin:
         task_id = int(task_id)
         rows = self._conn.execute(
             """
-            SELECT id, task_id, kind, ref_id, created_at
+            SELECT id, task_id, kind, ref_id, created_at, comment
             FROM task_attachments
             WHERE task_id = ?
             ORDER BY created_at ASC;
@@ -943,12 +963,31 @@ class DatabaseTasksMixin:
             )
         row = self._conn.execute(
             """
-            SELECT id, task_id, kind, ref_id, created_at
+            SELECT id, task_id, kind, ref_id, created_at, comment
             FROM task_attachments
             WHERE task_id = ? AND kind = ? AND ref_id = ?;
             """,
             (task_id, kind, ref_id),
         ).fetchone()
+        return TaskAttachmentData.from_row(row)
+
+    def update_task_attachment_comment(self, attachment_id: int, comment: str) -> TaskAttachmentData:
+        """Updates the comment stored for one attachment inside its task."""
+        attachment_id = int(attachment_id)
+        if attachment_id <= 0:
+            raise ValueError("Идентификатор вложения должен быть положительным.")
+        comment = (comment or "").strip()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE task_attachments SET comment = ? WHERE id = ?;",
+                (comment, attachment_id),
+            )
+        row = self._conn.execute(
+            "SELECT id, task_id, kind, ref_id, created_at, comment FROM task_attachments WHERE id = ?;",
+            (attachment_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Вложение задачи не найдено.")
         return TaskAttachmentData.from_row(row)
 
     def delete_task_attachment(self, attachment_id: int) -> None:

@@ -19,7 +19,15 @@ from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, get_theme_palette
 from .cast_gantt import TasksGanttCast
 from .gantt_duration_edit import GanttEstimateEdit
 from .quick_project_create_dialog import QuickProjectCreateDialog
+from .task_attachment_selector import (
+    cloud_file_link_text,
+    create_task_attachment_dialog,
+    find_cloud_file_id_by_rel_path,
+    load_task_attachment_sources,
+    safe_fetch,
+)
 from .task_image_preview_dialog import TaskImagePreviewDialog
+from .task_importance_labels import normalize_task_importance, task_importance_combo_items
 from .task_property_propagation import (
     TASK_PROPAGATABLE_CLEARABLE_FIELDS,
     TaskPropertyPropagationResult,
@@ -200,7 +208,7 @@ class TaskEditDialog(QDialog):
     _SIZE_SETTING_KEY = "ui.task_edit_dialog_size"
     _LEGACY_SIZE_SETTING_KEYS: tuple[str, ...] = ()
     _USE_SAVED_SIZE = False
-    _DEFAULT_SIZE = QSize(1042, 757)
+    _DEFAULT_SIZE = QSize(1200, 780)
     _LABEL_WIDTH = 138
 
     def __init__(self, task: TaskRow, parent=None):
@@ -214,7 +222,7 @@ class TaskEditDialog(QDialog):
         self.setProperty("task_dialog_id", int(task.id))
         self.setProperty("task_dialog_kind", "edit")
         self.setProperty("dialog_category", "keep_size")
-        self.setMinimumSize(640, 520)
+        self.setMinimumSize(1100, 700)
         self._db = get_database()
         self._task = task
         self._is_plan_item = self._resolve_plan_item_state(task.id)
@@ -269,6 +277,31 @@ class TaskEditDialog(QDialog):
         self.description_edit = QPlainTextEdit(task.description)
         self.description_edit.setPlaceholderText("Описание задачи...")
         self.description_edit.setFixedHeight(108)
+        description_editor = QWidget()
+        description_editor_layout = QVBoxLayout(description_editor)
+        description_editor_layout.setContentsMargins(0, 0, 0, 0)
+        description_editor_layout.setSpacing(6)
+        description_toolbar = QHBoxLayout()
+        description_toolbar.setSpacing(4)
+        for label, tooltip, prefix, suffix in (
+            ("B", "Жирный текст", "**", "**"),
+            ("I", "Курсив", "_", "_"),
+            ("H2", "Подзаголовок", "## ", ""),
+            ("•", "Маркированный список", "- ", ""),
+            (">", "Цитата", "> ", ""),
+            ("Link", "Ссылка", "[", "](https://)"),
+        ):
+            button = QToolButton(description_editor)
+            button.setText(label)
+            button.setToolTip(tooltip)
+            button.setFixedHeight(26)
+            button.clicked.connect(
+                lambda _checked=False, start=prefix, end=suffix: self._wrap_description_selection(start, end)
+            )
+            description_toolbar.addWidget(button)
+        description_toolbar.addStretch(1)
+        description_editor_layout.addLayout(description_toolbar)
+        description_editor_layout.addWidget(self.description_edit)
         self._quote_filters = attach_task_quote_autoreplace(self.title_edit, self.description_edit)
         self._context_link_controllers = [
             attach_context_entity_linking(
@@ -449,6 +482,19 @@ class TaskEditDialog(QDialog):
             has_descendant_tasks,
         )
 
+        self.importance_edit = QComboBox()
+        for label, importance in task_importance_combo_items():
+            self.importance_edit.addItem(label, importance)
+        importance_idx = self.importance_edit.findData(normalize_task_importance(getattr(task, "importance", 3)))
+        self.importance_edit.setCurrentIndex(max(0, importance_idx))
+        self.importance_property_group = self._create_property_group(
+            "importance",
+            "Важность",
+            self.importance_edit,
+            has_child_tasks,
+            has_descendant_tasks,
+        )
+
         self.marker_color_edit = QComboBox()
         self.marker_color_edit.addItem("Нет", "")
         self.marker_color_edit.addItem("Синий", "#2f6edb")
@@ -522,7 +568,7 @@ class TaskEditDialog(QDialog):
             parent_layout.addWidget(self.parent_schedule_button, 0)
 
         form.addRow(self._make_form_label("Название"), self.title_edit)
-        form.addRow(self._make_form_label("Описание"), self.description_edit)
+        form.addRow(self._make_form_label("Описание"), description_editor)
         form.addRow(self._make_form_label(""), project_group_row)
         form.addRow(self._make_form_label("Тип проекта"), self.project_task_type_edit)
         if parent_row is not None:
@@ -530,6 +576,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label(""), schedule_group_row)
         form.addRow(self._make_form_label("Повтор"), recurrence_row)
         form.addRow(self._make_form_label(""), self.priority_property_group)
+        form.addRow(self._make_form_label(""), self.importance_property_group)
         form.addRow(self._make_form_label(""), self.marker_color_property_group)
         form.addRow(self._make_form_label(""), self.marker_theme_property_group)
         form.addRow(self._make_form_label("GANTT"), self.gantt_estimate_edit)
@@ -580,6 +627,33 @@ class TaskEditDialog(QDialog):
         attachments_scroll.setWidget(attachments_host)
         attachments_layout.addWidget(attachments_scroll)
         layout.addWidget(attachments_frame)
+
+        images_frame = QFrame()
+        images_frame.setObjectName("TaskImages")
+        images_layout = QVBoxLayout(images_frame)
+        images_layout.setContentsMargins(12, 10, 12, 10)
+        images_layout.setSpacing(8)
+
+        images_header = QHBoxLayout()
+        images_title = QLabel("Изображения")
+        images_title.setObjectName("TaskAttachmentsTitle")
+        self.images_add_btn = QToolButton()
+        self.images_add_btn.setText("+ Прикрепить")
+        self.images_add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.images_add_btn.clicked.connect(self._open_attachment_dialog)
+        images_header.addWidget(images_title)
+        images_header.addStretch(1)
+        images_header.addWidget(self.images_add_btn)
+        images_layout.addLayout(images_header)
+
+        images_host = QWidget()
+        images_host.setObjectName("TaskImagesHost")
+        self.images_list = QVBoxLayout(images_host)
+        self.images_list.setContentsMargins(0, 0, 0, 0)
+        self.images_list.setSpacing(6)
+        self.images_list.setAlignment(Qt.AlignmentFlag.AlignTop)
+        images_layout.addWidget(images_host)
+        layout.addWidget(images_frame)
 
         self._load_attachment_sources()
         self._refresh_attachments()
@@ -823,7 +897,8 @@ class TaskEditDialog(QDialog):
                 color: #ffffff;
             }}
 
-            QDialog#TaskEditDialog QFrame#TaskAttachments {{
+            QDialog#TaskEditDialog QFrame#TaskAttachments,
+            QDialog#TaskEditDialog QFrame#TaskImages {{
                 background: #1c1d22;
                 border: 1px solid {palette.border};
                 border-radius: 10px;
@@ -835,7 +910,8 @@ class TaskEditDialog(QDialog):
             }}
 
             QDialog#TaskEditDialog QScrollArea#TaskAttachmentsScroll,
-            QDialog#TaskEditDialog QWidget#TaskAttachmentsHost {{
+            QDialog#TaskEditDialog QWidget#TaskAttachmentsHost,
+            QDialog#TaskEditDialog QWidget#TaskImagesHost {{
                 background: transparent;
             }}
 
@@ -992,6 +1068,8 @@ class TaskEditDialog(QDialog):
             return self.project_edit.currentData()
         if property_name == "priority":
             return self.priority_edit.currentText().strip() or "Medium"
+        if property_name == "importance":
+            return int(self.importance_edit.currentData() or 3)
         if property_name == "marker_color":
             return self.marker_color_edit.currentData() or ""
         if property_name == "marker_theme":
@@ -1074,6 +1152,13 @@ class TaskEditDialog(QDialog):
         QShortcut(QKeySequence("Ctrl+Return"), self, self._on_accept)
         QShortcut(QKeySequence("Ctrl+Enter"), self, self._on_accept)
         QShortcut(QKeySequence("Esc"), self, self.reject)
+
+    def _wrap_description_selection(self, prefix: str, suffix: str) -> None:
+        cursor = self.description_edit.textCursor()
+        selected = cursor.selectedText()
+        cursor.insertText(f"{prefix}{selected}{suffix}")
+        self.description_edit.setTextCursor(cursor)
+        self.description_edit.setFocus()
 
     def _setup_error_reset_handlers(self) -> None:
         self.title_edit.textChanged.connect(lambda *_: self._apply_error_state(self.title_edit, False))
@@ -1500,11 +1585,7 @@ class TaskEditDialog(QDialog):
         return self.time_edit.time().toString("HH:mm")
 
     def _safe_db_fetch(self, method_name: str, *args, **kwargs) -> List:
-        fetch_method = getattr(self._db, method_name, None)
-        if not callable(fetch_method):
-            return []
-        result = fetch_method(*args, **kwargs)
-        return list(result or [])
+        return safe_fetch(self._db, method_name, *args, **kwargs)
 
     def _context_source_id(self) -> Optional[int]:
         task_id = int(getattr(self._task, "id", 0) or 0)
@@ -1537,33 +1618,30 @@ class TaskEditDialog(QDialog):
         self._pending_context_links.clear()
 
     def _load_attachment_sources(self) -> None:
-        tasks = self._safe_db_fetch("fetch_tasks")
-        notes = self._safe_db_fetch("fetch_notes")
-        ideas_active = self._safe_db_fetch("fetch_ideas", archived=False)
-        active_ids = {idea.id for idea in ideas_active}
-        ideas_archived = [idea for idea in self._safe_db_fetch("fetch_ideas", archived=True) if idea.id not in active_ids]
-        ideas = ideas_active + ideas_archived
-        objects = self._safe_db_fetch("fetch_objects")
-        maps = self._safe_db_fetch("fetch_maps")
-        markers = self._safe_db_fetch("fetch_map_markers")
-        cloud_files = self._safe_db_fetch("fetch_cloud_files")
-        self._tasks_by_id = {task.id: task for task in tasks}
-        self._notes_by_id = {note.id: note for note in notes}
-        self._ideas_by_id = {idea.id: idea for idea in ideas}
-        self._objects_by_id = {item.id: item for item in objects}
-        self._maps_by_id = {item.id: item for item in maps}
-        self._markers_by_id = {item.id: item for item in markers}
-        self._cloud_files_by_id = {item.id: item for item in cloud_files}
+        sources = load_task_attachment_sources(self._db, safe=True)
+        self._tasks_by_id = sources.tasks_by_id
+        self._notes_by_id = sources.notes_by_id
+        self._ideas_by_id = sources.ideas_by_id
+        self._objects_by_id = sources.objects_by_id
+        self._maps_by_id = sources.maps_by_id
+        self._markers_by_id = sources.markers_by_id
+        self._cloud_files_by_id = sources.cloud_files_by_id
 
     def _refresh_attachments(self) -> None:
         self._load_attachment_sources()
         self._attachments = self._db.fetch_task_attachments(self._task_id)
         self._clear_layout(self.attachments_list)
-        if not self._attachments:
+        self._clear_layout(self.images_list)
+        relation_attachments = [attachment for attachment in self._attachments if attachment.kind != "image"]
+        image_attachments = [attachment for attachment in self._attachments if attachment.kind == "image"]
+        if not relation_attachments:
             empty = QLabel("Нет связанных элементов")
             empty.setStyleSheet("color: #8a8a8a;")
             self.attachments_list.addWidget(empty)
-            return
+        if not image_attachments:
+            empty = QLabel("Изображения не прикреплены")
+            empty.setStyleSheet("color: #8a8a8a;")
+            self.images_list.addWidget(empty)
         for attachment in self._attachments:
             row = QFrame()
             row.setObjectName("TaskAttachmentRow")
@@ -1589,7 +1667,8 @@ class TaskEditDialog(QDialog):
             row_layout.addWidget(kind_label)
             row_layout.addWidget(link_label, 1)
             row_layout.addWidget(remove_btn)
-            self.attachments_list.addWidget(row)
+            target_layout = self.images_list if attachment.kind == "image" else self.attachments_list
+            target_layout.addWidget(row)
 
     @staticmethod
     def _clear_layout(layout: QVBoxLayout) -> None:
@@ -1605,17 +1684,7 @@ class TaskEditDialog(QDialog):
 
     @staticmethod
     def _cloud_file_link_text(file_item) -> str:
-        description = (file_item.description or "").strip()
-        if description:
-            try:
-                payload = json.loads(description)
-            except json.JSONDecodeError:
-                return description
-            if isinstance(payload, dict):
-                text = (payload.get("text") or "").strip()
-                if text:
-                    return text
-        return file_item.name
+        return cloud_file_link_text(file_item)
 
     def _attachment_display_text(self, attachment) -> str:
         if attachment.kind == "task":
@@ -1669,148 +1738,13 @@ class TaskEditDialog(QDialog):
         self._refresh_attachments()
 
     def _create_attachment_dialog(self) -> tuple[QDialog, QComboBox, FilterableComboBox]:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Добавить связь")
-        dialog.setObjectName("TaskAttachmentDialog")
-        dialog.setFixedSize(550, 200)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-
-        kind_combo = QComboBox()
-        kind_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        kind_items = [
-            ("Задача", "task"),
-            ("Заметка", "note"),
-            ("Идея", "idea"),
-            ("Объект", "object"),
-            ("Карта", "map"),
-            ("Метка карты", "marker"),
-            ("Файл", "file"),
-            ("Изображение", "image"),
-        ]
-        for label, key in kind_items:
-            kind_combo.addItem(label, key)
-
-        item_combo = FilterableComboBox(dialog)
-        item_combo.setMinimumContentsLength(24)
-        item_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        item_view = item_combo.view()
-        if item_view is not None:
-            item_view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
-        file_picker_open = {"active": False}
-
-        def fill_items(selected_kind: str) -> None:
-            item_combo.clear()
-            if selected_kind == "task":
-                tasks = [task for task in self._tasks_by_id.values() if task.id != self._task_id]
-                for task_row in sorted(tasks, key=lambda task: (task.title.lower(), task.id)):
-                    row_label = f"{task_row.title} · {task_row.project_title}" if task_row.project_title else task_row.title
-                    item_combo.addItem(row_label, task_row.id)
-            elif selected_kind == "note":
-                for note_row in sorted(self._notes_by_id.values(), key=lambda note: note.title.lower()):
-                    row_label = f"{note_row.title} · {note_row.project}" if note_row.project else note_row.title
-                    item_combo.addItem(row_label, note_row.id)
-            elif selected_kind == "idea":
-                for idea_row in sorted(self._ideas_by_id.values(), key=lambda idea: idea.title.lower()):
-                    row_label = (
-                        f"{idea_row.title} · {idea_row.project_title}" if idea_row.project_title else idea_row.title
-                    )
-                    item_combo.addItem(row_label, idea_row.id)
-            elif selected_kind == "object":
-                for object_row in sorted(self._objects_by_id.values(), key=lambda obj: obj.title.lower()):
-                    row_label = f"{object_row.title} · {object_row.catalog}" if object_row.catalog else object_row.title
-                    item_combo.addItem(row_label, object_row.id)
-            elif selected_kind == "map":
-                for map_row in sorted(self._maps_by_id.values(), key=lambda map_item: map_item.title.lower()):
-                    row_label = f"{map_row.title} · {map_row.project}" if map_row.project else map_row.title
-                    item_combo.addItem(row_label, map_row.id)
-            elif selected_kind == "marker":
-                markers = sorted(self._markers_by_id.values(), key=lambda marker_row: marker_row.name.lower())
-                for marker in markers:
-                    map_title = self._maps_by_id.get(marker.map_id).title if marker.map_id in self._maps_by_id else ""
-                    marker_label = f"{marker.name} · {map_title}" if map_title else marker.name
-                    item_combo.addItem(marker_label, marker.id)
-            elif selected_kind in {"file", "image"}:
-                files = [
-                    file_row
-                    for file_row in self._cloud_files_by_id.values()
-                    if file_row.is_image == (selected_kind == "image")
-                ]
-                files = sorted(files, key=lambda file_row: file_row.name.lower())
-                for file_row in files:
-                    item_combo.addItem(self._cloud_file_link_text(file_row), file_row.id)
-            if item_combo.count() == 0:
-                item_combo.addItem("— нет доступных —", None)
-            item_combo.clear_filter()
-            item_combo.setCurrentIndex(0 if item_combo.count() else -1)
-
-        def select_file_from_picker() -> None:
-            if file_picker_open["active"]:
-                return
-            file_picker_open["active"] = True
-            try:
-                selected_file_id = self._pick_task_attachment_file()
-            finally:
-                file_picker_open["active"] = False
-            if selected_file_id is None:
-                return
-            selected_index = item_combo.findData(selected_file_id)
-            if selected_index >= 0:
-                item_combo.setCurrentIndex(selected_index)
-
-        def on_kind_changed(_idx: int) -> None:
-            selected_kind = kind_combo.currentData()
-            fill_items(selected_kind)
-            if selected_kind == "file":
-                QTimer.singleShot(0, select_file_from_picker)
-
-        kind_combo.currentIndexChanged.connect(on_kind_changed)
-        fill_items(kind_combo.currentData())
-
-        form.addRow("Тип", kind_combo)
-        form.addRow("Элемент", item_combo)
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(dialog)
-        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        dialog.setStyleSheet(f"""
-            QDialog#TaskAttachmentDialog {{
-                {MATH_PHYS_BACKGROUND}
-            }}
-            QDialog#TaskAttachmentDialog QLabel {{
-                color: #cfcfcf;
-            }}
-            QDialog#TaskAttachmentDialog QComboBox {{
-                background: #202127;
-                color: #e6e6e6;
-                border: 1px solid #2a2b2f;
-                padding: 4px 8px;
-                border-radius: 6px;
-                min-height: 28px;
-            }}
-            QDialog#TaskAttachmentDialog QDialogButtonBox QPushButton {{
-                background: #2a2b2f;
-                color: #e6e6e6;
-                border: 1px solid #3a3b40;
-                padding: 4px 10px;
-                min-height: 28px;
-                border-radius: 6px;
-            }}
-        """)
-        return dialog, kind_combo, item_combo
+        sources = load_task_attachment_sources(self._db, safe=True)
+        return create_task_attachment_dialog(
+            self,
+            sources,
+            current_task_id=self._task_id,
+            file_picker_factory=AttachFileSelectNav,
+        )
 
     def _pick_task_attachment_file(self) -> Optional[int]:
         dialog = AttachFileSelectNav(self)
@@ -1819,15 +1753,8 @@ class TaskEditDialog(QDialog):
         rel_path = dialog.selected_rel_path()
         if not rel_path:
             return None
-        normalized = rel_path.strip().strip("/")
-        matched = next(
-            (
-                file_item.id
-                for file_item in self._cloud_files_by_id.values()
-                if (file_item.rel_path or "").strip().strip("/") == normalized and not file_item.is_image
-            ),
-            None,
-        )
+        sources = load_task_attachment_sources(self._db, safe=True)
+        matched = find_cloud_file_id_by_rel_path(sources, rel_path, image=False)
         if matched is None:
             QMessageBox.warning(self, "Связи", "Файл не найден в базе.")
             return None
@@ -1846,20 +1773,7 @@ class TaskEditDialog(QDialog):
             self._open_image_preview(file_item)
             return
         if attachment.kind == "task":
-            task = self._tasks_by_id.get(attachment.ref_id)
-            if not task:
-                QMessageBox.warning(self, "Связи", "Задача не найдена.")
-                return
-            rows = [
-                ("Название", task.title),
-                ("Проект", task.project_title or "—"),
-                ("Дата", task.day.isoformat()),
-                ("Время", task.time_text or "—"),
-                ("Приоритет", task.priority),
-                ("Статус", "Выполнена" if task.done else "Активна"),
-                ("Описание", task.description or "—"),
-            ]
-            self._open_info_dialog("Задача", rows, wrap_rows={"Описание"})
+            self._open_linked_task(attachment.ref_id)
             return
         if attachment.kind == "file":
             file_item = self._cloud_files_by_id.get(attachment.ref_id)
@@ -2030,8 +1944,28 @@ class TaskEditDialog(QDialog):
             images=images,
             start_index=start_index,
             cloud_root=Path(cloud_root),
+            comments_by_file_id={
+                int(attachment.ref_id): attachment.comment
+                for attachment in self._attachments
+                if attachment.kind == "image"
+            },
+            save_comment=self._save_image_comment,
         )
         self._show_child_dialog(dialog)
+
+    def _save_image_comment(self, file_id: int, comment: str) -> None:
+        attachment = next(
+            (
+                item
+                for item in self._attachments
+                if item.kind == "image" and int(item.ref_id) == int(file_id)
+            ),
+            None,
+        )
+        if attachment is None:
+            raise ValueError("Привязанное изображение не найдено.")
+        self._db.update_task_attachment_comment(attachment.id, comment)
+        self._refresh_attachments()
 
     def _resolve_plan_item_state(self, task_id: int) -> bool:
         fetch_tasks = getattr(self._db, "fetch_tasks", None)
@@ -2055,6 +1989,7 @@ class TaskEditDialog(QDialog):
             "day": day,
             "time_text": time_text,
             "priority": self.priority_edit.currentText().strip() or "Medium",
+            "importance": int(self.importance_edit.currentData() or 3),
             "done": self.done_edit.isChecked(),
             "project_id": self.project_edit.currentData(),
             "project_task_type_id": self.project_task_type_edit.currentData(),
@@ -2068,7 +2003,7 @@ class TaskEditDialog(QDialog):
         debug_task_dialog(
             f"task_edit_dialog values task_id={self.property('task_dialog_id')} "
             f"title={payload['title']!r} day={payload['day'].isoformat()} time={payload['time_text']!r} "
-            f"priority={payload['priority']!r} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
+            f"priority={payload['priority']!r} importance={payload['importance']} done={payload['done']} gantt={payload['gantt_estimate_minutes']} "
             f"project_id={payload['project_id']} project_task_type_id={payload['project_task_type_id']} "
             f"recurrence={payload['recurrence_kind']!r} is_plan_task={payload['is_plan_task']} marker_color={payload['marker_color']!r} "
             f"marker_theme={payload['marker_theme']!r} description_len={len(payload['description'])}"
@@ -2082,7 +2017,7 @@ class TaskEditDialog(QDialog):
         day = date(qd.year(), qd.month(), qd.day()).isoformat()
         return (
             f"title={title!r} day={day} time={self._current_time_text()!r} "
-            f"priority={self.priority_edit.currentText()!r} done={self.done_edit.isChecked()} "
+            f"priority={self.priority_edit.currentText()!r} importance={self.importance_edit.currentData()!r} done={self.done_edit.isChecked()} "
             f"gantt={self.gantt_estimate_edit.minutes()} "
             f"project_id={self.project_edit.currentData()} project_task_type_id={self.project_task_type_edit.currentData()} "
             f"is_plan_task={self.plan_task_edit.isChecked()} "

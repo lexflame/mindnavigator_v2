@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QLabel, QScrollArea, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QTextEdit, QToolButton, QWidget
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -16,7 +16,7 @@ from mindnavigator.storage import (
     Database,
 )
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
-from mindnavigator.workspaces.tasks import task_details_dialog, task_edit_dialog
+from mindnavigator.workspaces.tasks import task_attachment_selector, task_details_dialog, task_edit_dialog
 from mindnavigator.workspaces.tasks._shared import normalize_task_text_quotes
 from mindnavigator.workspaces.tasks.cast_board import TasksBoardCast
 from mindnavigator.workspaces.tasks.cast_dash import TasksDashCast
@@ -740,6 +740,238 @@ def test_task_edit_dialog_attachment_dialog_opens_file_picker_for_file_kind(monk
         db_path.unlink(missing_ok=True)
 
 
+def test_task_attachment_selector_uses_shared_candidate_labels(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_selector_labels", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task(
+            title="Main task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        linked = database.create_task(
+            title="Linked task",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Medium",
+            project_id=database.create_project("Area", "Selector Project", date(2026, 3, 6), "Medium").id,
+        )
+        note = database.create_note(
+            title="Selector note",
+            preview="",
+            tags=[],
+            project="Notes Project",
+        )
+
+        sources = task_attachment_selector.load_task_attachment_sources(database)
+
+        task_items = task_attachment_selector.attachment_candidate_items(
+            sources,
+            "task",
+            current_task_id=task.id,
+        )
+        note_items = task_attachment_selector.attachment_candidate_items(
+            sources,
+            "note",
+            current_task_id=task.id,
+        )
+
+        assert (f"{linked.title} · Selector Project", linked.id) in task_items
+        assert all(ref_id != task.id for _label, ref_id in task_items)
+        assert ("Selector note · Notes Project", note.id) in note_items
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_attachment_dialog_uses_shared_filterable_selector(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_attachment_selector", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    attachment_dialog = None
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        note = database.create_note(
+            title="Details note",
+            preview="",
+            tags=[],
+            project="",
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        def fake_exec(self) -> int:
+            nonlocal attachment_dialog
+            if self.objectName() == "TaskAttachmentDialog":
+                attachment_dialog = self
+                kind_combo = self.findChildren(QComboBox)[0]
+                kind_combo.setCurrentIndex(kind_combo.findData("note"))
+                item_combo = self.findChild(FilterableComboBox)
+                assert item_combo is not None
+                item_combo.setCurrentIndex(item_combo.findData(note.id))
+                return int(QDialog.DialogCode.Accepted)
+            return int(QDialog.DialogCode.Rejected)
+
+        monkeypatch.setattr(QDialog, "exec", fake_exec)
+
+        dialog._open_attachment_dialog()
+
+        fetched = database.fetch_task_attachments(task.id)
+        assert len(fetched) == 1
+        assert fetched[0].kind == "note"
+        assert fetched[0].ref_id == note.id
+        assert attachment_dialog is not None
+        assert attachment_dialog.findChild(FilterableComboBox) is not None
+    finally:
+        if attachment_dialog is not None:
+            attachment_dialog.deleteLater()
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_image_attach_uses_file_nav_picker(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_image_nav_picker", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    picker_calls: list[str] = []
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        image = database.upsert_cloud_file(
+            rel_path="images/sample.png",
+            name="sample.png",
+            description="",
+            checksum="checksum-task-image",
+            hash_value="hash-task-image",
+            size=256,
+            is_image=True,
+            valid=True,
+        )
+        database.upsert_cloud_file(
+            rel_path="docs/spec.pdf",
+            name="spec.pdf",
+            description="",
+            checksum="checksum-task-doc",
+            hash_value="hash-task-doc",
+            size=128,
+            is_image=False,
+            valid=True,
+        )
+
+        class _FakeAttachDialog:
+            def __init__(self, parent=None) -> None:
+                picker_calls.append(type(parent).__name__)
+
+            def exec(self) -> int:
+                return int(task_details_dialog.QDialog.DialogCode.Accepted)
+
+            def selected_rel_path(self) -> str:
+                return "images/sample.png"
+
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(task_details_dialog, "AttachFileSelectNav", _FakeAttachDialog)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        dialog._open_image_attachment_dialog()
+
+        fetched = database.fetch_task_attachments(task.id)
+        assert picker_calls == ["TaskDetailsDialog"]
+        assert len(fetched) == 1
+        assert fetched[0].kind == "image"
+        assert fetched[0].ref_id == image.id
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_applies_group_property_to_children(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_property_propagation", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    host = None
+    messages: list[str] = []
+    try:
+        parent = database.create_task(
+            title="Parent",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="High",
+        )
+        child = database.create_task(
+            title="Child",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Low",
+            parent_id=parent.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(
+            task_details_dialog.QMessageBox,
+            "information",
+            lambda _parent, _title, text: messages.append(text),
+        )
+        model = tasks_workspace.TasksModel()
+
+        class _Host(QWidget):
+            def model(self):
+                return model
+
+        host = _Host()
+        dialog = task_details_dialog.TaskDetailsDialog(model.task_by_id(parent.id), parent=host)
+        dialog.show()
+        QApplication.processEvents()
+
+        for card in (
+            dialog.detail_project_card,
+            dialog.priority_card,
+            dialog.importance_card,
+            dialog.detail_marker_card,
+            dialog.detail_theme_card,
+        ):
+            assert card.action_button.isVisible()
+
+        dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("Medium"))
+        dialog._apply_property_to_children("priority", recursive=False)
+
+        refreshed_child = model.task_by_id(child.id)
+        assert refreshed_child is not None
+        assert refreshed_child.priority == "Medium"
+        assert messages
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        if host is not None:
+            host.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_dialog_redesign", ".sqlite3")
@@ -760,19 +992,28 @@ def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, u
         attachments_title = dialog.findChild(QLabel, "TaskAttachmentsTitle")
         buttons = dialog.findChild(QDialogButtonBox)
         content_scroll = dialog.findChild(QScrollArea, "TaskDialogScroll")
+        images_frame = dialog.findChild(QFrame, "TaskImages")
         assert attachments_title is not None
         assert buttons is not None
         assert content_scroll is not None
-        assert dialog.minimumWidth() == 640
-        assert dialog.minimumHeight() == 520
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert images_frame is not None
+        assert dialog.minimumWidth() == 1100
+        assert dialog.minimumHeight() == 700
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
         assert dialog.minimumSizeHint().height() <= dialog._DEFAULT_SIZE.height()
         assert dialog.header_bar.title_label.text() == "Задача"
         assert dialog.plan_task_edit.text() == "План"
         assert dialog.time_toggle.text() == ""
         assert attachments_title.text() == "Связи"
         assert dialog.attachments_add_btn.text() == "+ Добавить"
+        assert dialog.images_add_btn.text() == "+ Прикрепить"
+        dialog.description_edit.setPlainText("format")
+        cursor = dialog.description_edit.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        dialog.description_edit.setTextCursor(cursor)
+        dialog._wrap_description_selection("**", "**")
+        assert dialog.description_edit.toPlainText() == "**format**"
         assert buttons.button(QDialogButtonBox.StandardButton.Save).text() == "Сохранить"
         assert buttons.button(QDialogButtonBox.StandardButton.Cancel).text() == "Отмена"
     finally:
@@ -962,26 +1203,84 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
 
         empty_description = dialog.findChild(QLabel, "TaskDetailsDescriptionEmpty")
         empty_links = dialog.findChild(QLabel, "TaskDetailsLinksEmpty")
-        assert dialog.minimumWidth() == 1042
-        assert dialog.minimumHeight() == 757
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
-        assert dialog.links_title.text() == "Связи"
-        assert dialog.close_button.text() == "Закрыть"
-        assert dialog.edit_button.text() == "Редактировать"
+        assert dialog.minimumWidth() == 1180
+        assert dialog.minimumHeight() == 720
+        assert dialog.width() == 1360
+        assert dialog.height() == 980
+        assert dialog.links_title.text() == "☍  Связи"
+        assert dialog.images_title.text() == "▧  Изображения"
+        assert dialog.links_host.isHidden()
+        assert dialog.images_host.isHidden()
+        assert dialog.concept_board_summary.text() == "Связанные идеи, заметки и объекты образуют маршрут задачи."
+        assert dialog.details_title.text() == "☷  Свойства"
+        assert dialog.plan_task_checkbox.text() == "План задача"
+        assert dialog.plan_task_checkbox.isChecked() is False
+        assert dialog.plan_task_checkbox.isEnabled() is False
+        assert dialog.gantt_card not in dialog._detail_cards
+        assert dialog.gantt_card.objectName() == "TaskDetailsSectionCard"
+        assert dialog.footer_created_label.text().startswith("Создано:")
+        assert dialog.footer_updated_label.text().startswith("Обновлено:")
+        assert dialog.footer_status_combo.currentText() == "●  В работе"
+        assert dialog.footer_status_combo.isEnabled() is False
         assert dialog.header_edit_button.text() == "Редактировать"
-        assert dialog.close_button.height() == 40
-        assert dialog.edit_button.height() == 40
-        assert dialog.summary_label.text() == "Без проекта • 2026-03-06 • Medium"
+        assert dialog.header_add_button.text() == "+"
+        assert dialog.header_add_button.isEnabled() is False
+        assert dialog.header_add_button.width() == 52
+        assert dialog.header_add_button.height() == 62
+        assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        assert dialog.summary_label.isHidden()
+        assert dialog.left_column.indexOf(dialog.additional_card) < dialog.left_column.indexOf(dialog.description_card)
+        assert dialog.additional_card.findChild(QLabel, "TaskDetailsSectionTitle").text().endswith("Дополнительно")
+        assert dialog.additional_properties_layout.count() == 0
         assert empty_description is not None
         assert empty_description.text() == "Нет описания"
         assert empty_links is not None
         assert empty_links.text() == "Нет связанных элементов"
         assert dialog.time_card.value_label.text() == "—"
+        assert dialog.importance_card.value_label.text() == "Важно"
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
+        assert dialog.detail_id_card._custom_value_widget is False
+        assert dialog.header_parent_card._custom_value_widget is False
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
+        assert [card.title_label.text() for card in dialog._param_cards] == [
+            "Проект",
+            "Родительская задача",
+            "Приоритет",
+            "Важность задачи",
+        ]
+        assert [card.title_label.text() for card in dialog._detail_cards] == [
+            "ID",
+            "Срок выполнения",
+            "Тип",
+            "Маркер",
+            "Тема маркера",
+            "Статус",
+            "Повтор",
+        ]
+        dialog._reflow_params_grid(4)
+        parent_index = dialog.params_grid.indexOf(dialog.header_parent_card)
+        assert parent_index >= 0
+        parent_row, parent_column, _, parent_column_span = dialog.params_grid.getItemPosition(parent_index)
+        assert parent_row == 0
+        assert parent_column == 1
+        assert parent_column_span == 1
+        assert dialog.details_list.indexOf(dialog.deadline_card) == 1
+        assert dialog.deadline_card.height() == 66
+        assert dialog.date_inline.minimumWidth() == 150
+        assert dialog.time_inline.minimumWidth() == 90
+        assert dialog.date_inline.height() == 34
+        assert dialog.time_inline.height() == 34
+        assert dialog.time_inline.editor.inputMask() == "99:99;_"
+        assert dialog.time_inline.current_value() == ""
+        dialog._begin_deadline_inline_edit()
+        assert dialog.deadline_save_button.isHidden() is False
+        assert dialog.deadline_cancel_button.isHidden() is False
+        assert dialog.date_inline.save_button.isHidden() is True
+        assert dialog.time_inline.save_button.isHidden() is True
+        dialog._cancel_deadline_inline_edit()
+        assert dialog.deadline_save_button.isHidden() is True
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 2
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
@@ -993,7 +1292,54 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         db_path.unlink(missing_ok=True)
 
 
-def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_temp_path) -> None:
+def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_inline_edit", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task("Inline source", "Old body", date(2026, 3, 6), "", "Medium")
+        project = database.create_project("Area", "Inline project", date(2026, 3, 6), "Medium")
+        note = database.create_note("Navigator note", "", [], "")
+        database.add_task_attachment(task.id, "note", note.id)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        dialog = task_details_dialog.TaskDetailsDialog(task)
+
+        dialog.title_inline.begin_edit()
+        dialog.title_inline.editor.setText("Inline title")
+        dialog.title_inline.commit()
+        dialog.importance_inline.begin_edit()
+        dialog.importance_inline.editor.setCurrentIndex(4)
+        dialog.importance_inline.commit()
+        dialog.status_inline.begin_edit()
+        dialog.status_inline.editor.setCurrentIndex(1)
+        dialog.status_inline.commit()
+        dialog.project_inline.begin_edit()
+        dialog.project_inline.editor.setCurrentIndex(dialog.project_inline.editor.findData(project.id))
+        dialog.project_inline.commit()
+        dialog._begin_description_inline_edit()
+        description_editor = dialog.findChild(QTextEdit, "TaskDetailsDescriptionInlineEdit")
+        assert description_editor is not None
+        assert dialog.findChild(QToolButton, "TaskDetailsDescriptionTool") is not None
+        description_editor.setPlainText("Inline body")
+        dialog._save_inline_updates(description=dialog._description_editor_text())
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.title == "Inline title"
+        assert updated.importance == 5
+        assert updated.done is True
+        assert updated.project_id == project.id
+        assert updated.description == "Inline body"
+        nodes = dialog.findChildren(QToolButton, "TaskConceptBoardNode")
+        assert any("Navigator note" in node.text() for node in nodes)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_dialog_edit_refresh", ".sqlite3")
     database = Database(path=db_path)
@@ -1008,33 +1354,34 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         )
         monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
 
-        class _AcceptedEditDialog(QDialog):
-            def __init__(self, _task, parent=None) -> None:
-                super().__init__(parent)
-
-            def exec(self) -> int:  # noqa: A003 - Qt API name
-                return int(QDialog.DialogCode.Accepted)
-
-            def values(self) -> dict[str, object]:
-                return {
-                    "title": "Updated task",
-                    "description": "Updated description",
-                    "day": date(2026, 3, 7),
-                    "time_text": "18:00",
-                    "priority": "High",
-                    "done": True,
-                    "project_id": None,
-                    "recurrence_kind": "weekly",
-                    "recurrence_interval": 1,
-                    "is_plan_task": True,
-                    "marker_color": "#d68a2f",
-                    "marker_theme": "work",
-                }
-
-        monkeypatch.setattr(task_details_dialog, "TaskEditDialog", _AcceptedEditDialog)
-
         dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == created.id))
 
+        dialog._open_edit_dialog()
+        assert dialog._form_editing is True
+        assert dialog.header_close_button.text() == "Отменить"
+        assert dialog.header_edit_button.text() == "Сохранить"
+        assert dialog.links_add_button.isEnabled() is True
+        assert dialog.images_add_button.isEnabled() is True
+        assert dialog.plan_task_checkbox.isEnabled() is True
+        assert dialog.footer_status_combo.isEnabled() is True
+        assert not dialog.links_host.isHidden()
+        assert not dialog.images_host.isHidden()
+        dialog.title_inline.editor.setText("Discarded title")
+        dialog._cancel_or_close()
+        assert dialog._form_editing is False
+        assert dialog.title_label.text() == "Original task"
+        dialog._open_edit_dialog()
+        dialog.title_inline.editor.setText("Updated task")
+        assert dialog.description_editor is not None
+        dialog.description_editor.setPlainText("Updated description")
+        dialog.date_inline.set_value(date(2026, 3, 7))
+        dialog.time_inline.editor.setText("18:00")
+        dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("High"))
+        dialog.status_inline.editor.setCurrentIndex(dialog.status_inline.editor.findData(True))
+        dialog.recurrence_inline.editor.setCurrentIndex(dialog.recurrence_inline.editor.findData("weekly"))
+        dialog.plan_task_checkbox.setChecked(True)
+        dialog.marker_color_inline.editor.setCurrentIndex(dialog.marker_color_inline.editor.findData("#d68a2f"))
+        dialog.marker_theme_inline.editor.setCurrentIndex(dialog.marker_theme_inline.editor.findData("work"))
         dialog._open_edit_dialog()
 
         reloaded = next(item for item in database.fetch_tasks() if item.id == created.id)
@@ -1051,8 +1398,12 @@ def test_task_details_dialog_refreshes_after_edit_accept(monkeypatch, unique_tem
         assert dialog.title_label.text() == "Updated task"
         assert dialog.summary_label.text() == "Без проекта • 2026-03-07 • 18:00 • High"
         assert dialog.status_badge.text() == "Выполнено"
+        assert dialog.footer_status_combo.currentText() == "●  Выполнено"
+        assert dialog.footer_status_combo.isEnabled() is False
         assert dialog.recurrence_card.value_label.text() == "Еженедельно"
         assert dialog.detail_type_card.value_label.text() == "Плановая задача"
+        assert dialog.plan_task_checkbox.isChecked() is True
+        assert dialog.plan_task_checkbox.isEnabled() is False
         assert dialog.detail_marker_card.value_label.text() == "Оранжевый"
         assert dialog.detail_theme_card.value_label.text() == "Работа"
     finally:
@@ -1111,8 +1462,8 @@ def test_task_edit_dialog_ignores_saved_shared_size_setting(monkeypatch, unique_
 
         dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
 
-        assert dialog.width() == 1042
-        assert dialog.height() == 757
+        assert dialog.width() == 1200
+        assert dialog.height() == 780
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1162,8 +1513,8 @@ def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, un
 
         dialog = tasks_workspace.TaskCreateDialog()
 
-        assert dialog.width() == 820
-        assert dialog.height() == 610
+        assert dialog.width() == 1100
+        assert dialog.height() == 700
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1183,7 +1534,7 @@ def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch
         dialog.resize(790, 600)
         dialog.close()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "790x600"
+        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -1204,7 +1555,7 @@ def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monk
         dialog.title_edit.setText("Accepted task")
         dialog._on_accept()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "680x560"
+        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
     finally:
         if dialog is not None:
             dialog.deleteLater()

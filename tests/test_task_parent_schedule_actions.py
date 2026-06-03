@@ -78,14 +78,14 @@ def test_task_details_dialog_updates_child_schedule_from_parent(monkeypatch, uni
         dialog.show()
         app.processEvents()
 
-        assert dialog.detail_parent_card.action_button.isVisible()
+        assert dialog.header_parent_card.action_button.isVisible()
 
         dialog._sync_schedule_to_parent()
 
         refreshed = next(item for item in database.fetch_tasks() if item.id == child.id)
         assert refreshed.day == parent.day
         assert refreshed.time_text == parent.time_text
-        assert not dialog.detail_parent_card.action_button.isVisible()
+        assert not dialog.header_parent_card.action_button.isVisible()
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -193,29 +193,6 @@ def test_task_details_dialog_save_uses_tasks_model_when_available(monkeypatch, u
             priority="Medium",
         )
 
-        class _FakeAcceptedDialog:
-            def __init__(self, _task, parent=None) -> None:
-                self._parent = parent
-
-            def exec(self) -> int:
-                return int(task_details_dialog.QDialog.DialogCode.Accepted)
-
-            def values(self):
-                return {
-                    "title": "Updated task",
-                    "description": "Updated",
-                    "day": date(2026, 6, 8),
-                    "time_text": "18:05",
-                    "priority": "High",
-                    "done": True,
-                    "project_id": None,
-                    "recurrence_kind": "",
-                    "recurrence_interval": 1,
-                    "is_plan_task": False,
-                    "marker_color": "",
-                    "marker_theme": "",
-                }
-
         class _FakeModel:
             def __init__(self) -> None:
                 self.row_calls: list[int] = []
@@ -291,12 +268,18 @@ def test_task_details_dialog_save_uses_tasks_model_when_available(monkeypatch, u
         host = _Host(fake_model)
 
         monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
-        monkeypatch.setattr(task_details_dialog, "TaskEditDialog", _FakeAcceptedDialog)
-
         dialog = task_details_dialog.TaskDetailsDialog(task, parent=host)
         dialog.show()
         app.processEvents()
 
+        dialog._open_edit_dialog()
+        dialog.title_inline.editor.setText("Updated task")
+        assert dialog.description_editor is not None
+        dialog.description_editor.setPlainText("Updated")
+        dialog.date_inline.set_value(date(2026, 6, 8))
+        dialog.time_inline.editor.setText("18:05")
+        dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("High"))
+        dialog.status_inline.editor.setCurrentIndex(dialog.status_inline.editor.findData(True))
         dialog._open_edit_dialog()
 
         refreshed = next(item for item in database.fetch_tasks() if item.id == task.id)

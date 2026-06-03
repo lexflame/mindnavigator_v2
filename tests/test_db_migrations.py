@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
-CURRENT_SCHEMA_VERSION = 12
+CURRENT_SCHEMA_VERSION = 14
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
@@ -100,6 +100,11 @@ def test_database_applies_versioned_schema_migrations_for_legacy_schema(unique_t
         assert "is_plan_task" in task_columns
         assert "plan_order" in task_columns
         assert "marker_theme" in task_columns
+        assert "importance" in task_columns
+        attachment_columns = {
+            row["name"] for row in database._conn.execute("PRAGMA table_info(task_attachments);").fetchall()
+        }
+        assert "comment" in attachment_columns
         assert "completion_delay_minutes" in task_columns
         assert "started_at" in task_columns
         assert "finished_at" in task_columns

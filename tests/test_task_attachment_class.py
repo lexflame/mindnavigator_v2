@@ -13,6 +13,7 @@ def test_task_attachment_data_serialization_round_trip() -> None:
         "kind": "FiLe",
         "ref_id": "33",
         "created_at": "2026-02-25T10:00:00+00:00",
+        "comment": "Local task comment",
     }
 
     attachment = TaskAttachmentData.from_dict(payload)
@@ -27,6 +28,7 @@ def test_task_attachment_data_serialization_round_trip() -> None:
         "kind": "file",
         "ref_id": 33,
         "created_at": "2026-02-25T10:00:00+00:00",
+        "comment": "Local task comment",
     }
 
 
@@ -63,6 +65,25 @@ def test_task_attachment_crud_with_database(unique_temp_path) -> None:
 
         database.delete_task_attachment(created.id)
         assert database.fetch_task_attachments(task.id) == []
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_attachment_comment_updates_without_changing_link(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_comment", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        task = database.create_task("Comment target", "", date(2026, 2, 25), "", "Medium")
+        note = database.create_note("Linked note", "", [], "")
+        attachment = database.add_task_attachment(task.id, "note", note.id)
+
+        updated = database.update_task_attachment_comment(attachment.id, "  Context for this task  ")
+
+        assert updated.comment == "Context for this task"
+        assert updated.kind == attachment.kind
+        assert updated.ref_id == attachment.ref_id
+        assert database.fetch_task_attachments(task.id)[0].comment == "Context for this task"
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
