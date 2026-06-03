@@ -209,3 +209,50 @@ def test_project_folder_double_click_opens_project_dialog(monkeypatch, unique_te
             workspace.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_relation_payload_updates_existing_editors(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_relation_payload", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    current = database.create_project(
+        area="SPACE",
+        title="Current",
+        updated=date(2026, 1, 6),
+        priority="High",
+    )
+    related = database.create_project(
+        area="SPACE",
+        title="Related",
+        updated=date(2026, 1, 7),
+        priority="Medium",
+    )
+    task = database.create_task("Relation task", "", date(2026, 1, 8), "", "Medium")
+    map_item = database.create_map("Roadmap", "", "", "", 2, 2)
+    note = database.create_note("Project note", "", [], "")
+    obj = database.create_object("Project object", "", "", "", "")
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog(current)
+
+        assert (related.id, "SPACE / Related") in dialog._relation_candidates("project")
+        assert all(candidate_id != current.id for candidate_id, _label in dialog._relation_candidates("project"))
+
+        dialog._apply_relation_payload("project", related.id)
+        dialog._apply_relation_payload("project", related.id)
+        dialog._apply_relation_payload("task", task.id)
+        dialog._apply_relation_payload("map", map_item.id)
+        dialog._apply_relation_payload("note", note.id)
+        dialog._apply_relation_payload("object", obj.id)
+
+        assert dialog.related_projects_edit.toPlainText().splitlines() == [str(related.id)]
+        assert dialog.related_tasks_edit.toPlainText().splitlines() == [str(task.id)]
+        assert dialog.linked_map_edit.currentData() == map_item.id
+        assert dialog.linked_note_edit.currentData() == note.id
+        assert dialog.linked_object_edit.currentData() == obj.id
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)

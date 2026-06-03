@@ -5,7 +5,16 @@ from __future__ import annotations
 from html import escape
 
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QGridLayout, QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QPlainTextEdit
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QPlainTextEdit,
+)
 
 from ._shared import *  # noqa: F401,F403
 from mindnavigator.ui.styles import get_theme_palette
@@ -173,6 +182,11 @@ class ProjectEditDialog(QDialog):
         self._edit_action_buttons: list[QWidget] = []
         for row in (task_types_row, related_projects_row, related_tasks_row, repository_links_row, wiki_links_row):
             self._edit_action_buttons.extend(row.findChildren(QToolButton))
+        self.add_relation_button = QToolButton()
+        self.add_relation_button.setText("+ Добавить связь")
+        self.add_relation_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_relation_button.clicked.connect(self._add_relation_dialog)
+        self._edit_action_buttons.append(self.add_relation_button)
         self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
         area_field = self._field_stack(self.area_edit, lambda: self.area_edit.text().strip() or "Не задано")
         updated_field = self._field_stack(self.updated_edit, lambda: self.updated_edit.date().toString("dd.MM.yyyy"))
@@ -301,6 +315,7 @@ class ProjectEditDialog(QDialog):
         links_form.addRow("Linked map", linked_map_field)
         links_form.addRow("Linked note", linked_note_field)
         links_form.addRow("Linked object", linked_object_field)
+        links_form.addRow("", self.add_relation_button)
 
         types_card = self._section_card("Типы задач")
         types_form = self._section_form(types_card)
@@ -895,6 +910,157 @@ class ProjectEditDialog(QDialog):
         layout.addWidget(buttons)
         if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
             self._append_line(self.related_tasks_edit, str(combo.currentData()))
+
+    def _add_relation_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавить связь")
+        dialog.resize(620, 420)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        type_combo = QComboBox()
+        type_combo.addItem("Проект", "project")
+        type_combo.addItem("Задача", "task")
+        type_combo.addItem("Карта", "map")
+        type_combo.addItem("Заметка", "note")
+        type_combo.addItem("Объект", "object")
+        type_combo.addItem("Репозиторий", "repository")
+        type_combo.addItem("Wiki", "wiki")
+        layout.addWidget(type_combo)
+
+        search_edit = QLineEdit()
+        search_edit.setPlaceholderText("Поиск связи")
+        layout.addWidget(search_edit)
+
+        result_list = QListWidget()
+        layout.addWidget(result_list, 1)
+
+        manual_form = QWidget()
+        manual_layout = QFormLayout(manual_form)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+        title_edit = QLineEdit()
+        title_edit.setPlaceholderText("Название")
+        url_edit = QLineEdit()
+        url_edit.setPlaceholderText("Ссылка или путь")
+        manual_layout.addRow("Название", title_edit)
+        manual_layout.addRow("Ссылка", url_edit)
+        layout.addWidget(manual_form)
+
+        selected_label = QLabel("Выберите связь из списка")
+        selected_label.setObjectName("ProjectDialogMode")
+        layout.addWidget(selected_label)
+
+        buttons = QDialogButtonBox(dialog)
+        add_button = buttons.addButton("Добавить связь", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        def populate() -> None:
+            kind = str(type_combo.currentData() or "")
+            query = search_edit.text().strip().lower()
+            result_list.clear()
+            manual = kind in {"repository", "wiki"}
+            result_list.setVisible(not manual)
+            search_edit.setVisible(not manual)
+            manual_form.setVisible(manual)
+            selected_label.setText("Укажите название и ссылку" if manual else "Выберите связь из списка")
+            add_button.setEnabled(manual)
+            if manual:
+                return
+            for item_id, label in self._relation_candidates(kind):
+                if query and query not in label.lower():
+                    continue
+                item = QListWidgetItem(label)
+                item.setData(Qt.ItemDataRole.UserRole, (kind, item_id, label))
+                result_list.addItem(item)
+            add_button.setEnabled(result_list.currentItem() is not None)
+
+        def on_current_changed() -> None:
+            item = result_list.currentItem()
+            if item is None:
+                selected_label.setText("Выберите связь из списка")
+                add_button.setEnabled(False)
+                return
+            selected_label.setText(item.text())
+            add_button.setEnabled(True)
+
+        def accept_relation() -> None:
+            kind = str(type_combo.currentData() or "")
+            if kind in {"repository", "wiki"}:
+                url = url_edit.text().strip()
+                if not url:
+                    QMessageBox.warning(dialog, "Проверка", "Ссылка не должна быть пустой.")
+                    return
+                title = title_edit.text().strip()
+                line = f"{title} | {url}" if title else url
+                self._append_line(self.repository_links_edit if kind == "repository" else self.wiki_links_edit, line)
+                self._refresh_preview_fields()
+                dialog.accept()
+                return
+            item = result_list.currentItem()
+            if item is None:
+                QMessageBox.warning(dialog, "Проверка", "Выберите связь из списка.")
+                return
+            payload = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(payload, tuple) or len(payload) < 2:
+                return
+            self._apply_relation_payload(str(payload[0]), int(payload[1]))
+            dialog.accept()
+
+        type_combo.currentIndexChanged.connect(populate)
+        search_edit.textChanged.connect(populate)
+        result_list.currentItemChanged.connect(lambda _current, _previous: on_current_changed())
+        result_list.itemDoubleClicked.connect(lambda _item: accept_relation())
+        buttons.accepted.connect(accept_relation)
+        populate()
+
+        dialog.setStyleSheet(self.styleSheet())
+        dialog.exec()
+
+    def _relation_candidates(self, kind: str) -> list[tuple[int, str]]:
+        if kind == "project":
+            result = []
+            for project in self._db.fetch_projects():
+                if self._project and project.id == self._project.id:
+                    continue
+                result.append((project.id, f"{project.area} / {project.title}"))
+            return result
+        if kind == "task":
+            return [(task.id, f"MN-{task.id} {task.title}") for task in self._db.fetch_tasks()]
+        if kind == "map":
+            return [(item.id, item.title) for item in self._db.fetch_maps()]
+        if kind == "note":
+            return [(item.id, item.title) for item in self._db.fetch_notes()]
+        if kind == "object":
+            return [(item.id, item.title) for item in self._db.fetch_objects()]
+        return []
+
+    def _apply_relation_payload(self, kind: str, item_id: int) -> None:
+        if kind == "project":
+            self._append_unique_int_line(self.related_projects_edit, item_id)
+        elif kind == "task":
+            self._append_unique_int_line(self.related_tasks_edit, item_id)
+        elif kind == "map":
+            self._set_combo_data(self.linked_map_edit, item_id)
+        elif kind == "note":
+            self._set_combo_data(self.linked_note_edit, item_id)
+        elif kind == "object":
+            self._set_combo_data(self.linked_object_edit, item_id)
+        self._refresh_preview_fields()
+
+    def _append_unique_int_line(self, edit: QPlainTextEdit, item_id: int) -> None:
+        existing = set(self._parse_int_lines(edit.toPlainText(), "Связи"))
+        if item_id in existing:
+            return
+        self._append_line(edit, str(item_id))
+
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, item_id: int) -> None:
+        index = combo.findData(item_id)
+        if index >= 0:
+            combo.setCurrentIndex(index)
 
     def _add_repository_link_line(self) -> None:
         self._add_link_line(self.repository_links_edit, "Репозиторий")
