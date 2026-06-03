@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from html import escape
+
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QGridLayout, QPushButton, QScrollArea, QSizePolicy, QPlainTextEdit
+from PySide6.QtWidgets import QGridLayout, QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QPlainTextEdit
 
 from ._shared import *  # noqa: F401,F403
 
@@ -117,6 +119,7 @@ class ProjectEditDialog(QDialog):
 
         self.repository_catalog_edit = QLineEdit((project.repository_catalog if project else "") or "")
         self.repository_catalog_edit.setPlaceholderText("Путь к локальному репозиторию")
+        self.repository_catalog_row = self._make_repository_catalog_editor()
 
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
@@ -168,6 +171,55 @@ class ProjectEditDialog(QDialog):
         self._edit_action_buttons: list[QWidget] = []
         for row in (task_types_row, related_projects_row, related_tasks_row, repository_links_row, wiki_links_row):
             self._edit_action_buttons.extend(row.findChildren(QToolButton))
+        self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
+        area_field = self._field_stack(self.area_edit, lambda: self.area_edit.text().strip() or "Не задано")
+        updated_field = self._field_stack(self.updated_edit, lambda: self.updated_edit.date().toString("dd.MM.yyyy"))
+        priority_field = self._field_stack(self.priority_edit, lambda: self.priority_edit.currentText().strip() or "Medium")
+        parent_field = self._field_stack(self.parent_project_edit, lambda: self.parent_project_edit.currentText().strip() or "None")
+        title_field = self._field_stack(self.title_edit, lambda: self.title_edit.text().strip() or "Не задано")
+        repository_catalog_field = self._field_stack(
+            self.repository_catalog_row,
+            lambda: self.repository_catalog_edit.text().strip() or "Путь к локальному репозиторию не указан",
+        )
+        repository_links_field = self._field_stack(
+            repository_links_row,
+            lambda: self._chip_preview(self.repository_links_edit.toPlainText(), "Репозитории не указаны"),
+            rich=True,
+        )
+        wiki_links_field = self._field_stack(
+            wiki_links_row,
+            lambda: self._chip_preview(self.wiki_links_edit.toPlainText(), "Wiki не указана"),
+            rich=True,
+        )
+        related_projects_field = self._field_stack(
+            related_projects_row,
+            lambda: self._chip_preview(self.related_projects_edit.toPlainText(), "Нет связанных проектов"),
+            rich=True,
+        )
+        related_tasks_field = self._field_stack(
+            related_tasks_row,
+            lambda: self._chip_preview(self.related_tasks_edit.toPlainText(), "Нет связанных задач"),
+            rich=True,
+        )
+        task_types_field = self._field_stack(
+            task_types_row,
+            lambda: self._task_types_preview(),
+            rich=True,
+        )
+        linked_map_field = self._field_stack(self.linked_map_edit, lambda: self.linked_map_edit.currentText().strip() or "None")
+        linked_note_field = self._field_stack(self.linked_note_edit, lambda: self.linked_note_edit.currentText().strip() or "None")
+        linked_object_field = self._field_stack(self.linked_object_edit, lambda: self.linked_object_edit.currentText().strip() or "None")
+        default_priority_field = self._field_stack(
+            self.default_task_priority_edit,
+            lambda: self.default_task_priority_edit.currentText().strip() or "None",
+        )
+        recurrence_field = self._field_stack(
+            self.force_recurrence_kind_edit,
+            lambda: self.force_recurrence_kind_edit.currentText().strip() or "None",
+        )
+        marker_color_field = self._field_stack(self.marker_color_edit, lambda: self.marker_color_edit.currentText().strip() or "None")
+        marker_theme_field = self._field_stack(self.marker_theme_edit, lambda: self.marker_theme_edit.currentText().strip() or "None")
+        archived_field = self._field_stack(self.archived_edit, lambda: "Да" if self.archived_edit.isChecked() else "Нет")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
@@ -215,10 +267,10 @@ class ProjectEditDialog(QDialog):
         metrics_grid.setContentsMargins(0, 0, 0, 0)
         metrics_grid.setHorizontalSpacing(10)
         metrics_grid.setVerticalSpacing(10)
-        metrics_grid.addWidget(self._metric_card("Область", self.area_edit), 0, 0)
-        metrics_grid.addWidget(self._metric_card("Дата обновления", self.updated_edit), 0, 1)
-        metrics_grid.addWidget(self._metric_card("Приоритет", self.priority_edit), 0, 2)
-        metrics_grid.addWidget(self._metric_card("Parent project", self.parent_project_edit), 0, 3)
+        metrics_grid.addWidget(self._metric_card("Область", area_field), 0, 0)
+        metrics_grid.addWidget(self._metric_card("Дата обновления", updated_field), 0, 1)
+        metrics_grid.addWidget(self._metric_card("Приоритет", priority_field), 0, 2)
+        metrics_grid.addWidget(self._metric_card("Parent project", parent_field), 0, 3)
         shell_layout.addLayout(metrics_grid)
 
         scroll = QScrollArea(self.shell)
@@ -235,30 +287,30 @@ class ProjectEditDialog(QDialog):
 
         main_card = self._section_card("Основное")
         main_form = self._section_form(main_card)
-        main_form.addRow("Название", self.title_edit)
-        main_form.addRow("Каталог репозитория", self.repository_catalog_edit)
-        main_form.addRow("Репозитории", repository_links_row)
-        main_form.addRow("Wiki", wiki_links_row)
+        main_form.addRow("Название", title_field)
+        main_form.addRow("Каталог репозитория", repository_catalog_field)
+        main_form.addRow("Репозитории", repository_links_field)
+        main_form.addRow("Wiki", wiki_links_field)
 
         links_card = self._section_card("Связи")
         links_form = self._section_form(links_card)
-        links_form.addRow("Связанные проекты", related_projects_row)
-        links_form.addRow("Связанные задачи", related_tasks_row)
-        links_form.addRow("Linked map", self.linked_map_edit)
-        links_form.addRow("Linked note", self.linked_note_edit)
-        links_form.addRow("Linked object", self.linked_object_edit)
+        links_form.addRow("Связанные проекты", related_projects_field)
+        links_form.addRow("Связанные задачи", related_tasks_field)
+        links_form.addRow("Linked map", linked_map_field)
+        links_form.addRow("Linked note", linked_note_field)
+        links_form.addRow("Linked object", linked_object_field)
 
         types_card = self._section_card("Типы задач")
         types_form = self._section_form(types_card)
-        types_form.addRow("", task_types_row)
+        types_form.addRow("", task_types_field)
 
         properties_card = self._section_card("Свойства")
         properties_form = self._section_form(properties_card)
-        properties_form.addRow("Task priority preset", self.default_task_priority_edit)
-        properties_form.addRow("Force recurrence", self.force_recurrence_kind_edit)
-        properties_form.addRow("Маркер (цвет)", self.marker_color_edit)
-        properties_form.addRow("Тема маркера", self.marker_theme_edit)
-        properties_form.addRow("Архивирован", self.archived_edit)
+        properties_form.addRow("Task priority preset", default_priority_field)
+        properties_form.addRow("Force recurrence", recurrence_field)
+        properties_form.addRow("Маркер (цвет)", marker_color_field)
+        properties_form.addRow("Тема маркера", marker_theme_field)
+        properties_form.addRow("Архивирован", archived_field)
 
         hierarchy_card = self._section_card("Иерархия и правила")
         hierarchy_form = self._section_form(hierarchy_card)
@@ -343,6 +395,15 @@ class ProjectEditDialog(QDialog):
                 padding: 9px 11px;
             }}
 
+            QLabel#ProjectDialogValue {{
+                color: #edf2fb;
+                background: rgba(9, 18, 31, 0.44);
+                border: 1px solid #223650;
+                border-radius: 6px;
+                padding: 8px 10px;
+                min-height: 28px;
+            }}
+
             QScrollArea#ProjectDialogScroll {{
                 background: transparent;
                 border: none;
@@ -409,7 +470,93 @@ class ProjectEditDialog(QDialog):
             QPushButton#ProjectDialogSecondaryButton {{
                 min-width: 118px;
             }}
+
+            QToolButton#ProjectDialogIconButton {{
+                min-width: 32px;
+                max-width: 36px;
+                padding: 8px 0;
+            }}
         """)
+
+    def _field_stack(self, editor: QWidget, value_getter: object, rich: bool = False) -> QStackedWidget:
+        stack = QStackedWidget()
+        label = QLabel()
+        label.setObjectName("ProjectDialogValue")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if rich:
+            label.setTextFormat(Qt.TextFormat.RichText)
+        stack.addWidget(label)
+        stack.addWidget(editor)
+        label.installEventFilter(self)
+        self._preview_fields.append((stack, label, editor, value_getter))
+        return stack
+
+    def _refresh_preview_fields(self) -> None:
+        for stack, label, _editor, value_getter in self._preview_fields:
+            value = value_getter() if callable(value_getter) else ""
+            label.setText(str(value))
+            stack.setCurrentIndex(1 if self._edit_mode else 0)
+
+    def eventFilter(self, watched: object, event: QEvent) -> bool:
+        if event.type() != QEvent.Type.MouseButtonDblClick:
+            return super().eventFilter(watched, event)
+        for _stack, label, editor, _value_getter in self._preview_fields:
+            if watched is not label:
+                continue
+            self._set_edit_mode(True)
+            self._focus_editor(editor)
+            return True
+        return super().eventFilter(watched, event)
+
+    def _focus_editor(self, editor: QWidget) -> None:
+        if isinstance(editor, QLineEdit):
+            editor.setFocus(Qt.FocusReason.MouseFocusReason)
+            editor.selectAll()
+            return
+        if isinstance(editor, QPlainTextEdit):
+            editor.setFocus(Qt.FocusReason.MouseFocusReason)
+            return
+        if isinstance(editor, (QComboBox, QDateEdit, QCheckBox)):
+            editor.setFocus(Qt.FocusReason.MouseFocusReason)
+            return
+        for child_type in (QLineEdit, QPlainTextEdit, QComboBox, QDateEdit, QCheckBox):
+            child = editor.findChild(child_type)
+            if child is not None:
+                child.setFocus(Qt.FocusReason.MouseFocusReason)
+                return
+
+    def _chip_preview(self, text: str, empty_text: str) -> str:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return escape(empty_text)
+        chips = []
+        for line in lines:
+            chips.append(
+                "<span style='display:inline-block; color:#cdb7ff; background:#1b2340; "
+                "border:1px solid #34416f; border-radius:6px; padding:3px 8px; margin:2px;'>"
+                f"{escape(line)}</span>"
+            )
+        return " ".join(chips)
+
+    def _task_types_preview(self) -> str:
+        lines = [line.strip() for line in self.task_types_edit.toPlainText().splitlines() if line.strip()]
+        if not lines:
+            return escape("Типы задач не настроены")
+        chips = []
+        for line in lines:
+            values = self._parse_task_type_line(line)
+            title = str(values.get("title") or "")
+            color = str(values.get("color_marker") or "#34416f")
+            theme = str(values.get("theme_marker") or "")
+            suffix = f" · {theme}" if theme else ""
+            opacity = "1.0" if bool(values.get("active", True)) else "0.55"
+            chips.append(
+                "<span style='display:inline-block; color:#eef2ff; background:#17213a; "
+                f"border:1px solid {escape(color)}; border-radius:6px; padding:3px 8px; margin:2px; opacity:{opacity};'>"
+                f"{escape(title + suffix)}</span>"
+            )
+        return " ".join(chips)
 
     def _metric_card(self, title: str, editor: QWidget) -> QFrame:
         card = QFrame()
@@ -503,6 +650,7 @@ class ProjectEditDialog(QDialog):
         self.edit_button.setVisible(not enabled)
         self.cancel_button.setVisible(enabled)
         self.save_button.setVisible(enabled)
+        self._refresh_preview_fields()
 
     def _save_shortcut(self) -> None:
         if self._edit_mode:
@@ -513,6 +661,27 @@ class ProjectEditDialog(QDialog):
         edit.setPlaceholderText(placeholder)
         edit.setFixedHeight(64)
         return edit
+
+    def _make_repository_catalog_editor(self) -> QWidget:
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self.repository_catalog_edit, 1)
+        button = QToolButton()
+        button.setText("...")
+        button.setObjectName("ProjectDialogIconButton")
+        button.setToolTip("Выбрать каталог")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(self._choose_repository_catalog)
+        layout.addWidget(button)
+        return widget
+
+    def _choose_repository_catalog(self) -> None:
+        current_path = self.repository_catalog_edit.text().strip()
+        path = QFileDialog.getExistingDirectory(self, "Каталог репозитория", current_path)
+        if path:
+            self.repository_catalog_edit.setText(path)
 
     def _make_property_editor(self, edit: QPlainTextEdit, actions: list[tuple[str, object]]) -> QWidget:
         widget = QWidget()
