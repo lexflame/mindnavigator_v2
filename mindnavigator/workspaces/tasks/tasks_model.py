@@ -78,6 +78,8 @@ class TasksModel(QAbstractListModel):
             postponed_by_project_task_type_id=task.postponed_by_project_task_type_id,
             is_plan_task=task.is_plan_task,
             plan_order=task.plan_order,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
         )
 
     def _recompute_plan_meta(self) -> None:

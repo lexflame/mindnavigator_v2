@@ -1076,7 +1076,7 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.minimumWidth() == 1180
         assert dialog.minimumHeight() == 720
         assert dialog.width() == 1360
-        assert dialog.height() == 820
+        assert dialog.height() == 980
         assert dialog.links_title.text() == "☍  Связи"
         assert dialog.images_title.text() == "▧  Изображения"
         assert dialog.links_host.isHidden()
@@ -1088,16 +1088,16 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.plan_task_checkbox.isEnabled() is False
         assert dialog.gantt_card not in dialog._detail_cards
         assert dialog.gantt_card.objectName() == "TaskDetailsSectionCard"
-        assert dialog.close_button.text() == "Закрыть"
-        assert dialog.edit_button.text() == "Редактировать"
+        assert dialog.footer_created_label.text().startswith("Создано:")
+        assert dialog.footer_updated_label.text().startswith("Обновлено:")
+        assert dialog.footer_status_combo.currentText() == "●  В работе"
+        assert dialog.footer_status_combo.isEnabled() is False
         assert dialog.header_edit_button.text() == "Редактировать"
         assert dialog.header_add_button.text() == "+"
         assert dialog.header_add_button.isEnabled() is False
         assert dialog.header_add_button.width() == 52
         assert dialog.header_add_button.height() == 62
         assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        assert dialog.close_button.height() == 40
-        assert dialog.edit_button.height() == 40
         assert dialog.summary_label.isHidden()
         assert empty_description is not None
         assert empty_description.text() == "Нет описания"
@@ -1208,6 +1208,7 @@ def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_p
         assert dialog.links_add_button.isEnabled() is True
         assert dialog.images_add_button.isEnabled() is True
         assert dialog.plan_task_checkbox.isEnabled() is True
+        assert dialog.footer_status_combo.isEnabled() is True
         assert not dialog.links_host.isHidden()
         assert not dialog.images_host.isHidden()
         dialog.title_inline.editor.setText("Discarded title")
@@ -1242,6 +1243,8 @@ def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_p
         assert dialog.title_label.text() == "Updated task"
         assert dialog.summary_label.text() == "Без проекта • 2026-03-07 • 18:00 • High"
         assert dialog.status_badge.text() == "Выполнено"
+        assert dialog.footer_status_combo.currentText() == "●  Выполнено"
+        assert dialog.footer_status_combo.isEnabled() is False
         assert dialog.recurrence_card.value_label.text() == "Еженедельно"
         assert dialog.detail_type_card.value_label.text() == "Плановая задача"
         assert dialog.plan_task_checkbox.isChecked() is True

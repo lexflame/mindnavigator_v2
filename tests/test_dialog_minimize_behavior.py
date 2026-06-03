@@ -487,7 +487,7 @@ def test_task_details_dialog_uses_larger_non_minimizable_geometry(monkeypatch) -
         assert dialog.minimumWidth() == 1180
         assert dialog.minimumHeight() == 720
         assert dialog.width() == 1360
-        assert dialog.height() == 820
+        assert dialog.height() == 980
         assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6

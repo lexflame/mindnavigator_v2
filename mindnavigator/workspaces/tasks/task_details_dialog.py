@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
@@ -251,7 +251,7 @@ class _PropertyRow(QFrame):
 
 
 class TaskDetailsDialog(QDialog):
-    _DEFAULT_SIZE = QSize(1360, 820)
+    _DEFAULT_SIZE = QSize(1360, 980)
     _PARAM_BREAKPOINTS = ((0, 4),)
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
@@ -365,24 +365,31 @@ class TaskDetailsDialog(QDialog):
         self.footer = QFrame(self)
         self.footer.setObjectName("TaskDetailsFooter")
         footer_layout = QHBoxLayout(self.footer)
-        footer_layout.setContentsMargins(18, 10, 18, 14)
-        footer_layout.setSpacing(10)
+        footer_layout.setContentsMargins(26, 12, 26, 14)
+        footer_layout.setSpacing(18)
+
+        self.footer_created_label = QLabel("", self.footer)
+        self.footer_created_label.setObjectName("TaskDetailsFooterMeta")
+        footer_layout.addWidget(self.footer_created_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.footer_separator_label = QLabel("·", self.footer)
+        self.footer_separator_label.setObjectName("TaskDetailsFooterMeta")
+        footer_layout.addWidget(self.footer_separator_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.footer_updated_label = QLabel("", self.footer)
+        self.footer_updated_label.setObjectName("TaskDetailsFooterMeta")
+        footer_layout.addWidget(self.footer_updated_label, 0, Qt.AlignmentFlag.AlignVCenter)
         footer_layout.addStretch(1)
 
-        self.close_button = QPushButton("Закрыть", self.footer)
-        self.close_button.setObjectName("TaskDetailsSecondaryButton")
-        self.close_button.setFixedHeight(40)
-        self.close_button.clicked.connect(self.reject)
-        footer_layout.addWidget(self.close_button)
-
-        self.edit_button = QPushButton("Редактировать", self.footer)
-        self.edit_button.setObjectName("TaskDetailsPrimaryButton")
-        self.edit_button.setFixedHeight(40)
-        self.edit_button.clicked.connect(self._open_edit_dialog)
-        footer_layout.addWidget(self.edit_button)
+        self.footer_status_combo = QComboBox(self.footer)
+        self.footer_status_combo.setObjectName("TaskDetailsFooterStatus")
+        self.footer_status_combo.addItem("●  В работе", False)
+        self.footer_status_combo.addItem("●  Выполнено", True)
+        self.footer_status_combo.setEnabled(False)
+        self.footer_status_combo.currentIndexChanged.connect(self._on_footer_status_changed)
+        footer_layout.addWidget(self.footer_status_combo, 0, Qt.AlignmentFlag.AlignRight)
 
         root_layout.addWidget(self.footer)
-        self.footer.hide()
 
         self._setup_shortcuts()
         self._apply_styles()
@@ -575,6 +582,7 @@ class TaskDetailsDialog(QDialog):
         self.status_inline = InlineEditableField(QComboBox(self.status_card), self.status_card)
         self.status_inline.editor.addItem("Активна", False)
         self.status_inline.editor.addItem("Выполнена", True)
+        self.status_inline.editor.currentIndexChanged.connect(self._on_status_inline_changed)
         self.status_inline.value_committed.connect(lambda value: self._save_inline_updates(done=bool(value)))
         self.status_card.set_inline_editor(self.status_inline)
         self.marker_color_inline = InlineEditableField(QComboBox(self.detail_marker_card), self.detail_marker_card)
@@ -793,6 +801,7 @@ class TaskDetailsDialog(QDialog):
                 border-left: none;
                 border-right: none;
                 border-bottom: none;
+                min-height: 54px;
             }}
             QFrame#TaskDetailsInfoCard {{
                 background: rgba(255, 255, 255, 0.025);
@@ -954,6 +963,29 @@ class TaskDetailsDialog(QDialog):
             QLabel#TaskDetailsDescriptionCounter {{
                 color: {palette.dim_text};
                 font-size: 12px;
+            }}
+            QLabel#TaskDetailsFooterMeta {{
+                color: {palette.dim_text};
+                font-size: 13px;
+            }}
+            QComboBox#TaskDetailsFooterStatus {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 8px;
+                padding: 8px 34px 8px 14px;
+                min-width: 150px;
+                min-height: 28px;
+                font-weight: 600;
+            }}
+            QComboBox#TaskDetailsFooterStatus:disabled {{
+                color: {palette.text};
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+            }}
+            QComboBox#TaskDetailsFooterStatus::drop-down {{
+                border: none;
+                width: 28px;
             }}
             QWidget#TaskDetailsDescriptionToolbar {{
                 background: transparent;
@@ -1137,6 +1169,10 @@ class TaskDetailsDialog(QDialog):
         status_text = "Выполнена" if self._task.done else "Активна"
         self.status_card.set_value(status_text)
         self.status_inline.set_value(bool(self._task.done), status_text)
+        self.footer_status_combo.blockSignals(True)
+        self.footer_status_combo.setCurrentIndex(max(0, self.footer_status_combo.findData(bool(self._task.done))))
+        self.footer_status_combo.blockSignals(False)
+        self._refresh_footer_metadata()
 
         project_text = self._project_text(fallback="Без проекта")
         self.gantt_edit.set_minutes(self._effective_gantt_estimate_minutes())
@@ -1159,6 +1195,39 @@ class TaskDetailsDialog(QDialog):
 
         self._refresh_attachments()
         self._reflow_cards()
+
+    def _refresh_footer_metadata(self) -> None:
+        created_text = self._format_task_timestamp(getattr(self._task, "created_at", ""))
+        if created_text == "—":
+            schedule_time = (self._task.time_text or "").strip()
+            created_text = self._format_date_time(self._task.day, schedule_time)
+        updated_text = self._format_task_timestamp(getattr(self._task, "updated_at", ""))
+        self.footer_created_label.setText(f"Создано: {created_text}")
+        self.footer_updated_label.setText(f"Обновлено: {updated_text}")
+
+    @classmethod
+    def _format_task_timestamp(cls, value: str) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return "—"
+        normalized = raw.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return raw
+        return cls._format_date_time(parsed.date(), f"{parsed.hour:02d}:{parsed.minute:02d}")
+
+    @staticmethod
+    def _format_date_time(day: date, time_text: str = "") -> str:
+        months = (
+            "янв", "фев", "мар", "апр", "мая", "июн",
+            "июл", "авг", "сен", "окт", "ноя", "дек",
+        )
+        month = months[max(1, min(12, day.month)) - 1]
+        time_part = (time_text or "").strip()
+        if time_part:
+            return f"{day.day} {month} {day.year}, {time_part}"
+        return f"{day.day} {month} {day.year}"
 
     def _refresh_task_data(self) -> None:
         task = next((item for item in self._db.fetch_tasks() if item.id == self._task.id), None)
@@ -1591,6 +1660,7 @@ class TaskDetailsDialog(QDialog):
         self._form_editing = bool(enabled)
         for field in self._editable_fields():
             field.set_form_editing(enabled)
+        self.footer_status_combo.setEnabled(enabled)
         if enabled:
             self._begin_description_inline_edit(form_editing=True)
             self.header_close_button.setText("Отменить")
@@ -1630,13 +1700,33 @@ class TaskDetailsDialog(QDialog):
             priority=str(self.priority_inline.current_value() or ""),
             importance=int(self.importance_inline.current_value() or 3),
             recurrence_kind=str(self.recurrence_inline.current_value() or ""),
-            done=bool(self.status_inline.current_value()),
+            done=bool(self.footer_status_combo.currentData()),
             is_plan_task=bool(self.plan_task_checkbox.isChecked()),
             marker_color=str(self.marker_color_inline.current_value() or ""),
             marker_theme=str(self.marker_theme_inline.current_value() or ""),
         ):
             return
         self._set_form_editing(False)
+
+    def _on_footer_status_changed(self, _index: int) -> None:
+        if not hasattr(self, "status_inline"):
+            return
+        value = self.footer_status_combo.currentData()
+        target_index = self.status_inline.editor.findData(bool(value))
+        if target_index >= 0 and self.status_inline.editor.currentIndex() != target_index:
+            self.status_inline.editor.blockSignals(True)
+            self.status_inline.editor.setCurrentIndex(target_index)
+            self.status_inline.editor.blockSignals(False)
+
+    def _on_status_inline_changed(self, _index: int) -> None:
+        if not hasattr(self, "footer_status_combo"):
+            return
+        value = self.status_inline.editor.currentData()
+        target_index = self.footer_status_combo.findData(bool(value))
+        if target_index >= 0 and self.footer_status_combo.currentIndex() != target_index:
+            self.footer_status_combo.blockSignals(True)
+            self.footer_status_combo.setCurrentIndex(target_index)
+            self.footer_status_combo.blockSignals(False)
 
     def _open_linked_task(self, task_id: int) -> bool:
         task = self._tasks_by_id.get(task_id)

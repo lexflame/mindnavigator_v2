@@ -59,6 +59,8 @@ class DatabaseTasksMixin:
                 t.project_task_type_id,
                 t.postponed_reason,
                 t.postponed_by_project_task_type_id,
+                t.created_at,
+                t.updated_at,
                 ptt.title AS project_task_type_title,
                 ptt.color_marker AS project_task_type_color,
                 ptt.theme_marker AS project_task_type_theme,
@@ -111,6 +113,8 @@ class DatabaseTasksMixin:
                     project_task_type_theme=(row["project_task_type_theme"] or "").strip(),
                     postponed_reason=(row["postponed_reason"] or "").strip(),
                     postponed_by_project_task_type_id=row["postponed_by_project_task_type_id"],
+                    created_at=(row["created_at"] or "").strip(),
+                    updated_at=(row["updated_at"] or "").strip(),
                 )
             )
         return tasks
@@ -276,6 +280,8 @@ class DatabaseTasksMixin:
             marker_color=marker_color,
             marker_theme=marker_theme,
             project_task_type_id=project_task_type_id,
+            created_at=now,
+            updated_at=now,
         )
 
     def update_task(
@@ -479,6 +485,7 @@ class DatabaseTasksMixin:
             project_task_type_id=project_task_type_id,
             postponed_reason=postponed_reason,
             postponed_by_project_task_type_id=postponed_by_type_id,
+            updated_at=now,
         )
 
     def set_task_done(self, task_id: int, done: bool) -> None:

@@ -37,5 +37,7 @@ class TaskData:
     postponed_by_project_task_type_id: Optional[int] = None
     is_plan_task: bool = False
     plan_order: int = 0
+    created_at: str = ""
+    updated_at: str = ""
 
 __all__ = ["TaskData"]
