@@ -1126,18 +1126,19 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
             "Статус",
             "Повтор",
         ]
-        dialog._reflow_params_grid(5)
+        dialog._reflow_params_grid(4)
         deadline_index = dialog.params_grid.indexOf(dialog.deadline_card)
         assert deadline_index >= 0
-        _, deadline_column, _, deadline_column_span = dialog.params_grid.getItemPosition(deadline_index)
+        deadline_row, deadline_column, _, deadline_column_span = dialog.params_grid.getItemPosition(deadline_index)
+        assert deadline_row == 0
         assert deadline_column == 1
-        assert deadline_column_span == 2
-        assert dialog.date_inline.minimumWidth() == 194
-        assert dialog.time_inline.minimumWidth() == 138
+        assert deadline_column_span == 1
+        assert dialog.date_inline.minimumWidth() == 150
+        assert dialog.time_inline.minimumWidth() == 90
         assert dialog.time_inline.editor.inputMask() == "99:99;_"
         assert dialog.time_inline.current_value() == ""
-        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=5) == 5
-        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=5) == 2
+        assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
+        assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 2
         assert dialog._columns_for_width(1300, dialog._DETAIL_BREAKPOINTS, default=6) == 6
         assert dialog._columns_for_width(1000, dialog._DETAIL_BREAKPOINTS, default=6) == 3
     finally:

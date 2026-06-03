@@ -257,7 +257,7 @@ class _PropertyRow(QFrame):
 
 class TaskDetailsDialog(QDialog):
     _DEFAULT_SIZE = QSize(1360, 980)
-    _PARAM_BREAKPOINTS = ((1040, 5), (720, 2), (0, 1))
+    _PARAM_BREAKPOINTS = ((1040, 4), (720, 2), (0, 1))
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
     _MARKER_COLOR_LABELS = {
@@ -530,18 +530,18 @@ class TaskDetailsDialog(QDialog):
         date_editor.setObjectName("TaskDetailsDeadlineDateEdit")
         date_editor.setCalendarPopup(True)
         date_editor.setDisplayFormat("dd.MM.yyyy")
-        date_editor.setMinimumWidth(112)
+        date_editor.setMinimumWidth(96)
         self.date_inline = InlineEditableField(date_editor, deadline_host)
         self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
-        self.date_inline.setMinimumWidth(194)
+        self.date_inline.setMinimumWidth(150)
         self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
         deadline_layout.addWidget(self.date_inline, 3)
         self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
         self.time_inline.setObjectName("TaskDetailsDeadlineTimeInline")
-        self.time_inline.setMinimumWidth(138)
+        self.time_inline.setMinimumWidth(90)
         self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
         self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
-        self.time_inline.editor.setMinimumWidth(66)
+        self.time_inline.editor.setMinimumWidth(54)
         self.time_inline.editor.setInputMask("99:99;_")
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
         deadline_layout.addWidget(self.time_inline, 2)
@@ -952,30 +952,30 @@ class TaskDetailsDialog(QDialog):
                 border: none;
             }}
             QStackedWidget#TaskDetailsDeadlineDateInline {{
-                min-width: 194px;
+                min-width: 150px;
             }}
             QStackedWidget#TaskDetailsDeadlineTimeInline {{
-                min-width: 138px;
+                min-width: 90px;
             }}
             QDateEdit#TaskDetailsDeadlineDateEdit {{
                 background: {palette.elevated_bg};
                 color: {palette.text};
                 border: 1px solid {palette.border};
                 border-radius: 8px;
-                padding: 6px 8px;
-                min-width: 112px;
+                padding: 6px 6px;
+                min-width: 96px;
                 min-height: 34px;
             }}
             QLineEdit#TaskDetailsDeadlineTimeEdit {{
-                min-width: 66px;
+                min-width: 54px;
             }}
             QToolButton#TaskInlineCommitButton {{
                 background: transparent;
                 border: 1px solid transparent;
                 border-radius: 6px;
                 color: {palette.text};
-                min-width: 24px;
-                max-width: 24px;
+                min-width: 22px;
+                max-width: 22px;
                 min-height: 30px;
                 padding: 0;
             }}
@@ -1173,27 +1173,17 @@ class TaskDetailsDialog(QDialog):
         content_width = max(0, self.scroll.viewport().width() - 48)
         params_width = max(0, content_width - self.header_add_button.width() - 12)
         self._reflow_params_grid(
-            self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=5)
+            self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=4)
         )
 
     def _reflow_params_grid(self, columns: int) -> None:
         while self.params_grid.count():
             self.params_grid.takeAt(0)
         columns = max(1, columns)
-        if columns >= 5:
-            placements = (
-                (self.detail_project_card, 0, 0, 1, 1),
-                (self.deadline_card, 0, 1, 1, 2),
-                (self.priority_card, 0, 3, 1, 1),
-                (self.importance_card, 0, 4, 1, 1),
-            )
-            for widget, row, column, row_span, column_span in placements:
-                self.params_grid.addWidget(widget, row, column, row_span, column_span)
-        else:
-            for index, widget in enumerate(self._param_cards):
-                row = index // columns
-                column = index % columns
-                self.params_grid.addWidget(widget, row, column)
+        for index, widget in enumerate(self._param_cards):
+            row = index // columns
+            column = index % columns
+            self.params_grid.addWidget(widget, row, column)
         for column in range(columns):
             self.params_grid.setColumnStretch(column, 1)
 
