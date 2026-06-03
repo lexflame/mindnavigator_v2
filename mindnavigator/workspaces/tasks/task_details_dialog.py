@@ -18,6 +18,7 @@ from .task_attachment_selector import (
     attachment_candidate_items,
     cloud_file_link_text,
     create_task_attachment_dialog,
+    find_cloud_file_id_by_rel_path,
     load_task_attachment_sources,
 )
 from .task_image_preview_dialog import TaskImagePreviewDialog
@@ -752,7 +753,7 @@ class TaskDetailsDialog(QDialog):
         self.images_add_button.setObjectName("TaskDetailsLinkAction")
         self.images_add_button.setText("+ Прикрепить")
         self.images_add_button.setEnabled(False)
-        self.images_add_button.clicked.connect(lambda _checked=False: self._open_attachment_dialog(kind="image"))
+        self.images_add_button.clicked.connect(lambda _checked=False: self._open_image_attachment_dialog())
         header_layout.addWidget(self.images_add_button)
         self.images_toggle = QToolButton(self.images_card)
         self.images_toggle.setObjectName("TaskDetailsCollapseButton")
@@ -1900,6 +1901,21 @@ class TaskDetailsDialog(QDialog):
             QMessageBox.warning(self, "Связи", "Нет доступных элементов для добавления.")
             return
         self._db.add_task_attachment(self._task.id, str(kind_combo.currentData()), int(ref_id))
+        self._refresh_attachments()
+
+    def _open_image_attachment_dialog(self) -> None:
+        picker = AttachFileSelectNav(self)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
+        rel_path = picker.selected_rel_path()
+        if not rel_path:
+            return
+        sources = load_task_attachment_sources(self._db)
+        ref_id = find_cloud_file_id_by_rel_path(sources, rel_path, image=True)
+        if ref_id is None:
+            QMessageBox.warning(self, "Связи", "Изображение не найдено в базе.")
+            return
+        self._db.add_task_attachment(self._task.id, "image", int(ref_id))
         self._refresh_attachments()
 
     def _attachment_candidates(self, kind: str) -> list[tuple[str, int]]:

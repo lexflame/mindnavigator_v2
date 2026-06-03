@@ -842,6 +842,70 @@ def test_task_details_dialog_attachment_dialog_uses_shared_filterable_selector(m
         db_path.unlink(missing_ok=True)
 
 
+def test_task_details_dialog_image_attach_uses_file_nav_picker(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_image_nav_picker", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    picker_calls: list[str] = []
+    try:
+        task = database.create_task(
+            title="Task",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+        )
+        image = database.upsert_cloud_file(
+            rel_path="images/sample.png",
+            name="sample.png",
+            description="",
+            checksum="checksum-task-image",
+            hash_value="hash-task-image",
+            size=256,
+            is_image=True,
+            valid=True,
+        )
+        database.upsert_cloud_file(
+            rel_path="docs/spec.pdf",
+            name="spec.pdf",
+            description="",
+            checksum="checksum-task-doc",
+            hash_value="hash-task-doc",
+            size=128,
+            is_image=False,
+            valid=True,
+        )
+
+        class _FakeAttachDialog:
+            def __init__(self, parent=None) -> None:
+                picker_calls.append(type(parent).__name__)
+
+            def exec(self) -> int:
+                return int(task_details_dialog.QDialog.DialogCode.Accepted)
+
+            def selected_rel_path(self) -> str:
+                return "images/sample.png"
+
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(task_details_dialog, "AttachFileSelectNav", _FakeAttachDialog)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+
+        dialog._open_image_attachment_dialog()
+
+        fetched = database.fetch_task_attachments(task.id)
+        assert picker_calls == ["TaskDetailsDialog"]
+        assert len(fetched) == 1
+        assert fetched[0].kind == "image"
+        assert fetched[0].ref_id == image.id
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_dialog_redesign", ".sqlite3")
