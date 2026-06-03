@@ -53,11 +53,13 @@ class InlineEditableField(QStackedWidget):
         edit_layout.setSpacing(6)
         edit_layout.addWidget(editor, 1)
         self.save_button = QToolButton(edit_host)
+        self.save_button.setObjectName("TaskInlineCommitButton")
         self.save_button.setText("✓")
         self.save_button.setToolTip("Сохранить")
         self.save_button.clicked.connect(self.commit)
         edit_layout.addWidget(self.save_button)
         self.cancel_button = QToolButton(edit_host)
+        self.cancel_button.setObjectName("TaskInlineCommitButton")
         self.cancel_button.setText("×")
         self.cancel_button.setToolTip("Отменить")
         self.cancel_button.clicked.connect(self.cancel)
@@ -99,7 +101,10 @@ class InlineEditableField(QStackedWidget):
 
     def current_value(self) -> object | None:
         if isinstance(self.editor, QLineEdit):
-            return self.editor.text().strip()
+            text = self.editor.text().strip()
+            if self.editor.inputMask() and not any(char.isdigit() for char in text):
+                return ""
+            return text
         elif isinstance(self.editor, QComboBox):
             return self.editor.currentData()
         elif isinstance(self.editor, QDateEdit):
@@ -252,7 +257,7 @@ class _PropertyRow(QFrame):
 
 class TaskDetailsDialog(QDialog):
     _DEFAULT_SIZE = QSize(1360, 980)
-    _PARAM_BREAKPOINTS = ((0, 4),)
+    _PARAM_BREAKPOINTS = ((1040, 5), (720, 2), (0, 1))
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
 
     _MARKER_COLOR_LABELS = {
@@ -517,16 +522,27 @@ class TaskDetailsDialog(QDialog):
         self.importance_inline.value_committed.connect(lambda value: self._save_inline_updates(importance=int(value)))
         self.importance_card.set_inline_editor(self.importance_inline)
         deadline_host = QWidget(self.deadline_card)
+        deadline_host.setObjectName("TaskDetailsDeadlineEditor")
         deadline_layout = QHBoxLayout(deadline_host)
         deadline_layout.setContentsMargins(0, 0, 0, 0)
-        deadline_layout.setSpacing(6)
+        deadline_layout.setSpacing(8)
         date_editor = QDateEdit(deadline_host)
+        date_editor.setObjectName("TaskDetailsDeadlineDateEdit")
         date_editor.setCalendarPopup(True)
+        date_editor.setDisplayFormat("dd.MM.yyyy")
+        date_editor.setMinimumWidth(112)
         self.date_inline = InlineEditableField(date_editor, deadline_host)
+        self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
+        self.date_inline.setMinimumWidth(194)
         self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
         deadline_layout.addWidget(self.date_inline, 3)
         self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
+        self.time_inline.setObjectName("TaskDetailsDeadlineTimeInline")
+        self.time_inline.setMinimumWidth(138)
+        self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
         self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
+        self.time_inline.editor.setMinimumWidth(66)
+        self.time_inline.editor.setInputMask("99:99;_")
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
         deadline_layout.addWidget(self.time_inline, 2)
         self.deadline_card.set_value_widget(deadline_host)
@@ -931,6 +947,42 @@ class TaskDetailsDialog(QDialog):
             QDialog#TaskDetailsDialog QTimeEdit:focus {{
                 border: 1px solid {palette.accent};
             }}
+            QWidget#TaskDetailsDeadlineEditor {{
+                background: transparent;
+                border: none;
+            }}
+            QStackedWidget#TaskDetailsDeadlineDateInline {{
+                min-width: 194px;
+            }}
+            QStackedWidget#TaskDetailsDeadlineTimeInline {{
+                min-width: 138px;
+            }}
+            QDateEdit#TaskDetailsDeadlineDateEdit {{
+                background: {palette.elevated_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 8px;
+                padding: 6px 8px;
+                min-width: 112px;
+                min-height: 34px;
+            }}
+            QLineEdit#TaskDetailsDeadlineTimeEdit {{
+                min-width: 66px;
+            }}
+            QToolButton#TaskInlineCommitButton {{
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                color: {palette.text};
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 30px;
+                padding: 0;
+            }}
+            QToolButton#TaskInlineCommitButton:hover {{
+                background: {palette.elevated_bg};
+                border-color: {palette.border};
+            }}
             QLabel#TaskDetailsCardValue[muted="true"] {{
                 color: {palette.dim_text};
                 font-weight: 500;
@@ -1120,7 +1172,30 @@ class TaskDetailsDialog(QDialog):
     def _reflow_cards(self) -> None:
         content_width = max(0, self.scroll.viewport().width() - 48)
         params_width = max(0, content_width - self.header_add_button.width() - 12)
-        self._reflow_grid(self.params_grid, self._param_cards, self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=4))
+        self._reflow_params_grid(
+            self._columns_for_width(params_width, self._PARAM_BREAKPOINTS, default=5)
+        )
+
+    def _reflow_params_grid(self, columns: int) -> None:
+        while self.params_grid.count():
+            self.params_grid.takeAt(0)
+        columns = max(1, columns)
+        if columns >= 5:
+            placements = (
+                (self.detail_project_card, 0, 0, 1, 1),
+                (self.deadline_card, 0, 1, 1, 2),
+                (self.priority_card, 0, 3, 1, 1),
+                (self.importance_card, 0, 4, 1, 1),
+            )
+            for widget, row, column, row_span, column_span in placements:
+                self.params_grid.addWidget(widget, row, column, row_span, column_span)
+        else:
+            for index, widget in enumerate(self._param_cards):
+                row = index // columns
+                column = index % columns
+                self.params_grid.addWidget(widget, row, column)
+        for column in range(columns):
+            self.params_grid.setColumnStretch(column, 1)
 
     @staticmethod
     def _reflow_grid(layout: QGridLayout, widgets: list[QWidget], columns: int) -> None:
@@ -1674,6 +1749,7 @@ class TaskDetailsDialog(QDialog):
             if self.images_host.isHidden():
                 self._toggle_section(self.images_host, self.images_toggle)
             self._refresh_attachments()
+            self._reflow_cards()
             return
         self.header_close_button.setText("Закрыть")
         self.header_edit_button.setText("Редактировать")
@@ -1682,6 +1758,7 @@ class TaskDetailsDialog(QDialog):
         self.header_add_button.setEnabled(False)
         self.plan_task_checkbox.setEnabled(False)
         self._refresh_view()
+        self._reflow_cards()
 
     def _cancel_or_close(self) -> None:
         if self._form_editing:
