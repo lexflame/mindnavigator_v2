@@ -369,11 +369,10 @@ class ProjectsItemDelegate(QStyledItemDelegate):
             r = opt.rect
             cy = r.center().y()
 
+            box_rect = self.project_archive_rect(r)
             x = r.left() + 10
             x += 22
-            box_side = max(18, r.height())
-            box_rect = QRect(x, r.top(), box_side, r.height())
-            x += box_side + 8
+            x += 22
             x += 22
             depth: int = int(index.data(ProjectRoles.Depth) or 0)
             depth = max(0, min(depth, 6))
@@ -434,6 +433,13 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         x += 22
         cy = row_rect.center().y()
         return QRect(x, cy - 8, 16, 16).adjusted(-4, -4, 4, 4)
+
+    @staticmethod
+    def project_archive_rect(row_rect: QRect) -> QRect:
+        x = row_rect.left() + 10
+        x += 22
+        cy = row_rect.center().y()
+        return QRect(x, cy - 7, 14, 14).adjusted(-4, -4, 4, 4)
 
     def open_project_editor(self, index: QModelIndex) -> None:
         self._edit_project(index)
