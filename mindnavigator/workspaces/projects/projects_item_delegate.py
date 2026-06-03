@@ -357,8 +357,8 @@ class ProjectsItemDelegate(QStyledItemDelegate):
                 return False
             pos = event.position().toPoint()
             opt = cast(Any, option)
-            if self._project_folder_rect(opt.rect).contains(pos):
-                self._edit_project(index)
+            if self.project_folder_rect(opt.rect).contains(pos):
+                self.open_project_editor(index)
                 return True
 
         if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent):
@@ -428,12 +428,15 @@ class ProjectsItemDelegate(QStyledItemDelegate):
         return False
 
     @staticmethod
-    def _project_folder_rect(row_rect: QRect) -> QRect:
+    def project_folder_rect(row_rect: QRect) -> QRect:
         x = row_rect.left() + 10
         x += 22
         x += 22
         cy = row_rect.center().y()
-        return QRect(x, cy - 8, 16, 16)
+        return QRect(x, cy - 8, 16, 16).adjusted(-4, -4, 4, 4)
+
+    def open_project_editor(self, index: QModelIndex) -> None:
+        self._edit_project(index)
 
     def _show_row_menu(self, index: QModelIndex):
         """Показывает контекстное меню проекта."""

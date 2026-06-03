@@ -3,9 +3,9 @@ from __future__ import annotations
 import subprocess
 from datetime import date
 
-from PySide6.QtCore import QEvent, QPointF, QRect, Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.projects import project_edit_dialog
@@ -182,10 +182,7 @@ def test_project_folder_double_click_opens_project_dialog(monkeypatch, unique_te
         row = _find_project_row(workspace.model, project.id)
         assert row >= 0
         index = workspace.model.index(row, 0)
-        option = QStyleOptionViewItem()
-        option.rect = QRect(0, 0, 1200, workspace.delegate.ROW_H)
-        option.widget = workspace.list
-        folder_rect = workspace.delegate._project_folder_rect(option.rect)
+        folder_rect = workspace.delegate.project_folder_rect(workspace.list.visualRect(index))
         click_point = folder_rect.center()
         opened_project_ids: list[int] = []
 
@@ -194,7 +191,7 @@ def test_project_folder_double_click_opens_project_dialog(monkeypatch, unique_te
             if isinstance(value, int):
                 opened_project_ids.append(value)
 
-        monkeypatch.setattr(workspace.delegate, "_edit_project", _capture_edit)
+        monkeypatch.setattr(workspace.delegate, "open_project_editor", _capture_edit)
         event = QMouseEvent(
             QEvent.Type.MouseButtonDblClick,
             QPointF(float(click_point.x()), float(click_point.y())),
@@ -205,7 +202,7 @@ def test_project_folder_double_click_opens_project_dialog(monkeypatch, unique_te
             Qt.KeyboardModifier.NoModifier,
         )
 
-        assert workspace.delegate.editorEvent(event, workspace.model, option, index) is True
+        workspace.list.mouseDoubleClickEvent(event)
         assert opened_project_ids == [project.id]
     finally:
         if workspace is not None:
