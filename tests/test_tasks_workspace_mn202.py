@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QTextEdit, QToolButton
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QTextEdit, QToolButton, QWidget
 
 from mindnavigator.storage import (
     BOARD_COLUMN_COMPLETED,
@@ -906,6 +906,72 @@ def test_task_details_dialog_image_attach_uses_file_nav_picker(monkeypatch, uniq
         db_path.unlink(missing_ok=True)
 
 
+def test_task_details_dialog_applies_group_property_to_children(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_property_propagation", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    host = None
+    messages: list[str] = []
+    try:
+        parent = database.create_task(
+            title="Parent",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="High",
+        )
+        child = database.create_task(
+            title="Child",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Low",
+            parent_id=parent.id,
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(
+            task_details_dialog.QMessageBox,
+            "information",
+            lambda _parent, _title, text: messages.append(text),
+        )
+        model = tasks_workspace.TasksModel()
+
+        class _Host(QWidget):
+            def model(self):
+                return model
+
+        host = _Host()
+        dialog = task_details_dialog.TaskDetailsDialog(model.task_by_id(parent.id), parent=host)
+        dialog.show()
+        QApplication.processEvents()
+
+        for card in (
+            dialog.detail_project_card,
+            dialog.priority_card,
+            dialog.importance_card,
+            dialog.detail_marker_card,
+            dialog.detail_theme_card,
+        ):
+            assert card.action_button.isVisible()
+
+        dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("Medium"))
+        dialog._apply_property_to_children("priority", recursive=False)
+
+        refreshed_child = model.task_by_id(child.id)
+        assert refreshed_child is not None
+        assert refreshed_child.priority == "Medium"
+        assert messages
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        if host is not None:
+            host.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_uses_redesigned_labels_and_default_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_dialog_redesign", ".sqlite3")
@@ -1163,6 +1229,9 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.header_add_button.height() == 62
         assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         assert dialog.summary_label.isHidden()
+        assert dialog.left_column.indexOf(dialog.additional_card) < dialog.left_column.indexOf(dialog.description_card)
+        assert dialog.additional_card.findChild(QLabel, "TaskDetailsSectionTitle").text().endswith("Дополнительно")
+        assert dialog.additional_properties_layout.count() == 0
         assert empty_description is not None
         assert empty_description.text() == "Нет описания"
         assert empty_links is not None

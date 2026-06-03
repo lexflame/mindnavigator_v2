@@ -364,6 +364,7 @@ class TaskDetailsDialog(QDialog):
         body_layout.addLayout(self.right_column, 1)
         self.content_layout.addWidget(self.body_columns, 1)
 
+        self._build_additional_section()
         self._build_description_section()
         self._build_key_params_section()
         self._build_details_section()
@@ -478,6 +479,16 @@ class TaskDetailsDialog(QDialog):
         self.description_counter.setObjectName("TaskDetailsDescriptionCounter")
         self.description_card.layout().addWidget(self.description_counter, 0, Qt.AlignmentFlag.AlignRight)
         self.left_column.addWidget(self.description_card, 1)
+
+    def _build_additional_section(self) -> None:
+        self.additional_card = self._build_section_card("Дополнительно", icon="☷")
+        self.additional_properties_host = QWidget(self.additional_card)
+        self.additional_properties_host.setObjectName("TaskDetailsAdditionalProperties")
+        self.additional_properties_layout = QVBoxLayout(self.additional_properties_host)
+        self.additional_properties_layout.setContentsMargins(0, 0, 0, 0)
+        self.additional_properties_layout.setSpacing(0)
+        self.additional_card.layout().addWidget(self.additional_properties_host)
+        self.left_column.addWidget(self.additional_card, 0)
 
     def _build_key_params_section(self) -> None:
         self.params_card = QFrame(self.header_card)
@@ -656,6 +667,7 @@ class TaskDetailsDialog(QDialog):
             self.details_list.addWidget(card)
         details_layout.addLayout(self.details_list)
         self.right_column.addWidget(self.details_card)
+        self._setup_property_propagation_actions()
 
         self.gantt_card = self._build_section_card("GANTT / Время", icon="◴")
         self.gantt_metrics = QWidget(self.gantt_card)
@@ -1177,6 +1189,14 @@ class TaskDetailsDialog(QDialog):
                 color: {palette.muted_text};
                 border: 1px solid {palette.border};
             }}
+            QToolButton#TaskDetailsCardAction[compact="true"],
+            QToolButton#TaskDetailsPropertyAction[compact="true"] {{
+                min-width: 30px;
+                max-width: 34px;
+                min-height: 28px;
+                max-height: 30px;
+                padding: 0;
+            }}
             QToolButton#TaskAttachmentRemove {{
                 color: {palette.danger};
                 min-height: 24px;
@@ -1296,6 +1316,7 @@ class TaskDetailsDialog(QDialog):
         self.detail_theme_card.set_value(marker_theme_text, muted=marker_theme_text == "Нет")
         self.marker_color_inline.set_value(self._task.marker_color, marker_text)
         self.marker_theme_inline.set_value(self._task.marker_theme, marker_theme_text)
+        self._refresh_property_propagation_actions()
 
         self._refresh_attachments()
         self._reflow_cards()
@@ -1727,6 +1748,113 @@ class TaskDetailsDialog(QDialog):
                     return model
             current = current.parent() if hasattr(current, "parent") else None
         return None
+
+    def _setup_property_propagation_actions(self) -> None:
+        self._property_action_cards = {
+            "project_id": self.detail_project_card,
+            "priority": self.priority_card,
+            "importance": self.importance_card,
+            "marker_color": self.detail_marker_card,
+            "marker_theme": self.detail_theme_card,
+        }
+        for property_name, card in self._property_action_cards.items():
+            card.action_button.setText("⋯")
+            card.action_button.setToolTip("Действия свойства")
+            card.action_button.setProperty("compact", True)
+            card.action_button.setFixedSize(34, 30)
+            card.action_button.clicked.connect(
+                lambda _checked=False, name=property_name: self._open_property_action_menu(name)
+            )
+            card.set_action_visible(False)
+
+    def _refresh_property_propagation_actions(self) -> None:
+        has_children = self._task_has_children(self._task.id)
+        for card in getattr(self, "_property_action_cards", {}).values():
+            card.set_action_visible(has_children)
+
+    def _task_has_children(self, task_id: int) -> bool:
+        task_id = int(task_id)
+        model = self._tasks_model()
+        if model is not None and hasattr(model, "has_task_children"):
+            return bool(model.has_task_children(task_id))
+        return any(task.parent_id == task_id for task in self._db.fetch_tasks())
+
+    def _task_has_descendants(self, task_id: int) -> bool:
+        task_id = int(task_id)
+        model = self._tasks_model()
+        if model is not None and hasattr(model, "has_task_descendants"):
+            return bool(model.has_task_descendants(task_id))
+        by_parent: dict[Optional[int], list[TaskRow]] = {}
+        for task in self._db.fetch_tasks():
+            by_parent.setdefault(task.parent_id, []).append(task)
+        visited = {task_id}
+        stack = list(by_parent.get(task_id, []))
+        while stack:
+            child = stack.pop(0)
+            if child.id in visited:
+                continue
+            visited.add(child.id)
+            return True
+        return False
+
+    def _open_property_action_menu(self, property_name: str) -> None:
+        has_children = self._task_has_children(self._task.id)
+        has_descendants = self._task_has_descendants(self._task.id)
+        menu = QMenu(self)
+        apply_action = menu.addAction("Применить к вложенным задачам")
+        apply_action.setEnabled(has_children)
+        recursive_action = menu.addAction("Применить к вложенным задачам рекурсивно")
+        recursive_action.setEnabled(has_descendants)
+        chosen = menu.exec(QCursor.pos())
+        if chosen == apply_action:
+            self._apply_property_to_children(property_name, recursive=False)
+        elif chosen == recursive_action:
+            self._apply_property_to_children(property_name, recursive=True)
+
+    def _current_property_value(self, property_name: str) -> object:
+        if property_name == "project_id":
+            return self.project_inline.current_value()
+        if property_name == "priority":
+            return str(self.priority_inline.current_value() or "Medium")
+        if property_name == "importance":
+            return int(self.importance_inline.current_value() or 3)
+        if property_name == "marker_color":
+            return str(self.marker_color_inline.current_value() or "")
+        if property_name == "marker_theme":
+            return str(self.marker_theme_inline.current_value() or "")
+        return None
+
+    def _apply_property_to_children(self, property_name: str, *, recursive: bool) -> None:
+        model = self._tasks_model()
+        if model is None or not hasattr(model, "apply_task_property_to_children"):
+            QMessageBox.warning(self, "Свойства задачи", "Выберите задачу из рабочего пространства для применения свойства.")
+            return
+        result = model.apply_task_property_to_children(
+            int(self._task.id),
+            property_name,
+            self._current_property_value(property_name),
+            recursive=recursive,
+        )
+        refreshed_task = model.task_by_id(int(self._task.id)) if hasattr(model, "task_by_id") else None
+        if refreshed_task is not None:
+            self._task = refreshed_task
+        self._refresh_view()
+        self._notify_property_result(result)
+
+    def _notify_property_result(self, result) -> None:
+        if result.error_count and not result.updated_count and not result.parent_updated:
+            detail = result.errors[0] if result.errors else "Ошибка сохранения."
+            QMessageBox.warning(self, "Свойства задачи", detail)
+            return
+        if result.target_count <= 0:
+            QMessageBox.information(self, "Свойства задачи", "Нет вложенных задач для применения свойства.")
+            return
+        scope_text = " рекурсивно" if result.recursive else ""
+        QMessageBox.information(
+            self,
+            "Свойства задачи",
+            f"Свойство {result.property_label} применено к {result.updated_count} вложенным задачам{scope_text}.",
+        )
 
     def _parent_schedule_mismatch(self) -> bool:
         parent_task = self._parent_task()
