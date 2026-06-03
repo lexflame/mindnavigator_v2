@@ -1082,6 +1082,12 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.links_host.isHidden()
         assert dialog.images_host.isHidden()
         assert dialog.concept_board_summary.text() == "Связанные идеи, заметки и объекты образуют маршрут задачи."
+        assert dialog.details_title.text() == "☷  Свойства"
+        assert dialog.plan_task_checkbox.text() == "План задача"
+        assert dialog.plan_task_checkbox.isChecked() is False
+        assert dialog.plan_task_checkbox.isEnabled() is False
+        assert dialog.gantt_card not in dialog._detail_cards
+        assert dialog.gantt_card.objectName() == "TaskDetailsSectionCard"
         assert dialog.close_button.text() == "Закрыть"
         assert dialog.edit_button.text() == "Редактировать"
         assert dialog.header_edit_button.text() == "Редактировать"
@@ -1101,6 +1107,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.importance_card.value_label.text() == "Важно"
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
+        assert dialog.detail_id_card._custom_value_widget is False
+        assert dialog.detail_parent_card._custom_value_widget is False
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
         assert [card.title_label.text() for card in dialog._param_cards] == [
@@ -1108,6 +1116,15 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
             "Срок выполнения",
             "Приоритет",
             "Важность задачи",
+        ]
+        assert [card.title_label.text() for card in dialog._detail_cards] == [
+            "ID",
+            "Родительская задача",
+            "Тип",
+            "Маркер",
+            "Тема маркера",
+            "Статус",
+            "Повтор",
         ]
         assert dialog._columns_for_width(1200, dialog._PARAM_BREAKPOINTS, default=4) == 4
         assert dialog._columns_for_width(900, dialog._PARAM_BREAKPOINTS, default=4) == 4
@@ -1190,6 +1207,7 @@ def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_p
         assert dialog.header_edit_button.text() == "Сохранить"
         assert dialog.links_add_button.isEnabled() is True
         assert dialog.images_add_button.isEnabled() is True
+        assert dialog.plan_task_checkbox.isEnabled() is True
         assert not dialog.links_host.isHidden()
         assert not dialog.images_host.isHidden()
         dialog.title_inline.editor.setText("Discarded title")
@@ -1205,6 +1223,7 @@ def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_p
         dialog.priority_inline.editor.setCurrentIndex(dialog.priority_inline.editor.findData("High"))
         dialog.status_inline.editor.setCurrentIndex(dialog.status_inline.editor.findData(True))
         dialog.recurrence_inline.editor.setCurrentIndex(dialog.recurrence_inline.editor.findData("weekly"))
+        dialog.plan_task_checkbox.setChecked(True)
         dialog.marker_color_inline.editor.setCurrentIndex(dialog.marker_color_inline.editor.findData("#d68a2f"))
         dialog.marker_theme_inline.editor.setCurrentIndex(dialog.marker_theme_inline.editor.findData("work"))
         dialog._open_edit_dialog()
@@ -1217,14 +1236,16 @@ def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_p
         assert reloaded.priority == "High"
         assert reloaded.done is True
         assert reloaded.recurrence_kind == "weekly"
-        assert reloaded.is_plan_task is False
+        assert reloaded.is_plan_task is True
         assert reloaded.marker_color == "#d68a2f"
         assert reloaded.marker_theme == "work"
         assert dialog.title_label.text() == "Updated task"
         assert dialog.summary_label.text() == "Без проекта • 2026-03-07 • 18:00 • High"
         assert dialog.status_badge.text() == "Выполнено"
         assert dialog.recurrence_card.value_label.text() == "Еженедельно"
-        assert dialog.detail_type_card.value_label.text() == "Обычная задача"
+        assert dialog.detail_type_card.value_label.text() == "Плановая задача"
+        assert dialog.plan_task_checkbox.isChecked() is True
+        assert dialog.plan_task_checkbox.isEnabled() is False
         assert dialog.detail_marker_card.value_label.text() == "Оранжевый"
         assert dialog.detail_theme_card.value_label.text() == "Работа"
     finally:
