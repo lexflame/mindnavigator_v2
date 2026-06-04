@@ -5,7 +5,7 @@ from datetime import date
 
 from PySide6.QtCore import QEvent, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QLineEdit, QStyleOptionViewItem, QToolButton
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces.projects import project_edit_dialog
@@ -378,6 +378,127 @@ def test_project_dialog_relation_payload_updates_existing_editors(monkeypatch, u
         assert dialog.linked_map_edit.currentData() == map_item.id
         assert dialog.linked_note_edit.currentData() == note.id
         assert dialog.linked_object_edit.currentData() == obj.id
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_custom_property_lists_use_inline_rows(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_custom_property_lists", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.task_types_edit.setPlainText(
+            "DEVELOPMENT | DEV | #20f5d2 | debug | High | 5 | 1 | | active\n"
+            "MUSIC | MUSIC | #8A63D2 | music | Medium | 3 | 0 | | active"
+        )
+        dialog.display_properties_edit.setPlainText("WIKI | https://docs.example.com | name_link")
+        dialog._refresh_inline_property_lists()
+
+        task_inputs = dialog.task_types_list_widget.findChildren(QLineEdit)
+        display_inputs = dialog.display_properties_list_widget.findChildren(QLineEdit)
+        assert len(task_inputs) == 2
+        assert task_inputs[0].isReadOnly() is True
+        assert "DEVELOPMENT" in task_inputs[0].text()
+        assert len(display_inputs) == 1
+        assert "WIKI" in display_inputs[0].text()
+
+        task_buttons = dialog.task_types_list_widget.findChildren(QToolButton)
+        display_buttons = dialog.display_properties_list_widget.findChildren(QToolButton)
+        assert len(task_buttons) == 6
+        assert len(display_buttons) == 2
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_inline_task_type_actions_target_clicked_row(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_task_type_actions", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.task_types_edit.setPlainText(
+            "DEVELOPMENT | DEV | #20f5d2 | debug | High | 5 | 1 | | active\n"
+            "MUSIC | MUSIC | #8A63D2 | music | Medium | 3 | 0 | | active"
+        )
+        dialog._refresh_inline_property_lists()
+        monkeypatch.setattr(
+            dialog,
+            "_task_type_dialog",
+            lambda initial=None: {
+                "title": "UPDATED",
+                "value": "UPD",
+                "color_marker": "#4C78D0",
+                "theme_marker": "dev",
+                "priority": "Low",
+                "importance": 2,
+                "is_plan_task": False,
+                "concept_board_id": None,
+                "active": True,
+            },
+        )
+
+        dialog._edit_task_type_line(1)
+        lines = dialog.task_types_edit.toPlainText().splitlines()
+        assert lines[0].startswith("DEVELOPMENT | DEV")
+        assert lines[1].startswith("UPDATED | UPD")
+
+        dialog._toggle_task_type_line(0)
+        assert dialog._parse_task_type_line(dialog.task_types_edit.toPlainText().splitlines()[0])["active"] is False
+
+        monkeypatch.setattr(project_edit_dialog.QMessageBox, "question", lambda *args, **kwargs: project_edit_dialog.QMessageBox.StandardButton.Yes)
+        dialog._delete_task_type_line(0)
+        remaining = dialog.task_types_edit.toPlainText().splitlines()
+        assert len(remaining) == 1
+        assert remaining[0].startswith("UPDATED | UPD")
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_inline_display_property_actions_target_clicked_row(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_display_property_actions", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.display_properties_edit.setPlainText(
+            "WIKI | https://docs.example.com | name_link\n"
+            "REPO | https://github.com/lexflame/mindnavigator | url_text"
+        )
+        dialog._refresh_inline_property_lists()
+        monkeypatch.setattr(
+            dialog,
+            "_display_property_dialog",
+            lambda initial=None: {
+                "name": "DOCS",
+                "url": "https://docs.example.com/new",
+                "display_mode": "name_link",
+            },
+        )
+
+        dialog._edit_display_property_line(1)
+        lines = dialog.display_properties_edit.toPlainText().splitlines()
+        assert lines[0].startswith("WIKI | https://docs.example.com")
+        assert lines[1] == "DOCS | https://docs.example.com/new | name_link"
+
+        dialog._delete_display_property_line(0)
+        remaining = dialog.display_properties_edit.toPlainText().splitlines()
+        assert remaining == ["DOCS | https://docs.example.com/new | name_link"]
     finally:
         if dialog is not None:
             dialog.deleteLater()

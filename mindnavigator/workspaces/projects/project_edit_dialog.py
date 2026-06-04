@@ -46,13 +46,10 @@ class ProjectEditDialog(QDialog):
         self.updated_edit.setKeyboardTracking(False)
         self.updated_edit.setDate(QDate.currentDate())
         self.display_properties_edit = self._make_multiline_edit("WIKI | https://docs.example.com | name_link")
-        display_properties_row = self._make_property_editor(
+        display_properties_row = self._make_inline_property_editor(
             self.display_properties_edit,
-            [
-                ("Добавить", self._add_display_property_line),
-                ("Изменить", self._edit_display_property_line),
-                ("Удалить", self._delete_display_property_line),
-            ],
+            "display_properties",
+            self._add_display_property_line,
         )
         if project:
             self.updated_edit.setDate(QDate(project.updated.year, project.updated.month, project.updated.day))
@@ -152,14 +149,10 @@ class ProjectEditDialog(QDialog):
         self.repository_links_edit = self._make_multiline_edit("MindNavigator Core | D:/_Branch/PROJECTS/mindnavigator")
         self.wiki_links_edit = self._make_multiline_edit("Project Wiki | https://docs.example.com/project")
         self.display_properties_edit.setPlaceholderText("WIKI | https://docs.example.com | name_link")
-        task_types_row = self._make_property_editor(
+        task_types_row = self._make_inline_property_editor(
             self.task_types_edit,
-            [
-                ("Добавить", self._add_task_type_line),
-                ("Изменить", self._edit_task_type_line),
-                ("Актив./деакт.", self._toggle_task_type_line),
-                ("Удалить", self._delete_task_type_line),
-            ],
+            "task_types",
+            self._add_task_type_line,
         )
         related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
         related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
@@ -167,6 +160,7 @@ class ProjectEditDialog(QDialog):
         wiki_links_row = self._make_property_editor(self.wiki_links_edit, [("Добавить", self._add_wiki_link_line)])
         if project:
             self._load_project_properties(project.id)
+        self._refresh_inline_property_lists()
 
         self._editor_controls = [
             self.area_edit,
@@ -515,6 +509,41 @@ class ProjectEditDialog(QDialog):
                 max-width: 36px;
                 padding: 8px 0;
             }}
+
+            QFrame#ProjectInlineList {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#ProjectInlineRow {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 7px;
+            }}
+
+            QLabel#ProjectInlineEmpty {{
+                color: {palette.dim_text};
+                background: {palette.input_alt_bg};
+                border: 1px dashed {palette.border};
+                border-radius: 7px;
+                padding: 9px 11px;
+            }}
+
+            QLineEdit#ProjectInlineValue {{
+                background: transparent;
+                border: none;
+                color: {palette.text};
+                padding: 7px 8px;
+            }}
+
+            QToolButton#ProjectInlineIconButton {{
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 28px;
+                max-height: 28px;
+                padding: 0;
+                border-radius: 6px;
+            }}
         """)
 
     def _field_stack(self, editor: QWidget, value_getter: object, rich: bool = False) -> QStackedWidget:
@@ -703,6 +732,7 @@ class ProjectEditDialog(QDialog):
         for button in self._edit_action_buttons:
             button.setVisible(enabled)
             button.setEnabled(enabled)
+        self._set_inline_edit_enabled(enabled)
         if hasattr(self, "title_label"):
             self.title_label.setText(self.title_edit.text().strip() or "Новый проект")
         self.mode_label.setText("Редактирование проекта" if enabled else "Просмотр проекта")
@@ -762,12 +792,180 @@ class ProjectEditDialog(QDialog):
         layout.addLayout(action_row)
         return widget
 
+    def _make_inline_property_editor(self, edit: QPlainTextEdit, kind: str, add_callback: object) -> QWidget:
+        edit.setVisible(False)
+        widget = QFrame()
+        widget.setObjectName("ProjectInlineList")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(7)
+        rows_widget = QWidget(widget)
+        rows_widget.setObjectName(f"ProjectInlineRows_{kind}")
+        rows_layout = QVBoxLayout(rows_widget)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(6)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addStretch(1)
+        add_button = self._inline_icon_button("fa5s.plus", "Добавить")
+        add_button.clicked.connect(add_callback)
+        footer.addWidget(add_button)
+        layout.addWidget(edit)
+        layout.addWidget(rows_widget)
+        layout.addLayout(footer)
+        if kind == "task_types":
+            self.task_types_list_widget = rows_widget
+            self.task_types_list_layout = rows_layout
+        else:
+            self.display_properties_list_widget = rows_widget
+            self.display_properties_list_layout = rows_layout
+        return widget
+
+    def _inline_icon_button(self, icon_name: str, tooltip: str) -> QToolButton:
+        button = QToolButton()
+        button.setObjectName("ProjectInlineIconButton")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip(tooltip)
+        button.setIcon(qta.icon(icon_name, color=self._palette.text))
+        return button
+
+    def _refresh_inline_property_lists(self) -> None:
+        if hasattr(self, "task_types_list_layout"):
+            self._rebuild_inline_property_list(self.task_types_edit, self.task_types_list_layout, "task_types")
+        if hasattr(self, "display_properties_list_layout"):
+            self._rebuild_inline_property_list(
+                self.display_properties_edit,
+                self.display_properties_list_layout,
+                "display_properties",
+            )
+        if hasattr(self, "_edit_mode"):
+            self._set_inline_edit_enabled(self._edit_mode)
+
+    def _set_inline_edit_enabled(self, enabled: bool) -> None:
+        for button in self.findChildren(QToolButton):
+            if button.objectName() == "ProjectInlineIconButton":
+                button.setVisible(enabled)
+                button.setEnabled(enabled)
+
+    def _rebuild_inline_property_list(self, edit: QPlainTextEdit, layout: QVBoxLayout, kind: str) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        lines = [line.strip() for line in edit.toPlainText().splitlines() if line.strip()]
+        if not lines:
+            empty = QLabel("Нет настроенных элементов")
+            empty.setObjectName("ProjectInlineEmpty")
+            layout.addWidget(empty)
+            return
+        for index, line in enumerate(lines):
+            layout.addWidget(self._inline_property_row(kind, index, line))
+
+    def _inline_property_row(self, kind: str, line_index: int, line: str) -> QFrame:
+        row = QFrame()
+        row.setObjectName("ProjectInlineRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
+        value = QLineEdit(self._inline_property_label(kind, line))
+        value.setObjectName("ProjectInlineValue")
+        value.setReadOnly(True)
+        value.setCursorPosition(0)
+        layout.addWidget(value, 1)
+        edit_button = self._inline_icon_button("fa5s.edit", "Изменить")
+        edit_button.clicked.connect(lambda _checked=False, idx=line_index: self._edit_inline_property(kind, idx))
+        layout.addWidget(edit_button)
+        if kind == "task_types":
+            values = self._parse_task_type_line(line)
+            active = bool(values.get("active", True))
+            toggle_button = self._inline_icon_button("fa5s.check" if active else "fa5s.ban", "Активировать/деактивировать")
+            toggle_button.clicked.connect(lambda _checked=False, idx=line_index: self._toggle_inline_task_type(idx))
+            layout.addWidget(toggle_button)
+        delete_button = self._inline_icon_button("fa5s.trash", "Удалить")
+        delete_button.clicked.connect(lambda _checked=False, idx=line_index: self._delete_inline_property(kind, idx))
+        layout.addWidget(delete_button)
+        return row
+
+    def _inline_property_label(self, kind: str, line: str) -> str:
+        if kind == "task_types":
+            values = self._parse_task_type_line(line)
+            title = str(values.get("title") or "")
+            value = str(values.get("value") or title)
+            priority = str(values.get("priority") or "None")
+            status = "active" if bool(values.get("active", True)) else "disabled"
+            return f"{title} | {value} | {priority} | {status}"
+        values = self._parse_display_property_line(line)
+        return f"{values.get('name') or ''} | {values.get('url') or ''} | {values.get('display_mode') or 'name_link'}"
+
+    def _edit_inline_property(self, kind: str, line_index: int) -> None:
+        if kind == "task_types":
+            self._edit_task_type_line(line_index)
+        else:
+            self._edit_display_property_line(line_index)
+
+    def _delete_inline_property(self, kind: str, line_index: int) -> None:
+        if kind == "task_types":
+            self._delete_task_type_line(line_index)
+        else:
+            self._delete_display_property_line(line_index)
+
+    def _toggle_inline_task_type(self, line_index: int) -> None:
+        self._toggle_task_type_line(line_index)
+
+    def _apply_child_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+            }}
+
+            QLabel {{
+                color: {palette.text};
+            }}
+
+            QLineEdit,
+            QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 8px 10px;
+                min-height: 30px;
+            }}
+
+            QCheckBox {{
+                color: {palette.text};
+                padding: 4px 0;
+            }}
+
+            QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 8px 16px;
+                min-width: 104px;
+            }}
+
+            QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QDialogButtonBox QPushButton {{
+                min-width: 116px;
+            }}
+        """)
+
     def _append_line(self, edit: QPlainTextEdit, line: str) -> None:
         line = (line or "").strip()
         if not line:
             return
         text = edit.toPlainText().strip()
         edit.setPlainText(f"{text}\n{line}" if text else line)
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _current_line_info(self, edit: QPlainTextEdit) -> tuple[list[str], int, str]:
         lines = edit.toPlainText().splitlines()
@@ -788,6 +986,8 @@ class ProjectEditDialog(QDialog):
         for _ in range(line_index):
             cursor.movePosition(cursor.MoveOperation.Down)
         edit.setTextCursor(cursor)
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _remove_line(self, edit: QPlainTextEdit, line_index: int) -> None:
         lines = edit.toPlainText().splitlines()
@@ -795,6 +995,8 @@ class ProjectEditDialog(QDialog):
             return
         del lines[line_index]
         edit.setPlainText("\n".join(lines))
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
         for idx in range(source.count()):
@@ -806,8 +1008,11 @@ class ProjectEditDialog(QDialog):
             return
         self._append_line(self.task_types_edit, self._format_task_type_line(values))
 
-    def _edit_task_type_line(self) -> None:
-        lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _edit_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
@@ -816,16 +1021,22 @@ class ProjectEditDialog(QDialog):
             return
         self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(updated))
 
-    def _toggle_task_type_line(self) -> None:
-        lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _toggle_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
         values["active"] = not bool(values.get("active", True))
         self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(values))
 
-    def _delete_task_type_line(self) -> None:
-        _lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _delete_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
@@ -973,6 +1184,7 @@ class ProjectEditDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         title = " ".join(title_edit.text().strip().upper().split())
@@ -1225,16 +1437,22 @@ class ProjectEditDialog(QDialog):
         if values is not None:
             self._append_line(self.display_properties_edit, self._format_display_property_line(values))
 
-    def _edit_display_property_line(self) -> None:
-        _lines, line_index, line = self._current_line_info(self.display_properties_edit)
+    def _edit_display_property_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.display_properties_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._display_property_dialog(self._parse_display_property_line(line))
         if values is not None:
             self._replace_line(self.display_properties_edit, line_index, self._format_display_property_line(values))
 
-    def _delete_display_property_line(self) -> None:
-        _lines, line_index, line = self._current_line_info(self.display_properties_edit)
+    def _delete_display_property_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.display_properties_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index >= 0 and line:
             self._remove_line(self.display_properties_edit, line_index)
 
@@ -1264,6 +1482,7 @@ class ProjectEditDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         name = "".join(name_edit.text().strip().upper().split())
@@ -1343,6 +1562,7 @@ class ProjectEditDialog(QDialog):
                     "display_mode": item.display_mode,
                 }) for item in fetch_display(project_id))
             )
+        self._refresh_inline_property_lists()
 
     @staticmethod
     def _format_links(links) -> str:
