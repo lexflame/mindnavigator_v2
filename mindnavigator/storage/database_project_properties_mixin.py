@@ -196,6 +196,8 @@ class DatabaseProjectPropertiesMixin:
             )
         if bool(active) != existing.active:
             self.set_project_task_type_active(existing.id, bool(active))
+        elif active:
+            self.apply_project_task_type_defaults_to_task_tree(existing.id)
         updated = self.fetch_project_task_type(existing.id)
         if updated is None:
             raise ValueError("Тип задач проекта не найден.")
@@ -253,6 +255,8 @@ class DatabaseProjectPropertiesMixin:
                         task_type.id,
                     ),
                 )
+        if active:
+            self.apply_project_task_type_defaults_to_task_tree(task_type.id)
 
     def delete_project_task_type(self, task_type_id: int) -> None:
         task_type_id = int(task_type_id)

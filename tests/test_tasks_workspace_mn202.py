@@ -1552,6 +1552,72 @@ def test_task_details_type_inline_selects_project_task_type(monkeypatch, unique_
         db_path.unlink(missing_ok=True)
 
 
+def test_task_update_project_task_type_applies_defaults_to_nested_tasks(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_update_type_applies_nested", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Typed project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "debug",
+                    "priority": "High",
+                    "importance": 5,
+                    "is_plan_task": True,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        root = database.create_task("Root task", "", date(2026, 3, 6), "", "Medium", project_id=project.id)
+        child = database.create_task(
+            "Nested task",
+            "",
+            date(2026, 3, 6),
+            "",
+            "Low",
+            project_id=project.id,
+            parent_id=root.id,
+            importance=1,
+        )
+
+        database.update_task(
+            task_id=root.id,
+            title=root.title,
+            description=root.description,
+            day=root.day,
+            time_text=root.time_text,
+            priority=root.priority,
+            importance=root.importance,
+            done=root.done,
+            project_id=root.project_id,
+            parent_id=root.parent_id,
+            recurrence_kind=root.recurrence_kind,
+            recurrence_interval=root.recurrence_interval,
+            is_plan_task=root.is_plan_task,
+            plan_order=root.plan_order,
+            marker_color=root.marker_color,
+            marker_theme=root.marker_theme,
+            project_task_type_id=task_type.id,
+        )
+
+        tasks = {item.id: item for item in database.fetch_tasks()}
+        for task_id in (root.id, child.id):
+            assert tasks[task_id].project_task_type_id == task_type.id
+            assert tasks[task_id].priority == "High"
+            assert tasks[task_id].importance == 5
+            assert tasks[task_id].marker_color == "#20f5d2"
+            assert tasks[task_id].marker_theme == "debug"
+            assert tasks[task_id].is_plan_task is True
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_type_field_combines_builtin_and_project_types(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_type_combined", ".sqlite3")

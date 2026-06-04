@@ -128,6 +128,77 @@ def test_project_custom_task_type_inherits_task_defaults_and_display_properties(
         db_path.unlink(missing_ok=True)
 
 
+def test_project_task_type_update_reapplies_defaults_to_existing_tasks_tree(unique_temp_path) -> None:
+    db_path = unique_temp_path("project_task_type_update_existing_tree", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Typed project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "debug",
+                    "priority": "Low",
+                    "importance": 2,
+                    "is_plan_task": False,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        root = database.create_task(
+            "Typed root",
+            "",
+            date(2026, 3, 7),
+            "",
+            "Medium",
+            project_id=project.id,
+            project_task_type_id=task_type.id,
+            importance=1,
+        )
+        child = database.create_task(
+            "Nested child",
+            "",
+            date(2026, 3, 7),
+            "",
+            "Medium",
+            project_id=project.id,
+            parent_id=root.id,
+            importance=1,
+        )
+
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#ee3344",
+                    "theme_marker": "feature",
+                    "priority": "High",
+                    "importance": 5,
+                    "is_plan_task": True,
+                    "active": True,
+                }
+            ],
+        )
+
+        tasks = {item.id: item for item in database.fetch_tasks()}
+        for task_id in (root.id, child.id):
+            assert tasks[task_id].project_task_type_id == task_type.id
+            assert tasks[task_id].priority == "High"
+            assert tasks[task_id].importance == 5
+            assert tasks[task_id].marker_color == "#ee3344"
+            assert tasks[task_id].marker_theme == "feature"
+            assert tasks[task_id].is_plan_task is True
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_project_display_properties_limit_is_four(unique_temp_path) -> None:
     db_path = unique_temp_path("project_display_property_limit", ".sqlite3")
     database = Database(path=db_path)

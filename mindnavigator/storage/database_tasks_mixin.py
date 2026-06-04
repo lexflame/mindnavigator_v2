@@ -189,6 +189,76 @@ class DatabaseTasksMixin:
             return
         self.attach_concept_board_item(int(concept_board_id), "task", int(task_id))
 
+    def apply_project_task_type_defaults_to_task_tree(self, project_task_type_id: Optional[int]) -> None:
+        if project_task_type_id is None:
+            return
+        task_type_id = int(project_task_type_id)
+        row = self._conn.execute(
+            """
+            SELECT id, priority, importance, is_plan_task, color_marker, theme_marker, concept_board_id
+            FROM project_task_types
+            WHERE id = ? AND active = 1;
+            """,
+            (task_type_id,),
+        ).fetchone()
+        if row is None:
+            return
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        affected_rows = self._conn.execute(
+            """
+            WITH RECURSIVE affected(id) AS (
+                SELECT id FROM tasks WHERE project_task_type_id = ?
+                UNION
+                SELECT t.id FROM tasks t
+                JOIN affected a ON t.parent_id = a.id
+            )
+            SELECT id FROM affected;
+            """,
+            (task_type_id,),
+        ).fetchall()
+        affected_ids = [int(item["id"]) for item in affected_rows]
+        if not affected_ids:
+            return
+        assignments = [
+            "project_task_type_id = ?",
+            "importance = ?",
+            "is_plan_task = ?",
+            "updated_at = ?",
+        ]
+        params: list[object] = [
+            task_type_id,
+            max(1, min(5, int(row["importance"] or 3))),
+            int(bool(row["is_plan_task"])),
+            now,
+        ]
+        priority = (row["priority"] or "").strip()
+        if priority:
+            assignments.append("priority = ?")
+            params.append(normalize_priority(priority))
+        marker_color = (row["color_marker"] or "").strip()
+        if marker_color:
+            assignments.append("marker_color = ?")
+            params.append(marker_color)
+        marker_theme = (row["theme_marker"] or "").strip().lower()
+        if marker_theme:
+            assignments.append("marker_theme = ?")
+            params.append(marker_theme)
+        placeholders = ",".join("?" for _ in affected_ids)
+        params.extend(affected_ids)
+        with self._conn:
+            self._conn.execute(
+                f"""
+                UPDATE tasks
+                SET {", ".join(assignments)}
+                WHERE id IN ({placeholders});
+                """,
+                params,
+            )
+        concept_board_id = row["concept_board_id"]
+        if concept_board_id is not None:
+            for task_id in affected_ids:
+                self.attach_concept_board_item(int(concept_board_id), "task", int(task_id))
+
     def create_task(
         self,
         title: str,
@@ -507,6 +577,7 @@ class DatabaseTasksMixin:
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         self._attach_project_task_type_concept_board(task_id, project_task_type_id)
+        self.apply_project_task_type_defaults_to_task_tree(project_task_type_id)
         self._sync_task_text_attachments(task_id, title, description)
         new_plan_root_id = self._plan_root_id_for_parent(parent_id)
         if new_plan_root_id is not None:
