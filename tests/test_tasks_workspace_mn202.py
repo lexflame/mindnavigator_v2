@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
@@ -1332,6 +1333,80 @@ def test_task_details_project_display_properties_open_and_copy_links(monkeypatch
         assert copy_button is not None
         copy_button.click()
         assert QApplication.clipboard().text() == "https://github.com/lexflame/mindnavigator"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_reflects_project_builtin_links_as_url_text(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_project_reflected_links", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        linked_map = database.create_map("Project map", "", "", "tiles", 2, 2)
+        linked_note = database.create_note("Project note", "", [], "")
+        linked_object = database.create_object("Project object", "", "", "", "")
+        project = database.create_project(
+            "Area",
+            "Reflect project",
+            date(2026, 3, 6),
+            "Medium",
+            linked_map_id=linked_map.id,
+            linked_note_id=linked_note.id,
+            linked_object_id=linked_object.id,
+            repository_catalog="D:/repo/main",
+        )
+        database.replace_project_repository_links(
+            project.id,
+            [{"title": "Core", "url": "https://github.com/lexflame/mindnavigator"}],
+        )
+        database.replace_project_wiki_links(project.id, [{"title": "Docs", "url": "https://docs.example.com"}])
+        database.set_setting(
+            f"project_reflect_in_tasks:{project.id}",
+            json.dumps(
+                [
+                    "repository_catalog",
+                    "repository_links",
+                    "wiki_links",
+                    "linked_map",
+                    "linked_note",
+                    "linked_object",
+                ]
+            ),
+        )
+        task = database.create_task(
+            title="Reflected links",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+            project_id=project.id,
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        names = [label.text() for label in dialog.additional_properties_host.findChildren(QLabel, "TaskDetailsAdditionalPropertyName")]
+        values = [label.text() for label in dialog.additional_properties_host.findChildren(QLabel, "TaskDetailsAdditionalPropertyBadge")]
+        assert "Каталог репозитория:" in names
+        assert "Репозиторий Core:" in names
+        assert "Wiki Docs:" in names
+        assert "Связанная карта:" in names
+        assert "Связанная заметка:" in names
+        assert "Связанный объект:" in names
+        assert "D:/repo/main" in values
+        assert "https://github.com/lexflame/mindnavigator" in values
+        assert "https://docs.example.com" in values
+        assert "Project map" in values
+        assert "Project note" in values
+        assert "Project object" in values
+
+        copy_buttons = dialog.additional_properties_host.findChildren(QToolButton, "TaskDetailsAdditionalPropertyCopyButton")
+        assert len(copy_buttons) == 6
+        copy_buttons[0].click()
+        assert QApplication.clipboard().text() == "D:/repo/main"
     finally:
         if dialog is not None:
             dialog.deleteLater()

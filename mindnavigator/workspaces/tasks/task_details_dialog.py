@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from html import escape
 
@@ -24,6 +25,22 @@ from .task_attachment_selector import (
 )
 from .task_image_preview_dialog import TaskImagePreviewDialog
 from .task_importance_labels import normalize_task_importance, task_importance_combo_items, task_importance_label
+
+PROJECT_REFLECT_SETTING_PREFIX = "project_reflect_in_tasks"
+PROJECT_REFLECT_REPOSITORY_CATALOG = "repository_catalog"
+PROJECT_REFLECT_REPOSITORY_LINKS = "repository_links"
+PROJECT_REFLECT_WIKI_LINKS = "wiki_links"
+PROJECT_REFLECT_LINKED_MAP = "linked_map"
+PROJECT_REFLECT_LINKED_NOTE = "linked_note"
+PROJECT_REFLECT_LINKED_OBJECT = "linked_object"
+PROJECT_REFLECT_KEYS = {
+    PROJECT_REFLECT_REPOSITORY_CATALOG,
+    PROJECT_REFLECT_REPOSITORY_LINKS,
+    PROJECT_REFLECT_WIKI_LINKS,
+    PROJECT_REFLECT_LINKED_MAP,
+    PROJECT_REFLECT_LINKED_NOTE,
+    PROJECT_REFLECT_LINKED_OBJECT,
+}
 
 
 class _InlineViewLabel(QLabel):
@@ -1352,7 +1369,80 @@ class TaskDetailsDialog(QDialog):
                             display_mode=item.display_mode,
                         )
                     )
+            for name, value, url in self._reflected_project_property_rows(int(project_id)):
+                self.additional_properties_layout.addWidget(
+                    self._additional_property_row(
+                        name,
+                        value,
+                        "#20f5d2",
+                        url=url,
+                        display_mode="url_text",
+                    )
+                )
         self.additional_properties_host.setVisible(self.additional_properties_layout.count() > 0)
+
+    @staticmethod
+    def _project_reflect_setting_key(project_id: int) -> str:
+        return f"{PROJECT_REFLECT_SETTING_PREFIX}:{int(project_id)}"
+
+    def _project_reflect_keys(self, project_id: int) -> set[str]:
+        raw_value = self._db.get_setting(self._project_reflect_setting_key(project_id), "[]")
+        try:
+            values = json.loads(raw_value)
+        except json.JSONDecodeError:
+            values = []
+        return {str(value) for value in values if str(value) in PROJECT_REFLECT_KEYS}
+
+    def _reflected_project_property_rows(self, project_id: int) -> list[tuple[str, str, str]]:
+        enabled_keys = self._project_reflect_keys(project_id)
+        if not enabled_keys:
+            return []
+        project = next((item for item in self._db.fetch_projects() if item.id == project_id), None)
+        if project is None:
+            return []
+        rows: list[tuple[str, str, str]] = []
+        repository_catalog = (project.repository_catalog or "").strip()
+        if PROJECT_REFLECT_REPOSITORY_CATALOG in enabled_keys and repository_catalog:
+            rows.append(("Каталог репозитория", repository_catalog, repository_catalog))
+        if PROJECT_REFLECT_REPOSITORY_LINKS in enabled_keys:
+            for item in self._db.fetch_project_repository_links(project_id):
+                url = (item.url or "").strip()
+                if url:
+                    name = f"Репозиторий {item.title}".strip() if item.title else "Репозиторий"
+                    rows.append((name, url, url))
+        if PROJECT_REFLECT_WIKI_LINKS in enabled_keys:
+            for item in self._db.fetch_project_wiki_links(project_id):
+                url = (item.url or "").strip()
+                if url:
+                    name = f"Wiki {item.title}".strip() if item.title else "Wiki"
+                    rows.append((name, url, url))
+        if PROJECT_REFLECT_LINKED_MAP in enabled_keys:
+            title = self._linked_entity_title("map", project.linked_map_id)
+            if title:
+                rows.append(("Связанная карта", title, title))
+        if PROJECT_REFLECT_LINKED_NOTE in enabled_keys:
+            title = self._linked_entity_title("note", project.linked_note_id)
+            if title:
+                rows.append(("Связанная заметка", title, title))
+        if PROJECT_REFLECT_LINKED_OBJECT in enabled_keys:
+            title = self._linked_entity_title("object", project.linked_object_id)
+            if title:
+                rows.append(("Связанный объект", title, title))
+        return rows
+
+    def _linked_entity_title(self, kind: str, item_id: Optional[int]) -> str:
+        if item_id is None:
+            return ""
+        if kind == "map":
+            items = self._db.fetch_maps()
+        elif kind == "note":
+            items = self._db.fetch_notes()
+        elif kind == "object":
+            items = self._db.fetch_objects()
+        else:
+            return ""
+        item = next((entity for entity in items if entity.id == item_id), None)
+        return (getattr(item, "title", "") or "").strip() if item is not None else ""
 
     def _additional_property_row(
         self,

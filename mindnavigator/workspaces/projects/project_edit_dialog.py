@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from html import escape
 
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -21,6 +22,22 @@ from PySide6.QtWidgets import (
 from ._shared import *  # noqa: F401,F403
 from mindnavigator.ui.styles import get_theme_palette
 
+PROJECT_REFLECT_SETTING_PREFIX = "project_reflect_in_tasks"
+PROJECT_REFLECT_REPOSITORY_CATALOG = "repository_catalog"
+PROJECT_REFLECT_REPOSITORY_LINKS = "repository_links"
+PROJECT_REFLECT_WIKI_LINKS = "wiki_links"
+PROJECT_REFLECT_LINKED_MAP = "linked_map"
+PROJECT_REFLECT_LINKED_NOTE = "linked_note"
+PROJECT_REFLECT_LINKED_OBJECT = "linked_object"
+PROJECT_REFLECT_KEYS = {
+    PROJECT_REFLECT_REPOSITORY_CATALOG,
+    PROJECT_REFLECT_REPOSITORY_LINKS,
+    PROJECT_REFLECT_WIKI_LINKS,
+    PROJECT_REFLECT_LINKED_MAP,
+    PROJECT_REFLECT_LINKED_NOTE,
+    PROJECT_REFLECT_LINKED_OBJECT,
+}
+
 class ProjectEditDialog(QDialog):
     def __init__(self, project: Optional[ProjectRow] = None, parent=None):
         """Создает диалог создания или редактирования проекта."""
@@ -30,6 +47,7 @@ class ProjectEditDialog(QDialog):
         self._db = get_database()
         self._edit_mode = is_new
         self._palette = get_theme_palette("dark")
+        self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
@@ -139,6 +157,12 @@ class ProjectEditDialog(QDialog):
         self.repository_catalog_edit = QLineEdit((project.repository_catalog if project else "") or "")
         self.repository_catalog_edit.setPlaceholderText("Путь к локальному репозиторию")
         self.repository_catalog_row = self._make_repository_catalog_editor()
+        self.reflect_repository_catalog_edit = self._make_reflect_checkbox()
+        self.reflect_repository_links_edit = self._make_reflect_checkbox()
+        self.reflect_wiki_links_edit = self._make_reflect_checkbox()
+        self.reflect_linked_map_edit = self._make_reflect_checkbox()
+        self.reflect_linked_note_edit = self._make_reflect_checkbox()
+        self.reflect_linked_object_edit = self._make_reflect_checkbox()
 
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
@@ -156,12 +180,29 @@ class ProjectEditDialog(QDialog):
             "task_types",
             self._add_task_type_line,
         )
-        related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
-        related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
-        repository_links_row = self._make_property_editor(self.repository_links_edit, [("Добавить", self._add_repository_link_line)])
-        wiki_links_row = self._make_property_editor(self.wiki_links_edit, [("Добавить", self._add_wiki_link_line)])
+        related_projects_row = self._make_inline_property_editor(
+            self.related_projects_edit,
+            "related_projects",
+            self._add_related_project_line,
+        )
+        related_tasks_row = self._make_inline_property_editor(
+            self.related_tasks_edit,
+            "related_tasks",
+            self._add_related_task_line,
+        )
+        repository_links_row = self._make_inline_property_editor(
+            self.repository_links_edit,
+            "repository_links",
+            self._add_repository_link_line,
+        )
+        wiki_links_row = self._make_inline_property_editor(
+            self.wiki_links_edit,
+            "wiki_links",
+            self._add_wiki_link_line,
+        )
         if project:
             self._load_project_properties(project.id)
+            self._load_project_reflect_settings(project.id)
         self._refresh_inline_property_lists()
 
         self._editor_controls = [
@@ -178,6 +219,12 @@ class ProjectEditDialog(QDialog):
             self.marker_color_edit,
             self.marker_theme_edit,
             self.repository_catalog_edit,
+            self.reflect_repository_catalog_edit,
+            self.reflect_repository_links_edit,
+            self.reflect_wiki_links_edit,
+            self.reflect_linked_map_edit,
+            self.reflect_linked_note_edit,
+            self.reflect_linked_object_edit,
             self.archived_edit,
             self.task_types_edit,
             self.related_projects_edit,
@@ -194,23 +241,22 @@ class ProjectEditDialog(QDialog):
         self.add_relation_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_relation_button.clicked.connect(self._add_relation_dialog)
         self._edit_action_buttons.append(self.add_relation_button)
-        self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
         area_field = self._field_stack(self.area_edit, lambda: self.area_edit.text().strip() or "Не задано")
         updated_field = self._field_stack(self.updated_edit, lambda: self.updated_edit.date().toString("dd.MM.yyyy"))
         priority_field = self._field_stack(self.priority_edit, lambda: self.priority_edit.currentText().strip() or "Medium")
         parent_field = self._field_stack(self.parent_project_edit, lambda: self.parent_project_edit.currentText().strip() or "None")
         title_field = self._field_stack(self.title_edit, lambda: self.title_edit.text().strip() or "Не задано")
         repository_catalog_field = self._field_stack(
-            self.repository_catalog_row,
+            self._make_reflectable_editor(self.repository_catalog_row, self.reflect_repository_catalog_edit),
             lambda: self.repository_catalog_edit.text().strip() or "Путь к локальному репозиторию не указан",
         )
         repository_links_field = self._field_stack(
-            repository_links_row,
+            self._make_reflectable_editor(repository_links_row, self.reflect_repository_links_edit),
             lambda: self._chip_preview(self.repository_links_edit.toPlainText(), "Репозитории не указаны"),
             rich=True,
         )
         wiki_links_field = self._field_stack(
-            wiki_links_row,
+            self._make_reflectable_editor(wiki_links_row, self.reflect_wiki_links_edit),
             lambda: self._chip_preview(self.wiki_links_edit.toPlainText(), "Wiki не указана"),
             rich=True,
         )
@@ -234,9 +280,18 @@ class ProjectEditDialog(QDialog):
             lambda: self._display_properties_preview(),
             rich=True,
         )
-        linked_map_field = self._field_stack(self.linked_map_edit, lambda: self.linked_map_edit.currentText().strip() or "None")
-        linked_note_field = self._field_stack(self.linked_note_edit, lambda: self.linked_note_edit.currentText().strip() or "None")
-        linked_object_field = self._field_stack(self.linked_object_edit, lambda: self.linked_object_edit.currentText().strip() or "None")
+        linked_map_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_map_edit, self.reflect_linked_map_edit),
+            lambda: self.linked_map_edit.currentText().strip() or "None",
+        )
+        linked_note_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_note_edit, self.reflect_linked_note_edit),
+            lambda: self.linked_note_edit.currentText().strip() or "None",
+        )
+        linked_object_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_object_edit, self.reflect_linked_object_edit),
+            lambda: self.linked_object_edit.currentText().strip() or "None",
+        )
         default_priority_field = self._field_stack(
             self.default_task_priority_edit,
             lambda: self.default_task_priority_edit.currentText().strip() or "None",
@@ -298,7 +353,7 @@ class ProjectEditDialog(QDialog):
         metrics_grid.addWidget(self._metric_card("Область", area_field), 0, 0)
         metrics_grid.addWidget(self._metric_card("Дата обновления", updated_field), 0, 1)
         metrics_grid.addWidget(self._metric_card("Приоритет", priority_field), 0, 2)
-        metrics_grid.addWidget(self._metric_card("Parent project", parent_field), 0, 3)
+        metrics_grid.addWidget(self._metric_card("Родительский проект", parent_field), 0, 3)
         shell_layout.addLayout(metrics_grid)
 
         scroll = QScrollArea(self.shell)
@@ -324,9 +379,9 @@ class ProjectEditDialog(QDialog):
         links_form = self._section_form(links_card)
         links_form.addRow("Связанные проекты", related_projects_field)
         links_form.addRow("Связанные задачи", related_tasks_field)
-        links_form.addRow("Linked map", linked_map_field)
-        links_form.addRow("Linked note", linked_note_field)
-        links_form.addRow("Linked object", linked_object_field)
+        links_form.addRow("Связанная карта", linked_map_field)
+        links_form.addRow("Связанная заметка", linked_note_field)
+        links_form.addRow("Связанный объект", linked_object_field)
         links_form.addRow("", self.add_relation_button)
 
         types_card = self._section_card("Типы задач")
@@ -339,15 +394,15 @@ class ProjectEditDialog(QDialog):
 
         properties_card = self._section_card("Свойства")
         properties_form = self._section_form(properties_card)
-        properties_form.addRow("Task priority preset", default_priority_field)
-        properties_form.addRow("Force recurrence", recurrence_field)
+        properties_form.addRow("Приоритет задач по умолчанию", default_priority_field)
+        properties_form.addRow("Принудительное повторение", recurrence_field)
         properties_form.addRow("Маркер (цвет)", marker_color_field)
         properties_form.addRow("Тема маркера", marker_theme_field)
         properties_form.addRow("Архивирован", archived_field)
 
         hierarchy_card = self._section_card("Иерархия и правила")
         hierarchy_form = self._section_form(hierarchy_card)
-        hierarchy_form.addRow("Parent project", QLabel(self.parent_project_edit.currentText()))
+        hierarchy_form.addRow("Родительский проект", QLabel(self.parent_project_edit.currentText()))
         preset_note = QLabel("Настройки поведения задач, повторяемости, напоминаний и другие правила наследуются из родительского проекта или глобальных параметров системы.")
         preset_note.setObjectName("ProjectDialogInfo")
         preset_note.setWordWrap(True)
@@ -794,6 +849,21 @@ class ProjectEditDialog(QDialog):
         layout.addLayout(action_row)
         return widget
 
+    def _make_reflect_checkbox(self) -> QCheckBox:
+        checkbox = QCheckBox("Отразить в задачах")
+        checkbox.setToolTip("Показать это свойство в задачах проекта как «Текст ссылки».")
+        checkbox.toggled.connect(lambda _checked=False: self._refresh_preview_fields())
+        return checkbox
+
+    def _make_reflectable_editor(self, editor: QWidget, checkbox: QCheckBox) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(editor)
+        layout.addWidget(checkbox)
+        return widget
+
     def _make_inline_property_editor(self, edit: QPlainTextEdit, kind: str, add_callback: object) -> QWidget:
         edit.setVisible(False)
         widget = QFrame()
@@ -815,12 +885,8 @@ class ProjectEditDialog(QDialog):
         layout.addWidget(edit)
         layout.addWidget(rows_widget)
         layout.addLayout(footer)
-        if kind == "task_types":
-            self.task_types_list_widget = rows_widget
-            self.task_types_list_layout = rows_layout
-        else:
-            self.display_properties_list_widget = rows_widget
-            self.display_properties_list_layout = rows_layout
+        setattr(self, f"{kind}_list_widget", rows_widget)
+        setattr(self, f"{kind}_list_layout", rows_layout)
         return widget
 
     def _inline_icon_button(self, icon_name: str, tooltip: str) -> QToolButton:
@@ -840,6 +906,16 @@ class ProjectEditDialog(QDialog):
                 self.display_properties_list_layout,
                 "display_properties",
             )
+        for kind, edit_name in (
+            ("related_projects", "related_projects_edit"),
+            ("related_tasks", "related_tasks_edit"),
+            ("repository_links", "repository_links_edit"),
+            ("wiki_links", "wiki_links_edit"),
+        ):
+            layout = getattr(self, f"{kind}_list_layout", None)
+            edit = getattr(self, edit_name, None)
+            if layout is not None and edit is not None:
+                self._rebuild_inline_property_list(edit, layout, kind)
         if hasattr(self, "_edit_mode"):
             self._set_inline_edit_enabled(self._edit_mode)
 
@@ -893,20 +969,49 @@ class ProjectEditDialog(QDialog):
         if kind == "task_types":
             values = self._parse_task_type_line(line)
             return str(values.get("title") or "")
-        values = self._parse_display_property_line(line)
-        return str(values.get("name") or "")
+        if kind == "display_properties":
+            values = self._parse_display_property_line(line)
+            return str(values.get("name") or "")
+        if kind in {"repository_links", "wiki_links"}:
+            values = self._parse_link_line(line)
+            return str(values.get("title") or values.get("url") or "")
+        if kind == "related_projects":
+            project_id = self._line_int_or_none(line)
+            project = self._project_by_id(project_id)
+            return f"{project.area} / {project.title}" if project is not None else line.strip()
+        if kind == "related_tasks":
+            task_id = self._line_int_or_none(line)
+            task = self._task_by_id(task_id)
+            return f"MN-{task.id} {task.title}" if task is not None else line.strip()
+        return line.strip()
 
     def _edit_inline_property(self, kind: str, line_index: int) -> None:
         if kind == "task_types":
             self._edit_task_type_line(line_index)
-        else:
+        elif kind == "display_properties":
             self._edit_display_property_line(line_index)
+        elif kind == "related_projects":
+            self._edit_related_project_line(line_index)
+        elif kind == "related_tasks":
+            self._edit_related_task_line(line_index)
+        elif kind == "repository_links":
+            self._edit_link_line(self.repository_links_edit, "Репозиторий", line_index)
+        elif kind == "wiki_links":
+            self._edit_link_line(self.wiki_links_edit, "Wiki", line_index)
 
     def _delete_inline_property(self, kind: str, line_index: int) -> None:
         if kind == "task_types":
             self._delete_task_type_line(line_index)
-        else:
+        elif kind == "display_properties":
             self._delete_display_property_line(line_index)
+        elif kind == "related_projects":
+            self._remove_line(self.related_projects_edit, line_index)
+        elif kind == "related_tasks":
+            self._remove_line(self.related_tasks_edit, line_index)
+        elif kind == "repository_links":
+            self._remove_line(self.repository_links_edit, line_index)
+        elif kind == "wiki_links":
+            self._remove_line(self.wiki_links_edit, line_index)
 
     def _toggle_inline_task_type(self, line_index: int) -> None:
         self._toggle_task_type_line(line_index)
@@ -999,6 +1104,23 @@ class ProjectEditDialog(QDialog):
     def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
         for idx in range(source.count()):
             target.addItem(source.itemText(idx), source.itemData(idx))
+
+    @staticmethod
+    def _line_int_or_none(line: str) -> Optional[int]:
+        try:
+            return int((line or "").strip())
+        except ValueError:
+            return None
+
+    def _project_by_id(self, project_id: Optional[int]):
+        if project_id is None:
+            return None
+        return next((project for project in self._db.fetch_projects() if project.id == project_id), None)
+
+    def _task_by_id(self, task_id: Optional[int]):
+        if task_id is None:
+            return None
+        return next((task for task in self._db.fetch_tasks() if task.id == task_id), None)
 
     def _task_type_section_title(self, icon_name: str, text: str) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -1779,31 +1901,32 @@ class ProjectEditDialog(QDialog):
         }
 
     def _add_related_project_line(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Связанный проект")
-        layout = QVBoxLayout(dialog)
-        combo = QComboBox()
-        for project in self._db.fetch_projects():
-            if self._project and project.id == self._project.id:
-                continue
-            combo.addItem(f"{project.area} / {project.title}", project.id)
-        layout.addWidget(combo)
-        buttons = QDialogButtonBox(dialog)
-        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
-            self._append_line(self.related_projects_edit, str(combo.currentData()))
+        item_id = self._select_related_item("project", "Связанный проект")
+        if item_id is not None:
+            self._append_unique_int_line(self.related_projects_edit, item_id)
+
+    def _edit_related_project_line(self, line_index: int) -> None:
+        item_id = self._select_related_item("project", "Связанный проект")
+        if item_id is not None:
+            self._replace_line(self.related_projects_edit, line_index, str(item_id))
 
     def _add_related_task_line(self) -> None:
+        item_id = self._select_related_item("task", "Связанная задача")
+        if item_id is not None:
+            self._append_unique_int_line(self.related_tasks_edit, item_id)
+
+    def _edit_related_task_line(self, line_index: int) -> None:
+        item_id = self._select_related_item("task", "Связанная задача")
+        if item_id is not None:
+            self._replace_line(self.related_tasks_edit, line_index, str(item_id))
+
+    def _select_related_item(self, kind: str, title: str) -> Optional[int]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Связанная задача")
+        dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
         combo = QComboBox()
-        for task in self._db.fetch_tasks():
-            combo.addItem(f"MN-{task.id} {task.title}", task.id)
+        for item_id, label in self._relation_candidates(kind):
+            combo.addItem(label, item_id)
         layout.addWidget(combo)
         buttons = QDialogButtonBox(dialog)
         buttons.addButton(QDialogButtonBox.StandardButton.Ok)
@@ -1811,8 +1934,10 @@ class ProjectEditDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
-            self._append_line(self.related_tasks_edit, str(combo.currentData()))
+            return int(combo.currentData())
+        return None
 
     def _add_relation_dialog(self) -> None:
         dialog = QDialog(self)
@@ -2255,12 +2380,26 @@ class ProjectEditDialog(QDialog):
         }
 
     def _add_link_line(self, edit: QPlainTextEdit, title: str) -> None:
+        values = self._link_dialog(title)
+        if values is not None:
+            self._append_line(edit, self._format_link_line(values))
+
+    def _edit_link_line(self, edit: QPlainTextEdit, title: str, line_index: int) -> None:
+        lines = edit.toPlainText().splitlines()
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
+        if not line:
+            return
+        values = self._link_dialog(title, self._parse_link_line(line))
+        if values is not None:
+            self._replace_line(edit, line_index, self._format_link_line(values))
+
+    def _link_dialog(self, title: str, initial: Optional[dict[str, str]] = None) -> Optional[dict[str, str]]:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
-        title_edit = QLineEdit()
-        url_edit = QLineEdit()
+        title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
+        url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
         form.addRow("Текст", title_edit)
         form.addRow("Ссылка", url_edit)
         layout.addLayout(form)
@@ -2270,14 +2409,30 @@ class ProjectEditDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+            return None
         url = url_edit.text().strip()
         if not url:
             QMessageBox.warning(self, "Проверка", "Ссылка не должна быть пустой.")
-            return
+            return None
         link_title = title_edit.text().strip()
-        self._append_line(edit, f"{link_title} | {url}" if link_title else url)
+        return {"title": link_title, "url": url}
+
+    @staticmethod
+    def _format_link_line(values: dict[str, str]) -> str:
+        title = (values.get("title") or "").strip()
+        url = (values.get("url") or "").strip()
+        return f"{title} | {url}" if title else url
+
+    @staticmethod
+    def _parse_link_line(line: str) -> dict[str, str]:
+        line = (line or "").strip()
+        if "|" in line:
+            title, url = [part.strip() for part in line.split("|", 1)]
+        else:
+            title, url = "", line
+        return {"title": title, "url": url}
 
     def _load_project_properties(self, project_id: int) -> None:
         task_type_lines = []
@@ -2312,6 +2467,43 @@ class ProjectEditDialog(QDialog):
                 }) for item in fetch_display(project_id))
             )
         self._refresh_inline_property_lists()
+
+    @staticmethod
+    def _project_reflect_setting_key(project_id: int) -> str:
+        return f"{PROJECT_REFLECT_SETTING_PREFIX}:{int(project_id)}"
+
+    def _load_project_reflect_settings(self, project_id: int) -> None:
+        raw_value = self._db.get_setting(self._project_reflect_setting_key(project_id), "[]")
+        try:
+            values = json.loads(raw_value)
+        except json.JSONDecodeError:
+            values = []
+        enabled_keys = {str(value) for value in values if str(value) in PROJECT_REFLECT_KEYS}
+        self.reflect_repository_catalog_edit.setChecked(PROJECT_REFLECT_REPOSITORY_CATALOG in enabled_keys)
+        self.reflect_repository_links_edit.setChecked(PROJECT_REFLECT_REPOSITORY_LINKS in enabled_keys)
+        self.reflect_wiki_links_edit.setChecked(PROJECT_REFLECT_WIKI_LINKS in enabled_keys)
+        self.reflect_linked_map_edit.setChecked(PROJECT_REFLECT_LINKED_MAP in enabled_keys)
+        self.reflect_linked_note_edit.setChecked(PROJECT_REFLECT_LINKED_NOTE in enabled_keys)
+        self.reflect_linked_object_edit.setChecked(PROJECT_REFLECT_LINKED_OBJECT in enabled_keys)
+
+    def _save_project_reflect_settings(self, project_id: int) -> None:
+        values = []
+        if self.reflect_repository_catalog_edit.isChecked():
+            values.append(PROJECT_REFLECT_REPOSITORY_CATALOG)
+        if self.reflect_repository_links_edit.isChecked():
+            values.append(PROJECT_REFLECT_REPOSITORY_LINKS)
+        if self.reflect_wiki_links_edit.isChecked():
+            values.append(PROJECT_REFLECT_WIKI_LINKS)
+        if self.reflect_linked_map_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_MAP)
+        if self.reflect_linked_note_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_NOTE)
+        if self.reflect_linked_object_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_OBJECT)
+        self._db.set_setting(
+            self._project_reflect_setting_key(project_id),
+            json.dumps(values, ensure_ascii=False),
+        )
 
     @staticmethod
     def _format_links(links) -> str:
@@ -2350,6 +2542,7 @@ class ProjectEditDialog(QDialog):
         replace_display = getattr(self._db, "replace_project_display_properties", None)
         if callable(replace_display):
             replace_display(project_id, self._parse_display_properties())
+        self._save_project_reflect_settings(project_id)
 
     def _parse_project_task_types(self) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []

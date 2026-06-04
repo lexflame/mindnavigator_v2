@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import date
 
@@ -392,27 +393,53 @@ def test_project_dialog_custom_property_lists_use_inline_rows(monkeypatch, uniqu
     monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
     dialog = None
     try:
+        related_project = database.create_project("Area", "Related project", date(2026, 3, 6), "Medium")
+        related_task = database.create_task("Related task", "", date(2026, 3, 6), "", "Medium")
         dialog = project_edit_dialog.ProjectEditDialog()
         dialog.task_types_edit.setPlainText(
             "DEVELOPMENT | DEV | #20f5d2 | debug | High | 5 | 1 | | active\n"
             "MUSIC | MUSIC | #8A63D2 | music | Medium | 3 | 0 | | active"
         )
         dialog.display_properties_edit.setPlainText("WIKI | https://docs.example.com | name_link")
+        dialog.repository_links_edit.setPlainText("Core | https://github.com/lexflame/mindnavigator")
+        dialog.wiki_links_edit.setPlainText("Docs | https://docs.example.com")
+        dialog.related_projects_edit.setPlainText(str(related_project.id))
+        dialog.related_tasks_edit.setPlainText(str(related_task.id))
         dialog._refresh_inline_property_lists()
 
         task_inputs = dialog.task_types_list_widget.findChildren(QLineEdit)
         display_inputs = dialog.display_properties_list_widget.findChildren(QLineEdit)
+        repository_inputs = dialog.repository_links_list_widget.findChildren(QLineEdit)
+        wiki_inputs = dialog.wiki_links_list_widget.findChildren(QLineEdit)
+        related_project_inputs = dialog.related_projects_list_widget.findChildren(QLineEdit)
+        related_task_inputs = dialog.related_tasks_list_widget.findChildren(QLineEdit)
         assert len(task_inputs) == 2
         assert task_inputs[0].isReadOnly() is True
         assert task_inputs[0].text() == "DEVELOPMENT"
         assert task_inputs[1].text() == "MUSIC"
         assert len(display_inputs) == 1
         assert display_inputs[0].text() == "WIKI"
+        assert len(repository_inputs) == 1
+        assert repository_inputs[0].text() == "Core"
+        assert len(wiki_inputs) == 1
+        assert wiki_inputs[0].text() == "Docs"
+        assert len(related_project_inputs) == 1
+        assert related_project_inputs[0].text() == "Area / Related project"
+        assert len(related_task_inputs) == 1
+        assert related_task_inputs[0].text() == f"MN-{related_task.id} Related task"
 
         task_buttons = dialog.task_types_list_widget.findChildren(QToolButton)
         display_buttons = dialog.display_properties_list_widget.findChildren(QToolButton)
+        repository_buttons = dialog.repository_links_list_widget.findChildren(QToolButton)
+        wiki_buttons = dialog.wiki_links_list_widget.findChildren(QToolButton)
+        related_project_buttons = dialog.related_projects_list_widget.findChildren(QToolButton)
+        related_task_buttons = dialog.related_tasks_list_widget.findChildren(QToolButton)
         assert len(task_buttons) == 6
         assert len(display_buttons) == 2
+        assert len(repository_buttons) == 2
+        assert len(wiki_buttons) == 2
+        assert len(related_project_buttons) == 2
+        assert len(related_task_buttons) == 2
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -500,6 +527,37 @@ def test_project_dialog_inline_display_property_actions_target_clicked_row(monke
         dialog._delete_display_property_line(0)
         remaining = dialog.display_properties_edit.toPlainText().splitlines()
         assert remaining == ["DOCS | https://docs.example.com/new | name_link"]
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_reflect_in_tasks_flags_are_saved(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_reflect_flags", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        project = database.create_project("Area", "Reflect project", date(2026, 3, 6), "Medium")
+        dialog = project_edit_dialog.ProjectEditDialog(project)
+        dialog.reflect_repository_catalog_edit.setChecked(True)
+        dialog.reflect_repository_links_edit.setChecked(True)
+        dialog.reflect_wiki_links_edit.setChecked(False)
+        dialog.reflect_linked_map_edit.setChecked(True)
+        dialog.apply_project_properties(project.id)
+
+        raw_value = database.get_setting(f"project_reflect_in_tasks:{project.id}")
+        assert set(json.loads(raw_value)) == {"repository_catalog", "repository_links", "linked_map"}
+
+        dialog.deleteLater()
+        dialog = project_edit_dialog.ProjectEditDialog(project)
+        assert dialog.reflect_repository_catalog_edit.isChecked() is True
+        assert dialog.reflect_repository_links_edit.isChecked() is True
+        assert dialog.reflect_wiki_links_edit.isChecked() is False
+        assert dialog.reflect_linked_map_edit.isChecked() is True
     finally:
         if dialog is not None:
             dialog.deleteLater()
