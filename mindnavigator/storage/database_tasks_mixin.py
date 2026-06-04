@@ -195,7 +195,7 @@ class DatabaseTasksMixin:
         task_type_id = int(project_task_type_id)
         row = self._conn.execute(
             """
-            SELECT id, priority, importance, is_plan_task, color_marker, theme_marker, concept_board_id
+            SELECT id, project_id, priority, importance, is_plan_task, color_marker, theme_marker, concept_board_id
             FROM project_task_types
             WHERE id = ? AND active = 1;
             """,
@@ -220,12 +220,14 @@ class DatabaseTasksMixin:
         if not affected_ids:
             return
         assignments = [
+            "project_id = ?",
             "project_task_type_id = ?",
             "importance = ?",
             "is_plan_task = ?",
             "updated_at = ?",
         ]
         params: list[object] = [
+            int(row["project_id"]),
             task_type_id,
             max(1, min(5, int(row["importance"] or 3))),
             int(bool(row["is_plan_task"])),

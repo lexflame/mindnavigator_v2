@@ -1580,7 +1580,6 @@ def test_task_update_project_task_type_applies_defaults_to_nested_tasks(unique_t
             date(2026, 3, 6),
             "",
             "Low",
-            project_id=project.id,
             parent_id=root.id,
             importance=1,
         )
@@ -1607,6 +1606,7 @@ def test_task_update_project_task_type_applies_defaults_to_nested_tasks(unique_t
 
         tasks = {item.id: item for item in database.fetch_tasks()}
         for task_id in (root.id, child.id):
+            assert tasks[task_id].project_id == project.id
             assert tasks[task_id].project_task_type_id == task_type.id
             assert tasks[task_id].priority == "High"
             assert tasks[task_id].importance == 5
@@ -1639,6 +1639,10 @@ def test_tasks_model_refreshes_nested_rows_after_project_task_type_selection(mon
                 }
             ],
         )
+        database.replace_project_display_properties(
+            project.id,
+            [{"name": "wiki", "url": "https://docs.example.com/wiki", "display_mode": "name_link"}],
+        )
         task_type = database.fetch_project_task_types(project.id)[0]
         root = database.create_task("Root task", "", date(2026, 3, 6), "", "Medium", project_id=project.id)
         child = database.create_task(
@@ -1647,7 +1651,6 @@ def test_tasks_model_refreshes_nested_rows_after_project_task_type_selection(mon
             date(2026, 3, 6),
             "",
             "Low",
-            project_id=project.id,
             parent_id=root.id,
             marker_color="",
             marker_theme="",
@@ -1684,10 +1687,21 @@ def test_tasks_model_refreshes_nested_rows_after_project_task_type_selection(mon
         child_row = _find_task_row(model, child.id)
         assert child_row >= 0
         child_index = model.index(child_row, 0)
+        assert child_index.data(TaskRoles.ProjectTitle) == "Typed project"
         assert child_index.data(TaskRoles.ProjectTaskTypeId) == task_type.id
         assert child_index.data(TaskRoles.Priority) == "High"
         assert child_index.data(TaskRoles.MarkerColor) == "#20f5d2"
         assert child_index.data(TaskRoles.MarkerTheme) == "debug"
+
+        child_task = next(task for task in database.fetch_tasks() if task.id == child.id)
+        assert child_task.project_id == project.id
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        details = task_details_dialog.TaskDetailsDialog(child_task)
+        try:
+            labels = [label.text() for label in details.additional_properties_host.findChildren(QLabel)]
+            assert "WIKI:" in labels
+        finally:
+            details.deleteLater()
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
