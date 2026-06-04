@@ -34,6 +34,9 @@ from .task_property_propagation import (
     is_empty_task_property_value,
 )
 
+TASK_TYPE_REGULAR_VALUE = "__task_type_regular__"
+TASK_TYPE_PLAN_VALUE = "__task_type_plan__"
+
 
 class _TaskDialogHeader(QFrame):
     def __init__(self, dialog: "TaskEditDialog", title: str) -> None:
@@ -342,7 +345,6 @@ class TaskEditDialog(QDialog):
         self.project_task_type_edit.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.project_task_type_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.project_task_type_edit.setFixedHeight(32)
-        self._populate_project_task_types(task.project_task_type_id)
         self.project_task_type_edit.currentIndexChanged.connect(self._on_project_task_type_changed)
 
         self.project_create_btn = QToolButton()
@@ -360,6 +362,8 @@ class TaskEditDialog(QDialog):
         self.plan_task_edit = QCheckBox("План")
         self.plan_task_edit.setChecked(bool(task.is_plan_task))
         self.plan_task_edit.setFixedHeight(32)
+        self.plan_task_edit.toggled.connect(self._on_plan_task_toggled)
+        self._populate_project_task_types(task.project_task_type_id)
 
         has_child_tasks = self._task_has_children(task.id)
         has_descendant_tasks = self._task_has_descendants(task.id)
@@ -571,7 +575,7 @@ class TaskEditDialog(QDialog):
         form.addRow(self._make_form_label("Название"), self.title_edit)
         form.addRow(self._make_form_label("Описание"), description_editor)
         form.addRow(self._make_form_label(""), project_group_row)
-        form.addRow(self._make_form_label("Тип проекта"), self.project_task_type_edit)
+        form.addRow(self._make_form_label("Тип"), self.project_task_type_edit)
         if parent_row is not None:
             form.addRow(self._make_form_label("Родитель"), parent_row)
         form.addRow(self._make_form_label(""), schedule_group_row)
@@ -1452,28 +1456,33 @@ class TaskEditDialog(QDialog):
     def _populate_project_task_types(self, selected_id: Optional[int] = None) -> None:
         self.project_task_type_edit.blockSignals(True)
         self.project_task_type_edit.clear()
-        self.project_task_type_edit.addItem("Без типа", None)
+        selected_builtin = TASK_TYPE_PLAN_VALUE if bool(self.plan_task_edit.isChecked()) and selected_id is None else TASK_TYPE_REGULAR_VALUE
+        self.project_task_type_edit.addItem("Обычная задача", TASK_TYPE_REGULAR_VALUE)
+        self.project_task_type_edit.addItem("Плановая задача", TASK_TYPE_PLAN_VALUE)
         project_id = self.project_edit.currentData()
-        if project_id is None:
-            self.project_task_type_edit.setEnabled(False)
-            self.project_task_type_edit.blockSignals(False)
-            return
         fetch_types = getattr(self._db, "fetch_project_task_types", None)
-        if callable(fetch_types):
+        if project_id is not None and callable(fetch_types):
             for task_type in fetch_types(int(project_id), include_inactive=True):
                 if not task_type.active and task_type.id != selected_id:
                     continue
                 status = "" if task_type.active else " · отключен"
                 value = getattr(task_type, "value", "") or task_type.title
-                self.project_task_type_edit.addItem(f"{task_type.title} В· {value}{status}", task_type.id)
-        selected_idx = self.project_task_type_edit.findData(selected_id)
+                self.project_task_type_edit.addItem(f"{task_type.title} · {value}{status}", task_type.id)
+        selected_value = selected_id if selected_id is not None else selected_builtin
+        selected_idx = self.project_task_type_edit.findData(selected_value)
         if selected_idx >= 0:
             self.project_task_type_edit.setCurrentIndex(selected_idx)
-        self.project_task_type_edit.setEnabled(self.project_task_type_edit.count() > 1)
+        self.project_task_type_edit.setEnabled(True)
         self.project_task_type_edit.blockSignals(False)
 
     def _on_project_task_type_changed(self, _index: int) -> None:
         task_type_id = self.project_task_type_edit.currentData()
+        if task_type_id == TASK_TYPE_REGULAR_VALUE:
+            self.plan_task_edit.setChecked(False)
+            return
+        if task_type_id == TASK_TYPE_PLAN_VALUE:
+            self.plan_task_edit.setChecked(True)
+            return
         if task_type_id is None:
             return
         fetch_type = getattr(self._db, "fetch_project_task_type", None)
@@ -1491,6 +1500,29 @@ class TaskEditDialog(QDialog):
         self._set_combo_data(self.importance_edit, int(getattr(task_type, "importance", 3) or 3))
         if bool(getattr(task_type, "is_plan_task", False)):
             self.plan_task_edit.setChecked(True)
+
+    def _on_plan_task_toggled(self, checked: bool) -> None:
+        if not hasattr(self, "project_task_type_edit"):
+            return
+        value = self.project_task_type_edit.currentData()
+        if isinstance(value, int):
+            return
+        target = TASK_TYPE_PLAN_VALUE if checked else TASK_TYPE_REGULAR_VALUE
+        target_index = self.project_task_type_edit.findData(target)
+        if target_index >= 0 and self.project_task_type_edit.currentIndex() != target_index:
+            self.project_task_type_edit.setCurrentIndex(target_index)
+
+    def _selected_project_task_type_id(self) -> Optional[int]:
+        value = self.project_task_type_edit.currentData()
+        return int(value) if isinstance(value, int) else None
+
+    def _selected_is_plan_task(self) -> bool:
+        value = self.project_task_type_edit.currentData()
+        if value == TASK_TYPE_REGULAR_VALUE:
+            return False
+        if value == TASK_TYPE_PLAN_VALUE:
+            return True
+        return self.plan_task_edit.isChecked()
 
     def _best_project_index_for_title(self, title: str) -> Optional[int]:
         title_tokens = set(_tokenize_text_for_match(title))
@@ -2014,11 +2046,11 @@ class TaskEditDialog(QDialog):
             "importance": int(self.importance_edit.currentData() or 3),
             "done": self.done_edit.isChecked(),
             "project_id": self.project_edit.currentData(),
-            "project_task_type_id": self.project_task_type_edit.currentData(),
+            "project_task_type_id": self._selected_project_task_type_id(),
             "recurrence_kind": self.recurrence_type_edit.currentData() if self.recurrence_toggle.isChecked() else "",
             "recurrence_interval": 1,
             "gantt_estimate_minutes": self.gantt_estimate_edit.minutes(),
-            "is_plan_task": self.plan_task_edit.isChecked(),
+            "is_plan_task": self._selected_is_plan_task(),
             "marker_color": self.marker_color_edit.currentData() or "",
             "marker_theme": self.marker_theme_edit.currentData() or "",
         }

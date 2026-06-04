@@ -1503,6 +1503,102 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         db_path.unlink(missing_ok=True)
 
 
+def test_task_details_type_inline_selects_project_task_type(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_type_inline_project_type", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        project = database.create_project("Area", "Typed project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "debug",
+                    "priority": "High",
+                    "importance": 5,
+                    "is_plan_task": True,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        task = database.create_task("Typed task", "", date(2026, 3, 6), "", "Medium", project_id=project.id)
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        type_combo = dialog.type_inline.editor
+        assert type_combo.itemText(0) == "Обычная задача"
+        assert type_combo.itemText(1) == "Плановая задача"
+        assert type_combo.findData(task_type.id) >= 0
+
+        type_combo.setCurrentIndex(type_combo.findData(task_type.id))
+        dialog.type_inline.commit()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.project_task_type_id == task_type.id
+        assert updated.project_task_type_title == "DEVELOPMENT"
+        assert updated.priority == "High"
+        assert updated.importance == 5
+        assert updated.is_plan_task is True
+        assert dialog.detail_type_card.value_label.text() == "DEVELOPMENT · DEV"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_edit_dialog_type_field_combines_builtin_and_project_types(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_edit_type_combined", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        project = database.create_project("Area", "Typed project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "debug",
+                    "priority": "High",
+                    "importance": 5,
+                    "is_plan_task": False,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        task = database.create_task("Typed task", "", date(2026, 3, 6), "", "Medium", project_id=project.id)
+        monkeypatch.setattr(task_edit_dialog, "get_database", lambda: database)
+
+        dialog = task_edit_dialog.TaskEditDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        combo = dialog.project_task_type_edit
+        assert combo.itemText(0) == "Обычная задача"
+        assert combo.itemText(1) == "Плановая задача"
+        assert combo.findData(task_type.id) >= 0
+
+        combo.setCurrentIndex(combo.findData("__task_type_plan__"))
+        plan_values = dialog.values()
+        assert plan_values["project_task_type_id"] is None
+        assert plan_values["is_plan_task"] is True
+
+        combo.setCurrentIndex(combo.findData(task_type.id))
+        type_values = dialog.values()
+        assert type_values["project_task_type_id"] == task_type.id
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_details_dialog_saves_embedded_edit_form(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_dialog_edit_refresh", ".sqlite3")
