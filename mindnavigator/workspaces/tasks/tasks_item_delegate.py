@@ -470,7 +470,6 @@ class TasksItemDelegate(QStyledItemDelegate):
         project_area: str = index.data(TaskRoles.ProjectArea) or ""
         project_task_type_title: str = (index.data(TaskRoles.ProjectTaskTypeTitle) or "").strip()
         project_task_type_color: str = (index.data(TaskRoles.ProjectTaskTypeColor) or "").strip()
-        project_meta_summary: str = (index.data(TaskRoles.ProjectTaskMetaSummary) or "").strip()
         recurrence_kind: str = (index.data(TaskRoles.RecurrenceKind) or "").strip().lower()
         marker_color: str = (index.data(TaskRoles.MarkerColor) or "").strip()
         marker_theme: str = (index.data(TaskRoles.MarkerTheme) or "").strip()
@@ -599,20 +598,6 @@ class TasksItemDelegate(QStyledItemDelegate):
                 text_rect.width(),
             )
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_project)
-
-        if project_meta_summary:
-            meta_rect = QRect(layout["title"])
-            meta_rect.setTop(meta_rect.bottom() - 15)
-            meta_font = QFont(self._font_small)
-            meta_font.setPointSize(max(7, meta_font.pointSize() - 1))
-            painter.setFont(meta_font)
-            painter.setPen(QColor("#7dd3fc"))
-            elided_meta = QFontMetrics(meta_font).elidedText(
-                project_meta_summary,
-                Qt.TextElideMode.ElideRight,
-                meta_rect.width(),
-            )
-            painter.drawText(meta_rect, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, elided_meta)
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)

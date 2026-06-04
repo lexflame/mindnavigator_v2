@@ -343,6 +343,7 @@ class TaskEditDialog(QDialog):
         self.project_task_type_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.project_task_type_edit.setFixedHeight(32)
         self._populate_project_task_types(task.project_task_type_id)
+        self.project_task_type_edit.currentIndexChanged.connect(self._on_project_task_type_changed)
 
         self.project_create_btn = QToolButton()
         self.project_create_btn.setText("+")
@@ -1463,12 +1464,33 @@ class TaskEditDialog(QDialog):
                 if not task_type.active and task_type.id != selected_id:
                     continue
                 status = "" if task_type.active else " · отключен"
-                self.project_task_type_edit.addItem(f"{task_type.title}{status}", task_type.id)
+                value = getattr(task_type, "value", "") or task_type.title
+                self.project_task_type_edit.addItem(f"{task_type.title} В· {value}{status}", task_type.id)
         selected_idx = self.project_task_type_edit.findData(selected_id)
         if selected_idx >= 0:
             self.project_task_type_edit.setCurrentIndex(selected_idx)
         self.project_task_type_edit.setEnabled(self.project_task_type_edit.count() > 1)
         self.project_task_type_edit.blockSignals(False)
+
+    def _on_project_task_type_changed(self, _index: int) -> None:
+        task_type_id = self.project_task_type_edit.currentData()
+        if task_type_id is None:
+            return
+        fetch_type = getattr(self._db, "fetch_project_task_type", None)
+        if not callable(fetch_type):
+            return
+        task_type = fetch_type(int(task_type_id))
+        if task_type is None:
+            return
+        if getattr(task_type, "color_marker", ""):
+            self._set_combo_data(self.marker_color_edit, task_type.color_marker)
+        if getattr(task_type, "theme_marker", ""):
+            self._set_combo_data(self.marker_theme_edit, task_type.theme_marker)
+        if getattr(task_type, "priority", ""):
+            self.priority_edit.setCurrentText(task_type.priority)
+        self._set_combo_data(self.importance_edit, int(getattr(task_type, "importance", 3) or 3))
+        if bool(getattr(task_type, "is_plan_task", False)):
+            self.plan_task_edit.setChecked(True)
 
     def _best_project_index_for_title(self, title: str) -> Optional[int]:
         title_tokens = set(_tokenize_text_for_match(title))

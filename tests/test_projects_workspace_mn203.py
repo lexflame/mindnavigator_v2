@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import date
 
 from PySide6.QtCore import QEvent, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QLineEdit, QStyleOptionViewItem, QToolButton
 
 from mindnavigator.storage import Database
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.workspaces.projects import project_edit_dialog
 from mindnavigator.workspaces import projects as projects_workspace
 from mindnavigator.workspaces.projects import ProjectRoles
@@ -57,6 +59,90 @@ def test_project_storage_persists_repository_catalog(unique_temp_path) -> None:
 
         fetched = next(item for item in database.fetch_projects() if item.id == created.id)
         assert fetched.repository_catalog == "D:/repo/updated"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_custom_task_type_inherits_task_defaults_and_display_properties(unique_temp_path) -> None:
+    db_path = unique_temp_path("project_custom_task_type_defaults", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project(
+            area="Area",
+            title="Typed project",
+            updated=date(2026, 3, 6),
+            priority="Medium",
+        )
+        board = database.create_concept_board("Core board")
+        task_type = database.add_project_task_type(
+            project_id=project.id,
+            title="Разработка",
+            value="dev",
+            color_marker="#20f5d2",
+            theme_marker="debug",
+            priority="High",
+            importance=5,
+            is_plan_task=True,
+            concept_board_id=board.id,
+        )
+        database.replace_project_display_properties(
+            project.id,
+            [
+                {"name": "wiki", "url": "https://docs.example.com", "display_mode": "name_link"},
+                {"name": "repo", "url": "https://github.com/lexflame/mindnavigator", "display_mode": "url_text"},
+            ],
+        )
+
+        created = database.create_task(
+            title="Typed task",
+            description="",
+            day=date(2026, 3, 7),
+            time_text="",
+            priority="Low",
+            project_id=project.id,
+            marker_color="",
+            marker_theme="",
+            project_task_type_id=task_type.id,
+            importance=1,
+        )
+
+        assert created.project_task_type_id == task_type.id
+        assert created.priority == "High"
+        assert created.importance == 5
+        assert created.marker_color == "#20f5d2"
+        assert created.marker_theme == "debug"
+        assert created.is_plan_task is True
+
+        fetched_type = database.fetch_project_task_type(task_type.id)
+        assert fetched_type is not None
+        assert fetched_type.value == "DEV"
+        assert fetched_type.concept_board_id == board.id
+        board_items = database.fetch_concept_board_items(board.id)
+        assert [(item.entity_kind, item.entity_id) for item in board_items] == [("task", created.id)]
+
+        display = database.fetch_project_display_properties(project.id)
+        assert [(item.name, item.display_mode) for item in display] == [("WIKI", "name_link"), ("REPO", "url_text")]
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_display_properties_limit_is_four(unique_temp_path) -> None:
+    db_path = unique_temp_path("project_display_property_limit", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Display props", date(2026, 3, 6), "Medium")
+        too_many = [
+            {"name": f"PROP{idx}", "url": f"https://example.com/{idx}", "display_mode": "name_link"}
+            for idx in range(5)
+        ]
+        try:
+            database.replace_project_display_properties(project.id, too_many)
+        except ValueError as exc:
+            assert "4" in str(exc)
+        else:
+            raise AssertionError("Expected display property limit validation")
     finally:
         database.close()
         db_path.unlink(missing_ok=True)
@@ -297,5 +383,324 @@ def test_project_dialog_relation_payload_updates_existing_editors(monkeypatch, u
     finally:
         if dialog is not None:
             dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_custom_property_lists_use_inline_rows(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_custom_property_lists", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        related_project = database.create_project("Area", "Related project", date(2026, 3, 6), "Medium")
+        related_task = database.create_task("Related task", "", date(2026, 3, 6), "", "Medium")
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.task_types_edit.setPlainText(
+            "DEVELOPMENT | DEV | #20f5d2 | debug | High | 5 | 1 | | active\n"
+            "MUSIC | MUSIC | #8A63D2 | music | Medium | 3 | 0 | | active"
+        )
+        dialog.display_properties_edit.setPlainText("WIKI | https://docs.example.com | name_link")
+        dialog.repository_links_edit.setPlainText("Core | https://github.com/lexflame/mindnavigator")
+        dialog.wiki_links_edit.setPlainText("Docs | https://docs.example.com")
+        dialog.related_projects_edit.setPlainText(str(related_project.id))
+        dialog.related_tasks_edit.setPlainText(str(related_task.id))
+        dialog._refresh_inline_property_lists()
+
+        task_inputs = dialog.task_types_list_widget.findChildren(QLineEdit)
+        display_inputs = dialog.display_properties_list_widget.findChildren(QLineEdit)
+        repository_inputs = dialog.repository_links_list_widget.findChildren(QLineEdit)
+        wiki_inputs = dialog.wiki_links_list_widget.findChildren(QLineEdit)
+        related_project_inputs = dialog.related_projects_list_widget.findChildren(QLineEdit)
+        related_task_inputs = dialog.related_tasks_list_widget.findChildren(QLineEdit)
+        assert len(task_inputs) == 2
+        assert task_inputs[0].isReadOnly() is True
+        assert task_inputs[0].text() == "DEVELOPMENT"
+        assert task_inputs[1].text() == "MUSIC"
+        assert len(display_inputs) == 1
+        assert display_inputs[0].text() == "WIKI"
+        assert len(repository_inputs) == 1
+        assert repository_inputs[0].text() == "Core"
+        assert len(wiki_inputs) == 1
+        assert wiki_inputs[0].text() == "Docs"
+        assert len(related_project_inputs) == 1
+        assert related_project_inputs[0].text() == "Area / Related project"
+        assert len(related_task_inputs) == 1
+        assert related_task_inputs[0].text() == f"MN-{related_task.id} Related task"
+
+        task_buttons = dialog.task_types_list_widget.findChildren(QToolButton)
+        display_buttons = dialog.display_properties_list_widget.findChildren(QToolButton)
+        repository_buttons = dialog.repository_links_list_widget.findChildren(QToolButton)
+        wiki_buttons = dialog.wiki_links_list_widget.findChildren(QToolButton)
+        related_project_buttons = dialog.related_projects_list_widget.findChildren(QToolButton)
+        related_task_buttons = dialog.related_tasks_list_widget.findChildren(QToolButton)
+        assert len(task_buttons) == 6
+        assert len(display_buttons) == 2
+        assert len(repository_buttons) == 2
+        assert len(wiki_buttons) == 2
+        assert len(related_project_buttons) == 2
+        assert len(related_task_buttons) == 2
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_inline_task_type_actions_target_clicked_row(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_task_type_actions", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.task_types_edit.setPlainText(
+            "DEVELOPMENT | DEV | #20f5d2 | debug | High | 5 | 1 | | active\n"
+            "MUSIC | MUSIC | #8A63D2 | music | Medium | 3 | 0 | | active"
+        )
+        dialog._refresh_inline_property_lists()
+        monkeypatch.setattr(
+            dialog,
+            "_task_type_dialog",
+            lambda initial=None: {
+                "title": "UPDATED",
+                "value": "UPD",
+                "color_marker": "#4C78D0",
+                "theme_marker": "dev",
+                "priority": "Low",
+                "importance": 2,
+                "is_plan_task": False,
+                "concept_board_id": None,
+                "active": True,
+            },
+        )
+
+        dialog._edit_task_type_line(1)
+        lines = dialog.task_types_edit.toPlainText().splitlines()
+        assert lines[0].startswith("DEVELOPMENT | DEV")
+        assert lines[1].startswith("UPDATED | UPD")
+
+        dialog._toggle_task_type_line(0)
+        assert dialog._parse_task_type_line(dialog.task_types_edit.toPlainText().splitlines()[0])["active"] is False
+
+        monkeypatch.setattr(project_edit_dialog.QMessageBox, "question", lambda *args, **kwargs: project_edit_dialog.QMessageBox.StandardButton.Yes)
+        dialog._delete_task_type_line(0)
+        remaining = dialog.task_types_edit.toPlainText().splitlines()
+        assert len(remaining) == 1
+        assert remaining[0].startswith("UPDATED | UPD")
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_inline_display_property_actions_target_clicked_row(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_inline_display_property_actions", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.display_properties_edit.setPlainText(
+            "WIKI | https://docs.example.com | name_link\n"
+            "REPO | https://github.com/lexflame/mindnavigator | url_text"
+        )
+        dialog._refresh_inline_property_lists()
+        monkeypatch.setattr(
+            dialog,
+            "_display_property_dialog",
+            lambda initial=None: {
+                "name": "DOCS",
+                "url": "https://docs.example.com/new",
+                "display_mode": "name_link",
+            },
+        )
+
+        dialog._edit_display_property_line(1)
+        lines = dialog.display_properties_edit.toPlainText().splitlines()
+        assert lines[0].startswith("WIKI | https://docs.example.com")
+        assert lines[1] == "DOCS | https://docs.example.com/new | name_link"
+
+        dialog._delete_display_property_line(0)
+        remaining = dialog.display_properties_edit.toPlainText().splitlines()
+        assert remaining == ["DOCS | https://docs.example.com/new | name_link"]
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_reflect_in_tasks_flags_are_saved(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_reflect_flags", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        project = database.create_project("Area", "Reflect project", date(2026, 3, 6), "Medium")
+        dialog = project_edit_dialog.ProjectEditDialog(project)
+        dialog.reflect_repository_catalog_edit.setChecked(True)
+        dialog.reflect_repository_links_edit.setChecked(True)
+        dialog.reflect_wiki_links_edit.setChecked(False)
+        dialog.reflect_linked_map_edit.setChecked(True)
+        dialog.apply_project_properties(project.id)
+
+        raw_value = database.get_setting(f"project_reflect_in_tasks:{project.id}")
+        assert set(json.loads(raw_value)) == {"repository_catalog", "repository_links", "linked_map"}
+
+        dialog.deleteLater()
+        dialog = project_edit_dialog.ProjectEditDialog(project)
+        assert dialog.reflect_repository_catalog_edit.isChecked() is True
+        assert dialog.reflect_repository_links_edit.isChecked() is True
+        assert dialog.reflect_wiki_links_edit.isChecked() is False
+        assert dialog.reflect_linked_map_edit.isChecked() is True
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_small_property_forms_are_compact(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_compact_property_forms", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        database.create_project("Area", "Linked project", date(2026, 3, 6), "Medium")
+        database.create_task("Linked task", "", date(2026, 3, 6), "", "Medium")
+        dialog = project_edit_dialog.ProjectEditDialog()
+
+        assert dialog._select_related_item("project", "Связанный проект") is None
+        relation_dialog = captured_dialogs[-1]
+        assert relation_dialog.minimumWidth() == 550
+        assert relation_dialog.maximumWidth() == 550
+        assert relation_dialog.minimumHeight() == 200
+        assert relation_dialog.maximumHeight() == 200
+        selector = relation_dialog.findChild(FilterableComboBox)
+        assert selector is not None
+        assert selector.minimumContentsLength() == 24
+
+        assert dialog._link_dialog("Репозиторий") is None
+        link_dialog = captured_dialogs[-1]
+        assert link_dialog.minimumWidth() == 550
+        assert link_dialog.maximumWidth() == 550
+        assert link_dialog.minimumHeight() == 220
+        assert link_dialog.maximumHeight() == 220
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_task_type_dialog_matches_preview_shell_contract(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_task_type_dialog_shell", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        result = dialog._task_type_dialog(
+            {
+                "title": "Development",
+                "value": "DEV",
+                "color_marker": "#20f5d2",
+                "theme_marker": "debug",
+                "priority": "High",
+                "importance": 5,
+                "is_plan_task": True,
+                "concept_board_id": None,
+                "active": True,
+            }
+        )
+
+        assert result is not None
+        assert result["title"] == "DEVELOPMENT"
+        task_type_dialog = captured_dialogs[-1]
+        assert task_type_dialog.objectName() == "ProjectTaskTypeDialog"
+        assert task_type_dialog.width() == 900
+        assert task_type_dialog.height() == 620
+        assert task_type_dialog.minimumWidth() == 820
+        assert task_type_dialog.minimumHeight() == 560
+        assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypePreviewCard") is not None
+        assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypeCard") is not None
+        button_texts = {button.text() for button in task_type_dialog.findChildren(project_edit_dialog.QPushButton)}
+        assert {"Предпросмотр", "Закрыть", "Отмена", "Сохранить", "Сохранить и добавить ещё"}.issubset(button_texts)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_display_property_dialog_matches_preview_shell_contract(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_display_property_dialog_shell", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        result = dialog._display_property_dialog(
+            {
+                "name": "wiki",
+                "url": "https://docs.example.com/kazantip",
+                "display_mode": "url_text",
+            }
+        )
+
+        assert result == {
+            "name": "WIKI",
+            "url": "https://docs.example.com/kazantip",
+            "display_mode": "url_text",
+        }
+        display_dialog = captured_dialogs[-1]
+        assert display_dialog.objectName() == "ProjectDisplayPropertyDialog"
+        assert display_dialog.width() == 860
+        assert display_dialog.height() == 560
+        assert display_dialog.minimumWidth() == 760
+        assert display_dialog.minimumHeight() == 500
+        assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyPreviewCard") is not None
+        assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyCard") is not None
+        button_texts = {button.text() for button in display_dialog.findChildren(project_edit_dialog.QPushButton)}
+        assert {"Предпросмотр", "Закрыть", "Отмена", "Сохранить", "Сохранить и добавить ещё"}.issubset(button_texts)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)

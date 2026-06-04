@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from html import escape
 
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -10,14 +11,33 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStackedWidget,
     QPlainTextEdit,
 )
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.ui.styles import get_theme_palette
+
+PROJECT_REFLECT_SETTING_PREFIX = "project_reflect_in_tasks"
+PROJECT_REFLECT_REPOSITORY_CATALOG = "repository_catalog"
+PROJECT_REFLECT_REPOSITORY_LINKS = "repository_links"
+PROJECT_REFLECT_WIKI_LINKS = "wiki_links"
+PROJECT_REFLECT_LINKED_MAP = "linked_map"
+PROJECT_REFLECT_LINKED_NOTE = "linked_note"
+PROJECT_REFLECT_LINKED_OBJECT = "linked_object"
+PROJECT_REFLECT_KEYS = {
+    PROJECT_REFLECT_REPOSITORY_CATALOG,
+    PROJECT_REFLECT_REPOSITORY_LINKS,
+    PROJECT_REFLECT_WIKI_LINKS,
+    PROJECT_REFLECT_LINKED_MAP,
+    PROJECT_REFLECT_LINKED_NOTE,
+    PROJECT_REFLECT_LINKED_OBJECT,
+}
 
 class ProjectEditDialog(QDialog):
     def __init__(self, project: Optional[ProjectRow] = None, parent=None):
@@ -28,6 +48,7 @@ class ProjectEditDialog(QDialog):
         self._db = get_database()
         self._edit_mode = is_new
         self._palette = get_theme_palette("dark")
+        self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
@@ -45,6 +66,12 @@ class ProjectEditDialog(QDialog):
         self.updated_edit.setDisplayFormat("dd.MM.yyyy")
         self.updated_edit.setKeyboardTracking(False)
         self.updated_edit.setDate(QDate.currentDate())
+        self.display_properties_edit = self._make_multiline_edit("WIKI | https://docs.example.com | name_link")
+        display_properties_row = self._make_inline_property_editor(
+            self.display_properties_edit,
+            "display_properties",
+            self._add_display_property_line,
+        )
         if project:
             self.updated_edit.setDate(QDate(project.updated.year, project.updated.month, project.updated.day))
 
@@ -131,6 +158,12 @@ class ProjectEditDialog(QDialog):
         self.repository_catalog_edit = QLineEdit((project.repository_catalog if project else "") or "")
         self.repository_catalog_edit.setPlaceholderText("Путь к локальному репозиторию")
         self.repository_catalog_row = self._make_repository_catalog_editor()
+        self.reflect_repository_catalog_edit = self._make_reflect_checkbox()
+        self.reflect_repository_links_edit = self._make_reflect_checkbox()
+        self.reflect_wiki_links_edit = self._make_reflect_checkbox()
+        self.reflect_linked_map_edit = self._make_reflect_checkbox()
+        self.reflect_linked_note_edit = self._make_reflect_checkbox()
+        self.reflect_linked_object_edit = self._make_reflect_checkbox()
 
         self.archived_edit = QCheckBox("Архивировать")
         self.archived_edit.setChecked(project.archived if project else False)
@@ -142,21 +175,36 @@ class ProjectEditDialog(QDialog):
         self.related_tasks_edit = self._make_multiline_edit("ID связанных задач, по одному в строке")
         self.repository_links_edit = self._make_multiline_edit("MindNavigator Core | D:/_Branch/PROJECTS/mindnavigator")
         self.wiki_links_edit = self._make_multiline_edit("Project Wiki | https://docs.example.com/project")
-        task_types_row = self._make_property_editor(
+        self.display_properties_edit.setPlaceholderText("WIKI | https://docs.example.com | name_link")
+        task_types_row = self._make_inline_property_editor(
             self.task_types_edit,
-            [
-                ("Добавить", self._add_task_type_line),
-                ("Изменить", self._edit_task_type_line),
-                ("Актив./деакт.", self._toggle_task_type_line),
-                ("Удалить", self._delete_task_type_line),
-            ],
+            "task_types",
+            self._add_task_type_line,
         )
-        related_projects_row = self._make_property_editor(self.related_projects_edit, [("Добавить", self._add_related_project_line)])
-        related_tasks_row = self._make_property_editor(self.related_tasks_edit, [("Добавить", self._add_related_task_line)])
-        repository_links_row = self._make_property_editor(self.repository_links_edit, [("Добавить", self._add_repository_link_line)])
-        wiki_links_row = self._make_property_editor(self.wiki_links_edit, [("Добавить", self._add_wiki_link_line)])
+        related_projects_row = self._make_inline_property_editor(
+            self.related_projects_edit,
+            "related_projects",
+            self._add_related_project_line,
+        )
+        related_tasks_row = self._make_inline_property_editor(
+            self.related_tasks_edit,
+            "related_tasks",
+            self._add_related_task_line,
+        )
+        repository_links_row = self._make_inline_property_editor(
+            self.repository_links_edit,
+            "repository_links",
+            self._add_repository_link_line,
+        )
+        wiki_links_row = self._make_inline_property_editor(
+            self.wiki_links_edit,
+            "wiki_links",
+            self._add_wiki_link_line,
+        )
         if project:
             self._load_project_properties(project.id)
+            self._load_project_reflect_settings(project.id)
+        self._refresh_inline_property_lists()
 
         self._editor_controls = [
             self.area_edit,
@@ -172,38 +220,44 @@ class ProjectEditDialog(QDialog):
             self.marker_color_edit,
             self.marker_theme_edit,
             self.repository_catalog_edit,
+            self.reflect_repository_catalog_edit,
+            self.reflect_repository_links_edit,
+            self.reflect_wiki_links_edit,
+            self.reflect_linked_map_edit,
+            self.reflect_linked_note_edit,
+            self.reflect_linked_object_edit,
             self.archived_edit,
             self.task_types_edit,
             self.related_projects_edit,
             self.related_tasks_edit,
             self.repository_links_edit,
             self.wiki_links_edit,
+            self.display_properties_edit,
         ]
         self._edit_action_buttons: list[QWidget] = []
-        for row in (task_types_row, related_projects_row, related_tasks_row, repository_links_row, wiki_links_row):
+        for row in (task_types_row, related_projects_row, related_tasks_row, repository_links_row, wiki_links_row, display_properties_row):
             self._edit_action_buttons.extend(row.findChildren(QToolButton))
         self.add_relation_button = QToolButton()
         self.add_relation_button.setText("+ Добавить связь")
         self.add_relation_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_relation_button.clicked.connect(self._add_relation_dialog)
         self._edit_action_buttons.append(self.add_relation_button)
-        self._preview_fields: list[tuple[QStackedWidget, QLabel, QWidget, object]] = []
         area_field = self._field_stack(self.area_edit, lambda: self.area_edit.text().strip() or "Не задано")
         updated_field = self._field_stack(self.updated_edit, lambda: self.updated_edit.date().toString("dd.MM.yyyy"))
         priority_field = self._field_stack(self.priority_edit, lambda: self.priority_edit.currentText().strip() or "Medium")
         parent_field = self._field_stack(self.parent_project_edit, lambda: self.parent_project_edit.currentText().strip() or "None")
         title_field = self._field_stack(self.title_edit, lambda: self.title_edit.text().strip() or "Не задано")
         repository_catalog_field = self._field_stack(
-            self.repository_catalog_row,
+            self._make_reflectable_editor(self.repository_catalog_row, self.reflect_repository_catalog_edit),
             lambda: self.repository_catalog_edit.text().strip() or "Путь к локальному репозиторию не указан",
         )
         repository_links_field = self._field_stack(
-            repository_links_row,
+            self._make_reflectable_editor(repository_links_row, self.reflect_repository_links_edit),
             lambda: self._chip_preview(self.repository_links_edit.toPlainText(), "Репозитории не указаны"),
             rich=True,
         )
         wiki_links_field = self._field_stack(
-            wiki_links_row,
+            self._make_reflectable_editor(wiki_links_row, self.reflect_wiki_links_edit),
             lambda: self._chip_preview(self.wiki_links_edit.toPlainText(), "Wiki не указана"),
             rich=True,
         )
@@ -222,9 +276,23 @@ class ProjectEditDialog(QDialog):
             lambda: self._task_types_preview(),
             rich=True,
         )
-        linked_map_field = self._field_stack(self.linked_map_edit, lambda: self.linked_map_edit.currentText().strip() or "None")
-        linked_note_field = self._field_stack(self.linked_note_edit, lambda: self.linked_note_edit.currentText().strip() or "None")
-        linked_object_field = self._field_stack(self.linked_object_edit, lambda: self.linked_object_edit.currentText().strip() or "None")
+        display_properties_field = self._field_stack(
+            display_properties_row,
+            lambda: self._display_properties_preview(),
+            rich=True,
+        )
+        linked_map_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_map_edit, self.reflect_linked_map_edit),
+            lambda: self.linked_map_edit.currentText().strip() or "None",
+        )
+        linked_note_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_note_edit, self.reflect_linked_note_edit),
+            lambda: self.linked_note_edit.currentText().strip() or "None",
+        )
+        linked_object_field = self._field_stack(
+            self._make_reflectable_editor(self.linked_object_edit, self.reflect_linked_object_edit),
+            lambda: self.linked_object_edit.currentText().strip() or "None",
+        )
         default_priority_field = self._field_stack(
             self.default_task_priority_edit,
             lambda: self.default_task_priority_edit.currentText().strip() or "None",
@@ -286,7 +354,7 @@ class ProjectEditDialog(QDialog):
         metrics_grid.addWidget(self._metric_card("Область", area_field), 0, 0)
         metrics_grid.addWidget(self._metric_card("Дата обновления", updated_field), 0, 1)
         metrics_grid.addWidget(self._metric_card("Приоритет", priority_field), 0, 2)
-        metrics_grid.addWidget(self._metric_card("Parent project", parent_field), 0, 3)
+        metrics_grid.addWidget(self._metric_card("Родительский проект", parent_field), 0, 3)
         shell_layout.addLayout(metrics_grid)
 
         scroll = QScrollArea(self.shell)
@@ -312,26 +380,30 @@ class ProjectEditDialog(QDialog):
         links_form = self._section_form(links_card)
         links_form.addRow("Связанные проекты", related_projects_field)
         links_form.addRow("Связанные задачи", related_tasks_field)
-        links_form.addRow("Linked map", linked_map_field)
-        links_form.addRow("Linked note", linked_note_field)
-        links_form.addRow("Linked object", linked_object_field)
+        links_form.addRow("Связанная карта", linked_map_field)
+        links_form.addRow("Связанная заметка", linked_note_field)
+        links_form.addRow("Связанный объект", linked_object_field)
         links_form.addRow("", self.add_relation_button)
 
         types_card = self._section_card("Типы задач")
         types_form = self._section_form(types_card)
         types_form.addRow("", task_types_field)
 
+        display_properties_card = self._section_card("Отображаемые свойства")
+        display_properties_form = self._section_form(display_properties_card)
+        display_properties_form.addRow("", display_properties_field)
+
         properties_card = self._section_card("Свойства")
         properties_form = self._section_form(properties_card)
-        properties_form.addRow("Task priority preset", default_priority_field)
-        properties_form.addRow("Force recurrence", recurrence_field)
+        properties_form.addRow("Приоритет задач по умолчанию", default_priority_field)
+        properties_form.addRow("Принудительное повторение", recurrence_field)
         properties_form.addRow("Маркер (цвет)", marker_color_field)
         properties_form.addRow("Тема маркера", marker_theme_field)
         properties_form.addRow("Архивирован", archived_field)
 
         hierarchy_card = self._section_card("Иерархия и правила")
         hierarchy_form = self._section_form(hierarchy_card)
-        hierarchy_form.addRow("Parent project", QLabel(self.parent_project_edit.currentText()))
+        hierarchy_form.addRow("Родительский проект", QLabel(self.parent_project_edit.currentText()))
         preset_note = QLabel("Настройки поведения задач, повторяемости, напоминаний и другие правила наследуются из родительского проекта или глобальных параметров системы.")
         preset_note.setObjectName("ProjectDialogInfo")
         preset_note.setWordWrap(True)
@@ -348,7 +420,8 @@ class ProjectEditDialog(QDialog):
         content_layout.addWidget(links_card, 1, 0)
         content_layout.addWidget(hierarchy_card, 1, 1)
         content_layout.addWidget(types_card, 2, 0)
-        content_layout.addWidget(stats_card, 2, 1)
+        content_layout.addWidget(display_properties_card, 2, 1)
+        content_layout.addWidget(stats_card, 3, 1)
         content_layout.setColumnStretch(0, 1)
         content_layout.setColumnStretch(1, 1)
         shell_layout.addWidget(scroll, 1)
@@ -494,6 +567,41 @@ class ProjectEditDialog(QDialog):
                 max-width: 36px;
                 padding: 8px 0;
             }}
+
+            QFrame#ProjectInlineList {{
+                background: transparent;
+                border: none;
+            }}
+
+            QFrame#ProjectInlineRow {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 7px;
+            }}
+
+            QLabel#ProjectInlineEmpty {{
+                color: {palette.dim_text};
+                background: {palette.input_alt_bg};
+                border: 1px dashed {palette.border};
+                border-radius: 7px;
+                padding: 9px 11px;
+            }}
+
+            QLineEdit#ProjectInlineValue {{
+                background: transparent;
+                border: none;
+                color: {palette.text};
+                padding: 7px 8px;
+            }}
+
+            QToolButton#ProjectInlineIconButton {{
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 28px;
+                max-height: 28px;
+                padding: 0;
+                border-radius: 6px;
+            }}
         """)
 
     def _field_stack(self, editor: QWidget, value_getter: object, rich: bool = False) -> QStackedWidget:
@@ -575,6 +683,25 @@ class ProjectEditDialog(QDialog):
                 f"<span style='display:inline-block; color:{palette.text}; background:{palette.chip_bg}; "
                 f"border:1px solid {escape(color)}; border-radius:6px; padding:3px 8px; margin:2px; opacity:{opacity};'>"
                 f"{escape(title + suffix)}</span>"
+            )
+        return " ".join(chips)
+
+    def _display_properties_preview(self) -> str:
+        lines = [line.strip() for line in self.display_properties_edit.toPlainText().splitlines() if line.strip()]
+        if not lines:
+            return escape("Отображаемые свойства не настроены")
+        chips = []
+        palette = self._palette
+        for line in lines[:4]:
+            values = self._parse_display_property_line(line)
+            name = str(values.get("name") or "")
+            url = str(values.get("url") or "")
+            mode = str(values.get("display_mode") or "name_link")
+            label = f"{name}: {url}" if mode == "url_text" else name
+            chips.append(
+                f"<span style='display:inline-block; color:{palette.text}; background:{palette.chip_bg}; "
+                f"border:1px solid {palette.accent}; border-radius:6px; padding:3px 8px; margin:2px;'>"
+                f"{escape(label)}</span>"
             )
         return " ".join(chips)
 
@@ -663,6 +790,7 @@ class ProjectEditDialog(QDialog):
         for button in self._edit_action_buttons:
             button.setVisible(enabled)
             button.setEnabled(enabled)
+        self._set_inline_edit_enabled(enabled)
         if hasattr(self, "title_label"):
             self.title_label.setText(self.title_edit.text().strip() or "Новый проект")
         self.mode_label.setText("Редактирование проекта" if enabled else "Просмотр проекта")
@@ -722,12 +850,226 @@ class ProjectEditDialog(QDialog):
         layout.addLayout(action_row)
         return widget
 
+    def _make_reflect_checkbox(self) -> QCheckBox:
+        checkbox = QCheckBox("Отразить в задачах")
+        checkbox.setToolTip("Показать это свойство в задачах проекта как «Текст ссылки».")
+        checkbox.toggled.connect(lambda _checked=False: self._refresh_preview_fields())
+        return checkbox
+
+    def _make_reflectable_editor(self, editor: QWidget, checkbox: QCheckBox) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(editor)
+        layout.addWidget(checkbox)
+        return widget
+
+    def _make_inline_property_editor(self, edit: QPlainTextEdit, kind: str, add_callback: object) -> QWidget:
+        edit.setVisible(False)
+        widget = QFrame()
+        widget.setObjectName("ProjectInlineList")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(7)
+        rows_widget = QWidget(widget)
+        rows_widget.setObjectName(f"ProjectInlineRows_{kind}")
+        rows_layout = QVBoxLayout(rows_widget)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(6)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addStretch(1)
+        add_button = self._inline_icon_button("fa5s.plus", "Добавить")
+        add_button.clicked.connect(add_callback)
+        footer.addWidget(add_button)
+        layout.addWidget(edit)
+        layout.addWidget(rows_widget)
+        layout.addLayout(footer)
+        setattr(self, f"{kind}_list_widget", rows_widget)
+        setattr(self, f"{kind}_list_layout", rows_layout)
+        return widget
+
+    def _inline_icon_button(self, icon_name: str, tooltip: str) -> QToolButton:
+        button = QToolButton()
+        button.setObjectName("ProjectInlineIconButton")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip(tooltip)
+        button.setIcon(qta.icon(icon_name, color=self._palette.text))
+        return button
+
+    def _refresh_inline_property_lists(self) -> None:
+        if hasattr(self, "task_types_list_layout"):
+            self._rebuild_inline_property_list(self.task_types_edit, self.task_types_list_layout, "task_types")
+        if hasattr(self, "display_properties_list_layout"):
+            self._rebuild_inline_property_list(
+                self.display_properties_edit,
+                self.display_properties_list_layout,
+                "display_properties",
+            )
+        for kind, edit_name in (
+            ("related_projects", "related_projects_edit"),
+            ("related_tasks", "related_tasks_edit"),
+            ("repository_links", "repository_links_edit"),
+            ("wiki_links", "wiki_links_edit"),
+        ):
+            layout = getattr(self, f"{kind}_list_layout", None)
+            edit = getattr(self, edit_name, None)
+            if layout is not None and edit is not None:
+                self._rebuild_inline_property_list(edit, layout, kind)
+        if hasattr(self, "_edit_mode"):
+            self._set_inline_edit_enabled(self._edit_mode)
+
+    def _set_inline_edit_enabled(self, enabled: bool) -> None:
+        for button in self.findChildren(QToolButton):
+            if button.objectName() == "ProjectInlineIconButton":
+                button.setVisible(enabled)
+                button.setEnabled(enabled)
+
+    def _rebuild_inline_property_list(self, edit: QPlainTextEdit, layout: QVBoxLayout, kind: str) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        lines = [line.strip() for line in edit.toPlainText().splitlines() if line.strip()]
+        if not lines:
+            empty = QLabel("Нет настроенных элементов")
+            empty.setObjectName("ProjectInlineEmpty")
+            layout.addWidget(empty)
+            return
+        for index, line in enumerate(lines):
+            layout.addWidget(self._inline_property_row(kind, index, line))
+
+    def _inline_property_row(self, kind: str, line_index: int, line: str) -> QFrame:
+        row = QFrame()
+        row.setObjectName("ProjectInlineRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
+        value = QLineEdit(self._inline_property_label(kind, line))
+        value.setObjectName("ProjectInlineValue")
+        value.setReadOnly(True)
+        value.setCursorPosition(0)
+        layout.addWidget(value, 1)
+        edit_button = self._inline_icon_button("fa5s.edit", "Изменить")
+        edit_button.clicked.connect(lambda _checked=False, idx=line_index: self._edit_inline_property(kind, idx))
+        layout.addWidget(edit_button)
+        if kind == "task_types":
+            values = self._parse_task_type_line(line)
+            active = bool(values.get("active", True))
+            toggle_button = self._inline_icon_button("fa5s.check" if active else "fa5s.ban", "Активировать/деактивировать")
+            toggle_button.clicked.connect(lambda _checked=False, idx=line_index: self._toggle_inline_task_type(idx))
+            layout.addWidget(toggle_button)
+        delete_button = self._inline_icon_button("fa5s.trash", "Удалить")
+        delete_button.clicked.connect(lambda _checked=False, idx=line_index: self._delete_inline_property(kind, idx))
+        layout.addWidget(delete_button)
+        return row
+
+    def _inline_property_label(self, kind: str, line: str) -> str:
+        if kind == "task_types":
+            values = self._parse_task_type_line(line)
+            return str(values.get("title") or "")
+        if kind == "display_properties":
+            values = self._parse_display_property_line(line)
+            return str(values.get("name") or "")
+        if kind in {"repository_links", "wiki_links"}:
+            values = self._parse_link_line(line)
+            return str(values.get("title") or values.get("url") or "")
+        if kind == "related_projects":
+            project_id = self._line_int_or_none(line)
+            project = self._project_by_id(project_id)
+            return f"{project.area} / {project.title}" if project is not None else line.strip()
+        if kind == "related_tasks":
+            task_id = self._line_int_or_none(line)
+            task = self._task_by_id(task_id)
+            return f"MN-{task.id} {task.title}" if task is not None else line.strip()
+        return line.strip()
+
+    def _edit_inline_property(self, kind: str, line_index: int) -> None:
+        if kind == "task_types":
+            self._edit_task_type_line(line_index)
+        elif kind == "display_properties":
+            self._edit_display_property_line(line_index)
+        elif kind == "related_projects":
+            self._edit_related_project_line(line_index)
+        elif kind == "related_tasks":
+            self._edit_related_task_line(line_index)
+        elif kind == "repository_links":
+            self._edit_link_line(self.repository_links_edit, "Репозиторий", line_index)
+        elif kind == "wiki_links":
+            self._edit_link_line(self.wiki_links_edit, "Wiki", line_index)
+
+    def _delete_inline_property(self, kind: str, line_index: int) -> None:
+        if kind == "task_types":
+            self._delete_task_type_line(line_index)
+        elif kind == "display_properties":
+            self._delete_display_property_line(line_index)
+        elif kind == "related_projects":
+            self._remove_line(self.related_projects_edit, line_index)
+        elif kind == "related_tasks":
+            self._remove_line(self.related_tasks_edit, line_index)
+        elif kind == "repository_links":
+            self._remove_line(self.repository_links_edit, line_index)
+        elif kind == "wiki_links":
+            self._remove_line(self.wiki_links_edit, line_index)
+
+    def _toggle_inline_task_type(self, line_index: int) -> None:
+        self._toggle_task_type_line(line_index)
+
+    def _apply_child_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {palette.panel_bg};
+                color: {palette.text};
+            }}
+
+            QLabel {{
+                color: {palette.text};
+            }}
+
+            QLineEdit,
+            QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 8px 10px;
+                min-height: 30px;
+            }}
+
+            QCheckBox {{
+                color: {palette.text};
+                padding: 4px 0;
+            }}
+
+            QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 6px;
+                padding: 8px 16px;
+                min-width: 104px;
+            }}
+
+            QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QDialogButtonBox QPushButton {{
+                min-width: 116px;
+            }}
+        """)
+
     def _append_line(self, edit: QPlainTextEdit, line: str) -> None:
         line = (line or "").strip()
         if not line:
             return
         text = edit.toPlainText().strip()
         edit.setPlainText(f"{text}\n{line}" if text else line)
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _current_line_info(self, edit: QPlainTextEdit) -> tuple[list[str], int, str]:
         lines = edit.toPlainText().splitlines()
@@ -748,6 +1090,8 @@ class ProjectEditDialog(QDialog):
         for _ in range(line_index):
             cursor.movePosition(cursor.MoveOperation.Down)
         edit.setTextCursor(cursor)
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _remove_line(self, edit: QPlainTextEdit, line_index: int) -> None:
         lines = edit.toPlainText().splitlines()
@@ -755,10 +1099,405 @@ class ProjectEditDialog(QDialog):
             return
         del lines[line_index]
         edit.setPlainText("\n".join(lines))
+        self._refresh_inline_property_lists()
+        self._refresh_preview_fields()
 
     def _copy_combo_items(self, source: QComboBox, target: QComboBox) -> None:
         for idx in range(source.count()):
             target.addItem(source.itemText(idx), source.itemData(idx))
+
+    @staticmethod
+    def _line_int_or_none(line: str) -> Optional[int]:
+        try:
+            return int((line or "").strip())
+        except ValueError:
+            return None
+
+    def _project_by_id(self, project_id: Optional[int]):
+        if project_id is None:
+            return None
+        return next((project for project in self._db.fetch_projects() if project.id == project_id), None)
+
+    def _task_by_id(self, task_id: Optional[int]):
+        if task_id is None:
+            return None
+        return next((task for task in self._db.fetch_tasks() if task.id == task_id), None)
+
+    def _task_type_section_title(self, icon_name: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.text).pixmap(22, 22))
+        label = QLabel(text)
+        label.setObjectName("TaskTypeSectionTitle")
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addStretch(1)
+        return row
+
+    def _task_type_field_label(self, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        label = QLabel(text)
+        label.setObjectName("TaskTypeFieldLabel")
+        help_icon = QLabel()
+        help_icon.setPixmap(qta.icon("fa5s.question-circle", color=self._palette.dim_text).pixmap(14, 14))
+        row.addWidget(label)
+        row.addWidget(help_icon)
+        row.addStretch(1)
+        return row
+
+    def _task_type_rule_row(self, icon_name: str, color: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setObjectName("TaskTypeRuleIcon")
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(text)
+        label.setObjectName("TaskTypeRuleText")
+        label.setWordWrap(True)
+        row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label, 1)
+        return row
+
+    def _task_type_separator(self) -> QFrame:
+        separator = QFrame()
+        separator.setObjectName("TaskTypePreviewSeparator")
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFixedHeight(1)
+        return separator
+
+    def _task_type_preview_row(self, icon_name: str, color: str, label_text: str) -> tuple[QHBoxLayout, QLabel]:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(f"{label_text}:")
+        label.setObjectName("TaskTypePreviewLabel")
+        value = QLabel()
+        value.setObjectName("TaskTypePreviewValue")
+        value.setWordWrap(True)
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addWidget(value, 1)
+        return row, value
+
+    def _apply_task_type_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog#ProjectTaskTypeDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QFrame#TaskTypeCard,
+            QFrame#TaskTypePreviewCard {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QLabel#TaskTypeDialogTitle {{
+                color: {palette.selection_text};
+                font-size: 21px;
+                font-weight: 700;
+            }}
+
+            QLabel#TaskTypeDialogSubtitle,
+            QLabel#TaskTypeFieldHint,
+            QLabel#TaskTypePreviewCaption,
+            QLabel#TaskTypePreviewText {{
+                color: {palette.dim_text};
+                font-size: 12px;
+            }}
+
+            QLabel#TaskTypeSectionTitle,
+            QLabel#TaskTypePreviewTitle {{
+                color: {palette.selection_text};
+                font-size: 15px;
+                font-weight: 700;
+            }}
+
+            QLabel#TaskTypeFieldLabel,
+            QLabel#TaskTypePreviewLabel,
+            QLabel#TaskTypeRuleText {{
+                color: {palette.text};
+                font-size: 13px;
+                font-weight: 600;
+            }}
+
+            QLabel#TaskTypePreviewValue {{
+                color: {palette.text};
+                font-size: 13px;
+            }}
+
+            QLabel#TaskTypePreviewBadge {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.10);
+                border: 1px solid #20f5d2;
+                border-radius: 18px;
+                padding: 6px 14px;
+                font-size: 13px;
+                font-weight: 800;
+            }}
+
+            QFrame#TaskTypePreviewSeparator {{
+                background: {palette.border};
+                border: none;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QLineEdit,
+            QDialog#ProjectTaskTypeDialog QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 6px 9px;
+                min-height: 28px;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QLineEdit:focus,
+            QDialog#ProjectTaskTypeDialog QComboBox:focus {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QDialog#ProjectTaskTypeDialog QCheckBox {{
+                color: {palette.text};
+                font-size: 13px;
+                padding: 4px 0;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 7px;
+                padding: 7px 12px;
+                min-width: 104px;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QPushButton#TaskTypeDialogPrimaryButton {{
+                background: {palette.accent};
+                border: 1px solid {palette.accent_hover};
+                color: {palette.selection_text};
+                font-weight: 700;
+                min-width: 126px;
+            }}
+
+            QPushButton#TaskTypeDialogSecondaryButton {{
+                min-width: 108px;
+            }}
+        """)
+
+    def _display_property_section_title(self, icon_name: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.text).pixmap(22, 22))
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertySectionTitle")
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addStretch(1)
+        return row
+
+    def _display_property_field_label(self, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertyFieldLabel")
+        help_icon = QLabel()
+        help_icon.setPixmap(qta.icon("fa5s.question-circle", color=self._palette.dim_text).pixmap(14, 14))
+        row.addWidget(label)
+        row.addWidget(help_icon)
+        row.addStretch(1)
+        return row
+
+    def _display_mode_card(self, icon_name: str, title: str, text: str, value: str) -> tuple[QRadioButton, QFrame]:
+        card = QFrame()
+        card.setObjectName("DisplayModeCard")
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        radio = QRadioButton()
+        radio.setProperty("display_mode", value)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.accent).pixmap(20, 20))
+        text_box = QVBoxLayout()
+        text_box.setSpacing(5)
+        title_label = QLabel(title)
+        title_label.setObjectName("DisplayModeTitle")
+        body_label = QLabel(text)
+        body_label.setObjectName("DisplayModeText")
+        body_label.setWordWrap(True)
+        text_box.addWidget(title_label)
+        text_box.addWidget(body_label)
+        layout.addWidget(radio, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(text_box, 1)
+        card.mousePressEvent = lambda _event: radio.setChecked(True)
+        return radio, card
+
+    def _display_property_rule_row(self, icon_name: str, color: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertyRuleText")
+        label.setWordWrap(True)
+        row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label, 1)
+        return row
+
+    def _display_property_separator(self) -> QFrame:
+        separator = QFrame()
+        separator.setObjectName("DisplayPropertyPreviewSeparator")
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFixedHeight(1)
+        return separator
+
+    def _apply_display_property_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog#ProjectDisplayPropertyDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QFrame#DisplayPropertyCard,
+            QFrame#DisplayPropertyPreviewCard {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QFrame#DisplayModeCard {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 9px;
+            }}
+
+            QFrame#DisplayModeCard:hover {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QLabel#DisplayPropertyDialogTitle {{
+                color: {palette.selection_text};
+                font-size: 21px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyDialogSubtitle,
+            QLabel#DisplayPropertyFieldHint,
+            QLabel#DisplayPropertyPreviewCaption,
+            QLabel#DisplayPropertyPreviewText,
+            QLabel#DisplayModeText {{
+                color: {palette.dim_text};
+                font-size: 12px;
+            }}
+
+            QLabel#DisplayPropertySectionTitle,
+            QLabel#DisplayPropertyPreviewTitle {{
+                color: {palette.selection_text};
+                font-size: 15px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyFieldLabel,
+            QLabel#DisplayPropertyPreviewLabel,
+            QLabel#DisplayPropertyRuleText,
+            QLabel#DisplayModeTitle {{
+                color: {palette.text};
+                font-size: 13px;
+                font-weight: 600;
+            }}
+
+            QLabel#DisplayPropertyPreviewBadge {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.10);
+                border: 1px solid #20f5d2;
+                border-radius: 18px;
+                padding: 6px 14px;
+                font-size: 13px;
+                font-weight: 800;
+            }}
+
+            QLabel#DisplayPropertyPreviewLink {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.08);
+                border: 1px solid #20f5d2;
+                border-radius: 7px;
+                padding: 6px 10px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyPreviewUrl {{
+                color: {palette.text};
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 7px;
+                padding: 6px 10px;
+            }}
+
+            QFrame#DisplayPropertyPreviewSeparator {{
+                background: {palette.border};
+                border: none;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QLineEdit,
+            QDialog#ProjectDisplayPropertyDialog QSpinBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 6px 9px;
+                min-height: 28px;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QLineEdit:focus,
+            QDialog#ProjectDisplayPropertyDialog QSpinBox:focus {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QRadioButton {{
+                color: {palette.text};
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 7px;
+                padding: 7px 12px;
+                min-width: 104px;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QPushButton#DisplayPropertyDialogPrimaryButton {{
+                background: {palette.accent};
+                border: 1px solid {palette.accent_hover};
+                color: {palette.selection_text};
+                font-weight: 700;
+                min-width: 126px;
+            }}
+
+            QPushButton#DisplayPropertyDialogSecondaryButton {{
+                min-width: 108px;
+            }}
+        """)
 
     def _add_task_type_line(self) -> None:
         values = self._task_type_dialog()
@@ -766,8 +1505,11 @@ class ProjectEditDialog(QDialog):
             return
         self._append_line(self.task_types_edit, self._format_task_type_line(values))
 
-    def _edit_task_type_line(self) -> None:
-        lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _edit_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
@@ -776,16 +1518,22 @@ class ProjectEditDialog(QDialog):
             return
         self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(updated))
 
-    def _toggle_task_type_line(self) -> None:
-        lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _toggle_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
         values["active"] = not bool(values.get("active", True))
         self._replace_line(self.task_types_edit, line_index, self._format_task_type_line(values))
 
-    def _delete_task_type_line(self) -> None:
-        _lines, line_index, line = self._current_line_info(self.task_types_edit)
+    def _delete_task_type_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.task_types_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
         if line_index < 0 or not line:
             return
         values = self._parse_task_type_line(line)
@@ -875,46 +1623,346 @@ class ProjectEditDialog(QDialog):
             "active": status not in {"disabled", "inactive", "off", "0", "false"},
         }
 
-    def _add_related_project_line(self) -> None:
+    def _task_type_dialog(self, initial: Optional[dict[str, object]] = None) -> Optional[dict[str, object]]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Связанный проект")
-        layout = QVBoxLayout(dialog)
-        combo = QComboBox()
-        for project in self._db.fetch_projects():
-            if self._project and project.id == self._project.id:
-                continue
-            combo.addItem(f"{project.area} / {project.title}", project.id)
-        layout.addWidget(combo)
-        buttons = QDialogButtonBox(dialog)
-        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
-            self._append_line(self.related_projects_edit, str(combo.currentData()))
+        dialog.setWindowTitle("Редактирование типа задач" if initial else "Создание типа задач")
+        dialog.setObjectName("ProjectTaskTypeDialog")
+        dialog.resize(900, 620)
+        dialog.setMinimumSize(820, 560)
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        hero_icon = QLabel()
+        hero_icon.setObjectName("TaskTypeDialogHeroIcon")
+        hero_icon.setPixmap(qta.icon("fa5s.tag", color="#5f7cff").pixmap(26, 26))
+        header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        title_label = QLabel("Редактирование типа задач" if initial else "Создание типа задач")
+        title_label.setObjectName("TaskTypeDialogTitle")
+        subtitle_label = QLabel("Настройка кастомного типа задач проекта")
+        subtitle_label.setObjectName("TaskTypeDialogSubtitle")
+        title_box.addWidget(title_label)
+        title_box.addWidget(subtitle_label)
+        header.addLayout(title_box, 1)
+        preview_button = QPushButton("Предпросмотр")
+        preview_button.setObjectName("TaskTypeDialogSecondaryButton")
+        preview_button.setIcon(qta.icon("fa5s.eye", color=self._palette.text))
+        close_button = QPushButton("Закрыть")
+        close_button.setObjectName("TaskTypeDialogSecondaryButton")
+        close_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        close_button.clicked.connect(dialog.reject)
+        header.addWidget(preview_button)
+        header.addWidget(close_button)
+        root.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(10)
+        body.addLayout(left_column, 1)
+        preview_card = QFrame()
+        preview_card.setObjectName("TaskTypePreviewCard")
+        preview_card.setMinimumWidth(280)
+        preview_card.setMaximumWidth(320)
+        body.addWidget(preview_card)
+        root.addLayout(body, 1)
+
+        main_card = QFrame()
+        main_card.setObjectName("TaskTypeCard")
+        main_layout = QVBoxLayout(main_card)
+        main_layout.setContentsMargins(14, 12, 14, 14)
+        main_layout.setSpacing(10)
+        main_layout.addLayout(self._task_type_section_title("fa5s.clipboard-list", "Основное"))
+        left_column.addWidget(main_card)
+
+        title_grid = QGridLayout()
+        title_grid.setHorizontalSpacing(12)
+        title_grid.setVerticalSpacing(6)
+        title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
+        title_edit.setPlaceholderText("Разработка")
+        value_edit = QLineEdit(str(initial.get("value") or initial.get("title") or "") if initial else "")
+        value_edit.setPlaceholderText("DEV")
+        value_hint = QLabel("Английское значение, одно слово. Хранится и отображается в верхнем регистре.")
+        value_hint.setObjectName("TaskTypeFieldHint")
+        value_hint.setWordWrap(True)
+        title_grid.addLayout(self._task_type_field_label("Название"), 0, 0)
+        title_grid.addLayout(self._task_type_field_label("Значение"), 0, 1)
+        title_grid.addWidget(title_edit, 1, 0)
+        title_grid.addWidget(value_edit, 1, 1)
+        title_grid.addWidget(QLabel(""), 2, 0)
+        title_grid.addWidget(value_hint, 2, 1)
+        main_layout.addLayout(title_grid)
+
+        inherit_grid = QGridLayout()
+        inherit_grid.setHorizontalSpacing(12)
+        inherit_grid.setVerticalSpacing(8)
+        color_combo = QComboBox()
+        self._copy_combo_items(self.marker_color_edit, color_combo)
+        theme_combo = QComboBox()
+        self._copy_combo_items(self.marker_theme_edit, theme_combo)
+        priority_combo = QComboBox()
+        for label, value in (("None", ""), ("High", "High"), ("Medium", "Medium"), ("Low", "Low")):
+            priority_combo.addItem(label, value)
+        importance_combo = QComboBox()
+        for value in range(1, 6):
+            importance_combo.addItem(str(value), value)
+        concept_combo = QComboBox()
+        concept_combo.addItem("None", None)
+        fetch_boards = getattr(self._db, "fetch_concept_boards", None)
+        if callable(fetch_boards):
+            for board in fetch_boards():
+                concept_combo.addItem(board.title, board.id)
+        plan_combo = QComboBox()
+        plan_combo.addItem("Нет", False)
+        plan_combo.addItem("Да, плановая", True)
+        active_edit = QCheckBox("Тип задач активен")
+        active_edit.setChecked(True)
+        if initial:
+            for combo, key in (
+                (color_combo, "color_marker"),
+                (theme_combo, "theme_marker"),
+                (priority_combo, "priority"),
+                (importance_combo, "importance"),
+                (concept_combo, "concept_board_id"),
+            ):
+                idx = combo.findData(initial.get(key))
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+            plan_idx = plan_combo.findData(bool(initial.get("is_plan_task", False)))
+            if plan_idx >= 0:
+                plan_combo.setCurrentIndex(plan_idx)
+            active_edit.setChecked(bool(initial.get("active", True)))
+
+        for label, editor, row, column in (
+            ("Маркер", color_combo, 0, 0),
+            ("Тематика маркера", theme_combo, 0, 1),
+            ("Приоритет", priority_combo, 1, 0),
+            ("Важность", importance_combo, 1, 1),
+            ("План-задача", plan_combo, 2, 0),
+            ("Концептборд", concept_combo, 2, 1),
+        ):
+            cell = QVBoxLayout()
+            cell.setSpacing(7)
+            cell.addLayout(self._task_type_field_label(label))
+            cell.addWidget(editor)
+            inherit_grid.addLayout(cell, row, column)
+        main_layout.addLayout(inherit_grid)
+        main_layout.addWidget(active_edit)
+        active_note = QLabel("Если отключить, тип не будет доступен для новых задач")
+        active_note.setObjectName("TaskTypeFieldHint")
+        main_layout.addWidget(active_note)
+
+        rules_card = QFrame()
+        rules_card.setObjectName("TaskTypeCard")
+        rules_layout = QVBoxLayout(rules_card)
+        rules_layout.setContentsMargins(14, 12, 14, 14)
+        rules_layout.setSpacing(8)
+        rules_layout.addLayout(self._task_type_section_title("fa5s.shield-alt", "Правила и ограничения"))
+        for icon_name, color, text in (
+            ("fa5s.info-circle", "#3478f6", "Значение должно быть уникальным в рамках проекта."),
+            ("fa5s.exclamation-triangle", "#f0a72f", "В одном проекте нельзя повторять Маркер у разных типов."),
+            ("fa5s.th-large", "#8a63d2", "Свойства наследуются задачей после выбора типа."),
+        ):
+            rules_layout.addLayout(self._task_type_rule_row(icon_name, color, text))
+        left_column.addWidget(rules_card)
+        left_column.addStretch(1)
+
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(14, 12, 14, 14)
+        preview_layout.setSpacing(10)
+        preview_layout.addLayout(self._task_type_section_title("fa5s.eye", "Предпросмотр"))
+        badge_caption = QLabel("Бейдж типа")
+        badge_caption.setObjectName("TaskTypePreviewCaption")
+        preview_layout.addWidget(badge_caption)
+        badge_label = QLabel()
+        badge_label.setObjectName("TaskTypePreviewBadge")
+        badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_label.setMinimumWidth(150)
+        preview_layout.addWidget(badge_label, 0, Qt.AlignmentFlag.AlignLeft)
+        preview_layout.addWidget(self._task_type_separator())
+        inherit_title = QLabel("Наследуемые свойства")
+        inherit_title.setObjectName("TaskTypePreviewTitle")
+        preview_layout.addWidget(inherit_title)
+        preview_rows: dict[str, QLabel] = {}
+        for icon_name, color, label in (
+            ("fa5s.square", "#20f5d2", "Маркер"),
+            ("fa5s.bug", "#aeb6c8", "Тематика"),
+            ("fa5s.angle-double-up", "#ff4747", "Приоритет"),
+            ("fa5s.ellipsis-h", "#ff9f1c", "Важность"),
+            ("fa5s.calendar-check", "#43c463", "План-задача"),
+            ("fa5s.th-large", "#9b75ff", "Концептборд"),
+        ):
+            row_layout, value_label = self._task_type_preview_row(icon_name, color, label)
+            preview_rows[label] = value_label
+            preview_layout.addLayout(row_layout)
+        preview_layout.addWidget(self._task_type_separator())
+        about_title = QLabel("О типе задачи  ⓘ")
+        about_title.setObjectName("TaskTypePreviewTitle")
+        preview_layout.addWidget(about_title)
+        about_text = QLabel(
+            "При выборе этого типа для задачи будут применены указанные свойства. "
+            "Пользователь сможет изменить их вручную после создания задачи."
+        )
+        about_text.setObjectName("TaskTypePreviewText")
+        about_text.setWordWrap(True)
+        preview_layout.addWidget(about_text)
+        preview_layout.addStretch(1)
+        preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 2, 0, 0)
+        cancel_button = QPushButton("Отмена")
+        cancel_button.setObjectName("TaskTypeDialogSecondaryButton")
+        cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        cancel_button.clicked.connect(dialog.reject)
+        save_button = QPushButton("Сохранить")
+        save_button.setObjectName("TaskTypeDialogPrimaryButton")
+        save_button.setIcon(qta.icon("fa5s.save", color=self._palette.selection_text))
+        save_more_button = QPushButton("Сохранить и добавить ещё")
+        save_more_button.setObjectName("TaskTypeDialogSecondaryButton")
+        save_more_button.setIcon(qta.icon("fa5s.plus-circle", color=self._palette.text))
+        save_button.clicked.connect(dialog.accept)
+        save_more_button.clicked.connect(dialog.accept)
+        footer.addWidget(cancel_button)
+        footer.addStretch(1)
+        footer.addWidget(save_button)
+        footer.addWidget(save_more_button)
+        root.addLayout(footer)
+
+        def update_preview() -> None:
+            title_text = " ".join(title_edit.text().strip().upper().split()) or "РАЗРАБОТКА"
+            value_text = "".join(value_edit.text().strip().upper().split()) or "DEV"
+            badge_label.setText(f"{title_text} · {value_text}")
+            preview_rows["Маркер"].setText(color_combo.currentText().strip() or "None")
+            preview_rows["Тематика"].setText(theme_combo.currentText().strip() or "None")
+            preview_rows["Приоритет"].setText(priority_combo.currentText().strip() or "None")
+            preview_rows["Важность"].setText(importance_combo.currentText().strip() or "3")
+            preview_rows["План-задача"].setText("Да, плановая" if bool(plan_combo.currentData()) else "Нет")
+            preview_rows["Концептборд"].setText(concept_combo.currentText().strip() or "None")
+
+        for editor in (title_edit, value_edit):
+            editor.textChanged.connect(update_preview)
+        for combo in (color_combo, theme_combo, priority_combo, importance_combo, plan_combo, concept_combo):
+            combo.currentIndexChanged.connect(update_preview)
+        update_preview()
+        self._apply_task_type_dialog_style(dialog)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        title = " ".join(title_edit.text().strip().upper().split())
+        value = "".join(value_edit.text().strip().upper().split())
+        if not title or not value:
+            QMessageBox.warning(self, "Проверка", "Название и значение типа задачи обязательны.")
+            return None
+        return {
+            "title": title,
+            "value": value,
+            "color_marker": color_combo.currentData() or "",
+            "theme_marker": theme_combo.currentData() or "",
+            "priority": priority_combo.currentData() or "",
+            "importance": int(importance_combo.currentData() or 3),
+            "is_plan_task": bool(plan_combo.currentData()),
+            "concept_board_id": concept_combo.currentData(),
+            "active": active_edit.isChecked(),
+        }
+
+    @staticmethod
+    def _format_task_type_line(values: dict[str, object]) -> str:
+        status = "active" if bool(values.get("active", True)) else "disabled"
+        title = " ".join(str(values.get("title") or "").strip().upper().split())
+        value = "".join(str(values.get("value") or title).strip().upper().split())
+        return (
+            f"{title} | {value} | {values.get('color_marker') or ''} | {values.get('theme_marker') or ''} | "
+            f"{values.get('priority') or ''} | {int(values.get('importance') or 3)} | "
+            f"{1 if bool(values.get('is_plan_task', False)) else 0} | {values.get('concept_board_id') or ''} | {status}"
+        )
+
+    @staticmethod
+    def _parse_task_type_line(line: str) -> dict[str, object]:
+        parts = [part.strip() for part in (line or "").split("|")]
+        title = " ".join((parts[0] if parts else "").strip().upper().split())
+        legacy = len(parts) <= 4
+        status = (parts[3] if legacy and len(parts) > 3 else (parts[8] if len(parts) > 8 else "active")).strip().lower()
+        importance = 3
+        if not legacy and len(parts) > 5 and parts[5]:
+            importance = int(parts[5])
+        return {
+            "title": title,
+            "value": title if legacy else (parts[1] if len(parts) > 1 else title),
+            "color_marker": parts[1] if legacy and len(parts) > 1 else (parts[2] if len(parts) > 2 else ""),
+            "theme_marker": parts[2] if legacy and len(parts) > 2 else (parts[3] if len(parts) > 3 else ""),
+            "priority": "" if legacy else (parts[4] if len(parts) > 4 else ""),
+            "importance": importance,
+            "is_plan_task": False if legacy else (parts[6] if len(parts) > 6 else "") in {"1", "true", "yes", "on"},
+            "concept_board_id": None if legacy or len(parts) <= 7 or not parts[7] else int(parts[7]),
+            "active": status not in {"disabled", "inactive", "off", "0", "false"},
+        }
+
+    def _add_related_project_line(self) -> None:
+        item_id = self._select_related_item("project", "Связанный проект")
+        if item_id is not None:
+            self._append_unique_int_line(self.related_projects_edit, item_id)
+
+    def _edit_related_project_line(self, line_index: int) -> None:
+        item_id = self._select_related_item("project", "Связанный проект")
+        if item_id is not None:
+            self._replace_line(self.related_projects_edit, line_index, str(item_id))
 
     def _add_related_task_line(self) -> None:
+        item_id = self._select_related_item("task", "Связанная задача")
+        if item_id is not None:
+            self._append_unique_int_line(self.related_tasks_edit, item_id)
+
+    def _edit_related_task_line(self, line_index: int) -> None:
+        item_id = self._select_related_item("task", "Связанная задача")
+        if item_id is not None:
+            self._replace_line(self.related_tasks_edit, line_index, str(item_id))
+
+    def _select_related_item(self, kind: str, title: str) -> Optional[int]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Связанная задача")
+        dialog.setWindowTitle(title)
+        dialog.setObjectName("ProjectCompactRelationDialog")
+        dialog.setFixedSize(550, 200)
         layout = QVBoxLayout(dialog)
-        combo = QComboBox()
-        for task in self._db.fetch_tasks():
-            combo.addItem(f"MN-{task.id} {task.title}", task.id)
-        layout.addWidget(combo)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        combo = FilterableComboBox(dialog)
+        combo.setMinimumContentsLength(24)
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo_view = combo.view()
+        if combo_view is not None:
+            combo_view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        for item_id, label in self._relation_candidates(kind):
+            combo.addItem(label, item_id)
+        if combo.count() == 0:
+            combo.addItem("— нет доступных —", None)
+        form.addRow("Элемент", combo)
+        layout.addLayout(form)
         buttons = QDialogButtonBox(dialog)
         buttons.addButton(QDialogButtonBox.StandardButton.Ok)
         buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
-            self._append_line(self.related_tasks_edit, str(combo.currentData()))
+            item_id = combo.currentData()
+            return int(item_id) if item_id is not None else None
+        return None
 
     def _add_relation_dialog(self) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Добавить связь")
-        dialog.resize(620, 420)
+        dialog.setObjectName("ProjectCompactRelationDialog")
+        dialog.setFixedSize(620, 360)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
@@ -1068,13 +2116,320 @@ class ProjectEditDialog(QDialog):
     def _add_wiki_link_line(self) -> None:
         self._add_link_line(self.wiki_links_edit, "Wiki")
 
+    def _add_display_property_line(self) -> None:
+        if len([line for line in self.display_properties_edit.toPlainText().splitlines() if line.strip()]) >= 4:
+            QMessageBox.warning(self, "Отображаемые свойства", "Можно добавить не более 4 отображаемых свойств.")
+            return
+        values = self._display_property_dialog()
+        if values is not None:
+            self._append_line(self.display_properties_edit, self._format_display_property_line(values))
+
+    def _edit_display_property_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.display_properties_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
+        if line_index < 0 or not line:
+            return
+        values = self._display_property_dialog(self._parse_display_property_line(line))
+        if values is not None:
+            self._replace_line(self.display_properties_edit, line_index, self._format_display_property_line(values))
+
+    def _delete_display_property_line(self, line_index: Optional[int] = None) -> None:
+        lines, current_line_index, line = self._current_line_info(self.display_properties_edit)
+        if line_index is None:
+            line_index = current_line_index
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
+        if line_index >= 0 and line:
+            self._remove_line(self.display_properties_edit, line_index)
+
+    def _display_property_dialog(self, initial: Optional[dict[str, str]] = None) -> Optional[dict[str, str]]:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактирование отображаемого свойства" if initial else "Создание отображаемого свойства")
+        dialog.setObjectName("ProjectDisplayPropertyDialog")
+        dialog.resize(860, 560)
+        dialog.setMinimumSize(760, 500)
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        hero_icon = QLabel()
+        hero_icon.setPixmap(qta.icon("fa5s.link", color="#3478f6").pixmap(26, 26))
+        header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        title_label = QLabel("Редактирование отображаемого свойства" if initial else "Создание отображаемого свойства")
+        title_label.setObjectName("DisplayPropertyDialogTitle")
+        subtitle_label = QLabel("Настройка отображаемых данных проекта")
+        subtitle_label.setObjectName("DisplayPropertyDialogSubtitle")
+        title_box.addWidget(title_label)
+        title_box.addWidget(subtitle_label)
+        header.addLayout(title_box, 1)
+        preview_button = QPushButton("Предпросмотр")
+        preview_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        preview_button.setIcon(qta.icon("fa5s.eye", color=self._palette.text))
+        close_button = QPushButton("Закрыть")
+        close_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        close_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        close_button.clicked.connect(dialog.reject)
+        header.addWidget(preview_button)
+        header.addWidget(close_button)
+        root.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(10)
+        body.addLayout(left_column, 1)
+        preview_card = QFrame()
+        preview_card.setObjectName("DisplayPropertyPreviewCard")
+        preview_card.setMinimumWidth(280)
+        preview_card.setMaximumWidth(320)
+        body.addWidget(preview_card)
+        root.addLayout(body, 1)
+
+        main_card = QFrame()
+        main_card.setObjectName("DisplayPropertyCard")
+        main_layout = QVBoxLayout(main_card)
+        main_layout.setContentsMargins(14, 12, 14, 14)
+        main_layout.setSpacing(10)
+        main_layout.addLayout(self._display_property_section_title("fa5s.clipboard-list", "Основное"))
+        field_grid = QGridLayout()
+        field_grid.setHorizontalSpacing(12)
+        field_grid.setVerticalSpacing(6)
+        name_edit = QLineEdit(str(initial.get("name") or "") if initial else "")
+        name_edit.setPlaceholderText("WIKI")
+        url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
+        url_edit.setPlaceholderText("https://docs.example.com/kazantip")
+        name_hint = QLabel("Короткое название свойства, отображается в блоке «Дополнительно».")
+        name_hint.setObjectName("DisplayPropertyFieldHint")
+        name_hint.setWordWrap(True)
+        url_hint = QLabel("Ссылка открывается в браузере или может быть скопирована пользователем.")
+        url_hint.setObjectName("DisplayPropertyFieldHint")
+        url_hint.setWordWrap(True)
+        field_grid.addLayout(self._display_property_field_label("Имя"), 0, 0)
+        field_grid.addLayout(self._display_property_field_label("Ссылка"), 0, 1)
+        field_grid.addWidget(name_edit, 1, 0)
+        field_grid.addWidget(url_edit, 1, 1)
+        field_grid.addWidget(name_hint, 2, 0)
+        field_grid.addWidget(url_hint, 2, 1)
+        main_layout.addLayout(field_grid)
+        left_column.addWidget(main_card)
+
+        mode_card = QFrame()
+        mode_card.setObjectName("DisplayPropertyCard")
+        mode_layout = QVBoxLayout(mode_card)
+        mode_layout.setContentsMargins(14, 12, 14, 14)
+        mode_layout.setSpacing(10)
+        mode_layout.addLayout(self._display_property_section_title("fa5s.desktop", "Способ отображения"))
+        mode_group = QButtonGroup(dialog)
+        mode_group.setExclusive(True)
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(10)
+        name_link_radio, name_link_card = self._display_mode_card(
+            "fa5s.link",
+            "Имя со ссылкой внутри",
+            "Отображается как имя свойства, внутри которого размещена гиперссылка.",
+            "name_link",
+        )
+        url_text_radio, url_text_card = self._display_mode_card(
+            "fa5s.link",
+            "Текст ссылки",
+            "Отображается как сама ссылка для открытия или копирования.",
+            "url_text",
+        )
+        mode_group.addButton(name_link_radio)
+        mode_group.addButton(url_text_radio)
+        mode_row.addWidget(name_link_card)
+        mode_row.addWidget(url_text_card)
+        mode_layout.addLayout(mode_row)
+        position_label = QLabel("Позиция в списке  ⓘ")
+        position_label.setObjectName("DisplayPropertyFieldLabel")
+        position_edit = QSpinBox()
+        position_edit.setRange(1, 4)
+        position_edit.setValue(1)
+        mode_layout.addWidget(position_label)
+        mode_layout.addWidget(position_edit)
+        position_hint = QLabel("Отображаемые свойства выводятся после строки «Тип задач».")
+        position_hint.setObjectName("DisplayPropertyFieldHint")
+        mode_layout.addWidget(position_hint)
+        selected_mode = (initial.get("display_mode") if initial else "") or "name_link"
+        if selected_mode == "url_text":
+            url_text_radio.setChecked(True)
+        else:
+            name_link_radio.setChecked(True)
+        left_column.addWidget(mode_card)
+
+        rules_card = QFrame()
+        rules_card.setObjectName("DisplayPropertyCard")
+        rules_layout = QVBoxLayout(rules_card)
+        rules_layout.setContentsMargins(14, 12, 14, 14)
+        rules_layout.setSpacing(8)
+        rules_layout.addLayout(self._display_property_section_title("fa5s.shield-alt", "Ограничения и поведение"))
+        for icon_name, color, text in (
+            ("fa5s.info-circle", "#3478f6", "В одном проекте может быть не более 4 отображаемых свойств."),
+            ("fa5s.list", "#3bd16f", "Каждый элемент выводится отдельной строкой в блоке «Дополнительно»."),
+            ("fa5s.link", "#8a63d2", "Поддерживается открытие ссылки и копирование в буфер обмена."),
+        ):
+            rules_layout.addLayout(self._display_property_rule_row(icon_name, color, text))
+        left_column.addWidget(rules_card)
+        left_column.addStretch(1)
+
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(14, 12, 14, 14)
+        preview_layout.setSpacing(10)
+        preview_layout.addLayout(self._display_property_section_title("fa5s.eye", "Предпросмотр"))
+        preview_caption = QLabel("Как это выглядит в задаче")
+        preview_caption.setObjectName("DisplayPropertyPreviewCaption")
+        preview_layout.addWidget(preview_caption)
+        task_type_row = QHBoxLayout()
+        task_type_label = QLabel("Тип задач:")
+        task_type_label.setObjectName("DisplayPropertyPreviewLabel")
+        task_type_badge = QLabel("РАЗРАБОТКА · DEV")
+        task_type_badge.setObjectName("DisplayPropertyPreviewBadge")
+        task_type_row.addWidget(task_type_label)
+        task_type_row.addWidget(task_type_badge)
+        task_type_row.addStretch(1)
+        preview_layout.addLayout(task_type_row)
+        preview_layout.addWidget(self._display_property_separator())
+        props_title = QLabel("Отображаемые свойства")
+        props_title.setObjectName("DisplayPropertyPreviewTitle")
+        preview_layout.addWidget(props_title)
+        property_row = QHBoxLayout()
+        property_name = QLabel("WIKI:")
+        property_name.setObjectName("DisplayPropertyPreviewLabel")
+        property_value = QLabel()
+        property_value.setObjectName("DisplayPropertyPreviewLink")
+        property_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        property_row.addWidget(property_name)
+        property_row.addWidget(property_value, 1)
+        preview_layout.addLayout(property_row)
+        repo_row = QHBoxLayout()
+        repo_name = QLabel("REPO:")
+        repo_name.setObjectName("DisplayPropertyPreviewLabel")
+        repo_value = QLabel("https://github.com/lexflame/mindnavigator")
+        repo_value.setObjectName("DisplayPropertyPreviewUrl")
+        repo_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        repo_row.addWidget(repo_name)
+        repo_row.addWidget(repo_value, 1)
+        preview_layout.addLayout(repo_row)
+        preview_layout.addWidget(self._display_property_separator())
+        about_row = QHBoxLayout()
+        about_icon = QLabel()
+        about_icon.setPixmap(qta.icon("fa5s.info-circle", color=self._palette.text).pixmap(22, 22))
+        about_title = QLabel("О свойстве")
+        about_title.setObjectName("DisplayPropertyPreviewTitle")
+        about_row.addWidget(about_icon)
+        about_row.addWidget(about_title)
+        about_row.addStretch(1)
+        preview_layout.addLayout(about_row)
+        about_text = QLabel(
+            "Свойство отображается в блоке «Дополнительно» после строки «Тип задач». "
+            "Элемент может открывать ссылку в браузере или позволять копирование."
+        )
+        about_text.setObjectName("DisplayPropertyPreviewText")
+        about_text.setWordWrap(True)
+        preview_layout.addWidget(about_text)
+        preview_layout.addStretch(1)
+        preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 2, 0, 0)
+        cancel_button = QPushButton("Отмена")
+        cancel_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        cancel_button.clicked.connect(dialog.reject)
+        save_button = QPushButton("Сохранить")
+        save_button.setObjectName("DisplayPropertyDialogPrimaryButton")
+        save_button.setIcon(qta.icon("fa5s.save", color=self._palette.selection_text))
+        save_more_button = QPushButton("Сохранить и добавить ещё")
+        save_more_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        save_more_button.setIcon(qta.icon("fa5s.plus-circle", color=self._palette.text))
+        save_button.clicked.connect(dialog.accept)
+        save_more_button.clicked.connect(dialog.accept)
+        footer.addWidget(cancel_button)
+        footer.addStretch(1)
+        footer.addWidget(save_button)
+        footer.addWidget(save_more_button)
+        root.addLayout(footer)
+
+        def selected_mode_value() -> str:
+            return "url_text" if url_text_radio.isChecked() else "name_link"
+
+        def update_preview() -> None:
+            name = "".join(name_edit.text().strip().upper().split()) or "WIKI"
+            url = url_edit.text().strip() or "https://docs.example.com/kazantip"
+            property_name.setText(f"{name}:")
+            if selected_mode_value() == "url_text":
+                property_value.setObjectName("DisplayPropertyPreviewUrl")
+                property_value.setText(url)
+            else:
+                property_value.setObjectName("DisplayPropertyPreviewLink")
+                property_value.setText(f"🔗  {name}")
+            property_value.style().unpolish(property_value)
+            property_value.style().polish(property_value)
+
+        name_edit.textChanged.connect(update_preview)
+        url_edit.textChanged.connect(update_preview)
+        name_link_radio.toggled.connect(update_preview)
+        url_text_radio.toggled.connect(update_preview)
+        update_preview()
+        self._apply_display_property_dialog_style(dialog)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        name = "".join(name_edit.text().strip().upper().split())
+        url = url_edit.text().strip()
+        if not name or not url:
+            QMessageBox.warning(self, "Проверка", "Имя и ссылка отображаемого свойства обязательны.")
+            return None
+        return {"name": name, "url": url, "display_mode": selected_mode_value()}
+
+    @staticmethod
+    def _format_display_property_line(values: dict[str, str]) -> str:
+        return f"{values.get('name') or ''} | {values.get('url') or ''} | {values.get('display_mode') or 'name_link'}"
+
+    @staticmethod
+    def _parse_display_property_line(line: str) -> dict[str, str]:
+        parts = [part.strip() for part in (line or "").split("|")]
+        return {
+            "name": "".join((parts[0] if parts else "").strip().upper().split()),
+            "url": parts[1] if len(parts) > 1 else "",
+            "display_mode": parts[2] if len(parts) > 2 and parts[2] in {"name_link", "url_text"} else "name_link",
+        }
+
     def _add_link_line(self, edit: QPlainTextEdit, title: str) -> None:
+        values = self._link_dialog(title)
+        if values is not None:
+            self._append_line(edit, self._format_link_line(values))
+
+    def _edit_link_line(self, edit: QPlainTextEdit, title: str, line_index: int) -> None:
+        lines = edit.toPlainText().splitlines()
+        line = lines[line_index].strip() if 0 <= line_index < len(lines) else ""
+        if not line:
+            return
+        values = self._link_dialog(title, self._parse_link_line(line))
+        if values is not None:
+            self._replace_line(edit, line_index, self._format_link_line(values))
+
+    def _link_dialog(self, title: str, initial: Optional[dict[str, str]] = None) -> Optional[dict[str, str]]:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
+        dialog.setObjectName("ProjectCompactLinkDialog")
+        dialog.setFixedSize(550, 220)
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
         form = QFormLayout()
-        title_edit = QLineEdit()
-        url_edit = QLineEdit()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
+        url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
+        title_edit.setPlaceholderText("Короткое имя")
+        url_edit.setPlaceholderText("https://example.com или путь")
         form.addRow("Текст", title_edit)
         form.addRow("Ссылка", url_edit)
         layout.addLayout(form)
@@ -1084,20 +2439,45 @@ class ProjectEditDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        self._apply_child_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+            return None
         url = url_edit.text().strip()
         if not url:
             QMessageBox.warning(self, "Проверка", "Ссылка не должна быть пустой.")
-            return
+            return None
         link_title = title_edit.text().strip()
-        self._append_line(edit, f"{link_title} | {url}" if link_title else url)
+        return {"title": link_title, "url": url}
+
+    @staticmethod
+    def _format_link_line(values: dict[str, str]) -> str:
+        title = (values.get("title") or "").strip()
+        url = (values.get("url") or "").strip()
+        return f"{title} | {url}" if title else url
+
+    @staticmethod
+    def _parse_link_line(line: str) -> dict[str, str]:
+        line = (line or "").strip()
+        if "|" in line:
+            title, url = [part.strip() for part in line.split("|", 1)]
+        else:
+            title, url = "", line
+        return {"title": title, "url": url}
 
     def _load_project_properties(self, project_id: int) -> None:
         task_type_lines = []
         for item in self._db.fetch_project_task_types(project_id, include_inactive=True):
-            status = "active" if item.active else "disabled"
-            task_type_lines.append(f"{item.title} | {item.color_marker} | {item.theme_marker} | {status}")
+            task_type_lines.append(self._format_task_type_line({
+                "title": item.title,
+                "value": item.value,
+                "color_marker": item.color_marker,
+                "theme_marker": item.theme_marker,
+                "priority": item.priority,
+                "importance": item.importance,
+                "is_plan_task": item.is_plan_task,
+                "concept_board_id": item.concept_board_id,
+                "active": item.active,
+            }))
         self.task_types_edit.setPlainText("\n".join(task_type_lines))
         self.related_projects_edit.setPlainText(
             "\n".join(str(item.related_project_id) for item in self._db.fetch_project_related_projects(project_id))
@@ -1107,6 +2487,53 @@ class ProjectEditDialog(QDialog):
         )
         self.repository_links_edit.setPlainText(self._format_links(self._db.fetch_project_repository_links(project_id)))
         self.wiki_links_edit.setPlainText(self._format_links(self._db.fetch_project_wiki_links(project_id)))
+        fetch_display = getattr(self._db, "fetch_project_display_properties", None)
+        if callable(fetch_display):
+            self.display_properties_edit.setPlainText(
+                "\n".join(self._format_display_property_line({
+                    "name": item.name,
+                    "url": item.url,
+                    "display_mode": item.display_mode,
+                }) for item in fetch_display(project_id))
+            )
+        self._refresh_inline_property_lists()
+
+    @staticmethod
+    def _project_reflect_setting_key(project_id: int) -> str:
+        return f"{PROJECT_REFLECT_SETTING_PREFIX}:{int(project_id)}"
+
+    def _load_project_reflect_settings(self, project_id: int) -> None:
+        raw_value = self._db.get_setting(self._project_reflect_setting_key(project_id), "[]")
+        try:
+            values = json.loads(raw_value)
+        except json.JSONDecodeError:
+            values = []
+        enabled_keys = {str(value) for value in values if str(value) in PROJECT_REFLECT_KEYS}
+        self.reflect_repository_catalog_edit.setChecked(PROJECT_REFLECT_REPOSITORY_CATALOG in enabled_keys)
+        self.reflect_repository_links_edit.setChecked(PROJECT_REFLECT_REPOSITORY_LINKS in enabled_keys)
+        self.reflect_wiki_links_edit.setChecked(PROJECT_REFLECT_WIKI_LINKS in enabled_keys)
+        self.reflect_linked_map_edit.setChecked(PROJECT_REFLECT_LINKED_MAP in enabled_keys)
+        self.reflect_linked_note_edit.setChecked(PROJECT_REFLECT_LINKED_NOTE in enabled_keys)
+        self.reflect_linked_object_edit.setChecked(PROJECT_REFLECT_LINKED_OBJECT in enabled_keys)
+
+    def _save_project_reflect_settings(self, project_id: int) -> None:
+        values = []
+        if self.reflect_repository_catalog_edit.isChecked():
+            values.append(PROJECT_REFLECT_REPOSITORY_CATALOG)
+        if self.reflect_repository_links_edit.isChecked():
+            values.append(PROJECT_REFLECT_REPOSITORY_LINKS)
+        if self.reflect_wiki_links_edit.isChecked():
+            values.append(PROJECT_REFLECT_WIKI_LINKS)
+        if self.reflect_linked_map_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_MAP)
+        if self.reflect_linked_note_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_NOTE)
+        if self.reflect_linked_object_edit.isChecked():
+            values.append(PROJECT_REFLECT_LINKED_OBJECT)
+        self._db.set_setting(
+            self._project_reflect_setting_key(project_id),
+            json.dumps(values, ensure_ascii=False),
+        )
 
     @staticmethod
     def _format_links(links) -> str:
@@ -1123,6 +2550,7 @@ class ProjectEditDialog(QDialog):
             self._parse_int_lines(self.related_tasks_edit.toPlainText(), "Связанные задачи")
             self._parse_links(self.repository_links_edit.toPlainText())
             self._parse_links(self.wiki_links_edit.toPlainText())
+            self._parse_display_properties()
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
             return
@@ -1141,6 +2569,10 @@ class ProjectEditDialog(QDialog):
         )
         self._db.replace_project_repository_links(project_id, self._parse_links(self.repository_links_edit.toPlainText()))
         self._db.replace_project_wiki_links(project_id, self._parse_links(self.wiki_links_edit.toPlainText()))
+        replace_display = getattr(self._db, "replace_project_display_properties", None)
+        if callable(replace_display):
+            replace_display(project_id, self._parse_display_properties())
+        self._save_project_reflect_settings(project_id)
 
     def _parse_project_task_types(self) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
@@ -1159,11 +2591,38 @@ class ProjectEditDialog(QDialog):
             result.append(
                 {
                     "title": title,
+                    "value": str(values.get("value") or title),
                     "color_marker": str(values.get("color_marker") or ""),
                     "theme_marker": str(values.get("theme_marker") or ""),
+                    "priority": str(values.get("priority") or ""),
+                    "importance": int(values.get("importance") or 3),
+                    "is_plan_task": bool(values.get("is_plan_task", False)),
+                    "concept_board_id": values.get("concept_board_id"),
                     "active": bool(values.get("active", True)),
                 }
             )
+        return result
+
+    def _parse_display_properties(self) -> list[dict[str, str]]:
+        result: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for raw_line in self.display_properties_edit.toPlainText().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            values = self._parse_display_property_line(line)
+            name = str(values.get("name") or "")
+            url = str(values.get("url") or "")
+            if not name:
+                raise ValueError("Имя отображаемого свойства не должно быть пустым.")
+            if not url:
+                raise ValueError("Ссылка отображаемого свойства не должна быть пустой.")
+            if name in seen:
+                raise ValueError(f"Дублирующее отображаемое свойство: {name}")
+            seen.add(name)
+            result.append(values)
+        if len(result) > 4:
+            raise ValueError("В проекте может быть не более 4 отображаемых свойств.")
         return result
 
     @staticmethod

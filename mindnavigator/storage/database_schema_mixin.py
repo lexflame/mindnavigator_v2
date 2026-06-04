@@ -1231,16 +1231,33 @@ class DatabaseSchemaMixin:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                     title TEXT NOT NULL,
+                    value TEXT NOT NULL DEFAULT '',
                     color_marker TEXT NOT NULL DEFAULT '',
                     theme_marker TEXT NOT NULL DEFAULT '',
+                    priority TEXT NOT NULL DEFAULT '',
+                    importance INTEGER NOT NULL DEFAULT 3,
+                    is_plan_task INTEGER NOT NULL DEFAULT 0 CHECK (is_plan_task IN (0, 1)),
+                    concept_board_id INTEGER REFERENCES mutaboards(id) ON DELETE SET NULL,
                     active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    UNIQUE(project_id, title)
+                    UNIQUE(project_id, title),
+                    UNIQUE(project_id, value)
                 );
                 """
             )
+            project_task_type_columns = self._conn.execute("PRAGMA table_info(project_task_types);").fetchall()
+            project_task_type_names = {row["name"] for row in project_task_type_columns}
+            for column_name, ddl in (
+                ("value", "ALTER TABLE project_task_types ADD COLUMN value TEXT NOT NULL DEFAULT '';"),
+                ("priority", "ALTER TABLE project_task_types ADD COLUMN priority TEXT NOT NULL DEFAULT '';"),
+                ("importance", "ALTER TABLE project_task_types ADD COLUMN importance INTEGER NOT NULL DEFAULT 3;"),
+                ("is_plan_task", "ALTER TABLE project_task_types ADD COLUMN is_plan_task INTEGER NOT NULL DEFAULT 0;"),
+                ("concept_board_id", "ALTER TABLE project_task_types ADD COLUMN concept_board_id INTEGER REFERENCES mutaboards(id) ON DELETE SET NULL;"),
+            ):
+                if column_name not in project_task_type_names:
+                    self._conn.execute(ddl)
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS project_related_projects (
@@ -1280,11 +1297,28 @@ class DatabaseSchemaMixin:
                     );
                     """
                 )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_display_properties (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    display_mode TEXT NOT NULL DEFAULT 'name_link'
+                        CHECK (display_mode IN ('name_link', 'url_text')),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(project_id, name)
+                );
+                """
+            )
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_task_types_project ON project_task_types(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_related_projects_project ON project_related_projects(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_related_tasks_project ON project_related_tasks(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_repository_links_project ON project_repository_links(project_id);")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_wiki_links_project ON project_wiki_links(project_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_display_properties_project ON project_display_properties(project_id);")
 
     def _ensure_task_project_property_columns(self) -> None:
         """Добавляет колонки привязки задачи к проектному типу."""
