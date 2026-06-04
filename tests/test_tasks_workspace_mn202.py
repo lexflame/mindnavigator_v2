@@ -294,6 +294,48 @@ def test_tasks_delegate_dark_checkbox_is_not_transparent() -> None:
     assert center.alpha() >= 200
 
 
+def test_tasks_delegate_does_not_draw_project_meta_summary(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_delegate_project_meta_hidden", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Repo project", date(2026, 3, 6), "Medium")
+        database.replace_project_repository_links(project.id, [{"title": "Repo", "url": "123"}])
+        task = database.create_task(
+            title="Task with repo metadata",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+            project_id=project.id,
+        )
+        monkeypatch.setattr(tasks_workspace_impl, "get_database", lambda: database)
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+        row_idx = _find_task_row(model, task.id)
+        assert row_idx >= 0
+        original_data = model.data
+
+        def guarded_data(index, role=int(Qt.ItemDataRole.DisplayRole)):
+            if role == TaskRoles.ProjectTaskMetaSummary:
+                raise AssertionError("Project meta summary must not be drawn in the task list.")
+            return original_data(index, role)
+
+        monkeypatch.setattr(model, "data", guarded_data)
+        delegate = tasks_workspace.TasksItemDelegate()
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 700, delegate.ROW_H)
+        image = QImage(700, delegate.ROW_H, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+
+        painter = QPainter(image)
+        delegate.paint(painter, option, model.index(row_idx, 0))
+        painter.end()
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_model_steps_priority_up_and_down_without_wrap(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_priority_step", ".sqlite3")
