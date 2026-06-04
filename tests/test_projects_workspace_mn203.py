@@ -504,3 +504,49 @@ def test_project_dialog_inline_display_property_actions_target_clicked_row(monke
             dialog.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_project_task_type_dialog_matches_preview_shell_contract(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_task_type_dialog_shell", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        result = dialog._task_type_dialog(
+            {
+                "title": "Development",
+                "value": "DEV",
+                "color_marker": "#20f5d2",
+                "theme_marker": "debug",
+                "priority": "High",
+                "importance": 5,
+                "is_plan_task": True,
+                "concept_board_id": None,
+                "active": True,
+            }
+        )
+
+        assert result is not None
+        assert result["title"] == "DEVELOPMENT"
+        task_type_dialog = captured_dialogs[-1]
+        assert task_type_dialog.objectName() == "ProjectTaskTypeDialog"
+        assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypePreviewCard") is not None
+        assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypeCard") is not None
+        button_texts = {button.text() for button in task_type_dialog.findChildren(project_edit_dialog.QPushButton)}
+        assert {"Предпросмотр", "Закрыть", "Отмена", "Сохранить", "Сохранить и добавить ещё"}.issubset(button_texts)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)

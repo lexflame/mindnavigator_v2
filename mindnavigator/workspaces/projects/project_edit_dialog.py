@@ -1002,6 +1002,179 @@ class ProjectEditDialog(QDialog):
         for idx in range(source.count()):
             target.addItem(source.itemText(idx), source.itemData(idx))
 
+    def _task_type_section_title(self, icon_name: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.text).pixmap(22, 22))
+        label = QLabel(text)
+        label.setObjectName("TaskTypeSectionTitle")
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addStretch(1)
+        return row
+
+    def _task_type_field_label(self, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        label = QLabel(text)
+        label.setObjectName("TaskTypeFieldLabel")
+        help_icon = QLabel()
+        help_icon.setPixmap(qta.icon("fa5s.question-circle", color=self._palette.dim_text).pixmap(14, 14))
+        row.addWidget(label)
+        row.addWidget(help_icon)
+        row.addStretch(1)
+        return row
+
+    def _task_type_rule_row(self, icon_name: str, color: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setObjectName("TaskTypeRuleIcon")
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(text)
+        label.setObjectName("TaskTypeRuleText")
+        label.setWordWrap(True)
+        row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label, 1)
+        return row
+
+    def _task_type_separator(self) -> QFrame:
+        separator = QFrame()
+        separator.setObjectName("TaskTypePreviewSeparator")
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFixedHeight(1)
+        return separator
+
+    def _task_type_preview_row(self, icon_name: str, color: str, label_text: str) -> tuple[QHBoxLayout, QLabel]:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(f"{label_text}:")
+        label.setObjectName("TaskTypePreviewLabel")
+        value = QLabel()
+        value.setObjectName("TaskTypePreviewValue")
+        value.setWordWrap(True)
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addWidget(value, 1)
+        return row, value
+
+    def _apply_task_type_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog#ProjectTaskTypeDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QFrame#TaskTypeCard,
+            QFrame#TaskTypePreviewCard {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QLabel#TaskTypeDialogTitle {{
+                color: {palette.selection_text};
+                font-size: 25px;
+                font-weight: 700;
+            }}
+
+            QLabel#TaskTypeDialogSubtitle,
+            QLabel#TaskTypeFieldHint,
+            QLabel#TaskTypePreviewCaption,
+            QLabel#TaskTypePreviewText {{
+                color: {palette.dim_text};
+                font-size: 13px;
+            }}
+
+            QLabel#TaskTypeSectionTitle,
+            QLabel#TaskTypePreviewTitle {{
+                color: {palette.selection_text};
+                font-size: 17px;
+                font-weight: 700;
+            }}
+
+            QLabel#TaskTypeFieldLabel,
+            QLabel#TaskTypePreviewLabel,
+            QLabel#TaskTypeRuleText {{
+                color: {palette.text};
+                font-size: 14px;
+                font-weight: 600;
+            }}
+
+            QLabel#TaskTypePreviewValue {{
+                color: {palette.text};
+                font-size: 14px;
+            }}
+
+            QLabel#TaskTypePreviewBadge {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.10);
+                border: 1px solid #20f5d2;
+                border-radius: 18px;
+                padding: 7px 18px;
+                font-size: 15px;
+                font-weight: 800;
+            }}
+
+            QFrame#TaskTypePreviewSeparator {{
+                background: {palette.border};
+                border: none;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QLineEdit,
+            QDialog#ProjectTaskTypeDialog QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 8px 10px;
+                min-height: 30px;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QLineEdit:focus,
+            QDialog#ProjectTaskTypeDialog QComboBox:focus {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QDialog#ProjectTaskTypeDialog QCheckBox {{
+                color: {palette.text};
+                font-size: 14px;
+                padding: 4px 0;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 7px;
+                padding: 9px 16px;
+                min-width: 118px;
+            }}
+
+            QDialog#ProjectTaskTypeDialog QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QPushButton#TaskTypeDialogPrimaryButton {{
+                background: {palette.accent};
+                border: 1px solid {palette.accent_hover};
+                color: {palette.selection_text};
+                font-weight: 700;
+                min-width: 150px;
+            }}
+
+            QPushButton#TaskTypeDialogSecondaryButton {{
+                min-width: 126px;
+            }}
+        """)
+
     def _add_task_type_line(self) -> None:
         values = self._task_type_dialog()
         if values is None:
@@ -1128,14 +1301,81 @@ class ProjectEditDialog(QDialog):
 
     def _task_type_dialog(self, initial: Optional[dict[str, object]] = None) -> Optional[dict[str, object]]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Тип задачи")
-        dialog.resize(620, 520)
-        layout = QVBoxLayout(dialog)
-        form = QFormLayout()
+        dialog.setWindowTitle("Редактирование типа задач" if initial else "Создание типа задач")
+        dialog.setObjectName("ProjectTaskTypeDialog")
+        dialog.resize(1180, 780)
+        dialog.setMinimumSize(1040, 680)
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(28, 24, 28, 22)
+        root.setSpacing(18)
+
+        header = QHBoxLayout()
+        header.setSpacing(14)
+        hero_icon = QLabel()
+        hero_icon.setObjectName("TaskTypeDialogHeroIcon")
+        hero_icon.setPixmap(qta.icon("fa5s.tag", color="#5f7cff").pixmap(34, 34))
+        header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        title_label = QLabel("Редактирование типа задач" if initial else "Создание типа задач")
+        title_label.setObjectName("TaskTypeDialogTitle")
+        subtitle_label = QLabel("Настройка кастомного типа задач проекта")
+        subtitle_label.setObjectName("TaskTypeDialogSubtitle")
+        title_box.addWidget(title_label)
+        title_box.addWidget(subtitle_label)
+        header.addLayout(title_box, 1)
+        preview_button = QPushButton("Предпросмотр")
+        preview_button.setObjectName("TaskTypeDialogSecondaryButton")
+        preview_button.setIcon(qta.icon("fa5s.eye", color=self._palette.text))
+        close_button = QPushButton("Закрыть")
+        close_button.setObjectName("TaskTypeDialogSecondaryButton")
+        close_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        close_button.clicked.connect(dialog.reject)
+        header.addWidget(preview_button)
+        header.addWidget(close_button)
+        root.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setSpacing(22)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(16)
+        body.addLayout(left_column, 1)
+        preview_card = QFrame()
+        preview_card.setObjectName("TaskTypePreviewCard")
+        preview_card.setMinimumWidth(340)
+        preview_card.setMaximumWidth(380)
+        body.addWidget(preview_card)
+        root.addLayout(body, 1)
+
+        main_card = QFrame()
+        main_card.setObjectName("TaskTypeCard")
+        main_layout = QVBoxLayout(main_card)
+        main_layout.setContentsMargins(18, 16, 18, 18)
+        main_layout.setSpacing(14)
+        main_layout.addLayout(self._task_type_section_title("fa5s.clipboard-list", "Основное"))
+        left_column.addWidget(main_card)
+
+        title_grid = QGridLayout()
+        title_grid.setHorizontalSpacing(18)
+        title_grid.setVerticalSpacing(8)
         title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
         title_edit.setPlaceholderText("Разработка")
         value_edit = QLineEdit(str(initial.get("value") or initial.get("title") or "") if initial else "")
         value_edit.setPlaceholderText("DEV")
+        value_hint = QLabel("Английское значение, одно слово. Хранится и отображается в верхнем регистре.")
+        value_hint.setObjectName("TaskTypeFieldHint")
+        value_hint.setWordWrap(True)
+        title_grid.addLayout(self._task_type_field_label("Название"), 0, 0)
+        title_grid.addLayout(self._task_type_field_label("Значение"), 0, 1)
+        title_grid.addWidget(title_edit, 1, 0)
+        title_grid.addWidget(value_edit, 1, 1)
+        title_grid.addWidget(QLabel(""), 2, 0)
+        title_grid.addWidget(value_hint, 2, 1)
+        main_layout.addLayout(title_grid)
+
+        inherit_grid = QGridLayout()
+        inherit_grid.setHorizontalSpacing(18)
+        inherit_grid.setVerticalSpacing(10)
         color_combo = QComboBox()
         self._copy_combo_items(self.marker_color_edit, color_combo)
         theme_combo = QComboBox()
@@ -1152,8 +1392,10 @@ class ProjectEditDialog(QDialog):
         if callable(fetch_boards):
             for board in fetch_boards():
                 concept_combo.addItem(board.title, board.id)
-        plan_edit = QCheckBox("План-задача")
-        active_edit = QCheckBox("Активен")
+        plan_combo = QComboBox()
+        plan_combo.addItem("Нет", False)
+        plan_combo.addItem("Да, плановая", True)
+        active_edit = QCheckBox("Тип задач активен")
         active_edit.setChecked(True)
         if initial:
             for combo, key in (
@@ -1166,25 +1408,124 @@ class ProjectEditDialog(QDialog):
                 idx = combo.findData(initial.get(key))
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
-            plan_edit.setChecked(bool(initial.get("is_plan_task", False)))
+            plan_idx = plan_combo.findData(bool(initial.get("is_plan_task", False)))
+            if plan_idx >= 0:
+                plan_combo.setCurrentIndex(plan_idx)
             active_edit.setChecked(bool(initial.get("active", True)))
-        form.addRow("Название", title_edit)
-        form.addRow("Значение", value_edit)
-        form.addRow("Маркер", color_combo)
-        form.addRow("Тематика", theme_combo)
-        form.addRow("Приоритет", priority_combo)
-        form.addRow("Важность", importance_combo)
-        form.addRow("Концептборд", concept_combo)
-        form.addRow("", plan_edit)
-        form.addRow("", active_edit)
-        layout.addLayout(form)
-        buttons = QDialogButtonBox(dialog)
-        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        self._apply_child_dialog_style(dialog)
+
+        for label, editor, row, column in (
+            ("Маркер", color_combo, 0, 0),
+            ("Тематика маркера", theme_combo, 0, 1),
+            ("Приоритет", priority_combo, 1, 0),
+            ("Важность", importance_combo, 1, 1),
+            ("План-задача", plan_combo, 2, 0),
+            ("Концептборд", concept_combo, 2, 1),
+        ):
+            cell = QVBoxLayout()
+            cell.setSpacing(7)
+            cell.addLayout(self._task_type_field_label(label))
+            cell.addWidget(editor)
+            inherit_grid.addLayout(cell, row, column)
+        main_layout.addLayout(inherit_grid)
+        main_layout.addWidget(active_edit)
+        active_note = QLabel("Если отключить, тип не будет доступен для новых задач")
+        active_note.setObjectName("TaskTypeFieldHint")
+        main_layout.addWidget(active_note)
+
+        rules_card = QFrame()
+        rules_card.setObjectName("TaskTypeCard")
+        rules_layout = QVBoxLayout(rules_card)
+        rules_layout.setContentsMargins(18, 16, 18, 18)
+        rules_layout.setSpacing(11)
+        rules_layout.addLayout(self._task_type_section_title("fa5s.shield-alt", "Правила и ограничения"))
+        for icon_name, color, text in (
+            ("fa5s.info-circle", "#3478f6", "Значение должно быть уникальным в рамках проекта."),
+            ("fa5s.exclamation-triangle", "#f0a72f", "В одном проекте нельзя повторять Маркер у разных типов."),
+            ("fa5s.th-large", "#8a63d2", "Свойства наследуются задачей после выбора типа."),
+        ):
+            rules_layout.addLayout(self._task_type_rule_row(icon_name, color, text))
+        left_column.addWidget(rules_card)
+        left_column.addStretch(1)
+
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(20, 18, 20, 18)
+        preview_layout.setSpacing(14)
+        preview_layout.addLayout(self._task_type_section_title("fa5s.eye", "Предпросмотр"))
+        badge_caption = QLabel("Бейдж типа")
+        badge_caption.setObjectName("TaskTypePreviewCaption")
+        preview_layout.addWidget(badge_caption)
+        badge_label = QLabel()
+        badge_label.setObjectName("TaskTypePreviewBadge")
+        badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_label.setMinimumWidth(180)
+        preview_layout.addWidget(badge_label, 0, Qt.AlignmentFlag.AlignLeft)
+        preview_layout.addWidget(self._task_type_separator())
+        inherit_title = QLabel("Наследуемые свойства")
+        inherit_title.setObjectName("TaskTypePreviewTitle")
+        preview_layout.addWidget(inherit_title)
+        preview_rows: dict[str, QLabel] = {}
+        for icon_name, color, label in (
+            ("fa5s.square", "#20f5d2", "Маркер"),
+            ("fa5s.bug", "#aeb6c8", "Тематика"),
+            ("fa5s.angle-double-up", "#ff4747", "Приоритет"),
+            ("fa5s.ellipsis-h", "#ff9f1c", "Важность"),
+            ("fa5s.calendar-check", "#43c463", "План-задача"),
+            ("fa5s.th-large", "#9b75ff", "Концептборд"),
+        ):
+            row_layout, value_label = self._task_type_preview_row(icon_name, color, label)
+            preview_rows[label] = value_label
+            preview_layout.addLayout(row_layout)
+        preview_layout.addWidget(self._task_type_separator())
+        about_title = QLabel("О типе задачи  ⓘ")
+        about_title.setObjectName("TaskTypePreviewTitle")
+        preview_layout.addWidget(about_title)
+        about_text = QLabel(
+            "При выборе этого типа для задачи будут применены указанные свойства. "
+            "Пользователь сможет изменить их вручную после создания задачи."
+        )
+        about_text.setObjectName("TaskTypePreviewText")
+        about_text.setWordWrap(True)
+        preview_layout.addWidget(about_text)
+        preview_layout.addStretch(1)
+        preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 4, 0, 0)
+        cancel_button = QPushButton("Отмена")
+        cancel_button.setObjectName("TaskTypeDialogSecondaryButton")
+        cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        cancel_button.clicked.connect(dialog.reject)
+        save_button = QPushButton("Сохранить")
+        save_button.setObjectName("TaskTypeDialogPrimaryButton")
+        save_button.setIcon(qta.icon("fa5s.save", color=self._palette.selection_text))
+        save_more_button = QPushButton("Сохранить и добавить ещё")
+        save_more_button.setObjectName("TaskTypeDialogSecondaryButton")
+        save_more_button.setIcon(qta.icon("fa5s.plus-circle", color=self._palette.text))
+        save_button.clicked.connect(dialog.accept)
+        save_more_button.clicked.connect(dialog.accept)
+        footer.addWidget(cancel_button)
+        footer.addStretch(1)
+        footer.addWidget(save_button)
+        footer.addWidget(save_more_button)
+        root.addLayout(footer)
+
+        def update_preview() -> None:
+            title_text = " ".join(title_edit.text().strip().upper().split()) or "РАЗРАБОТКА"
+            value_text = "".join(value_edit.text().strip().upper().split()) or "DEV"
+            badge_label.setText(f"{title_text} · {value_text}")
+            preview_rows["Маркер"].setText(color_combo.currentText().strip() or "None")
+            preview_rows["Тематика"].setText(theme_combo.currentText().strip() or "None")
+            preview_rows["Приоритет"].setText(priority_combo.currentText().strip() or "None")
+            preview_rows["Важность"].setText(importance_combo.currentText().strip() or "3")
+            preview_rows["План-задача"].setText("Да, плановая" if bool(plan_combo.currentData()) else "Нет")
+            preview_rows["Концептборд"].setText(concept_combo.currentText().strip() or "None")
+
+        for editor in (title_edit, value_edit):
+            editor.textChanged.connect(update_preview)
+        for combo in (color_combo, theme_combo, priority_combo, importance_combo, plan_combo, concept_combo):
+            combo.currentIndexChanged.connect(update_preview)
+        update_preview()
+        self._apply_task_type_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         title = " ".join(title_edit.text().strip().upper().split())
@@ -1199,7 +1540,7 @@ class ProjectEditDialog(QDialog):
             "theme_marker": theme_combo.currentData() or "",
             "priority": priority_combo.currentData() or "",
             "importance": int(importance_combo.currentData() or 3),
-            "is_plan_task": plan_edit.isChecked(),
+            "is_plan_task": bool(plan_combo.currentData()),
             "concept_board_id": concept_combo.currentData(),
             "active": active_edit.isChecked(),
         }
