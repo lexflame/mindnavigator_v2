@@ -41,6 +41,8 @@ PROJECT_REFLECT_KEYS = {
     PROJECT_REFLECT_LINKED_NOTE,
     PROJECT_REFLECT_LINKED_OBJECT,
 }
+TASK_TYPE_REGULAR_VALUE = "__task_type_regular__"
+TASK_TYPE_PLAN_VALUE = "__task_type_plan__"
 
 
 class _InlineViewLabel(QLabel):
@@ -542,7 +544,8 @@ class TaskDetailsDialog(QDialog):
                 continue
             label = f"{project.area} • {project.title}" if project.area else project.title
             self.project_inline.editor.addItem(label, project.id)
-        self.project_inline.value_committed.connect(lambda value: self._save_inline_updates(project_id=value))
+        self.project_inline.editor.currentIndexChanged.connect(lambda _index: self._refresh_type_inline_options())
+        self.project_inline.value_committed.connect(self._save_project_inline_value)
         self.detail_project_card.set_inline_editor(self.project_inline)
         self.header_parent_card = _InfoCard("Родительская задача", self.params_card)
         self.header_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
@@ -585,6 +588,7 @@ class TaskDetailsDialog(QDialog):
         self.plan_task_checkbox = QCheckBox("План задача", self.details_card)
         self.plan_task_checkbox.setObjectName("TaskDetailsPlanCheck")
         self.plan_task_checkbox.setEnabled(False)
+        self.plan_task_checkbox.toggled.connect(self._on_plan_task_checkbox_toggled)
         details_header.addWidget(self.plan_task_checkbox, 0, Qt.AlignmentFlag.AlignRight)
         details_layout.addLayout(details_header)
 
@@ -662,6 +666,12 @@ class TaskDetailsDialog(QDialog):
         self.status_inline.editor.currentIndexChanged.connect(self._on_status_inline_changed)
         self.status_inline.value_committed.connect(lambda value: self._save_inline_updates(done=bool(value)))
         self.status_card.set_inline_editor(self.status_inline)
+        self.type_inline = InlineEditableField(QComboBox(self.detail_type_card), self.detail_type_card)
+        self.type_inline.editor.setMinimumContentsLength(16)
+        self.type_inline.editor.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.type_inline.editor.currentIndexChanged.connect(self._on_type_inline_changed)
+        self.type_inline.value_committed.connect(lambda value: self._save_inline_updates(**self._type_inline_save_payload(value)))
+        self.detail_type_card.set_inline_editor(self.type_inline)
         self.marker_color_inline = InlineEditableField(QComboBox(self.detail_marker_card), self.detail_marker_card)
         for value, label in self._MARKER_COLOR_LABELS.items():
             self.marker_color_inline.editor.addItem(label, value)
@@ -1328,7 +1338,10 @@ class TaskDetailsDialog(QDialog):
         self._refresh_gantt_progress()
         self.header_parent_card.set_value(parent_text, muted=parent_text == "—")
         self.header_parent_card.set_action_visible(self._parent_schedule_mismatch())
-        self.detail_type_card.set_value(self._task_type_text())
+        type_text = self._task_type_text()
+        self.detail_type_card.set_value(type_text)
+        self._refresh_type_inline_options()
+        self.type_inline.set_value(self._task_type_inline_value(), type_text)
         self.detail_marker_card.set_value(marker_text, muted=marker_text == "Нет")
         self.detail_marker_card.set_dot_color((self._task.marker_color or "").strip())
         self.detail_theme_card.set_value(marker_theme_text, muted=marker_theme_text == "Нет")
@@ -1854,11 +1867,113 @@ class TaskDetailsDialog(QDialog):
         return self._task_title(self._task.parent_id)
 
     def _task_type_text(self) -> str:
+        if self._task.project_task_type_title:
+            value = self._task.project_task_type_value or self._task.project_task_type_title
+            return f"{self._task.project_task_type_title} · {value}"
         if self._task.parent_id is not None and self._task.is_plan_task:
             return "Пункт плана"
         if self._task.is_plan_task:
             return "Плановая задача"
         return "Обычная задача"
+
+    def _task_type_inline_value(self) -> object:
+        if self._task.project_task_type_id is not None:
+            return int(self._task.project_task_type_id)
+        return TASK_TYPE_PLAN_VALUE if self._task.is_plan_task else TASK_TYPE_REGULAR_VALUE
+
+    def _current_type_project_id(self) -> Optional[int]:
+        if hasattr(self, "project_inline"):
+            value = self.project_inline.current_value()
+            if value is not None:
+                return int(value)
+        return self._task.project_id
+
+    def _refresh_type_inline_options(self, selected_value: object | None = None) -> None:
+        if not hasattr(self, "type_inline"):
+            return
+        combo = self.type_inline.editor
+        if not isinstance(combo, QComboBox):
+            return
+        if selected_value is None:
+            selected_value = combo.currentData()
+            if selected_value is None:
+                selected_value = self._task_type_inline_value()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Обычная задача", TASK_TYPE_REGULAR_VALUE)
+        combo.addItem("Плановая задача", TASK_TYPE_PLAN_VALUE)
+        project_id = self._current_type_project_id()
+        fetch_types = getattr(self._db, "fetch_project_task_types", None)
+        if project_id is not None and callable(fetch_types):
+            current_id = self._task.project_task_type_id
+            for task_type in fetch_types(int(project_id), include_inactive=True):
+                if not task_type.active and task_type.id != current_id:
+                    continue
+                value = task_type.value or task_type.title
+                status = "" if task_type.active else " · отключен"
+                combo.addItem(f"{task_type.title} · {value}{status}", task_type.id)
+        selected_idx = combo.findData(selected_value)
+        combo.setCurrentIndex(max(0, selected_idx))
+        combo.blockSignals(False)
+
+    def _type_inline_save_payload(self, value: object, *, include_plan: bool = True) -> dict[str, object]:
+        if isinstance(value, int):
+            return {"project_task_type_id": int(value)}
+        if value == TASK_TYPE_PLAN_VALUE:
+            payload: dict[str, object] = {"project_task_type_id": None}
+            if include_plan:
+                payload["is_plan_task"] = True
+            return payload
+        payload = {"project_task_type_id": None}
+        if include_plan:
+            payload["is_plan_task"] = False
+        return payload
+
+    def _on_type_inline_changed(self, _index: int) -> None:
+        if not hasattr(self, "type_inline"):
+            return
+        value = self.type_inline.editor.currentData()
+        if value == TASK_TYPE_REGULAR_VALUE:
+            self.plan_task_checkbox.setChecked(False)
+            return
+        if value == TASK_TYPE_PLAN_VALUE:
+            self.plan_task_checkbox.setChecked(True)
+            return
+        if not isinstance(value, int):
+            return
+        fetch_type = getattr(self._db, "fetch_project_task_type", None)
+        if not callable(fetch_type):
+            return
+        task_type = fetch_type(int(value))
+        if task_type is None:
+            return
+        if getattr(task_type, "color_marker", ""):
+            self.marker_color_inline.set_value(task_type.color_marker, self._MARKER_COLOR_LABELS.get(task_type.color_marker, task_type.color_marker))
+        if getattr(task_type, "theme_marker", ""):
+            theme = str(task_type.theme_marker).strip().lower()
+            self.marker_theme_inline.set_value(theme, self._MARKER_THEME_LABELS.get(theme, theme))
+        if getattr(task_type, "priority", ""):
+            self.priority_inline.set_value(task_type.priority, task_type.priority)
+        importance = int(getattr(task_type, "importance", 3) or 3)
+        self.importance_inline.set_value(importance, task_importance_label(importance))
+        self.plan_task_checkbox.setChecked(bool(getattr(task_type, "is_plan_task", False)))
+
+    def _on_plan_task_checkbox_toggled(self, checked: bool) -> None:
+        if not hasattr(self, "type_inline"):
+            return
+        combo = self.type_inline.editor
+        if not isinstance(combo, QComboBox) or isinstance(combo.currentData(), int):
+            return
+        target = TASK_TYPE_PLAN_VALUE if checked else TASK_TYPE_REGULAR_VALUE
+        target_index = combo.findData(target)
+        if target_index >= 0 and combo.currentIndex() != target_index:
+            combo.setCurrentIndex(target_index)
+
+    def _save_project_inline_value(self, value: object) -> bool:
+        changes: dict[str, object] = {"project_id": value}
+        if value != self._task.project_id:
+            changes["project_task_type_id"] = None
+        return self._save_inline_updates(**changes)
 
     def _marker_color_text(self) -> str:
         return self._MARKER_COLOR_LABELS.get((self._task.marker_color or "").strip(), "Нет")
@@ -2075,6 +2190,7 @@ class TaskDetailsDialog(QDialog):
             self.time_inline,
             self.priority_inline,
             self.importance_inline,
+            self.type_inline,
             self.recurrence_inline,
             self.status_inline,
             self.marker_color_inline,
@@ -2127,6 +2243,7 @@ class TaskDetailsDialog(QDialog):
             time_text=str(self.time_inline.current_value() or ""),
             priority=str(self.priority_inline.current_value() or ""),
             importance=int(self.importance_inline.current_value() or 3),
+            **self._type_inline_save_payload(self.type_inline.current_value(), include_plan=False),
             recurrence_kind=str(self.recurrence_inline.current_value() or ""),
             done=bool(self.footer_status_combo.currentData()),
             is_plan_task=bool(self.plan_task_checkbox.isChecked()),
