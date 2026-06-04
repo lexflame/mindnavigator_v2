@@ -1618,6 +1618,81 @@ def test_task_update_project_task_type_applies_defaults_to_nested_tasks(unique_t
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_model_refreshes_nested_rows_after_project_task_type_selection(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_model_type_refreshes_nested", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        project = database.create_project("Area", "Typed project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Development",
+                    "value": "DEV",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "debug",
+                    "priority": "High",
+                    "importance": 5,
+                    "is_plan_task": False,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        root = database.create_task("Root task", "", date(2026, 3, 6), "", "Medium", project_id=project.id)
+        child = database.create_task(
+            "Nested task",
+            "",
+            date(2026, 3, 6),
+            "",
+            "Low",
+            project_id=project.id,
+            parent_id=root.id,
+            marker_color="",
+            marker_theme="",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        model = tasks_workspace.TasksModel()
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+        child_row = _find_task_row(model, child.id)
+        assert child_row >= 0
+        assert model.index(child_row, 0).data(TaskRoles.Priority) == "Low"
+
+        model.update_task_by_row(
+            root_row,
+            title=root.title,
+            description=root.description,
+            day=root.day,
+            time_text=root.time_text,
+            priority=root.priority,
+            done=root.done,
+            project_id=root.project_id,
+            recurrence_kind=root.recurrence_kind,
+            recurrence_interval=root.recurrence_interval,
+            marker_color=root.marker_color,
+            marker_theme=root.marker_theme,
+            project_task_type_id=task_type.id,
+        )
+
+        root_row = _find_task_row(model, root.id)
+        assert root_row >= 0
+        model.expand_subtasks_tree_by_row(root_row)
+        child_row = _find_task_row(model, child.id)
+        assert child_row >= 0
+        child_index = model.index(child_row, 0)
+        assert child_index.data(TaskRoles.ProjectTaskTypeId) == task_type.id
+        assert child_index.data(TaskRoles.Priority) == "High"
+        assert child_index.data(TaskRoles.MarkerColor) == "#20f5d2"
+        assert child_index.data(TaskRoles.MarkerTheme) == "debug"
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_edit_dialog_type_field_combines_builtin_and_project_types(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_edit_type_combined", ".sqlite3")

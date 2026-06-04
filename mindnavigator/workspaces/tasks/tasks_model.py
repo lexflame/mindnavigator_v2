@@ -672,6 +672,12 @@ class TasksModel(QAbstractListModel):
             )
             self._reload_from_db()
             return
+        if r.project_task_type_id != updated.project_task_type_id:
+            debug_task_dialog(
+                f"tasks_model update_task_by_row reload_for_project_task_type task_id={updated.id}"
+            )
+            self._reload_from_db()
+            return
 
         updated_row = self._row_from_task_data(updated)
         self._all_rows = [
