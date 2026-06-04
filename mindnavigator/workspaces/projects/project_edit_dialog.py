@@ -10,8 +10,10 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStackedWidget,
     QPlainTextEdit,
 )
@@ -1175,6 +1177,209 @@ class ProjectEditDialog(QDialog):
             }}
         """)
 
+    def _display_property_section_title(self, icon_name: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.text).pixmap(22, 22))
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertySectionTitle")
+        row.addWidget(icon)
+        row.addWidget(label)
+        row.addStretch(1)
+        return row
+
+    def _display_property_field_label(self, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertyFieldLabel")
+        help_icon = QLabel()
+        help_icon.setPixmap(qta.icon("fa5s.question-circle", color=self._palette.dim_text).pixmap(14, 14))
+        row.addWidget(label)
+        row.addWidget(help_icon)
+        row.addStretch(1)
+        return row
+
+    def _display_mode_card(self, icon_name: str, title: str, text: str, value: str) -> tuple[QRadioButton, QFrame]:
+        card = QFrame()
+        card.setObjectName("DisplayModeCard")
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        radio = QRadioButton()
+        radio.setProperty("display_mode", value)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=self._palette.accent).pixmap(20, 20))
+        text_box = QVBoxLayout()
+        text_box.setSpacing(5)
+        title_label = QLabel(title)
+        title_label.setObjectName("DisplayModeTitle")
+        body_label = QLabel(text)
+        body_label.setObjectName("DisplayModeText")
+        body_label.setWordWrap(True)
+        text_box.addWidget(title_label)
+        text_box.addWidget(body_label)
+        layout.addWidget(radio, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(text_box, 1)
+        card.mousePressEvent = lambda _event: radio.setChecked(True)
+        return radio, card
+
+    def _display_property_rule_row(self, icon_name: str, color: str, text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QLabel()
+        icon.setPixmap(qta.icon(icon_name, color=color).pixmap(24, 24))
+        label = QLabel(text)
+        label.setObjectName("DisplayPropertyRuleText")
+        label.setWordWrap(True)
+        row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label, 1)
+        return row
+
+    def _display_property_separator(self) -> QFrame:
+        separator = QFrame()
+        separator.setObjectName("DisplayPropertyPreviewSeparator")
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFixedHeight(1)
+        return separator
+
+    def _apply_display_property_dialog_style(self, dialog: QDialog) -> None:
+        palette = self._palette
+        dialog.setStyleSheet(f"""
+            QDialog#ProjectDisplayPropertyDialog {{
+                background: {palette.window_bg};
+            }}
+
+            QFrame#DisplayPropertyCard,
+            QFrame#DisplayPropertyPreviewCard {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+            }}
+
+            QFrame#DisplayModeCard {{
+                background: {palette.input_alt_bg};
+                border: 1px solid {palette.border};
+                border-radius: 9px;
+            }}
+
+            QFrame#DisplayModeCard:hover {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QLabel#DisplayPropertyDialogTitle {{
+                color: {palette.selection_text};
+                font-size: 25px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyDialogSubtitle,
+            QLabel#DisplayPropertyFieldHint,
+            QLabel#DisplayPropertyPreviewCaption,
+            QLabel#DisplayPropertyPreviewText,
+            QLabel#DisplayModeText {{
+                color: {palette.dim_text};
+                font-size: 13px;
+            }}
+
+            QLabel#DisplayPropertySectionTitle,
+            QLabel#DisplayPropertyPreviewTitle {{
+                color: {palette.selection_text};
+                font-size: 17px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyFieldLabel,
+            QLabel#DisplayPropertyPreviewLabel,
+            QLabel#DisplayPropertyRuleText,
+            QLabel#DisplayModeTitle {{
+                color: {palette.text};
+                font-size: 14px;
+                font-weight: 600;
+            }}
+
+            QLabel#DisplayPropertyPreviewBadge {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.10);
+                border: 1px solid #20f5d2;
+                border-radius: 18px;
+                padding: 7px 18px;
+                font-size: 14px;
+                font-weight: 800;
+            }}
+
+            QLabel#DisplayPropertyPreviewLink {{
+                color: #20f5d2;
+                background: rgba(32, 245, 210, 0.08);
+                border: 1px solid #20f5d2;
+                border-radius: 7px;
+                padding: 7px 12px;
+                font-weight: 700;
+            }}
+
+            QLabel#DisplayPropertyPreviewUrl {{
+                color: {palette.text};
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 7px;
+                padding: 7px 12px;
+            }}
+
+            QFrame#DisplayPropertyPreviewSeparator {{
+                background: {palette.border};
+                border: none;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QLineEdit,
+            QDialog#ProjectDisplayPropertyDialog QSpinBox {{
+                background: {palette.input_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border};
+                border-radius: 6px;
+                padding: 8px 10px;
+                min-height: 30px;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QLineEdit:focus,
+            QDialog#ProjectDisplayPropertyDialog QSpinBox:focus {{
+                border: 1px solid {palette.accent};
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QRadioButton {{
+                color: {palette.text};
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QPushButton {{
+                background: {palette.panel_alt_bg};
+                color: {palette.text};
+                border: 1px solid {palette.border_strong};
+                border-radius: 7px;
+                padding: 9px 16px;
+                min-width: 118px;
+            }}
+
+            QDialog#ProjectDisplayPropertyDialog QPushButton:hover {{
+                background: {palette.selection_bg};
+            }}
+
+            QPushButton#DisplayPropertyDialogPrimaryButton {{
+                background: {palette.accent};
+                border: 1px solid {palette.accent_hover};
+                color: {palette.selection_text};
+                font-weight: 700;
+                min-width: 150px;
+            }}
+
+            QPushButton#DisplayPropertyDialogSecondaryButton {{
+                min-width: 126px;
+            }}
+        """)
+
     def _add_task_type_line(self) -> None:
         values = self._task_type_dialog()
         if values is None:
@@ -1799,31 +2004,238 @@ class ProjectEditDialog(QDialog):
 
     def _display_property_dialog(self, initial: Optional[dict[str, str]] = None) -> Optional[dict[str, str]]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Отображаемое свойство")
-        layout = QVBoxLayout(dialog)
-        form = QFormLayout()
+        dialog.setWindowTitle("Редактирование отображаемого свойства" if initial else "Создание отображаемого свойства")
+        dialog.setObjectName("ProjectDisplayPropertyDialog")
+        dialog.resize(1180, 780)
+        dialog.setMinimumSize(1040, 680)
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(28, 24, 28, 22)
+        root.setSpacing(18)
+
+        header = QHBoxLayout()
+        header.setSpacing(14)
+        hero_icon = QLabel()
+        hero_icon.setPixmap(qta.icon("fa5s.link", color="#3478f6").pixmap(34, 34))
+        header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        title_label = QLabel("Редактирование отображаемого свойства" if initial else "Создание отображаемого свойства")
+        title_label.setObjectName("DisplayPropertyDialogTitle")
+        subtitle_label = QLabel("Настройка отображаемых данных проекта")
+        subtitle_label.setObjectName("DisplayPropertyDialogSubtitle")
+        title_box.addWidget(title_label)
+        title_box.addWidget(subtitle_label)
+        header.addLayout(title_box, 1)
+        preview_button = QPushButton("Предпросмотр")
+        preview_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        preview_button.setIcon(qta.icon("fa5s.eye", color=self._palette.text))
+        close_button = QPushButton("Закрыть")
+        close_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        close_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        close_button.clicked.connect(dialog.reject)
+        header.addWidget(preview_button)
+        header.addWidget(close_button)
+        root.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setSpacing(22)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(16)
+        body.addLayout(left_column, 1)
+        preview_card = QFrame()
+        preview_card.setObjectName("DisplayPropertyPreviewCard")
+        preview_card.setMinimumWidth(380)
+        preview_card.setMaximumWidth(420)
+        body.addWidget(preview_card)
+        root.addLayout(body, 1)
+
+        main_card = QFrame()
+        main_card.setObjectName("DisplayPropertyCard")
+        main_layout = QVBoxLayout(main_card)
+        main_layout.setContentsMargins(18, 16, 18, 18)
+        main_layout.setSpacing(14)
+        main_layout.addLayout(self._display_property_section_title("fa5s.clipboard-list", "Основное"))
+        field_grid = QGridLayout()
+        field_grid.setHorizontalSpacing(18)
+        field_grid.setVerticalSpacing(8)
         name_edit = QLineEdit(str(initial.get("name") or "") if initial else "")
         name_edit.setPlaceholderText("WIKI")
         url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
-        url_edit.setPlaceholderText("https://docs.example.com")
-        mode_combo = QComboBox()
-        mode_combo.addItem("Имя со ссылкой внутри", "name_link")
-        mode_combo.addItem("Текст ссылки", "url_text")
-        if initial:
-            idx = mode_combo.findData(initial.get("display_mode"))
-            if idx >= 0:
-                mode_combo.setCurrentIndex(idx)
-        form.addRow("Имя", name_edit)
-        form.addRow("Ссылка", url_edit)
-        form.addRow("Способ", mode_combo)
-        layout.addLayout(form)
-        buttons = QDialogButtonBox(dialog)
-        buttons.addButton(QDialogButtonBox.StandardButton.Ok)
-        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        self._apply_child_dialog_style(dialog)
+        url_edit.setPlaceholderText("https://docs.example.com/kazantip")
+        name_hint = QLabel("Короткое название свойства, отображается в блоке «Дополнительно».")
+        name_hint.setObjectName("DisplayPropertyFieldHint")
+        name_hint.setWordWrap(True)
+        url_hint = QLabel("Ссылка открывается в браузере или может быть скопирована пользователем.")
+        url_hint.setObjectName("DisplayPropertyFieldHint")
+        url_hint.setWordWrap(True)
+        field_grid.addLayout(self._display_property_field_label("Имя"), 0, 0)
+        field_grid.addLayout(self._display_property_field_label("Ссылка"), 0, 1)
+        field_grid.addWidget(name_edit, 1, 0)
+        field_grid.addWidget(url_edit, 1, 1)
+        field_grid.addWidget(name_hint, 2, 0)
+        field_grid.addWidget(url_hint, 2, 1)
+        main_layout.addLayout(field_grid)
+        left_column.addWidget(main_card)
+
+        mode_card = QFrame()
+        mode_card.setObjectName("DisplayPropertyCard")
+        mode_layout = QVBoxLayout(mode_card)
+        mode_layout.setContentsMargins(18, 16, 18, 18)
+        mode_layout.setSpacing(14)
+        mode_layout.addLayout(self._display_property_section_title("fa5s.desktop", "Способ отображения"))
+        mode_group = QButtonGroup(dialog)
+        mode_group.setExclusive(True)
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(14)
+        name_link_radio, name_link_card = self._display_mode_card(
+            "fa5s.link",
+            "Имя со ссылкой внутри",
+            "Отображается как имя свойства, внутри которого размещена гиперссылка.",
+            "name_link",
+        )
+        url_text_radio, url_text_card = self._display_mode_card(
+            "fa5s.link",
+            "Текст ссылки",
+            "Отображается как сама ссылка для открытия или копирования.",
+            "url_text",
+        )
+        mode_group.addButton(name_link_radio)
+        mode_group.addButton(url_text_radio)
+        mode_row.addWidget(name_link_card)
+        mode_row.addWidget(url_text_card)
+        mode_layout.addLayout(mode_row)
+        position_label = QLabel("Позиция в списке  ⓘ")
+        position_label.setObjectName("DisplayPropertyFieldLabel")
+        position_edit = QSpinBox()
+        position_edit.setRange(1, 4)
+        position_edit.setValue(1)
+        mode_layout.addWidget(position_label)
+        mode_layout.addWidget(position_edit)
+        position_hint = QLabel("Отображаемые свойства выводятся после строки «Тип задач».")
+        position_hint.setObjectName("DisplayPropertyFieldHint")
+        mode_layout.addWidget(position_hint)
+        selected_mode = (initial.get("display_mode") if initial else "") or "name_link"
+        if selected_mode == "url_text":
+            url_text_radio.setChecked(True)
+        else:
+            name_link_radio.setChecked(True)
+        left_column.addWidget(mode_card)
+
+        rules_card = QFrame()
+        rules_card.setObjectName("DisplayPropertyCard")
+        rules_layout = QVBoxLayout(rules_card)
+        rules_layout.setContentsMargins(18, 16, 18, 18)
+        rules_layout.setSpacing(11)
+        rules_layout.addLayout(self._display_property_section_title("fa5s.shield-alt", "Ограничения и поведение"))
+        for icon_name, color, text in (
+            ("fa5s.info-circle", "#3478f6", "В одном проекте может быть не более 4 отображаемых свойств."),
+            ("fa5s.list", "#3bd16f", "Каждый элемент выводится отдельной строкой в блоке «Дополнительно»."),
+            ("fa5s.link", "#8a63d2", "Поддерживается открытие ссылки и копирование в буфер обмена."),
+        ):
+            rules_layout.addLayout(self._display_property_rule_row(icon_name, color, text))
+        left_column.addWidget(rules_card)
+        left_column.addStretch(1)
+
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(20, 18, 20, 18)
+        preview_layout.setSpacing(14)
+        preview_layout.addLayout(self._display_property_section_title("fa5s.eye", "Предпросмотр"))
+        preview_caption = QLabel("Как это выглядит в задаче")
+        preview_caption.setObjectName("DisplayPropertyPreviewCaption")
+        preview_layout.addWidget(preview_caption)
+        task_type_row = QHBoxLayout()
+        task_type_label = QLabel("Тип задач:")
+        task_type_label.setObjectName("DisplayPropertyPreviewLabel")
+        task_type_badge = QLabel("РАЗРАБОТКА · DEV")
+        task_type_badge.setObjectName("DisplayPropertyPreviewBadge")
+        task_type_row.addWidget(task_type_label)
+        task_type_row.addWidget(task_type_badge)
+        task_type_row.addStretch(1)
+        preview_layout.addLayout(task_type_row)
+        preview_layout.addWidget(self._display_property_separator())
+        props_title = QLabel("Отображаемые свойства")
+        props_title.setObjectName("DisplayPropertyPreviewTitle")
+        preview_layout.addWidget(props_title)
+        property_row = QHBoxLayout()
+        property_name = QLabel("WIKI:")
+        property_name.setObjectName("DisplayPropertyPreviewLabel")
+        property_value = QLabel()
+        property_value.setObjectName("DisplayPropertyPreviewLink")
+        property_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        property_row.addWidget(property_name)
+        property_row.addWidget(property_value, 1)
+        preview_layout.addLayout(property_row)
+        repo_row = QHBoxLayout()
+        repo_name = QLabel("REPO:")
+        repo_name.setObjectName("DisplayPropertyPreviewLabel")
+        repo_value = QLabel("https://github.com/lexflame/mindnavigator")
+        repo_value.setObjectName("DisplayPropertyPreviewUrl")
+        repo_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        repo_row.addWidget(repo_name)
+        repo_row.addWidget(repo_value, 1)
+        preview_layout.addLayout(repo_row)
+        preview_layout.addWidget(self._display_property_separator())
+        about_row = QHBoxLayout()
+        about_icon = QLabel()
+        about_icon.setPixmap(qta.icon("fa5s.info-circle", color=self._palette.text).pixmap(22, 22))
+        about_title = QLabel("О свойстве")
+        about_title.setObjectName("DisplayPropertyPreviewTitle")
+        about_row.addWidget(about_icon)
+        about_row.addWidget(about_title)
+        about_row.addStretch(1)
+        preview_layout.addLayout(about_row)
+        about_text = QLabel(
+            "Свойство отображается в блоке «Дополнительно» после строки «Тип задач». "
+            "Элемент может открывать ссылку в браузере или позволять копирование."
+        )
+        about_text.setObjectName("DisplayPropertyPreviewText")
+        about_text.setWordWrap(True)
+        preview_layout.addWidget(about_text)
+        preview_layout.addStretch(1)
+        preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 4, 0, 0)
+        cancel_button = QPushButton("Отмена")
+        cancel_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
+        cancel_button.clicked.connect(dialog.reject)
+        save_button = QPushButton("Сохранить")
+        save_button.setObjectName("DisplayPropertyDialogPrimaryButton")
+        save_button.setIcon(qta.icon("fa5s.save", color=self._palette.selection_text))
+        save_more_button = QPushButton("Сохранить и добавить ещё")
+        save_more_button.setObjectName("DisplayPropertyDialogSecondaryButton")
+        save_more_button.setIcon(qta.icon("fa5s.plus-circle", color=self._palette.text))
+        save_button.clicked.connect(dialog.accept)
+        save_more_button.clicked.connect(dialog.accept)
+        footer.addWidget(cancel_button)
+        footer.addStretch(1)
+        footer.addWidget(save_button)
+        footer.addWidget(save_more_button)
+        root.addLayout(footer)
+
+        def selected_mode_value() -> str:
+            return "url_text" if url_text_radio.isChecked() else "name_link"
+
+        def update_preview() -> None:
+            name = "".join(name_edit.text().strip().upper().split()) or "WIKI"
+            url = url_edit.text().strip() or "https://docs.example.com/kazantip"
+            property_name.setText(f"{name}:")
+            if selected_mode_value() == "url_text":
+                property_value.setObjectName("DisplayPropertyPreviewUrl")
+                property_value.setText(url)
+            else:
+                property_value.setObjectName("DisplayPropertyPreviewLink")
+                property_value.setText(f"🔗  {name}")
+            property_value.style().unpolish(property_value)
+            property_value.style().polish(property_value)
+
+        name_edit.textChanged.connect(update_preview)
+        url_edit.textChanged.connect(update_preview)
+        name_link_radio.toggled.connect(update_preview)
+        url_text_radio.toggled.connect(update_preview)
+        update_preview()
+        self._apply_display_property_dialog_style(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         name = "".join(name_edit.text().strip().upper().split())
@@ -1831,7 +2243,7 @@ class ProjectEditDialog(QDialog):
         if not name or not url:
             QMessageBox.warning(self, "Проверка", "Имя и ссылка отображаемого свойства обязательны.")
             return None
-        return {"name": name, "url": url, "display_mode": str(mode_combo.currentData() or "name_link")}
+        return {"name": name, "url": url, "display_mode": selected_mode_value()}
 
     @staticmethod
     def _format_display_property_line(values: dict[str, str]) -> str:

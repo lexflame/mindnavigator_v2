@@ -550,3 +550,46 @@ def test_project_task_type_dialog_matches_preview_shell_contract(monkeypatch, un
             captured.deleteLater()
         database.close()
         db_path.unlink(missing_ok=True)
+
+
+def test_project_display_property_dialog_matches_preview_shell_contract(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_display_property_dialog_shell", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        result = dialog._display_property_dialog(
+            {
+                "name": "wiki",
+                "url": "https://docs.example.com/kazantip",
+                "display_mode": "url_text",
+            }
+        )
+
+        assert result == {
+            "name": "WIKI",
+            "url": "https://docs.example.com/kazantip",
+            "display_mode": "url_text",
+        }
+        display_dialog = captured_dialogs[-1]
+        assert display_dialog.objectName() == "ProjectDisplayPropertyDialog"
+        assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyPreviewCard") is not None
+        assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyCard") is not None
+        button_texts = {button.text() for button in display_dialog.findChildren(project_edit_dialog.QPushButton)}
+        assert {"Предпросмотр", "Закрыть", "Отмена", "Сохранить", "Сохранить и добавить ещё"}.issubset(button_texts)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
