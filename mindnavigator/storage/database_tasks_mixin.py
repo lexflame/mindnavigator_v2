@@ -261,6 +261,50 @@ class DatabaseTasksMixin:
             for task_id in affected_ids:
                 self.attach_concept_board_item(int(concept_board_id), "task", int(task_id))
 
+    def apply_task_builtin_type_to_descendants(
+        self,
+        task_id: int,
+        *,
+        project_id: Optional[int],
+        priority: str,
+        importance: int,
+        is_plan_task: bool,
+        marker_color: str,
+        marker_theme: str,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn:
+            self._conn.execute(
+                """
+                WITH RECURSIVE descendants(id) AS (
+                    SELECT id FROM tasks WHERE parent_id = ?
+                    UNION ALL
+                    SELECT t.id FROM tasks t
+                    JOIN descendants d ON t.parent_id = d.id
+                )
+                UPDATE tasks
+                SET project_id = ?,
+                    project_task_type_id = NULL,
+                    priority = ?,
+                    importance = ?,
+                    is_plan_task = ?,
+                    marker_color = ?,
+                    marker_theme = ?,
+                    updated_at = ?
+                WHERE id IN (SELECT id FROM descendants);
+                """,
+                (
+                    int(task_id),
+                    project_id,
+                    normalize_priority(priority),
+                    max(1, min(5, int(importance or 3))),
+                    int(bool(is_plan_task)),
+                    (marker_color or "").strip(),
+                    (marker_theme or "").strip().lower(),
+                    now,
+                ),
+            )
+
     def create_task(
         self,
         title: str,
@@ -579,7 +623,18 @@ class DatabaseTasksMixin:
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         self._attach_project_task_type_concept_board(task_id, project_task_type_id)
-        self.apply_project_task_type_defaults_to_task_tree(project_task_type_id)
+        if project_task_type_id is None:
+            self.apply_task_builtin_type_to_descendants(
+                task_id,
+                project_id=project_id,
+                priority=priority,
+                importance=importance,
+                is_plan_task=is_plan_task,
+                marker_color=marker_color,
+                marker_theme=marker_theme,
+            )
+        else:
+            self.apply_project_task_type_defaults_to_task_tree(project_task_type_id)
         self._sync_task_text_attachments(task_id, title, description)
         new_plan_root_id = self._plan_root_id_for_parent(parent_id)
         if new_plan_root_id is not None:
