@@ -1292,6 +1292,53 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         db_path.unlink(missing_ok=True)
 
 
+def test_task_details_project_display_properties_open_and_copy_links(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_project_display_links", ".sqlite3")
+    database = Database(path=db_path)
+    opened_urls: list[str] = []
+    dialog = None
+    try:
+        project = database.create_project("Area", "Link project", date(2026, 3, 6), "Medium")
+        database.replace_project_display_properties(
+            project.id,
+            [
+                {"name": "wiki", "url": "https://docs.example.com/wiki", "display_mode": "name_link"},
+                {"name": "repo", "url": "https://github.com/lexflame/mindnavigator", "display_mode": "url_text"},
+            ],
+        )
+        task = database.create_task(
+            title="Display links",
+            description="",
+            day=date(2026, 3, 6),
+            time_text="",
+            priority="Medium",
+            project_id=project.id,
+        )
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(
+            task_details_dialog.QDesktopServices,
+            "openUrl",
+            lambda url: opened_urls.append(url.toString()) or True,
+        )
+
+        dialog = task_details_dialog.TaskDetailsDialog(next(item for item in database.fetch_tasks() if item.id == task.id))
+        labels = dialog.additional_properties_host.findChildren(QLabel, "TaskDetailsAdditionalPropertyBadge")
+        wiki_label = next(label for label in labels if "WIKI" in label.text())
+        wiki_label.linkActivated.emit("https://docs.example.com/wiki")
+        assert opened_urls == ["https://docs.example.com/wiki"]
+
+        copy_button = dialog.additional_properties_host.findChild(QToolButton, "TaskDetailsAdditionalPropertyCopyButton")
+        assert copy_button is not None
+        copy_button.click()
+        assert QApplication.clipboard().text() == "https://github.com/lexflame/mindnavigator"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("task_details_inline_edit", ".sqlite3")

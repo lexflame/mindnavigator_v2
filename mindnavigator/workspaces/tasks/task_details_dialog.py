@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from html import escape
 
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
@@ -1342,10 +1343,26 @@ class TaskDetailsDialog(QDialog):
             if callable(fetch_display):
                 for item in fetch_display(int(project_id))[:4]:
                     label = item.url if item.display_mode == "url_text" else item.name
-                    self.additional_properties_layout.addWidget(self._additional_property_row(item.name, label, "#20f5d2"))
+                    self.additional_properties_layout.addWidget(
+                        self._additional_property_row(
+                            item.name,
+                            label,
+                            "#20f5d2",
+                            url=item.url,
+                            display_mode=item.display_mode,
+                        )
+                    )
         self.additional_properties_host.setVisible(self.additional_properties_layout.count() > 0)
 
-    def _additional_property_row(self, name: str, value: str, color: str = "") -> QFrame:
+    def _additional_property_row(
+        self,
+        name: str,
+        value: str,
+        color: str = "",
+        *,
+        url: str = "",
+        display_mode: str = "",
+    ) -> QFrame:
         row = QFrame(self.additional_properties_host)
         row.setObjectName("TaskDetailsAdditionalPropertyRow")
         layout = QHBoxLayout(row)
@@ -1356,10 +1373,28 @@ class TaskDetailsDialog(QDialog):
         value_label = QLabel(value, row)
         value_label.setObjectName("TaskDetailsAdditionalPropertyBadge")
         value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        normalized_url = (url or "").strip()
+        if normalized_url and display_mode == "name_link":
+            value_label.setText(f"<a href=\"{escape(normalized_url)}\">{escape(value)}</a>")
+            value_label.setTextFormat(Qt.TextFormat.RichText)
+            value_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextBrowserInteraction
+                | Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            value_label.setOpenExternalLinks(False)
+            value_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            value_label.linkActivated.connect(lambda link: QDesktopServices.openUrl(QUrl.fromUserInput(link)))
         if color and QColor(color).isValid():
             value_label.setStyleSheet(f"border-color: {color}; color: {color};")
         layout.addWidget(name_label, 0)
         layout.addWidget(value_label, 0)
+        if normalized_url and display_mode == "url_text":
+            copy_button = QToolButton(row)
+            copy_button.setObjectName("TaskDetailsAdditionalPropertyCopyButton")
+            copy_button.setText("Копировать")
+            copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            copy_button.clicked.connect(lambda _checked=False, text=normalized_url: QApplication.clipboard().setText(text))
+            layout.addWidget(copy_button, 0)
         layout.addStretch(1)
         return row
 
