@@ -892,13 +892,9 @@ class ProjectEditDialog(QDialog):
     def _inline_property_label(self, kind: str, line: str) -> str:
         if kind == "task_types":
             values = self._parse_task_type_line(line)
-            title = str(values.get("title") or "")
-            value = str(values.get("value") or title)
-            priority = str(values.get("priority") or "None")
-            status = "active" if bool(values.get("active", True)) else "disabled"
-            return f"{title} | {value} | {priority} | {status}"
+            return str(values.get("title") or "")
         values = self._parse_display_property_line(line)
-        return f"{values.get('name') or ''} | {values.get('url') or ''} | {values.get('display_mode') or 'name_link'}"
+        return str(values.get("name") or "")
 
     def _edit_inline_property(self, kind: str, line_index: int) -> None:
         if kind == "task_types":

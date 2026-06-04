@@ -404,9 +404,10 @@ def test_project_dialog_custom_property_lists_use_inline_rows(monkeypatch, uniqu
         display_inputs = dialog.display_properties_list_widget.findChildren(QLineEdit)
         assert len(task_inputs) == 2
         assert task_inputs[0].isReadOnly() is True
-        assert "DEVELOPMENT" in task_inputs[0].text()
+        assert task_inputs[0].text() == "DEVELOPMENT"
+        assert task_inputs[1].text() == "MUSIC"
         assert len(display_inputs) == 1
-        assert "WIKI" in display_inputs[0].text()
+        assert display_inputs[0].text() == "WIKI"
 
         task_buttons = dialog.task_types_list_widget.findChildren(QToolButton)
         display_buttons = dialog.display_properties_list_widget.findChildren(QToolButton)
