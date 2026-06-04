@@ -9,6 +9,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QLineEdit, QStyleOptionViewItem, QToolButton
 
 from mindnavigator.storage import Database
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.workspaces.projects import project_edit_dialog
 from mindnavigator.workspaces import projects as projects_workspace
 from mindnavigator.workspaces.projects import ProjectRoles
@@ -565,6 +566,49 @@ def test_project_dialog_reflect_in_tasks_flags_are_saved(monkeypatch, unique_tem
         db_path.unlink(missing_ok=True)
 
 
+def test_project_dialog_small_property_forms_are_compact(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_compact_property_forms", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    captured_dialogs = []
+
+    def fake_exec(self):
+        captured_dialogs.append(self)
+        return project_edit_dialog.QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(project_edit_dialog.QDialog, "exec", fake_exec)
+    dialog = None
+    try:
+        database.create_project("Area", "Linked project", date(2026, 3, 6), "Medium")
+        database.create_task("Linked task", "", date(2026, 3, 6), "", "Medium")
+        dialog = project_edit_dialog.ProjectEditDialog()
+
+        assert dialog._select_related_item("project", "Связанный проект") is None
+        relation_dialog = captured_dialogs[-1]
+        assert relation_dialog.minimumWidth() == 550
+        assert relation_dialog.maximumWidth() == 550
+        assert relation_dialog.minimumHeight() == 200
+        assert relation_dialog.maximumHeight() == 200
+        selector = relation_dialog.findChild(FilterableComboBox)
+        assert selector is not None
+        assert selector.minimumContentsLength() == 24
+
+        assert dialog._link_dialog("Репозиторий") is None
+        link_dialog = captured_dialogs[-1]
+        assert link_dialog.minimumWidth() == 550
+        assert link_dialog.maximumWidth() == 550
+        assert link_dialog.minimumHeight() == 220
+        assert link_dialog.maximumHeight() == 220
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        for captured in captured_dialogs:
+            captured.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_project_task_type_dialog_matches_preview_shell_contract(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("project_task_type_dialog_shell", ".sqlite3")
@@ -598,6 +642,10 @@ def test_project_task_type_dialog_matches_preview_shell_contract(monkeypatch, un
         assert result["title"] == "DEVELOPMENT"
         task_type_dialog = captured_dialogs[-1]
         assert task_type_dialog.objectName() == "ProjectTaskTypeDialog"
+        assert task_type_dialog.width() == 900
+        assert task_type_dialog.height() == 620
+        assert task_type_dialog.minimumWidth() == 820
+        assert task_type_dialog.minimumHeight() == 560
         assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypePreviewCard") is not None
         assert task_type_dialog.findChild(project_edit_dialog.QFrame, "TaskTypeCard") is not None
         button_texts = {button.text() for button in task_type_dialog.findChildren(project_edit_dialog.QPushButton)}
@@ -641,6 +689,10 @@ def test_project_display_property_dialog_matches_preview_shell_contract(monkeypa
         }
         display_dialog = captured_dialogs[-1]
         assert display_dialog.objectName() == "ProjectDisplayPropertyDialog"
+        assert display_dialog.width() == 860
+        assert display_dialog.height() == 560
+        assert display_dialog.minimumWidth() == 760
+        assert display_dialog.minimumHeight() == 500
         assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyPreviewCard") is not None
         assert display_dialog.findChild(project_edit_dialog.QFrame, "DisplayPropertyCard") is not None
         button_texts = {button.text() for button in display_dialog.findChildren(project_edit_dialog.QPushButton)}

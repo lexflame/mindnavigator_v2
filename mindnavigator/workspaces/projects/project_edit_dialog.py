@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.ui.styles import get_theme_palette
 
 PROJECT_REFLECT_SETTING_PREFIX = "project_reflect_in_tasks"
@@ -1201,7 +1202,7 @@ class ProjectEditDialog(QDialog):
 
             QLabel#TaskTypeDialogTitle {{
                 color: {palette.selection_text};
-                font-size: 25px;
+                font-size: 21px;
                 font-weight: 700;
             }}
 
@@ -1210,13 +1211,13 @@ class ProjectEditDialog(QDialog):
             QLabel#TaskTypePreviewCaption,
             QLabel#TaskTypePreviewText {{
                 color: {palette.dim_text};
-                font-size: 13px;
+                font-size: 12px;
             }}
 
             QLabel#TaskTypeSectionTitle,
             QLabel#TaskTypePreviewTitle {{
                 color: {palette.selection_text};
-                font-size: 17px;
+                font-size: 15px;
                 font-weight: 700;
             }}
 
@@ -1224,13 +1225,13 @@ class ProjectEditDialog(QDialog):
             QLabel#TaskTypePreviewLabel,
             QLabel#TaskTypeRuleText {{
                 color: {palette.text};
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 600;
             }}
 
             QLabel#TaskTypePreviewValue {{
                 color: {palette.text};
-                font-size: 14px;
+                font-size: 13px;
             }}
 
             QLabel#TaskTypePreviewBadge {{
@@ -1238,8 +1239,8 @@ class ProjectEditDialog(QDialog):
                 background: rgba(32, 245, 210, 0.10);
                 border: 1px solid #20f5d2;
                 border-radius: 18px;
-                padding: 7px 18px;
-                font-size: 15px;
+                padding: 6px 14px;
+                font-size: 13px;
                 font-weight: 800;
             }}
 
@@ -1254,8 +1255,8 @@ class ProjectEditDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border};
                 border-radius: 6px;
-                padding: 8px 10px;
-                min-height: 30px;
+                padding: 6px 9px;
+                min-height: 28px;
             }}
 
             QDialog#ProjectTaskTypeDialog QLineEdit:focus,
@@ -1265,7 +1266,7 @@ class ProjectEditDialog(QDialog):
 
             QDialog#ProjectTaskTypeDialog QCheckBox {{
                 color: {palette.text};
-                font-size: 14px;
+                font-size: 13px;
                 padding: 4px 0;
             }}
 
@@ -1274,8 +1275,8 @@ class ProjectEditDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border_strong};
                 border-radius: 7px;
-                padding: 9px 16px;
-                min-width: 118px;
+                padding: 7px 12px;
+                min-width: 104px;
             }}
 
             QDialog#ProjectTaskTypeDialog QPushButton:hover {{
@@ -1287,11 +1288,11 @@ class ProjectEditDialog(QDialog):
                 border: 1px solid {palette.accent_hover};
                 color: {palette.selection_text};
                 font-weight: 700;
-                min-width: 150px;
+                min-width: 126px;
             }}
 
             QPushButton#TaskTypeDialogSecondaryButton {{
-                min-width: 126px;
+                min-width: 108px;
             }}
         """)
 
@@ -1392,7 +1393,7 @@ class ProjectEditDialog(QDialog):
 
             QLabel#DisplayPropertyDialogTitle {{
                 color: {palette.selection_text};
-                font-size: 25px;
+                font-size: 21px;
                 font-weight: 700;
             }}
 
@@ -1402,13 +1403,13 @@ class ProjectEditDialog(QDialog):
             QLabel#DisplayPropertyPreviewText,
             QLabel#DisplayModeText {{
                 color: {palette.dim_text};
-                font-size: 13px;
+                font-size: 12px;
             }}
 
             QLabel#DisplayPropertySectionTitle,
             QLabel#DisplayPropertyPreviewTitle {{
                 color: {palette.selection_text};
-                font-size: 17px;
+                font-size: 15px;
                 font-weight: 700;
             }}
 
@@ -1417,7 +1418,7 @@ class ProjectEditDialog(QDialog):
             QLabel#DisplayPropertyRuleText,
             QLabel#DisplayModeTitle {{
                 color: {palette.text};
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 600;
             }}
 
@@ -1426,8 +1427,8 @@ class ProjectEditDialog(QDialog):
                 background: rgba(32, 245, 210, 0.10);
                 border: 1px solid #20f5d2;
                 border-radius: 18px;
-                padding: 7px 18px;
-                font-size: 14px;
+                padding: 6px 14px;
+                font-size: 13px;
                 font-weight: 800;
             }}
 
@@ -1436,7 +1437,7 @@ class ProjectEditDialog(QDialog):
                 background: rgba(32, 245, 210, 0.08);
                 border: 1px solid #20f5d2;
                 border-radius: 7px;
-                padding: 7px 12px;
+                padding: 6px 10px;
                 font-weight: 700;
             }}
 
@@ -1445,7 +1446,7 @@ class ProjectEditDialog(QDialog):
                 background: {palette.input_bg};
                 border: 1px solid {palette.border};
                 border-radius: 7px;
-                padding: 7px 12px;
+                padding: 6px 10px;
             }}
 
             QFrame#DisplayPropertyPreviewSeparator {{
@@ -1459,8 +1460,8 @@ class ProjectEditDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border};
                 border-radius: 6px;
-                padding: 8px 10px;
-                min-height: 30px;
+                padding: 6px 9px;
+                min-height: 28px;
             }}
 
             QDialog#ProjectDisplayPropertyDialog QLineEdit:focus,
@@ -1477,8 +1478,8 @@ class ProjectEditDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border_strong};
                 border-radius: 7px;
-                padding: 9px 16px;
-                min-width: 118px;
+                padding: 7px 12px;
+                min-width: 104px;
             }}
 
             QDialog#ProjectDisplayPropertyDialog QPushButton:hover {{
@@ -1490,11 +1491,11 @@ class ProjectEditDialog(QDialog):
                 border: 1px solid {palette.accent_hover};
                 color: {palette.selection_text};
                 font-weight: 700;
-                min-width: 150px;
+                min-width: 126px;
             }}
 
             QPushButton#DisplayPropertyDialogSecondaryButton {{
-                min-width: 126px;
+                min-width: 108px;
             }}
         """)
 
@@ -1626,17 +1627,17 @@ class ProjectEditDialog(QDialog):
         dialog = QDialog(self)
         dialog.setWindowTitle("Редактирование типа задач" if initial else "Создание типа задач")
         dialog.setObjectName("ProjectTaskTypeDialog")
-        dialog.resize(1180, 780)
-        dialog.setMinimumSize(1040, 680)
+        dialog.resize(900, 620)
+        dialog.setMinimumSize(820, 560)
         root = QVBoxLayout(dialog)
-        root.setContentsMargins(28, 24, 28, 22)
-        root.setSpacing(18)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(12)
 
         header = QHBoxLayout()
-        header.setSpacing(14)
+        header.setSpacing(10)
         hero_icon = QLabel()
         hero_icon.setObjectName("TaskTypeDialogHeroIcon")
-        hero_icon.setPixmap(qta.icon("fa5s.tag", color="#5f7cff").pixmap(34, 34))
+        hero_icon.setPixmap(qta.icon("fa5s.tag", color="#5f7cff").pixmap(26, 26))
         header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
         title_box = QVBoxLayout()
         title_box.setSpacing(4)
@@ -1659,28 +1660,28 @@ class ProjectEditDialog(QDialog):
         root.addLayout(header)
 
         body = QHBoxLayout()
-        body.setSpacing(22)
+        body.setSpacing(14)
         left_column = QVBoxLayout()
-        left_column.setSpacing(16)
+        left_column.setSpacing(10)
         body.addLayout(left_column, 1)
         preview_card = QFrame()
         preview_card.setObjectName("TaskTypePreviewCard")
-        preview_card.setMinimumWidth(340)
-        preview_card.setMaximumWidth(380)
+        preview_card.setMinimumWidth(280)
+        preview_card.setMaximumWidth(320)
         body.addWidget(preview_card)
         root.addLayout(body, 1)
 
         main_card = QFrame()
         main_card.setObjectName("TaskTypeCard")
         main_layout = QVBoxLayout(main_card)
-        main_layout.setContentsMargins(18, 16, 18, 18)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(14, 12, 14, 14)
+        main_layout.setSpacing(10)
         main_layout.addLayout(self._task_type_section_title("fa5s.clipboard-list", "Основное"))
         left_column.addWidget(main_card)
 
         title_grid = QGridLayout()
-        title_grid.setHorizontalSpacing(18)
-        title_grid.setVerticalSpacing(8)
+        title_grid.setHorizontalSpacing(12)
+        title_grid.setVerticalSpacing(6)
         title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
         title_edit.setPlaceholderText("Разработка")
         value_edit = QLineEdit(str(initial.get("value") or initial.get("title") or "") if initial else "")
@@ -1697,8 +1698,8 @@ class ProjectEditDialog(QDialog):
         main_layout.addLayout(title_grid)
 
         inherit_grid = QGridLayout()
-        inherit_grid.setHorizontalSpacing(18)
-        inherit_grid.setVerticalSpacing(10)
+        inherit_grid.setHorizontalSpacing(12)
+        inherit_grid.setVerticalSpacing(8)
         color_combo = QComboBox()
         self._copy_combo_items(self.marker_color_edit, color_combo)
         theme_combo = QComboBox()
@@ -1758,8 +1759,8 @@ class ProjectEditDialog(QDialog):
         rules_card = QFrame()
         rules_card.setObjectName("TaskTypeCard")
         rules_layout = QVBoxLayout(rules_card)
-        rules_layout.setContentsMargins(18, 16, 18, 18)
-        rules_layout.setSpacing(11)
+        rules_layout.setContentsMargins(14, 12, 14, 14)
+        rules_layout.setSpacing(8)
         rules_layout.addLayout(self._task_type_section_title("fa5s.shield-alt", "Правила и ограничения"))
         for icon_name, color, text in (
             ("fa5s.info-circle", "#3478f6", "Значение должно быть уникальным в рамках проекта."),
@@ -1771,8 +1772,8 @@ class ProjectEditDialog(QDialog):
         left_column.addStretch(1)
 
         preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(20, 18, 20, 18)
-        preview_layout.setSpacing(14)
+        preview_layout.setContentsMargins(14, 12, 14, 14)
+        preview_layout.setSpacing(10)
         preview_layout.addLayout(self._task_type_section_title("fa5s.eye", "Предпросмотр"))
         badge_caption = QLabel("Бейдж типа")
         badge_caption.setObjectName("TaskTypePreviewCaption")
@@ -1780,7 +1781,7 @@ class ProjectEditDialog(QDialog):
         badge_label = QLabel()
         badge_label.setObjectName("TaskTypePreviewBadge")
         badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge_label.setMinimumWidth(180)
+        badge_label.setMinimumWidth(150)
         preview_layout.addWidget(badge_label, 0, Qt.AlignmentFlag.AlignLeft)
         preview_layout.addWidget(self._task_type_separator())
         inherit_title = QLabel("Наследуемые свойства")
@@ -1813,7 +1814,7 @@ class ProjectEditDialog(QDialog):
         preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
 
         footer = QHBoxLayout()
-        footer.setContentsMargins(0, 4, 0, 0)
+        footer.setContentsMargins(0, 2, 0, 0)
         cancel_button = QPushButton("Отмена")
         cancel_button.setObjectName("TaskTypeDialogSecondaryButton")
         cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
@@ -1923,11 +1924,28 @@ class ProjectEditDialog(QDialog):
     def _select_related_item(self, kind: str, title: str) -> Optional[int]:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
+        dialog.setObjectName("ProjectCompactRelationDialog")
+        dialog.setFixedSize(550, 200)
         layout = QVBoxLayout(dialog)
-        combo = QComboBox()
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        combo = FilterableComboBox(dialog)
+        combo.setMinimumContentsLength(24)
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo_view = combo.view()
+        if combo_view is not None:
+            combo_view.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         for item_id, label in self._relation_candidates(kind):
             combo.addItem(label, item_id)
-        layout.addWidget(combo)
+        if combo.count() == 0:
+            combo.addItem("— нет доступных —", None)
+        form.addRow("Элемент", combo)
+        layout.addLayout(form)
         buttons = QDialogButtonBox(dialog)
         buttons.addButton(QDialogButtonBox.StandardButton.Ok)
         buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
@@ -1936,13 +1954,15 @@ class ProjectEditDialog(QDialog):
         layout.addWidget(buttons)
         self._apply_child_dialog_style(dialog)
         if combo.count() and dialog.exec() == QDialog.DialogCode.Accepted:
-            return int(combo.currentData())
+            item_id = combo.currentData()
+            return int(item_id) if item_id is not None else None
         return None
 
     def _add_relation_dialog(self) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Добавить связь")
-        dialog.resize(620, 420)
+        dialog.setObjectName("ProjectCompactRelationDialog")
+        dialog.setFixedSize(620, 360)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
@@ -2127,16 +2147,16 @@ class ProjectEditDialog(QDialog):
         dialog = QDialog(self)
         dialog.setWindowTitle("Редактирование отображаемого свойства" if initial else "Создание отображаемого свойства")
         dialog.setObjectName("ProjectDisplayPropertyDialog")
-        dialog.resize(1180, 780)
-        dialog.setMinimumSize(1040, 680)
+        dialog.resize(860, 560)
+        dialog.setMinimumSize(760, 500)
         root = QVBoxLayout(dialog)
-        root.setContentsMargins(28, 24, 28, 22)
-        root.setSpacing(18)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(12)
 
         header = QHBoxLayout()
-        header.setSpacing(14)
+        header.setSpacing(10)
         hero_icon = QLabel()
-        hero_icon.setPixmap(qta.icon("fa5s.link", color="#3478f6").pixmap(34, 34))
+        hero_icon.setPixmap(qta.icon("fa5s.link", color="#3478f6").pixmap(26, 26))
         header.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignTop)
         title_box = QVBoxLayout()
         title_box.setSpacing(4)
@@ -2159,26 +2179,26 @@ class ProjectEditDialog(QDialog):
         root.addLayout(header)
 
         body = QHBoxLayout()
-        body.setSpacing(22)
+        body.setSpacing(14)
         left_column = QVBoxLayout()
-        left_column.setSpacing(16)
+        left_column.setSpacing(10)
         body.addLayout(left_column, 1)
         preview_card = QFrame()
         preview_card.setObjectName("DisplayPropertyPreviewCard")
-        preview_card.setMinimumWidth(380)
-        preview_card.setMaximumWidth(420)
+        preview_card.setMinimumWidth(280)
+        preview_card.setMaximumWidth(320)
         body.addWidget(preview_card)
         root.addLayout(body, 1)
 
         main_card = QFrame()
         main_card.setObjectName("DisplayPropertyCard")
         main_layout = QVBoxLayout(main_card)
-        main_layout.setContentsMargins(18, 16, 18, 18)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(14, 12, 14, 14)
+        main_layout.setSpacing(10)
         main_layout.addLayout(self._display_property_section_title("fa5s.clipboard-list", "Основное"))
         field_grid = QGridLayout()
-        field_grid.setHorizontalSpacing(18)
-        field_grid.setVerticalSpacing(8)
+        field_grid.setHorizontalSpacing(12)
+        field_grid.setVerticalSpacing(6)
         name_edit = QLineEdit(str(initial.get("name") or "") if initial else "")
         name_edit.setPlaceholderText("WIKI")
         url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
@@ -2201,13 +2221,13 @@ class ProjectEditDialog(QDialog):
         mode_card = QFrame()
         mode_card.setObjectName("DisplayPropertyCard")
         mode_layout = QVBoxLayout(mode_card)
-        mode_layout.setContentsMargins(18, 16, 18, 18)
-        mode_layout.setSpacing(14)
+        mode_layout.setContentsMargins(14, 12, 14, 14)
+        mode_layout.setSpacing(10)
         mode_layout.addLayout(self._display_property_section_title("fa5s.desktop", "Способ отображения"))
         mode_group = QButtonGroup(dialog)
         mode_group.setExclusive(True)
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(14)
+        mode_row.setSpacing(10)
         name_link_radio, name_link_card = self._display_mode_card(
             "fa5s.link",
             "Имя со ссылкой внутри",
@@ -2245,8 +2265,8 @@ class ProjectEditDialog(QDialog):
         rules_card = QFrame()
         rules_card.setObjectName("DisplayPropertyCard")
         rules_layout = QVBoxLayout(rules_card)
-        rules_layout.setContentsMargins(18, 16, 18, 18)
-        rules_layout.setSpacing(11)
+        rules_layout.setContentsMargins(14, 12, 14, 14)
+        rules_layout.setSpacing(8)
         rules_layout.addLayout(self._display_property_section_title("fa5s.shield-alt", "Ограничения и поведение"))
         for icon_name, color, text in (
             ("fa5s.info-circle", "#3478f6", "В одном проекте может быть не более 4 отображаемых свойств."),
@@ -2258,8 +2278,8 @@ class ProjectEditDialog(QDialog):
         left_column.addStretch(1)
 
         preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(20, 18, 20, 18)
-        preview_layout.setSpacing(14)
+        preview_layout.setContentsMargins(14, 12, 14, 14)
+        preview_layout.setSpacing(10)
         preview_layout.addLayout(self._display_property_section_title("fa5s.eye", "Предпросмотр"))
         preview_caption = QLabel("Как это выглядит в задаче")
         preview_caption.setObjectName("DisplayPropertyPreviewCaption")
@@ -2316,7 +2336,7 @@ class ProjectEditDialog(QDialog):
         preview_button.clicked.connect(lambda: preview_card.setFocus(Qt.FocusReason.OtherFocusReason))
 
         footer = QHBoxLayout()
-        footer.setContentsMargins(0, 4, 0, 0)
+        footer.setContentsMargins(0, 2, 0, 0)
         cancel_button = QPushButton("Отмена")
         cancel_button.setObjectName("DisplayPropertyDialogSecondaryButton")
         cancel_button.setIcon(qta.icon("fa5s.times", color=self._palette.text))
@@ -2396,10 +2416,20 @@ class ProjectEditDialog(QDialog):
     def _link_dialog(self, title: str, initial: Optional[dict[str, str]] = None) -> Optional[dict[str, str]]:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
+        dialog.setObjectName("ProjectCompactLinkDialog")
+        dialog.setFixedSize(550, 220)
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
         title_edit = QLineEdit(str(initial.get("title") or "") if initial else "")
         url_edit = QLineEdit(str(initial.get("url") or "") if initial else "")
+        title_edit.setPlaceholderText("Короткое имя")
+        url_edit.setPlaceholderText("https://example.com или путь")
         form.addRow("Текст", title_edit)
         form.addRow("Ссылка", url_edit)
         layout.addLayout(form)
