@@ -50,6 +50,7 @@ PROJECTS_CSV_FIELDS: tuple[str, ...] = (
     "marker_theme",
     "repository_catalog",
     "project_task_types_json",
+    "project_display_properties_json",
     "related_project_ids",
     "related_task_ids",
     "repository_links_json",
@@ -141,9 +142,10 @@ def export_tasks_rows(tasks: Sequence[TaskData]) -> list[dict[str, object]]:
     ]
 
 
-def export_projects_rows(projects: Sequence[ProjectData]) -> list[dict[str, object]]:
-    return [
-        {
+def export_projects_rows(projects: Sequence[ProjectData], db=None) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for project in projects:
+        row: dict[str, object] = {
             "id": project.id,
             "parent_project_id": project.parent_project_id if project.parent_project_id is not None else "",
             "area": project.area,
@@ -160,13 +162,16 @@ def export_projects_rows(projects: Sequence[ProjectData]) -> list[dict[str, obje
             "marker_theme": project.marker_theme,
             "repository_catalog": project.repository_catalog,
             "project_task_types_json": "",
+            "project_display_properties_json": "",
             "related_project_ids": "",
             "related_task_ids": "",
             "repository_links_json": "",
             "wiki_links_json": "",
         }
-        for project in projects
-    ]
+        if db is not None:
+            row.update(_export_project_properties(db, int(project.id)))
+        rows.append(row)
+    return rows
 
 
 def export_notes_rows(notes: Sequence[NoteData]) -> list[dict[str, object]]:
@@ -348,6 +353,7 @@ def import_projects_rows(db, rows: Sequence[Mapping[str, str]]) -> CsvImportResu
                 "marker_theme": _text(row.get("marker_theme")).lower(),
                 "repository_catalog": _text(row.get("repository_catalog")),
                 "project_task_types": _parse_json_list(row.get("project_task_types_json")),
+                "project_display_properties": _parse_json_list(row.get("project_display_properties_json")),
                 "related_project_source_ids": _parse_pipe_ints(row.get("related_project_ids")),
                 "related_task_ids": _parse_pipe_ints(row.get("related_task_ids")),
                 "repository_links": _parse_json_list(row.get("repository_links_json")),
@@ -744,6 +750,47 @@ def _parse_pipe_ints(value: object) -> list[int]:
     return result
 
 
+def _export_project_properties(db, project_id: int) -> dict[str, object]:
+    return {
+        "project_task_types_json": json.dumps(
+            [
+                {
+                    "title": item.title,
+                    "value": item.value,
+                    "color_marker": item.color_marker,
+                    "theme_marker": item.theme_marker,
+                    "priority": item.priority,
+                    "importance": item.importance,
+                    "is_plan_task": item.is_plan_task,
+                    "concept_board_id": item.concept_board_id,
+                    "active": item.active,
+                }
+                for item in db.fetch_project_task_types(project_id, include_inactive=True)
+            ],
+            ensure_ascii=False,
+        ),
+        "project_display_properties_json": json.dumps(
+            [
+                {"name": item.name, "url": item.url, "display_mode": item.display_mode}
+                for item in db.fetch_project_display_properties(project_id)
+            ],
+            ensure_ascii=False,
+        ),
+        "related_project_ids": "|".join(
+            str(item.related_project_id) for item in db.fetch_project_related_projects(project_id)
+        ),
+        "related_task_ids": "|".join(str(item.task_id) for item in db.fetch_project_related_tasks(project_id)),
+        "repository_links_json": json.dumps(
+            [{"title": item.title, "url": item.url} for item in db.fetch_project_repository_links(project_id)],
+            ensure_ascii=False,
+        ),
+        "wiki_links_json": json.dumps(
+            [{"title": item.title, "url": item.url} for item in db.fetch_project_wiki_links(project_id)],
+            ensure_ascii=False,
+        ),
+    }
+
+
 def _project_task_type_id_by_title(db, project_id: Optional[int], title: str) -> Optional[int]:
     if project_id is None or not title:
         return None
@@ -760,6 +807,7 @@ def _project_task_type_id_by_title(db, project_id: Optional[int], title: str) ->
 def _apply_imported_project_properties(db, project_id: int, row: Mapping[str, object], source_to_created_id: Mapping[int, int]) -> None:
     try:
         db.replace_project_task_types(project_id, list(row.get("project_task_types") or []))
+        db.replace_project_display_properties(project_id, list(row.get("project_display_properties") or []))
         related_project_ids = [
             source_to_created_id[source_id]
             for source_id in row.get("related_project_source_ids", [])

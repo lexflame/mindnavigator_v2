@@ -8,6 +8,7 @@ from mindnavigator.workspaces.csv_transfer import (
     export_collections_rows,
     export_dossiers_rows,
     export_notes_rows,
+    export_projects_rows,
     import_dossiers_rows,
     import_notes_rows,
     import_projects_rows,
@@ -111,6 +112,66 @@ def test_import_projects_rows_restores_parent_chain(unique_temp_path) -> None:
         assert projects["Child CSV Project"].parent_project_id == projects["Root CSV Project"].id
     finally:
         db.close()
+
+
+def test_export_import_projects_rows_preserves_custom_project_properties(unique_temp_path) -> None:
+    source_db = Database(path=unique_temp_path("csv_projects_custom_source", ".db"))
+    target_db = Database(path=unique_temp_path("csv_projects_custom_target", ".db"))
+    try:
+        project = source_db.create_project(
+            area="Architecture",
+            title="Custom CSV Project",
+            updated=date(2026, 2, 25),
+            priority="Medium",
+            repository_catalog="D:/repo/custom",
+        )
+        source_db.add_project_task_type(
+            project_id=project.id,
+            title="Development",
+            value="dev",
+            color_marker="#20f5d2",
+            theme_marker="debug",
+            priority="High",
+            importance=5,
+            is_plan_task=True,
+        )
+        source_db.replace_project_display_properties(
+            project.id,
+            [{"name": "wiki", "url": "https://docs.example.com", "display_mode": "name_link"}],
+        )
+        source_db.replace_project_repository_links(
+            project.id,
+            [{"title": "Repo", "url": "https://github.com/lexflame/mindnavigator"}],
+        )
+        source_db.replace_project_wiki_links(
+            project.id,
+            [{"title": "Docs", "url": "https://docs.example.com/project"}],
+        )
+
+        rows = export_projects_rows(source_db.fetch_projects(), db=source_db)
+        only_row = next(row for row in rows if row["title"] == "Custom CSV Project")
+
+        result = import_projects_rows(target_db, [only_row])
+        assert result.imported == 1
+
+        imported_project = next(project for project in target_db.fetch_projects() if project.title == "Custom CSV Project")
+        imported_types = target_db.fetch_project_task_types(imported_project.id, include_inactive=True)
+        assert [(item.title, item.value, item.priority, item.importance, item.is_plan_task) for item in imported_types] == [
+            ("DEVELOPMENT", "DEV", "High", 5, True)
+        ]
+        display = target_db.fetch_project_display_properties(imported_project.id)
+        assert [(item.name, item.url, item.display_mode) for item in display] == [
+            ("WIKI", "https://docs.example.com", "name_link")
+        ]
+        assert [item.url for item in target_db.fetch_project_repository_links(imported_project.id)] == [
+            "https://github.com/lexflame/mindnavigator"
+        ]
+        assert [item.url for item in target_db.fetch_project_wiki_links(imported_project.id)] == [
+            "https://docs.example.com/project"
+        ]
+    finally:
+        source_db.close()
+        target_db.close()
 
 
 def test_export_and_import_notes_rows_preserve_flags_and_tags(unique_temp_path) -> None:
