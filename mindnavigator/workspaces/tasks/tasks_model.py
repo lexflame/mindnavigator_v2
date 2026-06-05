@@ -183,7 +183,11 @@ class TasksModel(QAbstractListModel):
             payload = self._task_update_payload(parent_task)
             payload[property_name] = value
             try:
-                self._db.update_task(task_id=parent_task.id, **payload)
+                self._db.update_task(
+                    task_id=parent_task.id,
+                    suppress_builtin_type_cascade=True,
+                    **payload,
+                )
             except Exception as exc:  # noqa: BLE001 - collect save errors for the operation report
                 errors.append(f"MN-{parent_task.id}: {exc}")
             else:
@@ -197,7 +201,11 @@ class TasksModel(QAbstractListModel):
             payload = self._task_update_payload(child)
             payload[property_name] = value
             try:
-                self._db.update_task(task_id=child.id, **payload)
+                self._db.update_task(
+                    task_id=child.id,
+                    suppress_builtin_type_cascade=True,
+                    **payload,
+                )
             except Exception as exc:  # noqa: BLE001 - collect per-row save errors for the operation report
                 errors.append(f"MN-{child.id}: {exc}")
                 continue
@@ -510,7 +518,7 @@ class TasksModel(QAbstractListModel):
             description="",
             day=parent_task.day,
             time_text=parent_task.time_text,
-            priority="Medium" if self._task_plan_branch.get(parent_task.id, False) else (parent_task.priority or "Medium"),
+            priority=self.default_subtask_priority(parent_task.id),
             project_id=parent_task.project_id,
             parent_id=parent_task.id,
             recurrence_kind="",
@@ -519,6 +527,17 @@ class TasksModel(QAbstractListModel):
             marker_theme=parent_task.marker_theme,
             project_task_type_id=parent_task.project_task_type_id,
         )
+
+    def default_subtask_priority(self, parent_task_id: int) -> str:
+        parent_task = next(
+            (it for it in self._all_rows if isinstance(it, TaskRow) and it.id == parent_task_id),
+            None,
+        )
+        if parent_task is None:
+            return "Medium"
+        if self._task_plan_branch.get(parent_task.id, False):
+            return "Medium"
+        return parent_task.priority or "Medium"
 
     def quick_add_task_for_day(self, target_day: date) -> None:
         return self.add_task(
