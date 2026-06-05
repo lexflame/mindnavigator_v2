@@ -49,6 +49,35 @@ def _find_header_row(model: tasks_workspace.TasksModel, target_day: date) -> int
     return -1
 
 
+class _AcceptedTaskCreateDialog:
+    instances: list["_AcceptedTaskCreateDialog"] = []
+
+    def __init__(self, parent=None, **kwargs) -> None:
+        self.parent = parent
+        self.kwargs = kwargs
+        self.__class__.instances.append(self)
+
+    def values(self) -> dict[str, object]:
+        return {
+            "title": self.kwargs.get("title") or "Dialog seeded task",
+            "description": self.kwargs.get("description", ""),
+            "day": self.kwargs.get("day") or date(2026, 3, 7),
+            "time_text": self.kwargs.get("time_text", ""),
+            "priority": self.kwargs.get("priority") or "Medium",
+            "project_id": self.kwargs.get("project_id"),
+            "recurrence_kind": self.kwargs.get("recurrence_kind", ""),
+            "recurrence_interval": self.kwargs.get("recurrence_interval", 1),
+            "marker_color": self.kwargs.get("marker_color", ""),
+            "marker_theme": self.kwargs.get("marker_theme", ""),
+            "project_task_type_id": self.kwargs.get("project_task_type_id"),
+            "importance": self.kwargs.get("importance", 3),
+            "is_plan_task": self.kwargs.get("is_plan_task", False),
+        }
+
+    def apply_pending_context_links(self, task_id: int) -> None:
+        self.applied_task_id = task_id
+
+
 def _create_completed_task(database: Database, title: str, completion_day: date, priority: str = "Medium") -> int:
     created = database.create_task(
         title=title,
@@ -2013,9 +2042,9 @@ def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_p
 
         dialog = tasks_workspace.TaskCreateDialog()
         try:
-            dialog.title_edit.setText("Refactor backend API endpoints")
+            dialog.title_inline.editor.setText("Refactor backend API endpoints")
             QApplication.processEvents()
-            assert dialog.project_edit.currentData() == backend.id
+            assert dialog.project_inline.editor.currentData() == backend.id
         finally:
             dialog.deleteLater()
     finally:
@@ -2023,7 +2052,7 @@ def test_task_create_dialog_suggests_project_by_title(monkeypatch, unique_temp_p
         db_path.unlink(missing_ok=True)
 
 
-def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, unique_temp_path) -> None:
+def test_task_create_dialog_uses_details_dialog_default_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_create_dialog_shared_size", ".sqlite3")
     database = Database(path=db_path)
@@ -2034,8 +2063,8 @@ def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, un
 
         dialog = tasks_workspace.TaskCreateDialog()
 
-        assert dialog.width() == 1100
-        assert dialog.height() == 700
+        assert dialog.width() == 1360
+        assert dialog.height() == 980
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -2043,7 +2072,7 @@ def test_task_create_dialog_uses_shared_edit_dialog_size_setting(monkeypatch, un
         db_path.unlink(missing_ok=True)
 
 
-def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+def test_task_create_dialog_does_not_save_legacy_edit_dialog_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_create_dialog_save_shared_size", ".sqlite3")
     database = Database(path=db_path)
@@ -2055,7 +2084,7 @@ def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch
         dialog.resize(790, 600)
         dialog.close()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
+        assert database.get_setting("ui.task_edit_dialog_size", default="") == ""
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -2063,7 +2092,7 @@ def test_task_create_dialog_saves_size_to_shared_edit_dialog_setting(monkeypatch
         db_path.unlink(missing_ok=True)
 
 
-def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monkeypatch, unique_temp_path) -> None:
+def test_task_create_dialog_accept_does_not_save_legacy_edit_dialog_size(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_create_dialog_accept_save_shared_size", ".sqlite3")
     database = Database(path=db_path)
@@ -2073,10 +2102,10 @@ def test_task_create_dialog_accept_saves_size_to_shared_edit_dialog_setting(monk
 
         dialog = tasks_workspace.TaskCreateDialog()
         dialog.resize(680, 560)
-        dialog.title_edit.setText("Accepted task")
-        dialog._on_accept()
+        dialog.title_inline.editor.setText("Accepted task")
+        dialog._save_form_updates()
 
-        assert database.get_setting("ui.task_edit_dialog_size") == "1100x700"
+        assert database.get_setting("ui.task_edit_dialog_size", default="") == ""
     finally:
         if dialog is not None:
             dialog.deleteLater()
@@ -3307,7 +3336,10 @@ def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch
     try:
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
-        monkeypatch.setattr(workspace, "open_task_for_edit", lambda task_id: True)
+        monkeypatch.setattr(workspace, "open_task_for_view", lambda task_id: True)
+        _AcceptedTaskCreateDialog.instances.clear()
+        monkeypatch.setattr(tasks_workspace_impl, "TaskCreateDialog", _AcceptedTaskCreateDialog)
+        monkeypatch.setattr(tasks_workspace_impl, "exec_with_overlay", lambda dialog, parent: QDialog.DialogCode.Accepted)
         workspace.new_title.setText('Задача "тест"')
         workspace._quick_quote_filters[0]._normalize_line_edit(workspace.new_title.text())
 
@@ -3317,6 +3349,7 @@ def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch
 
         created = database.fetch_tasks()
         assert any(task.title == "Задача «тест»" for task in created)
+        assert _AcceptedTaskCreateDialog.instances[-1].kwargs["title"] == "Задача «тест»"
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -3324,7 +3357,7 @@ def test_tasks_workspace_quick_create_replaces_ascii_quotes_in_title(monkeypatch
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_quick_create_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_quick_create_opens_created_task_view(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_quick_create_open_edit", ".sqlite3")
     database = Database(path=db_path)
@@ -3333,14 +3366,17 @@ def test_tasks_workspace_quick_create_opens_created_task_for_edit(monkeypatch, u
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
         before_count = len(database.fetch_tasks())
-        edited_task_ids: list[int] = []
+        viewed_task_ids: list[int] = []
+        _AcceptedTaskCreateDialog.instances.clear()
 
-        def _capture_edit(index: QModelIndex) -> None:
+        def _capture_view(index: QModelIndex) -> None:
             task_id = index.data(TaskRoles.TaskId)
             if isinstance(task_id, int):
-                edited_task_ids.append(task_id)
+                viewed_task_ids.append(task_id)
 
-        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        monkeypatch.setattr(workspace.delegate, "open_task_view", _capture_view)
+        monkeypatch.setattr(tasks_workspace_impl, "TaskCreateDialog", _AcceptedTaskCreateDialog)
+        monkeypatch.setattr(tasks_workspace_impl, "exec_with_overlay", lambda dialog, parent: QDialog.DialogCode.Accepted)
         workspace.new_title.setText("Quick create edit")
 
         workspace._on_create_task()
@@ -3348,7 +3384,8 @@ def test_tasks_workspace_quick_create_opens_created_task_for_edit(monkeypatch, u
         created = database.fetch_tasks()
         assert len(created) == before_count + 1
         created_task = next(task for task in created if task.title == "Quick create edit")
-        assert edited_task_ids == [created_task.id]
+        assert viewed_task_ids == [created_task.id]
+        assert _AcceptedTaskCreateDialog.instances[-1].kwargs["title"] == "Quick create edit"
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -3364,16 +3401,16 @@ def test_task_create_dialog_replaces_and_normalizes_ascii_quotes(monkeypatch, un
     try:
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         dialog = tasks_workspace.TaskCreateDialog()
-        dialog.title_edit.setText('Новая "задача"')
-        dialog._quote_filters[0]._normalize_line_edit(dialog.title_edit.text())
-        dialog.description_edit.setPlainText('Описание "теста"')
-        dialog._quote_filters[1]._normalize_plain_text_edit()
+        dialog.title_inline.editor.setText('Новая "задача"')
+        assert dialog.description_editor is not None
+        dialog.description_editor.setPlainText('Описание "теста"')
 
-        assert dialog.title_edit.text() == "Новая «задача»"
-        assert dialog.description_edit.toPlainText() == "Описание «теста»"
+        values = dialog.values()
+        assert values["title"] == "Новая «задача»"
+        assert values["description"] == "Описание «теста»"
 
-        dialog.title_edit.setText('Вставка "заголовка"')
-        dialog.description_edit.setPlainText('Вставка "описания"')
+        dialog.title_inline.editor.setText('Вставка "заголовка"')
+        dialog.description_editor.setPlainText('Вставка "описания"')
 
         values = dialog.values()
         assert values["title"] == "Вставка «заголовка»"
@@ -3385,7 +3422,7 @@ def test_task_create_dialog_replaces_and_normalizes_ascii_quotes(monkeypatch, un
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_dialog_create_opens_created_task_view(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_dialog_create_open_edit", ".sqlite3")
     database = Database(path=db_path)
@@ -3394,16 +3431,17 @@ def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, 
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
         before_count = len(database.fetch_tasks())
-        edited_task_ids: list[int] = []
+        viewed_task_ids: list[int] = []
 
-        def _capture_edit(index: QModelIndex) -> None:
+        def _capture_view(index: QModelIndex) -> None:
             task_id = index.data(TaskRoles.TaskId)
             if isinstance(task_id, int):
-                edited_task_ids.append(task_id)
+                viewed_task_ids.append(task_id)
 
         class _FakeTaskCreateDialog:
-            def __init__(self, parent=None) -> None:
+            def __init__(self, parent=None, **kwargs) -> None:
                 self.parent = parent
+                self.kwargs = kwargs
 
             def values(self) -> dict[str, object]:
                 return {
@@ -3417,9 +3455,15 @@ def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, 
                     "recurrence_interval": 1,
                     "marker_color": "",
                     "marker_theme": "",
+                    "project_task_type_id": None,
+                    "importance": 3,
+                    "is_plan_task": False,
                 }
 
-        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+            def apply_pending_context_links(self, task_id: int) -> None:
+                self.applied_task_id = task_id
+
+        monkeypatch.setattr(workspace.delegate, "open_task_view", _capture_view)
         monkeypatch.setattr(tasks_workspace_impl, "TaskCreateDialog", _FakeTaskCreateDialog)
         monkeypatch.setattr(tasks_workspace_impl, "exec_with_overlay", lambda dialog, parent: QDialog.DialogCode.Accepted)
 
@@ -3428,7 +3472,7 @@ def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, 
         created = database.fetch_tasks()
         assert len(created) == before_count + 1
         created_task = next(task for task in created if task.title == "Dialog create edit")
-        assert edited_task_ids == [created_task.id]
+        assert viewed_task_ids == [created_task.id]
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -3436,7 +3480,7 @@ def test_tasks_workspace_dialog_create_opens_created_task_for_edit(monkeypatch, 
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_header_quick_add_opens_created_task_for_edit(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_header_quick_add_opens_created_task_view(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_header_quick_add_open_edit", ".sqlite3")
     database = Database(path=db_path)
@@ -3452,14 +3496,32 @@ def test_tasks_workspace_header_quick_add_opens_created_task_for_edit(monkeypatc
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
         before_ids = {task.id for task in database.fetch_tasks()}
-        edited_task_ids: list[int] = []
+        viewed_task_ids: list[int] = []
+        create_calls: list[dict[str, object]] = []
 
-        def _capture_edit(index: QModelIndex) -> None:
+        def _capture_view(index: QModelIndex) -> None:
             task_id = index.data(TaskRoles.TaskId)
             if isinstance(task_id, int):
-                edited_task_ids.append(task_id)
+                viewed_task_ids.append(task_id)
 
-        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        def _capture_create(**kwargs) -> bool:
+            create_calls.append(kwargs)
+            created = workspace.model.add_task(
+                title="Header quick create",
+                day=kwargs["day"],
+                time_text=kwargs.get("time_text", ""),
+                priority=kwargs.get("priority", "Medium"),
+                project_id=kwargs.get("project_id"),
+                parent_id=kwargs.get("parent_id"),
+                marker_color=kwargs.get("marker_color", ""),
+                marker_theme=kwargs.get("marker_theme", ""),
+                project_task_type_id=kwargs.get("project_task_type_id"),
+            )
+            workspace.open_task_for_view(created.id)
+            return True
+
+        monkeypatch.setattr(workspace.delegate, "open_task_view", _capture_view)
+        monkeypatch.setattr(workspace, "open_create_task_dialog", _capture_create)
         header_row = _find_header_row(workspace.model, source_task.day)
         assert header_row >= 0
         index = workspace.model.index(header_row, 0)
@@ -3490,7 +3552,8 @@ def test_tasks_workspace_header_quick_add_opens_created_task_for_edit(monkeypatc
         created_task = created_tasks[0]
         assert created_task.day == source_task.day
         assert created_task.parent_id is None
-        assert edited_task_ids == [created_task.id]
+        assert viewed_task_ids == [created_task.id]
+        assert create_calls == [{"day": source_task.day}]
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -3498,7 +3561,7 @@ def test_tasks_workspace_header_quick_add_opens_created_task_for_edit(monkeypatc
         db_path.unlink(missing_ok=True)
 
 
-def test_tasks_workspace_task_quick_add_opens_created_subtask_for_edit(monkeypatch, unique_temp_path) -> None:
+def test_tasks_workspace_task_quick_add_opens_created_subtask_view(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_row_quick_add_open_edit", ".sqlite3")
     database = Database(path=db_path)
@@ -3514,14 +3577,32 @@ def test_tasks_workspace_task_quick_add_opens_created_subtask_for_edit(monkeypat
         monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
         workspace = tasks_workspace.TasksWorkspace()
         before_ids = {task.id for task in database.fetch_tasks()}
-        edited_task_ids: list[int] = []
+        viewed_task_ids: list[int] = []
+        create_calls: list[dict[str, object]] = []
 
-        def _capture_edit(index: QModelIndex) -> None:
+        def _capture_view(index: QModelIndex) -> None:
             task_id = index.data(TaskRoles.TaskId)
             if isinstance(task_id, int):
-                edited_task_ids.append(task_id)
+                viewed_task_ids.append(task_id)
 
-        monkeypatch.setattr(workspace.delegate, "edit_task", _capture_edit)
+        def _capture_create(**kwargs) -> bool:
+            create_calls.append(kwargs)
+            created = workspace.model.add_task(
+                title="Row quick subtask",
+                day=kwargs["day"],
+                time_text=kwargs.get("time_text", ""),
+                priority=kwargs.get("priority", "Medium"),
+                project_id=kwargs.get("project_id"),
+                parent_id=kwargs.get("parent_id"),
+                marker_color=kwargs.get("marker_color", ""),
+                marker_theme=kwargs.get("marker_theme", ""),
+                project_task_type_id=kwargs.get("project_task_type_id"),
+            )
+            workspace.open_task_for_view(created.id)
+            return True
+
+        monkeypatch.setattr(workspace.delegate, "open_task_view", _capture_view)
+        monkeypatch.setattr(workspace, "open_create_task_dialog", _capture_create)
         root_row = _find_task_row(workspace.model, root.id)
         assert root_row >= 0
         index = workspace.model.index(root_row, 0)
@@ -3552,7 +3633,19 @@ def test_tasks_workspace_task_quick_add_opens_created_subtask_for_edit(monkeypat
         created_task = created_tasks[0]
         assert created_task.parent_id == root.id
         assert created_task.day == root.day
-        assert edited_task_ids == [created_task.id]
+        assert viewed_task_ids == [created_task.id]
+        assert create_calls == [
+            {
+                "day": root.day,
+                "time_text": root.time_text,
+                "priority": root.priority,
+                "project_id": root.project_id,
+                "parent_id": root.id,
+                "marker_color": root.marker_color,
+                "marker_theme": root.marker_theme,
+                "project_task_type_id": root.project_task_type_id,
+            }
+        ]
     finally:
         if workspace is not None:
             workspace.deleteLater()

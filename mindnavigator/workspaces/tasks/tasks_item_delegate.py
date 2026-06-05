@@ -838,9 +838,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 if quick_rect.contains(pos) and tasks_model is not None:
                     target_day = index.data(TaskRoles.Day)
                     if isinstance(target_day, date):
-                        created = tasks_model.quick_add_task_for_day(target_day)
-                        self._open_created_task_for_edit(option, created)
-                        return True
+                        return self._open_create_task_dialog(option, day=target_day)
             return False
         if row_type != "task":
             return False
@@ -945,9 +943,18 @@ class TasksItemDelegate(QStyledItemDelegate):
             if quick_rect.contains(pos):
                 task = tasks_model.task_at_row(index.row())
                 if task is not None:
-                    created = tasks_model.quick_add_subtask(task.id)
-                    self._open_created_task_for_edit(option, created)
-                    return True
+                    priority = tasks_model.default_subtask_priority(task.id)
+                    return self._open_create_task_dialog(
+                        option,
+                        day=task.day,
+                        time_text=task.time_text,
+                        priority=priority,
+                        project_id=task.project_id,
+                        parent_id=task.id,
+                        marker_color=task.marker_color,
+                        marker_theme=task.marker_theme,
+                        project_task_type_id=task.project_task_type_id,
+                    )
 
         if event.type() == QEvent.Type.MouseButtonRelease and isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.RightButton:
             pos = event.position().toPoint()
@@ -961,20 +968,17 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         return False
 
-    def _open_created_task_for_edit(self, option: QStyleOptionViewItem, created_task: object) -> None:
-        task_id = getattr(created_task, "id", None)
-        if not isinstance(task_id, int):
-            return
+    def _open_create_task_dialog(self, option: QStyleOptionViewItem, **kwargs) -> bool:
         host_widget = getattr(option, "widget", None)
         current_widget = host_widget if isinstance(host_widget, QWidget) else (
             self.parent() if isinstance(self.parent(), QWidget) else None
         )
         while current_widget is not None:
-            opener = getattr(current_widget, "open_task_for_edit", None)
+            opener = getattr(current_widget, "open_create_task_dialog", None)
             if callable(opener):
-                opener(task_id)
-                return
+                return bool(opener(**kwargs))
             current_widget = current_widget.parentWidget()
+        return False
 
     def _show_row_menu(self, index: QModelIndex):
         """Отображает контекстное меню строки."""
