@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import QDate, QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
@@ -2613,15 +2614,23 @@ def test_tasks_workspace_haven_importance_badges_filter_with_counts(monkeypatch,
         database.create_task(
             "Complex", "", date(2026, 3, 6), "12:00", "Medium", project_id=project.id, importance=5
         )
+        undefined_task = database.create_task(
+            "Undefined importance", "", date(2026, 3, 6), "13:00", "Medium", project_id=project.id, importance=3
+        )
 
         workspace = tasks_workspace.TasksWorkspace()
+        workspace.model._all_rows = [
+            replace(row, importance=None) if getattr(row, "id", None) == undefined_task.id else row
+            for row in workspace.model._all_rows
+        ]
         workspace.apply_haven_filter("project", project.id, project.title)
         QApplication.processEvents()
 
-        assert len(workspace.haven_importance_buttons) == 5
+        assert len(workspace.haven_importance_buttons) == 6
         button_by_importance = {
             int(button.property("importance")): button for button in workspace.haven_importance_buttons
         }
+        assert "Неопределён (1)" in button_by_importance[0].text()
         assert "(1)" in button_by_importance[1].text()
         assert "(2)" in button_by_importance[3].text()
         assert "(1)" in button_by_importance[5].text()
@@ -2640,10 +2649,22 @@ def test_tasks_workspace_haven_importance_badges_filter_with_counts(monkeypatch,
         assert "(1)" in button_by_importance[1].text()
         assert "(2)" in button_by_importance[3].text()
 
+        button_by_importance[0].click()
+        QApplication.processEvents()
+        visible_titles = {
+            workspace.model.index(row, 0).data(TaskRoles.Title)
+            for row in range(workspace.model.rowCount())
+            if workspace.model.index(row, 0).data(TaskRoles.RowType) == "task"
+        }
+        assert visible_titles == {"Undefined importance"}
+        assert workspace.model._importance_filter == 0
+        assert button_by_importance[0].isChecked() is True
+
         button_by_importance[3].click()
         QApplication.processEvents()
-        assert workspace.model._importance_filter is None
-        assert button_by_importance[3].isChecked() is False
+        assert workspace.model._importance_filter == 3
+        assert button_by_importance[0].isChecked() is False
+        assert button_by_importance[3].isChecked() is True
     finally:
         if workspace is not None:
             workspace.deleteLater()
@@ -2676,8 +2697,8 @@ def test_tasks_workspace_haven_host_sits_between_secondary_modes_and_actions(mon
         assert indexes["DASH"] < indexes["TasksHavenHost"]
         assert action_button_indexes
         assert indexes["TasksHavenHost"] < min(action_button_indexes)
-        assert len(workspace.haven_importance_buttons) == 5
-        assert workspace.haven_layout.count() == 8
+        assert len(workspace.haven_importance_buttons) == 6
+        assert workspace.haven_layout.count() == 9
     finally:
         if workspace is not None:
             workspace.deleteLater()

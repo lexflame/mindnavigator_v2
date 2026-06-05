@@ -10,7 +10,7 @@ from .cast_dash import TasksDashCast
 from .cast_gantt import TasksGanttCast
 from .style import TasksWorkspaceStyle
 from .task_create_dialog import TaskCreateDialog
-from .task_importance_labels import task_importance_label
+from .task_importance_labels import UNDEFINED_TASK_IMPORTANCE, task_importance_label
 from .tasks_item_delegate import TasksItemDelegate
 from .tasks_model import TasksModel
 
@@ -437,7 +437,7 @@ class TasksWorkspace(BaseWorkspace):
         layout.setSpacing(6)
         layout.addStretch(1)
 
-        for importance in range(1, 6):
+        for importance in range(0, 6):
             button = QToolButton(host)
             button.setObjectName("TasksHavenImportanceBadge")
             button.setCheckable(True)
@@ -491,10 +491,15 @@ class TasksWorkspace(BaseWorkspace):
             return
         counts = self.model.importance_counts() if self.model is not None else {}
         for button in self.haven_importance_buttons:
-            importance = int(button.property("importance") or 3)
+            importance = int(button.property("importance") or UNDEFINED_TASK_IMPORTANCE)
             count = int(counts.get(importance, 0))
+            label = (
+                task_importance_label(importance)
+                if importance == UNDEFINED_TASK_IMPORTANCE
+                else f"{importance} · {task_importance_label(importance)}"
+            )
             button.blockSignals(True)
-            button.setText(f"{importance} · {task_importance_label(importance)} ({count})")
+            button.setText(f"{label} ({count})")
             button.setChecked(self._haven_importance_filter == importance)
             button.setEnabled(count > 0 or self._haven_importance_filter == importance)
             button.blockSignals(False)

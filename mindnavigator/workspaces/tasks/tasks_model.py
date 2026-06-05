@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
-from .task_importance_labels import normalize_task_importance
+from .task_importance_labels import task_importance_filter_key
 from .task_property_propagation import TASK_PROPAGATABLE_FIELDS, TaskPropertyPropagationResult
 
 
@@ -497,17 +497,17 @@ class TasksModel(QAbstractListModel):
 
     def set_importance_filter(self, importance: Optional[int]) -> None:
         """Устанавливает фильтр по важности задачи."""
-        self._importance_filter = normalize_task_importance(importance) if importance is not None else None
+        self._importance_filter = task_importance_filter_key(importance) if importance is not None else None
         self._rebuild()
 
     def importance_counts(self) -> dict[int, int]:
         """Возвращает счетчики задач по важности в текущем контексте без фильтра важности."""
-        counts = {importance: 0 for importance in range(1, 6)}
+        counts = {importance: 0 for importance in range(0, 6)}
         search = self._search
         for task_item in self._collect_base_tasks(ignore_importance_filter=True):
             if search and search not in task_item.title.lower():
                 continue
-            importance = normalize_task_importance(task_item.importance)
+            importance = task_importance_filter_key(task_item.importance)
             counts[importance] = counts.get(importance, 0) + 1
         return counts
 
@@ -1318,7 +1318,7 @@ class TasksModel(QAbstractListModel):
             if (
                 not ignore_importance_filter
                 and self._importance_filter is not None
-                and normalize_task_importance(it.importance) != self._importance_filter
+                and task_importance_filter_key(it.importance) != self._importance_filter
             ):
                 continue
 
