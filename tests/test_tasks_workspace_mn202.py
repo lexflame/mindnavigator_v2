@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, timezone
 
-from PySide6.QtCore import QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
+from PySide6.QtCore import QDate, QEvent, QItemSelectionModel, QModelIndex, QPointF, QRect, Qt
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPainter, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDialogButtonBox, QFrame, QLabel, QPlainTextEdit, QScrollArea, QStyleOptionViewItem, QTextEdit, QToolButton, QWidget
@@ -1534,6 +1534,45 @@ def test_task_details_dialog_inline_edit_updates_individual_fields(monkeypatch, 
         assert updated.description == "Inline body"
         nodes = dialog.findChildren(QToolButton, "TaskConceptBoardNode")
         assert any("Navigator note" in node.text() for node in nodes)
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_task_details_dialog_enter_commits_inline_edit(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("task_details_inline_enter", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    try:
+        task = database.create_task("Enter source", "", date(2026, 3, 6), "09:00", "Medium")
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        dialog = task_details_dialog.TaskDetailsDialog(task)
+
+        dialog.title_inline.begin_edit()
+        dialog.title_inline.editor.setText("Enter title")
+        QTest.keyClick(dialog.title_inline.editor, Qt.Key.Key_Return)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.title == "Enter title"
+        assert dialog.title_inline.currentIndex() == 0
+
+        dialog._begin_deadline_inline_edit()
+        dialog.date_inline.editor.setDate(QDate(2026, 3, 8))
+        dialog.time_inline.editor.setText("10:15")
+        QTest.keyClick(dialog.time_inline.editor, Qt.Key.Key_Return)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.day == date(2026, 3, 8)
+        assert updated.time_text == "10:15"
+        assert dialog.date_inline.currentIndex() == 0
+        assert dialog.time_inline.currentIndex() == 0
+        assert dialog.deadline_save_button.isHidden()
+        assert dialog.deadline_cancel_button.isHidden()
     finally:
         if dialog is not None:
             dialog.deleteLater()

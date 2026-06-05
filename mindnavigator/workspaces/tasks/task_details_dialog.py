@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from html import escape
+from typing import Callable
 
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
@@ -70,6 +71,8 @@ class InlineEditableField(QStackedWidget):
         self.editor = editor
         if isinstance(editor, QLineEdit):
             editor.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        editor.installEventFilter(self)
+        self._submit_handler: Callable[[], None] | None = None
 
         edit_host = QWidget(self)
         edit_layout = QHBoxLayout(edit_host)
@@ -93,6 +96,9 @@ class InlineEditableField(QStackedWidget):
         self.addWidget(edit_host)
         self.setCurrentIndex(0)
         self._commit_controls_enabled = True
+
+    def set_submit_handler(self, handler: Callable[[], None] | None) -> None:
+        self._submit_handler = handler
 
     def set_commit_controls_enabled(self, enabled: bool) -> None:
         self._commit_controls_enabled = bool(enabled)
@@ -121,6 +127,24 @@ class InlineEditableField(QStackedWidget):
 
     def cancel(self) -> None:
         self.setCurrentIndex(0)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if watched is self.editor and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if isinstance(self.editor, QComboBox) and self.editor.view().isVisible():
+                    return super().eventFilter(watched, event)
+                self._submit_edit()
+                event.accept()
+                return True
+        return super().eventFilter(watched, event)
+
+    def _submit_edit(self) -> None:
+        if self.currentIndex() != 1:
+            return
+        if self._submit_handler is not None:
+            self._submit_handler()
+            return
+        self.commit()
 
     def commit(self) -> None:
         value = self.current_value()
@@ -654,6 +678,8 @@ class TaskDetailsDialog(QDialog):
         self.time_inline.setFixedHeight(34)
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
         deadline_layout.addWidget(self.time_inline, 2)
+        self.date_inline.set_submit_handler(self._commit_deadline_inline_edit)
+        self.time_inline.set_submit_handler(self._commit_deadline_inline_edit)
         self.deadline_save_button = QToolButton(deadline_host)
         self.deadline_save_button.setObjectName("TaskDeadlineCommitButton")
         self.deadline_save_button.setText("✓")
@@ -1809,6 +1835,8 @@ class TaskDetailsDialog(QDialog):
             day=self.date_inline.current_value(),
             time_text=str(self.time_inline.current_value() or ""),
         ):
+            self.date_inline.setCurrentIndex(0)
+            self.time_inline.setCurrentIndex(0)
             self._set_deadline_commit_buttons_visible(False)
 
     def _save_inline_updates(self, **changes) -> bool:
