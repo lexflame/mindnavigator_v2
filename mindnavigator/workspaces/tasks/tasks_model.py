@@ -26,6 +26,10 @@ class TasksModel(QAbstractListModel):
         self._search = ""
         self._focus_day: Optional[date] = None
         self._project_filter_id: Optional[int] = None
+        self._project_tree_filter_id: Optional[int] = None
+        self._project_tree_filter_ids: Optional[set[int]] = None
+        self._project_area_filter: Optional[str] = None
+        self._project_area_filter_ids: Optional[set[int]] = None
         self._priority_filter: Optional[str] = None
         self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
@@ -460,7 +464,65 @@ class TasksModel(QAbstractListModel):
     def set_project_filter(self, project_id: Optional[int]):
         """Устанавливает фильтр по проекту."""
         self._project_filter_id = project_id
+        self._project_tree_filter_id = None
+        self._project_tree_filter_ids = None
+        self._project_area_filter = None
+        self._project_area_filter_ids = None
         self._rebuild()
+
+    def set_project_tree_filter(self, project_id: Optional[int]) -> None:
+        """Устанавливает фильтр по проекту верхнего уровня и его дочерним проектам."""
+        self._project_tree_filter_id = int(project_id) if project_id is not None else None
+        self._project_tree_filter_ids = (
+            self._project_descendant_ids(int(project_id)) if project_id is not None else None
+        )
+        self._project_filter_id = None
+        self._project_area_filter = None
+        self._project_area_filter_ids = None
+        self._rebuild()
+
+    def set_project_area_filter(self, area: Optional[str]) -> None:
+        """Устанавливает фильтр по области верхнего проекта."""
+        normalized_area = (area or "").strip()
+        self._project_area_filter = normalized_area or None
+        self._project_filter_id = None
+        self._project_tree_filter_id = None
+        self._project_tree_filter_ids = None
+        self._project_area_filter_ids = (
+            self._project_ids_for_top_area(normalized_area) if normalized_area else None
+        )
+        self._rebuild()
+
+    def _project_descendant_ids(self, project_id: int) -> set[int]:
+        projects = {project.id: project for project in self._db.fetch_projects()}
+        result = {int(project_id)}
+        changed = True
+        while changed:
+            changed = False
+            for project in projects.values():
+                if project.id in result:
+                    continue
+                if project.parent_project_id in result:
+                    result.add(project.id)
+                    changed = True
+        return result
+
+    def _project_ids_for_top_area(self, area: str) -> set[int]:
+        projects = {project.id: project for project in self._db.fetch_projects()}
+        result: set[int] = set()
+        normalized_area = (area or "").strip()
+        for project in projects.values():
+            current = project
+            seen: set[int] = set()
+            while current.parent_project_id is not None and current.id not in seen:
+                seen.add(current.id)
+                parent = projects.get(current.parent_project_id)
+                if parent is None:
+                    break
+                current = parent
+            if (current.area or "").strip() == normalized_area:
+                result.add(project.id)
+        return result
 
     def set_priority_filter(self, priority: Optional[str]):
         """Устанавливает фильтр по приоритету."""
@@ -1225,6 +1287,12 @@ class TasksModel(QAbstractListModel):
                 continue
 
             if self._project_filter_id is not None and it.project_id != self._project_filter_id:
+                continue
+
+            if self._project_tree_filter_ids is not None and it.project_id not in self._project_tree_filter_ids:
+                continue
+
+            if self._project_area_filter_ids is not None and it.project_id not in self._project_area_filter_ids:
                 continue
 
             if self._priority_filter is not None and (

@@ -89,6 +89,30 @@ class TasksWorkspaceStyle:
                 color: {palette.selection_text};
             }}
 
+            QWidget#TasksHavenHost {{
+                background: transparent;
+            }}
+            QFrame#TasksHavenBadge {{
+                background: {palette.elevated_bg};
+                border: 1px solid {palette.border_strong};
+                border-radius: 8px;
+            }}
+            QLabel#TasksHavenBadgeLabel {{
+                color: {palette.text};
+                font-weight: 600;
+            }}
+            QToolButton#TasksHavenClearButton {{
+                color: {palette.dim_text};
+                border: none;
+                padding: 0px 5px;
+                min-width: 18px;
+            }}
+            QToolButton#TasksHavenClearButton:hover {{
+                color: {palette.selection_text};
+                background: {palette.selection_bg};
+                border-radius: 6px;
+            }}
+
             QLabel#TasksDayLabel {{
                 color: {palette.text};
                 padding: 0px 6px;
