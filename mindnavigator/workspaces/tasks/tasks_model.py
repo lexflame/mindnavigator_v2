@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
+from .task_importance_labels import normalize_task_importance
 from .task_property_propagation import TASK_PROPAGATABLE_FIELDS, TaskPropertyPropagationResult
 
 
@@ -31,6 +32,7 @@ class TasksModel(QAbstractListModel):
         self._project_area_filter: Optional[str] = None
         self._project_area_filter_ids: Optional[set[int]] = None
         self._priority_filter: Optional[str] = None
+        self._importance_filter: Optional[int] = None
         self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
@@ -492,6 +494,22 @@ class TasksModel(QAbstractListModel):
             self._project_ids_for_top_area(normalized_area) if normalized_area else None
         )
         self._rebuild()
+
+    def set_importance_filter(self, importance: Optional[int]) -> None:
+        """Устанавливает фильтр по важности задачи."""
+        self._importance_filter = normalize_task_importance(importance) if importance is not None else None
+        self._rebuild()
+
+    def importance_counts(self) -> dict[int, int]:
+        """Возвращает счетчики задач по важности в текущем контексте без фильтра важности."""
+        counts = {importance: 0 for importance in range(1, 6)}
+        search = self._search
+        for task_item in self._collect_base_tasks(ignore_importance_filter=True):
+            if search and search not in task_item.title.lower():
+                continue
+            importance = normalize_task_importance(task_item.importance)
+            counts[importance] = counts.get(importance, 0) + 1
+        return counts
 
     def _project_descendant_ids(self, project_id: int) -> set[int]:
         projects = {project.id: project for project in self._db.fetch_projects()}
@@ -1243,15 +1261,13 @@ class TasksModel(QAbstractListModel):
                 count += 1
         return count
 
-    def _rebuild(self):
-        """Перестраивает список задач с учетом фильтров и поиска."""
+    def _collect_base_tasks(self, *, ignore_importance_filter: bool = False) -> List[TaskRow]:
         today = app_today()
 
         def is_today(d: date) -> bool:
             """Проверяет, соответствует ли дата сегодняшнему дню."""
             return d == today
 
-        search = self._search
         all_tasks_by_id = {
             it.id: it for it in self._all_rows if isinstance(it, TaskRow)
         }
@@ -1278,7 +1294,6 @@ class TasksModel(QAbstractListModel):
             return False
 
         base_tasks: List[TaskRow] = []
-        search_hits: set[int] = set()
         for it in self._all_rows:
             if not isinstance(it, TaskRow):
                 continue
@@ -1297,6 +1312,13 @@ class TasksModel(QAbstractListModel):
 
             if self._priority_filter is not None and (
                 self._task_is_plan_item.get(it.id, False) or it.priority != self._priority_filter
+            ):
+                continue
+
+            if (
+                not ignore_importance_filter
+                and self._importance_filter is not None
+                and normalize_task_importance(it.importance) != self._importance_filter
             ):
                 continue
 
@@ -1331,6 +1353,20 @@ class TasksModel(QAbstractListModel):
                     continue
 
             base_tasks.append(it)
+        return base_tasks
+
+    def _rebuild(self):
+        """Перестраивает список задач с учетом фильтров и поиска."""
+        today = app_today()
+
+        def is_today(d: date) -> bool:
+            """Проверяет, соответствует ли дата сегодняшнему дню."""
+            return d == today
+
+        search = self._search
+        base_tasks = self._collect_base_tasks()
+        search_hits: set[int] = set()
+        for it in base_tasks:
             if not search or search in it.title.lower():
                 search_hits.add(it.id)
 

@@ -2593,6 +2593,64 @@ def test_tasks_workspace_haven_filter_badge_filters_top_project_area(monkeypatch
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_workspace_haven_importance_badges_filter_with_counts(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_haven_importance_filter", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = None
+    try:
+        project = database.create_project("Haven", "Importance Project", date(2026, 3, 6), "Medium")
+        database.create_task(
+            "Low importance", "", date(2026, 3, 6), "09:00", "Medium", project_id=project.id, importance=1
+        )
+        database.create_task(
+            "Important A", "", date(2026, 3, 6), "10:00", "Medium", project_id=project.id, importance=3
+        )
+        database.create_task(
+            "Important B", "", date(2026, 3, 6), "11:00", "Medium", project_id=project.id, importance=3
+        )
+        database.create_task(
+            "Complex", "", date(2026, 3, 6), "12:00", "Medium", project_id=project.id, importance=5
+        )
+
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace.apply_haven_filter("project", project.id, project.title)
+        QApplication.processEvents()
+
+        assert len(workspace.haven_importance_buttons) == 5
+        button_by_importance = {
+            int(button.property("importance")): button for button in workspace.haven_importance_buttons
+        }
+        assert "(1)" in button_by_importance[1].text()
+        assert "(2)" in button_by_importance[3].text()
+        assert "(1)" in button_by_importance[5].text()
+
+        button_by_importance[3].click()
+        QApplication.processEvents()
+
+        visible_titles = {
+            workspace.model.index(row, 0).data(TaskRoles.Title)
+            for row in range(workspace.model.rowCount())
+            if workspace.model.index(row, 0).data(TaskRoles.RowType) == "task"
+        }
+        assert visible_titles == {"Important A", "Important B"}
+        assert workspace.model._importance_filter == 3
+        assert button_by_importance[3].isChecked() is True
+        assert "(1)" in button_by_importance[1].text()
+        assert "(2)" in button_by_importance[3].text()
+
+        button_by_importance[3].click()
+        QApplication.processEvents()
+        assert workspace.model._importance_filter is None
+        assert button_by_importance[3].isChecked() is False
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_haven_host_sits_between_secondary_modes_and_actions(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_haven_toolbar_position", ".sqlite3")
@@ -2618,7 +2676,8 @@ def test_tasks_workspace_haven_host_sits_between_secondary_modes_and_actions(mon
         assert indexes["DASH"] < indexes["TasksHavenHost"]
         assert action_button_indexes
         assert indexes["TasksHavenHost"] < min(action_button_indexes)
-        assert workspace.haven_layout.count() == 3
+        assert len(workspace.haven_importance_buttons) == 5
+        assert workspace.haven_layout.count() == 8
     finally:
         if workspace is not None:
             workspace.deleteLater()

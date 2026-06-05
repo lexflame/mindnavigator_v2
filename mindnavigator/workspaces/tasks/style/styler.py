@@ -92,6 +92,28 @@ class TasksWorkspaceStyle:
             QWidget#TasksHavenHost {{
                 background: transparent;
             }}
+            QToolButton#TasksHavenImportanceBadge {{
+                background: {palette.chip_bg};
+                color: {palette.text};
+                border: 1px solid {palette.chip_border};
+                border-radius: 8px;
+                padding: 4px 8px;
+                font-weight: 600;
+            }}
+            QToolButton#TasksHavenImportanceBadge:hover {{
+                border-color: {palette.accent};
+                color: {palette.accent_hover};
+            }}
+            QToolButton#TasksHavenImportanceBadge:checked {{
+                background: {palette.selection_bg};
+                color: {palette.selection_text};
+                border-color: {palette.accent};
+            }}
+            QToolButton#TasksHavenImportanceBadge:disabled {{
+                color: {palette.muted_text};
+                border-color: {palette.border};
+                background: {palette.input_alt_bg};
+            }}
             QFrame#TasksHavenBadge {{
                 background: {palette.elevated_bg};
                 border: 1px solid {palette.border_strong};

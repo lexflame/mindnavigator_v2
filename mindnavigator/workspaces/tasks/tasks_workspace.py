@@ -10,6 +10,7 @@ from .cast_dash import TasksDashCast
 from .cast_gantt import TasksGanttCast
 from .style import TasksWorkspaceStyle
 from .task_create_dialog import TaskCreateDialog
+from .task_importance_labels import task_importance_label
 from .tasks_item_delegate import TasksItemDelegate
 from .tasks_model import TasksModel
 
@@ -334,9 +335,11 @@ class TasksWorkspace(BaseWorkspace):
         self.haven_layout = None
         self.haven_badge = None
         self.haven_clear_button = None
+        self.haven_importance_buttons: List[QToolButton] = []
         self._haven_filter_kind: Optional[str] = None
         self._haven_filter_value: Optional[object] = None
         self._haven_filter_label = ""
+        self._haven_importance_filter: Optional[int] = None
         self._project_type_hover_row: Optional[int] = None
         self.board_day_filter_checkbox = None
         self.board_column_format_combo = None
@@ -434,6 +437,20 @@ class TasksWorkspace(BaseWorkspace):
         layout.setSpacing(6)
         layout.addStretch(1)
 
+        for importance in range(1, 6):
+            button = QToolButton(host)
+            button.setObjectName("TasksHavenImportanceBadge")
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setProperty("importance", importance)
+            button.clicked.connect(
+                lambda checked=False, selected_importance=importance: self.set_haven_importance_filter(
+                    selected_importance
+                )
+            )
+            layout.addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
+            self.haven_importance_buttons.append(button)
+
         badge = QFrame(host)
         badge.setObjectName("TasksHavenBadge")
         badge_layout = QHBoxLayout(badge)
@@ -458,6 +475,7 @@ class TasksWorkspace(BaseWorkspace):
         self.haven_badge = badge
         self.haven_badge_label = label
         self.haven_clear_button = clear_button
+        self._update_haven_importance_badges()
         return host
 
     def _update_haven_badge(self) -> None:
@@ -466,6 +484,32 @@ class TasksWorkspace(BaseWorkspace):
         self.haven_badge.setVisible(active)
         if active:
             self.haven_badge_label.setText(self._haven_filter_label)
+        self._update_haven_importance_badges()
+
+    def _update_haven_importance_badges(self) -> None:
+        if not self.haven_importance_buttons:
+            return
+        counts = self.model.importance_counts() if self.model is not None else {}
+        for button in self.haven_importance_buttons:
+            importance = int(button.property("importance") or 3)
+            count = int(counts.get(importance, 0))
+            button.blockSignals(True)
+            button.setText(f"{importance} · {task_importance_label(importance)} ({count})")
+            button.setChecked(self._haven_importance_filter == importance)
+            button.setEnabled(count > 0 or self._haven_importance_filter == importance)
+            button.blockSignals(False)
+
+    def set_haven_importance_filter(self, importance: int) -> None:
+        selected_importance = int(importance)
+        if self._haven_importance_filter == selected_importance:
+            self._haven_importance_filter = None
+            self._filters.pop("importance", None)
+            self.model.set_importance_filter(None)
+        else:
+            self._haven_importance_filter = selected_importance
+            self._remember_filter("importance", selected_importance)
+            self.model.set_importance_filter(selected_importance)
+        self._update_haven_importance_badges()
 
     def apply_haven_filter(self, kind: str, value: object, label: str) -> None:
         self._haven_filter_kind = kind
@@ -632,6 +676,8 @@ class TasksWorkspace(BaseWorkspace):
         self.model.layoutChanged.connect(self._on_task_selection_changed)
         self.model.modelReset.connect(self._update_sticky_day_header)
         self.model.layoutChanged.connect(self._update_sticky_day_header)
+        self.model.modelReset.connect(self._update_haven_importance_badges)
+        self.model.layoutChanged.connect(self._update_haven_importance_badges)
         self.model.rowsInserted.connect(lambda *_: self._update_sticky_day_header())
         self.model.rowsRemoved.connect(lambda *_: self._update_sticky_day_header())
         self.list.verticalScrollBar().valueChanged.connect(lambda *_: self._update_sticky_day_header())
@@ -1502,6 +1548,7 @@ class TasksWorkspace(BaseWorkspace):
             project_tree_id = filters.get("project_tree_id")
             project_area = filters.get("project_area")
             priority = filters.get("priority")
+            importance = filters.get("importance")
             board_day_filter = filters.get("board_day_filter")
             board_column_format = filters.get("board_column_format")
             secondary_mode_raw = filters.get("secondary_mode")
@@ -1545,6 +1592,12 @@ class TasksWorkspace(BaseWorkspace):
                 self._haven_filter_value = None
                 self._haven_filter_label = ""
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
+            if isinstance(importance, int):
+                self._haven_importance_filter = importance
+                self.model.set_importance_filter(importance)
+            else:
+                self._haven_importance_filter = None
+                self.model.set_importance_filter(None)
             if priority:
                 self.cmb_priority.setCurrentText(priority)
             else:
