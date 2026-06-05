@@ -2532,6 +2532,173 @@ def test_tasks_workspace_project_quick_link_click_toggles_filter(monkeypatch, un
         db_path.unlink(missing_ok=True)
 
 
+def test_tasks_workspace_haven_filter_badge_filters_top_project_area(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_haven_area_filter", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = None
+    try:
+        root = database.create_project("Haven", "Root Project", date(2026, 3, 6), "Medium")
+        child = database.create_project(
+            "Nested",
+            "Child Project",
+            date(2026, 3, 6),
+            "Medium",
+            parent_project_id=root.id,
+        )
+        other = database.create_project("Other", "Other Project", date(2026, 3, 6), "Medium")
+        database.create_task("Child task", "", date(2026, 3, 6), "09:00", "Medium", project_id=child.id)
+        database.create_task("Root task", "", date(2026, 3, 6), "10:00", "Medium", project_id=root.id)
+        database.create_task("Other task", "", date(2026, 3, 6), "11:00", "Medium", project_id=other.id)
+
+        workspace = tasks_workspace.TasksWorkspace()
+        workspace.apply_haven_filter("project", root.id, root.title)
+        QApplication.processEvents()
+
+        visible_titles = {
+            workspace.model.index(row, 0).data(TaskRoles.Title)
+            for row in range(workspace.model.rowCount())
+            if workspace.model.index(row, 0).data(TaskRoles.RowType) == "task"
+        }
+        assert visible_titles == {"Child task", "Root task"}
+        assert workspace.model._project_filter_id is None
+        assert workspace.model._project_tree_filter_id == root.id
+        assert workspace.model._project_area_filter is None
+        assert workspace.haven_badge.isHidden() is False
+        assert workspace.haven_badge_label.text() == root.title
+
+        workspace.apply_haven_filter("area", "Haven", "Haven")
+        QApplication.processEvents()
+
+        visible_titles = {
+            workspace.model.index(row, 0).data(TaskRoles.Title)
+            for row in range(workspace.model.rowCount())
+            if workspace.model.index(row, 0).data(TaskRoles.RowType) == "task"
+        }
+        assert visible_titles == {"Child task", "Root task"}
+        assert workspace.model._project_filter_id is None
+        assert workspace.model._project_area_filter == "Haven"
+        assert workspace.haven_badge.isHidden() is False
+        assert workspace.haven_badge_label.text() == "Haven"
+
+        workspace.haven_clear_button.click()
+        QApplication.processEvents()
+        assert workspace.model._project_area_filter is None
+        assert workspace.haven_badge.isHidden() is True
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_workspace_haven_host_sits_between_secondary_modes_and_actions(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_haven_toolbar_position", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = None
+    try:
+        workspace = tasks_workspace.TasksWorkspace()
+        layout = workspace.toolbar_layout
+        indexes = {
+            widget.objectName() or widget.text(): layout.indexOf(widget)
+            for widget in (workspace.btn_gantt, workspace.btn_board, workspace.btn_dash, workspace.haven_host)
+        }
+        action_button_indexes = [
+            layout.indexOf(widget)
+            for widget in workspace.toolbar_row.findChildren(QToolButton)
+            if widget.defaultAction() in workspace.actions.values()
+        ]
+        action_button_indexes = [index for index in action_button_indexes if index >= 0]
+
+        assert indexes["GANTT"] < indexes["TasksHavenHost"]
+        assert indexes["BOARD"] < indexes["TasksHavenHost"]
+        assert indexes["DASH"] < indexes["TasksHavenHost"]
+        assert action_button_indexes
+        assert indexes["TasksHavenHost"] < min(action_button_indexes)
+        assert workspace.haven_layout.count() == 3
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_delegate_project_type_switch_opens_haven_menu(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_haven_delegate_switch", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+    workspace = None
+    try:
+        project = database.create_project("Haven", "Typed Project", date(2026, 3, 6), "Medium")
+        database.replace_project_task_types(
+            project.id,
+            [
+                {
+                    "title": "Switch Type",
+                    "value": "SW",
+                    "color_marker": "#20f5d2",
+                    "theme_marker": "",
+                    "priority": "Medium",
+                    "importance": 3,
+                    "is_plan_task": False,
+                    "active": True,
+                }
+            ],
+        )
+        task_type = database.fetch_project_task_types(project.id)[0]
+        task = database.create_task(
+            "Typed task",
+            "",
+            date(2026, 3, 6),
+            "09:00",
+            "Medium",
+            project_id=project.id,
+            project_task_type_id=task_type.id,
+        )
+
+        workspace = tasks_workspace.TasksWorkspace()
+        opened: list[int] = []
+
+        def _capture_haven_menu(task_id: int, _global_pos: QPoint) -> bool:
+            opened.append(task_id)
+            return True
+
+        monkeypatch.setattr(workspace, "open_haven_filter_menu", _capture_haven_menu)
+        row = _find_task_row(workspace.model, task.id)
+        assert row >= 0
+        index = workspace.model.index(row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 1200, workspace.delegate.ROW_H)
+        option.widget = workspace.list
+        layout = workspace.delegate.row_layout(option.rect)
+        bracket_rect = workspace.delegate._project_type_bracket_rect(layout["project"])
+        switch_rect = workspace.delegate._project_type_switch_rect(bracket_rect)
+        assert switch_rect.right() + 1 == bracket_rect.left()
+        assert switch_rect.height() == bracket_rect.height()
+        click_point = switch_rect.center()
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            QPointF(float(click_point.x()), float(click_point.y())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        assert workspace.delegate.editorEvent(event, workspace.model, option, index) is True
+        assert opened == [task.id]
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_project_filter_can_be_cleared_after_mode_switch(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_project_quick_link_clear_button", ".sqlite3")
