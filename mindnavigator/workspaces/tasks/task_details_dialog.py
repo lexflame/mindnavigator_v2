@@ -8,7 +8,7 @@ from html import escape
 from typing import Callable
 
 from PySide6.QtGui import QFont, QTextCursor
-from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
+from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
 
 from mindnavigator.storage import DEFERRED_PRIORITY
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
@@ -69,9 +69,13 @@ class InlineEditableField(QStackedWidget):
         self.view_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self.view_label.edit_requested.connect(self.begin_edit)
         self.editor = editor
+        self._submit_event_widgets: tuple[QWidget, ...] = (editor,)
         if isinstance(editor, QLineEdit):
             editor.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        editor.installEventFilter(self)
+        elif isinstance(editor, QAbstractSpinBox):
+            self._submit_event_widgets = (editor, editor.lineEdit())
+        for event_widget in self._submit_event_widgets:
+            event_widget.installEventFilter(self)
         self._submit_handler: Callable[[], None] | None = None
 
         edit_host = QWidget(self)
@@ -129,7 +133,7 @@ class InlineEditableField(QStackedWidget):
         self.setCurrentIndex(0)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
-        if watched is self.editor and event.type() == QEvent.Type.KeyPress:
+        if watched in self._submit_event_widgets and event.type() == QEvent.Type.KeyPress:
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 if isinstance(self.editor, QComboBox) and self.editor.view().isVisible():
                     return super().eventFilter(watched, event)

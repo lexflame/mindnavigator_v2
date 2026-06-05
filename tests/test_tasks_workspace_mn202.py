@@ -1573,6 +1573,18 @@ def test_task_details_dialog_enter_commits_inline_edit(monkeypatch, unique_temp_
         assert dialog.time_inline.currentIndex() == 0
         assert dialog.deadline_save_button.isHidden()
         assert dialog.deadline_cancel_button.isHidden()
+
+        dialog._begin_deadline_inline_edit()
+        dialog.date_inline.editor.setDate(QDate(2026, 3, 9))
+        dialog.time_inline.editor.setText("11:30")
+        QTest.keyClick(dialog.date_inline.editor.lineEdit(), Qt.Key.Key_Return)
+        QApplication.processEvents()
+
+        updated = next(item for item in database.fetch_tasks() if item.id == task.id)
+        assert updated.day == date(2026, 3, 9)
+        assert updated.time_text == "11:30"
+        assert dialog.date_inline.currentIndex() == 0
+        assert dialog.time_inline.currentIndex() == 0
     finally:
         if dialog is not None:
             dialog.deleteLater()
