@@ -1245,7 +1245,7 @@ class TasksModel(QAbstractListModel):
 
     def _rebuild(self):
         """Перестраивает список задач с учетом фильтров и поиска."""
-        today = date.today()
+        today = app_today()
 
         def is_today(d: date) -> bool:
             """Проверяет, соответствует ли дата сегодняшнему дню."""

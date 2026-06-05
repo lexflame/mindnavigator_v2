@@ -28,7 +28,7 @@ class TaskCreateDialog(TaskDetailsDialog):
     ):
         task = TaskRow(
             id=0,
-            day=day or date.today(),
+            day=day or app_today(),
             time_text=time_text,
             title=title,
             description=description,

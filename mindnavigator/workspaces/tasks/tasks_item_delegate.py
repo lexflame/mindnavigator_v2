@@ -1425,7 +1425,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Проверяет, просрочена ли задача."""
         if is_plan_item or normalize_priority(priority) == DEFERRED_PRIORITY:
             return False
-        return (d < date.today()) and (not done)
+        return (d < app_today()) and (not done)
 
     @staticmethod
     def _format_header(d: date) -> str:

@@ -304,7 +304,7 @@ class TasksWorkspace(BaseWorkspace):
         self._db = get_database()
         self._csv_service = CsvTransferService()
         self._theme_mode = "dark"
-        self._focus_day = date.today()
+        self._focus_day = app_today()
         self._board_day_filter_enabled = True
         self._board_column_format = self.BOARD_COLUMN_FORMAT_IMPORTANCE
         self._applying_filters = False
@@ -554,7 +554,7 @@ class TasksWorkspace(BaseWorkspace):
         self.new_day.setCalendarPopup(True)
         self.new_day.setDisplayFormat("yyyy-MM-dd")
         self.new_day.setFixedWidth(140)
-        today = datetime.now().date()
+        today = app_today()
         self.new_day.setDate(QDate(today.year, today.month, today.day))
         self.new_day.setToolTip("Дата выполнения (можно выбрать в календаре или ввести вручную)")
         self.new_day.setKeyboardTracking(False)
@@ -697,7 +697,8 @@ class TasksWorkspace(BaseWorkspace):
         self.batch_date_edit.setCalendarPopup(True)
         self.batch_date_edit.setDisplayFormat("yyyy-MM-dd")
         self.batch_date_edit.setKeyboardTracking(False)
-        self.batch_date_edit.setDate(QDate.currentDate())
+        today = app_today()
+        self.batch_date_edit.setDate(QDate(today.year, today.month, today.day))
         self.batch_date_edit.hide()
         layout.addWidget(self.batch_date_edit)
 
@@ -2172,7 +2173,7 @@ class TasksWorkspace(BaseWorkspace):
         if mode == "Сегодня":
             _reset_secondary_modes()
             self.model.set_filter_mode("Сегодня")
-            self._focus_day = date.today()
+            self._focus_day = app_today()
             self.model.set_focus_day(self._focus_day)
             self._set_drag_drop_state(False)
             _set_secondary_buttons_visible(True)
@@ -2359,7 +2360,7 @@ class TasksWorkspace(BaseWorkspace):
         total_minutes = max(0, int(active_index.data(TaskRoles.HeaderTotalMinutes) or 0))
         overrun_minutes = max(0, int(active_index.data(TaskRoles.HeaderOverrunMinutes) or 0))
         text = self.delegate.format_header_with_plan_summary(active_day, total_minutes, overrun_minutes)
-        if active_day == date.today():
+        if active_day == app_today():
             text = f"{text}  СЕГОДНЯ"
         self._sticky_header.setText(text)
 

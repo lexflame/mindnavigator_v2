@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtCore import QRect
@@ -11,8 +11,10 @@ from PySide6.QtWidgets import QApplication
 
 from mindnavigator.storage import Database
 from mindnavigator.workspaces import tasks as tasks_workspace
+from mindnavigator.workspaces.tasks import tasks_model as tasks_model_module
 from mindnavigator.workspaces.tasks import (
     TaskRoles,
+    app_today,
     blend_task_row_background,
     format_task_list_title,
     is_marker_only_task_update,
@@ -74,6 +76,11 @@ def test_format_task_list_title_prefixes_valid_id_and_falls_back_for_invalid_id(
 def test_should_show_today_badge_detects_current_day() -> None:
     assert should_show_today_badge(date.today()) is True
     assert should_show_today_badge(date.today() - timedelta(days=1)) is False
+
+
+def test_app_today_starts_new_day_at_six_am() -> None:
+    assert app_today(datetime(2026, 5, 21, 5, 59, 59)) == date(2026, 5, 20)
+    assert app_today(datetime(2026, 5, 21, 6, 0, 0)) == date(2026, 5, 21)
 
 
 def test_header_quick_rect_reserves_space_for_today_badge() -> None:
@@ -326,6 +333,46 @@ def test_tasks_model_today_mode_shows_subtasks_expanded(monkeypatch, unique_temp
 
         assert root.id in visible_task_ids
         assert child.id in visible_task_ids
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_tasks_model_today_mode_uses_app_day_boundary(monkeypatch, unique_temp_path) -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = unique_temp_path("tasks_today_app_day_boundary", ".sqlite3")
+    database = Database(path=db_path)
+    logical_today = date(2026, 5, 20)
+    next_calendar_day = date(2026, 5, 21)
+    try:
+        current_day_task = database.create_task(
+            title="Night current day",
+            description="",
+            day=logical_today,
+            time_text="23:00",
+            priority="Medium",
+        )
+        next_day_task = database.create_task(
+            title="Morning next day",
+            description="",
+            day=next_calendar_day,
+            time_text="07:00",
+            priority="Medium",
+        )
+        monkeypatch.setattr(tasks_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(tasks_model_module, "app_today", lambda: logical_today)
+        model = tasks_workspace.TasksModel()
+
+        model.set_filter_mode("Сегодня")
+
+        visible_task_ids = [
+            model.index(row, 0).data(TaskRoles.TaskId)
+            for row in range(model.rowCount())
+            if model.index(row, 0).data(TaskRoles.RowType) == "task"
+        ]
+
+        assert current_day_task.id in visible_task_ids
+        assert next_day_task.id not in visible_task_ids
     finally:
         database.close()
         db_path.unlink(missing_ok=True)

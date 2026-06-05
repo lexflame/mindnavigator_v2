@@ -279,8 +279,18 @@ def extract_task_reference_ids(*texts: str) -> list[int]:
     return result
 
 
+APP_DAY_START_HOUR = 6
+
+
+def app_today(now: datetime | None = None) -> date:
+    current = now or datetime.now()
+    if current.hour < APP_DAY_START_HOUR:
+        current = current - timedelta(days=1)
+    return current.date()
+
+
 def should_show_today_badge(header_day: date) -> bool:
-    return header_day == date.today()
+    return header_day == app_today()
 
 
 def _tokenize_text_for_match(text: str) -> list[str]:

@@ -1672,7 +1672,7 @@ class TaskDetailsDialog(QDialog):
             self.plan_badge.setStyleSheet(self._badge_stylesheet("#6b5ad4"))
 
     def _status_badge_payload(self) -> tuple[str, str]:
-        today = date.today()
+        today = app_today()
         if self._task.done:
             return "Выполнено", self._palette.success
         if (self._task.priority or "").strip() == DEFERRED_PRIORITY:
