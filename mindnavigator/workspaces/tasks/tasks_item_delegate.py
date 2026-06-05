@@ -30,6 +30,8 @@ class TasksItemDelegate(QStyledItemDelegate):
     PARENT_MOVE_BUTTON_H = 22
     PARENT_MOVE_BUTTON_PAD_X = 10
     PARENT_MOVE_BUTTON_GAP = 8
+    PROJECT_SWITCH_BUTTON_H = 20
+    PROJECT_SWITCH_BUTTON_PAD_X = 10
 
     C_BG = QColor("#16171a")
     C_ROW = QColor("#2a2d33")
@@ -384,6 +386,42 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.drawLine(middle_point, last_point)
         painter.restore()
 
+    @staticmethod
+    def _project_type_bracket_rect(project_rect: QRect) -> QRect:
+        return QRect(project_rect.left(), project_rect.center().y() - 10, 4, 20)
+
+    def _project_type_switch_rect(self, bracket_rect: QRect) -> QRect:
+        text = "Переключиться"
+        metrics = QFontMetrics(self._font_small)
+        width = metrics.horizontalAdvance(text) + self.PROJECT_SWITCH_BUTTON_PAD_X * 2
+        width = max(96, width)
+        return QRect(
+            bracket_rect.left() - width,
+            bracket_rect.top(),
+            width,
+            bracket_rect.height(),
+        )
+
+    def _is_project_type_switch_hovered(self, option: QStyleOptionViewItem, bracket_rect: QRect, switch_rect: QRect) -> bool:
+        widget = getattr(option, "widget", None)
+        if not isinstance(widget, QWidget):
+            return False
+        hover_pos = widget.mapFromGlobal(QCursor.pos())
+        return bracket_rect.united(switch_rect).contains(hover_pos)
+
+    def _draw_project_type_switch_button(self, painter: QPainter, switch_rect: QRect, bracket_rect: QRect, color: QColor) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(switch_rect, 4, 4)
+        painter.fillRect(QRect(switch_rect.right() - 4, switch_rect.top(), 5, switch_rect.height()), color)
+        painter.fillRect(bracket_rect, color)
+        painter.setFont(self._font_small)
+        painter.setPen(Qt.GlobalColor.white)
+        painter.drawText(switch_rect.adjusted(8, 0, -8, 0), Qt.AlignmentFlag.AlignCenter, "Переключиться")
+        painter.restore()
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         """Рисует строку задачи или заголовок дня."""
         painter.save()
@@ -586,9 +624,10 @@ class TasksItemDelegate(QStyledItemDelegate):
                 display_project = f"{display_project} · {marker_theme.upper()}"
             text_rect = QRect(project_rect)
             if project_task_type_color and QColor(project_task_type_color).isValid():
-                bracket_rect = QRect(project_rect.left(), project_rect.center().y() - 10, 4, 20)
+                project_type_color = QColor(project_task_type_color)
+                bracket_rect = self._project_type_bracket_rect(project_rect)
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(project_task_type_color))
+                painter.setBrush(project_type_color)
                 painter.drawRoundedRect(bracket_rect, 2, 2)
                 painter.setPen(self.C_DIM)
                 text_rect.setLeft(text_rect.left() + 12)
@@ -598,6 +637,10 @@ class TasksItemDelegate(QStyledItemDelegate):
                 text_rect.width(),
             )
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_project)
+            if project_task_type_color and QColor(project_task_type_color).isValid():
+                switch_rect = self._project_type_switch_rect(bracket_rect)
+                if self._is_project_type_switch_hovered(option, bracket_rect, switch_rect):
+                    self._draw_project_type_switch_button(painter, switch_rect, bracket_rect, project_type_color)
 
         icon_rect = layout["doc"]
         self._icon_doc.paint(painter, icon_rect)
@@ -863,6 +906,13 @@ class TasksItemDelegate(QStyledItemDelegate):
             toggle_rect = layout.get("subtask_toggle")
             parent_move_rect, parent_move_target, _ = self._parent_schedule_action(index, r)
             quick_rect = self._task_quick_rect(layout, r)
+            project_task_type_color = (index.data(TaskRoles.ProjectTaskTypeColor) or "").strip()
+            if project_task_type_color and QColor(project_task_type_color).isValid():
+                bracket_rect = self._project_type_bracket_rect(layout["project"])
+                switch_rect = self._project_type_switch_rect(bracket_rect)
+                if bracket_rect.united(switch_rect).contains(pos):
+                    task_id = index.data(TaskRoles.TaskId)
+                    return self._open_haven_filter_menu(option, int(task_id)) if isinstance(task_id, int) else False
 
             if has_subtasks and bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
                 title_rect = layout.get("title")
@@ -966,6 +1016,19 @@ class TasksItemDelegate(QStyledItemDelegate):
                 self._show_row_menu(index)
                 return True
 
+        return False
+
+    def _open_haven_filter_menu(self, option: QStyleOptionViewItem, task_id: int) -> bool:
+        host_widget = getattr(option, "widget", None)
+        global_pos = QCursor.pos()
+        current_widget = host_widget if isinstance(host_widget, QWidget) else (
+            self.parent() if isinstance(self.parent(), QWidget) else None
+        )
+        while current_widget is not None:
+            opener = getattr(current_widget, "open_haven_filter_menu", None)
+            if callable(opener):
+                return bool(opener(task_id, global_pos))
+            current_widget = current_widget.parentWidget()
         return False
 
     def _open_create_task_dialog(self, option: QStyleOptionViewItem, **kwargs) -> bool:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtWidgets import QSizePolicy
+
 from ._shared import *  # noqa: F401,F403
 from .cast_board import TasksBoardCast
 from .cast_dash import TasksDashCast
@@ -328,6 +330,13 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_gantt = None
         self.btn_board = None
         self.btn_dash = None
+        self.haven_host = None
+        self.haven_layout = None
+        self.haven_badge = None
+        self.haven_clear_button = None
+        self._haven_filter_kind: Optional[str] = None
+        self._haven_filter_value: Optional[object] = None
+        self._haven_filter_label = ""
         self.board_day_filter_checkbox = None
         self.board_column_format_combo = None
         self._project_quick_links_host = None
@@ -393,7 +402,11 @@ class TasksWorkspace(BaseWorkspace):
         }
 
     def build_toolbar(self, actions: dict[str, QAction]) -> None:
-        persistent_widgets = {self.btn_gantt, self.btn_board, self.btn_dash}
+        persistent_widgets = {
+            widget
+            for widget in (self.btn_gantt, self.btn_board, self.btn_dash, self.haven_host)
+            if widget is not None
+        }
         while self.toolbar_layout.count():
             item = self.toolbar_layout.takeAt(0)
             widget = item.widget()
@@ -403,11 +416,122 @@ class TasksWorkspace(BaseWorkspace):
         for button in mode_buttons:
             if isinstance(button, QToolButton):
                 self.toolbar_layout.addWidget(button)
-        self.toolbar_layout.addStretch(1)
+        self.toolbar_layout.addWidget(self._ensure_haven_host(), 1)
         for action in actions.values():
             button = QToolButton()
             button.setDefaultAction(action)
             self.toolbar_layout.addWidget(button)
+
+    def _ensure_haven_host(self) -> QWidget:
+        if self.haven_host is not None:
+            return self.haven_host
+        host = QWidget(self.toolbar_row)
+        host.setObjectName("TasksHavenHost")
+        host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(host)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addStretch(1)
+
+        badge = QFrame(host)
+        badge.setObjectName("TasksHavenBadge")
+        badge_layout = QHBoxLayout(badge)
+        badge_layout.setContentsMargins(10, 3, 5, 3)
+        badge_layout.setSpacing(6)
+        label = QLabel("", badge)
+        label.setObjectName("TasksHavenBadgeLabel")
+        badge_layout.addWidget(label)
+        clear_button = QToolButton(badge)
+        clear_button.setObjectName("TasksHavenClearButton")
+        clear_button.setText("×")
+        clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        clear_button.setToolTip("Сбросить фильтр Haven")
+        clear_button.clicked.connect(self.clear_haven_filter)
+        badge_layout.addWidget(clear_button)
+        badge.hide()
+
+        layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch(1)
+        self.haven_host = host
+        self.haven_layout = layout
+        self.haven_badge = badge
+        self.haven_badge_label = label
+        self.haven_clear_button = clear_button
+        return host
+
+    def _update_haven_badge(self) -> None:
+        self._ensure_haven_host()
+        active = bool(self._haven_filter_kind and self._haven_filter_label)
+        self.haven_badge.setVisible(active)
+        if active:
+            self.haven_badge_label.setText(self._haven_filter_label)
+
+    def apply_haven_filter(self, kind: str, value: object, label: str) -> None:
+        self._haven_filter_kind = kind
+        self._haven_filter_value = value
+        self._haven_filter_label = label
+        if kind == "project":
+            self._remember_filter("project_tree_id", int(value))
+            self._filters.pop("project_id", None)
+            self._filters.pop("project_area", None)
+            self.model.set_project_tree_filter(int(value))
+        elif kind == "area":
+            area = str(value)
+            self._filters.pop("project_id", None)
+            self._filters.pop("project_tree_id", None)
+            self._remember_filter("project_area", area)
+            self.model.set_project_area_filter(area)
+        self._sync_project_quick_links_selection()
+        self._update_haven_badge()
+
+    def clear_haven_filter(self) -> None:
+        self._haven_filter_kind = None
+        self._haven_filter_value = None
+        self._haven_filter_label = ""
+        self._filters.pop("project_id", None)
+        self._filters.pop("project_area", None)
+        self._filters.pop("project_tree_id", None)
+        self.model.set_project_filter(None)
+        self._sync_project_quick_links_selection()
+        self._update_haven_badge()
+
+    def _top_project_for_project_id(self, project_id: Optional[int]):
+        if project_id is None:
+            return None
+        projects = {project.id: project for project in self._db.fetch_projects()}
+        current = projects.get(int(project_id))
+        if current is None:
+            return None
+        seen: set[int] = set()
+        while current.parent_project_id is not None and current.id not in seen:
+            seen.add(current.id)
+            parent = projects.get(current.parent_project_id)
+            if parent is None:
+                break
+            current = parent
+        return current
+
+    def open_haven_filter_menu(self, task_id: int, global_pos: QPoint) -> bool:
+        task = self.model.task_by_id(int(task_id)) if self.model is not None else None
+        if task is None or task.project_id is None:
+            return False
+        top_project = self._top_project_for_project_id(task.project_id)
+        if top_project is None:
+            return False
+        menu = QMenu(self)
+        project_action = menu.addAction(top_project.title)
+        area_action = None
+        top_area = (top_project.area or "").strip()
+        if top_area:
+            area_action = menu.addAction(top_area)
+        chosen = menu.exec(global_pos)
+        if chosen == project_action:
+            self.apply_haven_filter("project", top_project.id, top_project.title)
+            return True
+        if area_action is not None and chosen == area_action:
+            self.apply_haven_filter("area", top_area, top_area)
+            return True
+        return chosen is not None
 
     def build_content(self) -> None:
         content = QWidget()
@@ -1373,6 +1497,8 @@ class TasksWorkspace(BaseWorkspace):
                     tab = "plan"
             focus_day = filters.get("focus_day")
             project_id = filters.get("project_id")
+            project_tree_id = filters.get("project_tree_id")
+            project_area = filters.get("project_area")
             priority = filters.get("priority")
             board_day_filter = filters.get("board_day_filter")
             board_column_format = filters.get("board_column_format")
@@ -1394,13 +1520,35 @@ class TasksWorkspace(BaseWorkspace):
             else:
                 self._set_board_column_format(self.BOARD_COLUMN_FORMAT_IMPORTANCE)
             self._apply_tab(tab, focus_day=focus_day)
-            self.model.set_project_filter(project_id)
+            if isinstance(project_id, int):
+                self.model.set_project_filter(project_id)
+                self._haven_filter_kind = None
+                self._haven_filter_value = None
+                self._haven_filter_label = ""
+            elif isinstance(project_tree_id, int):
+                self.model.set_project_tree_filter(project_tree_id)
+                top_project = self._top_project_for_project_id(project_tree_id)
+                self._haven_filter_kind = "project"
+                self._haven_filter_value = project_tree_id
+                self._haven_filter_label = top_project.title if top_project is not None else ""
+            elif isinstance(project_area, str) and project_area.strip():
+                area = project_area.strip()
+                self.model.set_project_area_filter(area)
+                self._haven_filter_kind = "area"
+                self._haven_filter_value = area
+                self._haven_filter_label = area
+            else:
+                self.model.set_project_filter(None)
+                self._haven_filter_kind = None
+                self._haven_filter_value = None
+                self._haven_filter_label = ""
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
             if priority:
                 self.cmb_priority.setCurrentText(priority)
             else:
                 self.cmb_priority.setCurrentText("Любой")
             self._sync_project_quick_links_selection()
+            self._update_haven_badge()
             if tab == "plan" and secondary_mode in {"gantt", "board", "dash"}:
                 self._set_secondary_mode(secondary_mode, True)
             elif self._gantt_mode or self._board_mode or self._dash_mode:
@@ -1940,13 +2088,20 @@ class TasksWorkspace(BaseWorkspace):
 
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
+        self._haven_filter_kind = None
+        self._haven_filter_value = None
+        self._haven_filter_label = ""
+        self._filters.pop("project_area", None)
+        self._filters.pop("project_tree_id", None)
         if self._applying_filters:
             self.model.set_project_filter(project_id)
             self._sync_project_quick_links_selection()
+            self._update_haven_badge()
             return
         self._remember_filter("project_id", project_id)
         self.model.set_project_filter(project_id)
         self._sync_project_quick_links_selection()
+        self._update_haven_badge()
 
     def refresh_tasks(self) -> None:
         """Перезагружает список задач из базы."""
