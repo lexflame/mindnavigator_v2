@@ -1312,7 +1312,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.importance_card.value_label.text() == "Важно"
         assert dialog.recurrence_card.value_label.text() == "—"
         assert dialog.detail_type_card.value_label.text() == "Обычная задача"
-        assert dialog.detail_id_card._custom_value_widget is False
+        assert dialog.header_id_label.text() == str(task.id)
+        assert dialog.header_id_label.objectName() == "TaskDetailsHeaderId"
         assert dialog.header_parent_card._custom_value_widget is False
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
@@ -1322,8 +1323,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
             "Приоритет",
             "Важность задачи",
         ]
+        assert all(card.title_label.isHidden() for card in dialog._param_cards)
         assert [card.title_label.text() for card in dialog._detail_cards] == [
-            "ID",
             "Срок выполнения",
             "Тип",
             "Маркер",
@@ -1338,8 +1339,8 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert parent_row == 0
         assert parent_column == 1
         assert parent_column_span == 1
-        assert dialog.details_list.indexOf(dialog.deadline_card) == 1
-        assert dialog.deadline_card.height() == 66
+        assert dialog.details_list.indexOf(dialog.deadline_card) == 0
+        assert dialog.deadline_card.height() == 102
         assert dialog.date_inline.minimumWidth() == 150
         assert dialog.time_inline.minimumWidth() == 90
         assert dialog.date_inline.height() == 34
