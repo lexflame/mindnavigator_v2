@@ -79,6 +79,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         self.set_theme_mode("dark")
 
     def set_theme_mode(self, theme_mode: str) -> None:
+        """Применяет палитру, цвета и иконки делегата для выбранной темы."""
         self._theme_mode = "light" if str(theme_mode).strip().lower() == "light" else "dark"
         palette = get_theme_palette(self._theme_mode)
         self.C_BG = QColor(palette.window_bg)
@@ -132,14 +133,17 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _tasks_model(model: QAbstractItemModel | None) -> Optional[TasksModel]:
+        """Возвращает модель задач, если переданная модель имеет ожидаемый тип."""
         if isinstance(model, TasksModel):
             return model
         return None
 
     def set_task_flash_progress(self, task_id: int, progress: float) -> None:
+        """Сохраняет прогресс подсветки задачи после визуального перемещения."""
         self._task_flash_progress[int(task_id)] = max(0.0, min(1.0, float(progress)))
 
     def clear_task_flash(self, task_id: int) -> None:
+        """Очищает временную подсветку задачи по идентификатору."""
         self._task_flash_progress.pop(int(task_id), None)
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
@@ -190,6 +194,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return QSize(option_rect.width(), total_height)
 
     def _tags_height(self, tags: List[str], max_width: int) -> int:
+        """Вычисляет высоту блока тегов с переносом по доступной ширине."""
         if not tags:
             return 0
         metrics = QFontMetrics(self._font_small)
@@ -204,6 +209,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return lines * self.TAG_H + (lines - 1) * self.TAG_LINE_GAP
 
     def _draw_tags(self, painter: QPainter, start: QPoint, max_width: int, tags: List[str]) -> None:
+        """Рисует теги вложений в несколько строк внутри строки задачи."""
         if not tags:
             return
         metrics = QFontMetrics(self._font_small)
@@ -224,6 +230,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             x += tag_width + self.TAG_GAP
 
     def _execution_badge_rect(self, title_rect: QRect, execution_text: str) -> QRect:
+        """Строит прямоугольник бейджа фактического времени выполнения."""
         metrics = QFontMetrics(self._font_small)
         badge_width = metrics.horizontalAdvance(execution_text) + self.EXECUTION_BADGE_PAD_X * 2
         badge_height = metrics.height() + self.EXECUTION_BADGE_PAD_Y * 2
@@ -235,6 +242,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         )
 
     def _draw_execution_badge(self, painter: QPainter, badge_rect: QRect, execution_text: str, execution_color: QColor) -> None:
+        """Рисует бейдж статуса выполнения плановой задачи."""
         if badge_rect.isNull() or not execution_text:
             return
         badge_fill = QColor(execution_color)
@@ -258,6 +266,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         header_text: str,
         include_today_badge: bool = False,
     ) -> QRect:
+        """Возвращает область быстрой кнопки добавления задачи в заголовке дня."""
         metrics = QFontMetrics(self._font_header)
         text_left = row_rect.left() + 10
         text_width = metrics.horizontalAdvance(header_text)
@@ -272,6 +281,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _task_quick_rect(layout: dict, row_rect: QRect) -> QRect:
+        """Возвращает область быстрой кнопки добавления подзадачи в строке."""
         quick_width = 22
         quick_height = row_rect.height()
         toggle_rect = layout.get("subtask_toggle")
@@ -284,6 +294,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return QRect(quick_x, row_rect.top(), quick_width, quick_height)
 
     def _draw_task_quick_add_indicator(self, painter: QPainter, quick_rect: QRect) -> None:
+        """Рисует индикатор быстрого добавления подзадачи."""
         painter.save()
         quick_font = QFont(self._font)
         quick_font.setBold(True)
@@ -298,6 +309,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _marker_theme_asset_pixmap(self, marker_theme: str) -> QPixmap:
+        """Загружает и кэширует фоновую картинку темы маркера задачи."""
         theme_key = (marker_theme or "").strip().lower()
         if not theme_key:
             return QPixmap()
@@ -316,9 +328,11 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _marker_theme_overlay_rect(row_rect: QRect) -> QRect:
+        """Возвращает прямоугольник для фонового слоя темы маркера."""
         return row_rect.adjusted(1, 1, -1, -1)
 
     def _draw_marker_theme_overlay(self, painter: QPainter, row_rect: QRect, marker_theme: str) -> None:
+        """Рисует приглушенный фон или иконку темы маркера задачи."""
         theme_key = (marker_theme or "").strip().lower()
         if not theme_key:
             return
@@ -358,6 +372,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _draw_done_checkbox(self, painter: QPainter, checkbox_rect: QRect, done: bool, border_color: QColor) -> None:
+        """Рисует чекбокс выполнения задачи и отметку для завершенных задач."""
         painter.save()
         painter.setPen(border_color)
         painter.setBrush(self.C_CHECK_BG)
@@ -969,6 +984,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return False
 
     def _open_create_task_dialog(self, option: QStyleOptionViewItem, **kwargs) -> bool:
+        """Находит workspace-владелец и открывает форму создания задачи."""
         host_widget = getattr(option, "widget", None)
         current_widget = host_widget if isinstance(host_widget, QWidget) else (
             self.parent() if isinstance(self.parent(), QWidget) else None
@@ -1056,6 +1072,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             tasks_model.delete_task_by_row(index.row())
 
     def _schedule_task_edit(self, index: QModelIndex) -> None:
+        """Откладывает открытие редактирования, чтобы завершить обработку клика."""
         persistent_index = QPersistentModelIndex(index)
         QTimer.singleShot(
             0,
@@ -1064,6 +1081,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _attachment_display_name(attachment: TaskAttachmentData) -> str:
+        """Возвращает человекочитаемое имя вложения задачи."""
         db = get_database()
         kind = (attachment.kind or "").strip().lower()
         if kind == "task":
@@ -1092,6 +1110,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return f"id={attachment.ref_id}"
 
     def _open_attachment_preview(self, attachment: TaskAttachmentData) -> None:
+        """Открывает краткий просмотр вложения из контекстного меню задачи."""
         db = get_database()
         parent = self.parent() if isinstance(self.parent(), QWidget) else None
         title = attachment_kind_label(attachment.kind)
@@ -1200,6 +1219,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         parent: QWidget | None,
         result_code: int,
     ) -> None:
+        """Применяет результат диалога редактирования к модели задач."""
         if bool(dialog.property("_task_edit_result_applied")):
             return
         if int(result_code) != int(QDialog.DialogCode.Accepted):
@@ -1258,9 +1278,11 @@ class TasksItemDelegate(QStyledItemDelegate):
             QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def edit_task(self, index: QModelIndex) -> None:
+        """Публично открывает редактирование задачи по индексу строки."""
         self._edit_task(index)
 
     def _open_task_view(self, index: QModelIndex) -> None:
+        """Открывает форму просмотра задачи по индексу строки."""
         tasks_model = self._tasks_model(index.model())
         if tasks_model is None:
             return
@@ -1272,6 +1294,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         exec_with_overlay(dialog, parent)
 
     def _open_linked_project_task(self, task_id: int) -> None:
+        """Открывает просмотр задачи, связанной с проектной информацией."""
         task = next((item for item in get_database().fetch_tasks() if item.id == int(task_id)), None)
         if task is None:
             return
@@ -1280,6 +1303,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         exec_with_overlay(dialog, parent)
 
     def open_task_view(self, index: QModelIndex) -> None:
+        """Публично открывает просмотр задачи по индексу строки."""
         self._open_task_view(index)
 
     def _prio_color(self, p: str) -> QColor:
@@ -1295,6 +1319,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _board_stage_label(board_column: str, priority: str) -> str:
+        """Возвращает подпись колонки доски для статуса задачи."""
         normalized = normalize_board_column(board_column, priority)
         if normalized == BOARD_COLUMN_DEFERRED:
             return "Отложенные"
@@ -1305,6 +1330,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         return "В очереди"
 
     def _board_stage_color(self, board_column: str, priority: str) -> QColor:
+        """Возвращает цвет подписи стадии доски для задачи."""
         normalized = normalize_board_column(board_column, priority)
         if normalized == BOARD_COLUMN_DEFERRED:
             return self.C_DEFER
@@ -1328,9 +1354,11 @@ class TasksItemDelegate(QStyledItemDelegate):
         return f"{d.isoformat()} — {wd}"
 
     def format_header(self, d: date) -> str:
+        """Публично форматирует заголовок дня."""
         return self._format_header(d)
 
     def format_header_with_plan_summary(self, d: date, total_minutes: int = 0, overrun_minutes: int = 0) -> str:
+        """Формирует заголовок дня с суммой плана и превышением времени."""
         base = self._format_header(d)
         summary_text = self._format_header_total_text(total_minutes)
         overrun_text = self._format_header_overrun_text(overrun_minutes)
@@ -1351,6 +1379,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _format_duration_minutes(total_minutes: int) -> str:
+        """Форматирует длительность в минутах в компактный текст."""
         minutes = max(0, int(total_minutes or 0))
         hours, minutes = divmod(minutes, 60)
         if hours and minutes:
@@ -1361,6 +1390,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @classmethod
     def _format_header_total_text(cls, total_minutes: int) -> str:
+        """Формирует текст суммарного планового времени для заголовка."""
         total = max(0, int(total_minutes or 0))
         if total <= 0:
             return ""
@@ -1368,6 +1398,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @classmethod
     def _format_header_overrun_text(cls, overrun_minutes: int) -> str:
+        """Формирует текст превышения планового времени для заголовка."""
         overrun = max(0, int(overrun_minutes or 0))
         if overrun <= 0:
             return ""
@@ -1375,6 +1406,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _elapsed_minutes_since(started_at: str, now_dt: datetime | None = None) -> Optional[int]:
+        """Считает количество минут с момента старта плановой задачи."""
         started_text = str(started_at or "").strip()
         if not started_text:
             return None
@@ -1401,6 +1433,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         actual_minutes: int,
         now_dt: datetime | None = None,
     ) -> str:
+        """Формирует текст фактического выполнения для плановой задачи."""
         if not is_plan_item:
             return ""
         if done and actual_minutes > 0:
@@ -1451,6 +1484,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _format_parent_schedule_text(parent_task: TaskRow) -> str:
+        """Формирует текст кнопки переноса задачи на срок родителя."""
         if parent_task.time_text:
             return f"Перенести на {parent_task.day.isoformat()} {parent_task.time_text}"
         return f"Перенести на {parent_task.day.isoformat()}"
@@ -1473,6 +1507,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _time_control_rects(time_rect: QRect, show_plan_controls: bool = False) -> dict[str, QRect]:
+        """Возвращает области текста времени и стрелок порядка плановых задач."""
         if not show_plan_controls:
             return {
                 "text": time_rect,
@@ -1505,6 +1540,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     @staticmethod
     def _priority_control_rects(priority_chip_rect: QRect, stage_only: bool = False) -> dict[str, QRect]:
+        """Возвращает области управления приоритетом и стадией доски."""
         arrows_w = 18
         icon_w = 16
         stage_arrows_rect = QRect(
@@ -1621,6 +1657,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         }
 
     def row_layout(self, rect: QRect, depth: int = 0, has_subtasks: bool = False) -> dict:
+        """Публично возвращает геометрию строки для тестов и внешних проверок."""
         return self._row_layout(rect, depth, has_subtasks)
 
 __all__ = ["TasksItemDelegate"]
