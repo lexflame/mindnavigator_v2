@@ -256,6 +256,67 @@ QMenu::separator {{
 """.strip()
 
 
+def build_calendar_popup_stylesheet(theme_mode: str) -> str:
+    palette = get_theme_palette(theme_mode)
+    return f"""
+QCalendarWidget {{
+    background: {palette.panel_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+}}
+QCalendarWidget QWidget#qt_calendar_navigationbar {{
+    background: {palette.input_alt_bg};
+    border-bottom: 1px solid {palette.border};
+}}
+QCalendarWidget QToolButton {{
+    background: transparent;
+    color: {palette.text};
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 2px;
+}}
+QCalendarWidget QToolButton:hover {{
+    background: {palette.elevated_bg};
+    color: {palette.accent_hover};
+}}
+QCalendarWidget QToolButton:pressed {{
+    background: {palette.selection_bg};
+    color: {palette.selection_text};
+}}
+QCalendarWidget QSpinBox {{
+    background: {palette.elevated_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+    border-radius: 5px;
+    padding: 2px 6px;
+}}
+QCalendarWidget QMenu {{
+    background: {palette.elevated_bg};
+    color: {palette.text};
+    border: 1px solid {palette.border};
+}}
+QCalendarWidget QMenu::item:selected {{
+    background: {palette.selection_bg};
+    color: {palette.selection_text};
+}}
+QCalendarWidget QAbstractItemView {{
+    background: {palette.panel_bg};
+    alternate-background-color: {palette.panel_alt_bg};
+    color: {palette.text};
+    selection-background-color: {palette.accent};
+    selection-color: {palette.selection_text};
+    outline: none;
+}}
+QCalendarWidget QAbstractItemView:enabled {{
+    color: {palette.text};
+}}
+QCalendarWidget QAbstractItemView:disabled {{
+    color: {palette.muted_text};
+}}
+""".strip()
+
+
 def build_base_app_stylesheet(theme_mode: str) -> str:
     palette = get_theme_palette(theme_mode)
     return f"""

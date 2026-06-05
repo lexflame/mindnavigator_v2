@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QGridLayout, QProgres
 from mindnavigator.storage import DEFERRED_PRIORITY
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.dialogs import AttachFileSelectNav
-from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND, get_theme_palette
+from mindnavigator.ui.styles import MATH_PHYS_BACKGROUND, build_calendar_popup_stylesheet, get_theme_palette
 
 from ._shared import *  # noqa: F401,F403
 from .gantt_duration_edit import GanttEstimateEdit
@@ -657,6 +657,7 @@ class TaskDetailsDialog(QDialog):
         date_editor = QDateEdit(deadline_host)
         date_editor.setObjectName("TaskDetailsDeadlineDateEdit")
         date_editor.setCalendarPopup(True)
+        date_editor.calendarWidget().setStyleSheet(build_calendar_popup_stylesheet(self._theme_mode))
         date_editor.setDisplayFormat("dd.MM.yyyy")
         date_editor.setMinimumWidth(96)
         date_editor.setFixedHeight(48)

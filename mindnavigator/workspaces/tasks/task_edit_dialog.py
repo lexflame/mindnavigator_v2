@@ -15,7 +15,7 @@ from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.context_entity_linking import ContextEntityLinkService, PendingContextLink
-from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, get_theme_palette
+from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, build_calendar_popup_stylesheet, get_theme_palette
 from .cast_gantt import TasksGanttCast
 from .gantt_duration_edit import GanttEstimateEdit
 from .quick_project_create_dialog import QuickProjectCreateDialog
@@ -388,6 +388,7 @@ class TaskEditDialog(QDialog):
 
         self.day_edit = QDateEdit()
         self.day_edit.setCalendarPopup(True)
+        self.day_edit.calendarWidget().setStyleSheet(build_calendar_popup_stylesheet("dark"))
         self.day_edit.setDisplayFormat("yyyy-MM-dd")
         self.day_edit.setDate(QDate(task.day.year, task.day.month, task.day.day))
         self.day_edit.setKeyboardTracking(False)
