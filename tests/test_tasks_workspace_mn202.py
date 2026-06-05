@@ -1351,8 +1351,10 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.deadline_card.height() == 102
         assert dialog.date_inline.minimumWidth() == 150
         assert dialog.time_inline.minimumWidth() == 90
-        assert dialog.date_inline.height() == 34
-        assert dialog.time_inline.height() == 34
+        assert dialog.date_inline.height() == 48
+        assert dialog.time_inline.height() == 48
+        assert dialog.date_inline.editor.height() <= dialog.date_inline.height()
+        assert dialog.time_inline.editor.height() <= dialog.time_inline.height()
         assert dialog.time_inline.editor.inputMask() == "99:99;_"
         assert dialog.time_inline.current_value() == ""
         dialog._begin_deadline_inline_edit()
