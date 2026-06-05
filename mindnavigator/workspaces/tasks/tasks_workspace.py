@@ -1642,6 +1642,17 @@ class TasksWorkspace(BaseWorkspace):
         self.delegate.edit_task(index)
         return True
 
+    def open_task_for_view(self, task_id: int) -> bool:
+        if not self.focus_task(task_id):
+            return False
+        index = self._selected_task_index()
+        if index is None or index.data(TaskRoles.TaskId) != task_id:
+            index = self._index_for_task_id(task_id)
+        if index is None:
+            return False
+        self.delegate.open_task_view(index)
+        return True
+
     def _edit_selected_task(self) -> None:
         index = self._selected_task_index()
         if index is None:
@@ -1806,10 +1817,8 @@ class TasksWorkspace(BaseWorkspace):
             self._refresh_board_day()
 
     def _on_create_task(self):
-        """Создает задачу из формы и очищает ввод."""
+        """Открывает форму создания с начальными значениями из быстрой строки."""
         title = normalize_task_text_quotes(self.new_title.text()).strip()
-        if not title:
-            return
         if title != self.new_title.text():
             self.new_title.setText(title)
 
@@ -1821,25 +1830,56 @@ class TasksWorkspace(BaseWorkspace):
         if self.new_time_toggle.isChecked():
             time_text = self.new_time.time().toString("HH:mm")
 
-        try:
-            created = self.model.add_task(title=title, day=d, time_text=time_text, priority=pr)
-        except ValueError as exc:
-            QMessageBox.warning(self, "Проверка", str(exc))
+        created = self.open_create_task_dialog(
+            title=title,
+            day=d,
+            time_text=time_text,
+            priority=pr,
+        )
+        if not created:
             return
-
-        if self._secondary_view_includes_day(d):
-            self._refresh_secondary_view()
-        self._refresh_project_quick_links()
 
         self.new_title.clear()
         self.new_time.setTime(QTime.currentTime().addSecs(3600))
         self.new_title.setFocus()
-        self.open_task_for_edit(created.id)
 
-    def open_create_task_dialog(self) -> None:
-        dialog = TaskCreateDialog(parent=self)
+    def open_create_task_dialog(
+        self,
+        *,
+        title: str = "",
+        description: str = "",
+        day: date | None = None,
+        time_text: str = "",
+        priority: str = "Medium",
+        project_id: Optional[int] = None,
+        parent_id: Optional[int] = None,
+        recurrence_kind: str = "",
+        recurrence_interval: int = 1,
+        marker_color: str = "",
+        marker_theme: str = "",
+        project_task_type_id: Optional[int] = None,
+        importance: int = 3,
+        is_plan_task: bool = False,
+    ) -> bool:
+        dialog = TaskCreateDialog(
+            parent=self,
+            title=title,
+            description=description,
+            day=day,
+            time_text=time_text,
+            priority=priority,
+            project_id=project_id,
+            parent_id=parent_id,
+            recurrence_kind=recurrence_kind,
+            recurrence_interval=recurrence_interval,
+            marker_color=marker_color,
+            marker_theme=marker_theme,
+            project_task_type_id=project_task_type_id,
+            importance=importance,
+            is_plan_task=is_plan_task,
+        )
         if exec_with_overlay(dialog, self) != QDialog.DialogCode.Accepted:
-            return
+            return False
         values = dialog.values()
         try:
             created = self.model.add_task(
@@ -1849,22 +1889,26 @@ class TasksWorkspace(BaseWorkspace):
                 time_text=values["time_text"],
                 priority=values["priority"],
                 project_id=values["project_id"],
+                parent_id=parent_id,
                 recurrence_kind=values["recurrence_kind"],
                 recurrence_interval=values["recurrence_interval"],
                 marker_color=values["marker_color"],
                 marker_theme=values["marker_theme"],
                 project_task_type_id=values.get("project_task_type_id"),
+                importance=values["importance"],
+                is_plan_task=values["is_plan_task"],
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Проверка", str(exc))
-            return
+            return False
         if self._secondary_view_includes_day(values["day"]):
             self._refresh_secondary_view()
         self._refresh_project_quick_links()
         apply_pending_context_links = getattr(dialog, "apply_pending_context_links", None)
         if callable(apply_pending_context_links):
             apply_pending_context_links(created.id)
-        self.open_task_for_edit(created.id)
+        self.open_task_for_view(created.id)
+        return True
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.list and event.type() == QEvent.Type.Resize:

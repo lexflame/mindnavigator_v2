@@ -474,6 +474,7 @@ class DatabaseTasksMixin:
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
         importance: Optional[int] = None,
+        suppress_builtin_type_cascade: bool = False,
     ) -> TaskData:
         """Обновляет задачу."""
         prev_row = self._conn.execute(
@@ -623,7 +624,7 @@ class DatabaseTasksMixin:
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         self._attach_project_task_type_concept_board(task_id, project_task_type_id)
-        if project_task_type_id is None:
+        if project_task_type_id is None and not suppress_builtin_type_cascade:
             self.apply_task_builtin_type_to_descendants(
                 task_id,
                 project_id=project_id,
