@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from html import escape
+from typing import Callable
 
 from PySide6.QtGui import QFont, QTextCursor
-from PySide6.QtWidgets import QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
+from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
 
 from mindnavigator.storage import DEFERRED_PRIORITY
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
@@ -65,14 +66,23 @@ class InlineEditableField(QStackedWidget):
         self.view_label = _InlineViewLabel("", self)
         self.view_label.setObjectName("TaskInlineViewLabel")
         self.view_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.view_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self.view_label.edit_requested.connect(self.begin_edit)
         self.editor = editor
+        self._submit_event_widgets: tuple[QWidget, ...] = (editor,)
+        if isinstance(editor, QLineEdit):
+            editor.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        elif isinstance(editor, QAbstractSpinBox):
+            self._submit_event_widgets = (editor, editor.lineEdit())
+        for event_widget in self._submit_event_widgets:
+            event_widget.installEventFilter(self)
+        self._submit_handler: Callable[[], None] | None = None
 
         edit_host = QWidget(self)
         edit_layout = QHBoxLayout(edit_host)
         edit_layout.setContentsMargins(0, 0, 0, 0)
         edit_layout.setSpacing(6)
-        edit_layout.addWidget(editor, 1)
+        edit_layout.addWidget(editor, 1, Qt.AlignmentFlag.AlignVCenter)
         self.save_button = QToolButton(edit_host)
         self.save_button.setObjectName("TaskInlineCommitButton")
         self.save_button.setText("✓")
@@ -90,6 +100,9 @@ class InlineEditableField(QStackedWidget):
         self.addWidget(edit_host)
         self.setCurrentIndex(0)
         self._commit_controls_enabled = True
+
+    def set_submit_handler(self, handler: Callable[[], None] | None) -> None:
+        self._submit_handler = handler
 
     def set_commit_controls_enabled(self, enabled: bool) -> None:
         self._commit_controls_enabled = bool(enabled)
@@ -118,6 +131,24 @@ class InlineEditableField(QStackedWidget):
 
     def cancel(self) -> None:
         self.setCurrentIndex(0)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if watched in self._submit_event_widgets and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if isinstance(self.editor, QComboBox) and self.editor.view().isVisible():
+                    return super().eventFilter(watched, event)
+                self._submit_edit()
+                event.accept()
+                return True
+        return super().eventFilter(watched, event)
+
+    def _submit_edit(self) -> None:
+        if self.currentIndex() != 1:
+            return
+        if self._submit_handler is not None:
+            self._submit_handler()
+            return
+        self.commit()
 
     def commit(self) -> None:
         value = self.current_value()
@@ -158,13 +189,9 @@ class _InfoCard(QFrame):
         self.title_label = QLabel(title)
         self.title_label.setObjectName("TaskDetailsCardTitle")
         self.title_label.setWordWrap(False)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         title_row.addWidget(self.title_label)
         title_row.addStretch(1)
-
-        self.action_button = QToolButton(self)
-        self.action_button.setObjectName("TaskDetailsCardAction")
-        self.action_button.hide()
-        title_row.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignRight)
 
         layout.addLayout(title_row)
 
@@ -181,7 +208,12 @@ class _InfoCard(QFrame):
         self.value_label = QLabel("")
         self.value_label.setObjectName("TaskDetailsCardValue")
         self.value_label.setWordWrap(True)
-        value_row.addWidget(self.value_label, 1)
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        value_row.addWidget(self.value_label, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.action_button = QToolButton(self)
+        self.action_button.setObjectName("TaskDetailsCardAction")
+        self.action_button.hide()
+        value_row.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
         value_row.addStretch(0)
         self._custom_value_widget = False
 
@@ -219,6 +251,9 @@ class _InfoCard(QFrame):
     def set_action_visible(self, visible: bool) -> None:
         self.action_button.setVisible(bool(visible))
 
+    def set_title_visible(self, visible: bool) -> None:
+        self.title_label.setVisible(bool(visible))
+
 
 class _PropertyRow(QFrame):
     def __init__(self, title: str, parent: QWidget | None = None, *, accent_dot: bool = False) -> None:
@@ -236,7 +271,8 @@ class _PropertyRow(QFrame):
         self.title_label = QLabel(title, self)
         self.title_label.setObjectName("TaskDetailsPropertyTitle")
         self.title_label.setMinimumWidth(160)
-        layout.addWidget(self.title_label, 0)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.dot_label = QLabel("●", self)
         self.dot_label.setObjectName("TaskDetailsCardDot")
@@ -246,7 +282,8 @@ class _PropertyRow(QFrame):
         self.value_label = QLabel("", self)
         self.value_label.setObjectName("TaskDetailsPropertyValue")
         self.value_label.setWordWrap(False)
-        layout.addWidget(self.value_label, 1)
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self.value_label, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.action_button = QToolButton(self)
         self.action_button.setObjectName("TaskDetailsPropertyAction")
@@ -439,13 +476,18 @@ class TaskDetailsDialog(QDialog):
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(12)
 
+        self.header_id_label = QLabel("", self.header_card)
+        self.header_id_label.setObjectName("TaskDetailsHeaderId")
+        self.header_id_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        title_row.addWidget(self.header_id_label, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+
         self.title_inline = InlineEditableField(QLineEdit(self.header_card), self.header_card)
         self.title_inline.setObjectName("TaskDetailsTitleInline")
         self.title_inline.view_label.setObjectName("TaskDetailsTitle")
         self.title_inline.view_label.setWordWrap(True)
         self.title_inline.value_committed.connect(lambda value: self._save_inline_updates(title=str(value)))
         self.title_label = self.title_inline.view_label
-        title_row.addWidget(self.title_inline, 1)
+        title_row.addWidget(self.title_inline, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.header_close_button = QToolButton(self.header_card)
         self.header_close_button.setObjectName("TaskDetailsHeaderCloseButton")
@@ -568,6 +610,8 @@ class TaskDetailsDialog(QDialog):
             self.importance_card,
         ]
         for card in self._param_cards:
+            card.set_title_visible(False)
+        for card in self._param_cards:
             self.params_grid.addWidget(card)
         self.header_card.layout().addWidget(self.params_card)
 
@@ -596,10 +640,9 @@ class TaskDetailsDialog(QDialog):
         self.details_list.setContentsMargins(0, 0, 0, 0)
         self.details_list.setSpacing(0)
 
-        self.detail_id_card = _PropertyRow("ID", self.details_card)
         self.deadline_card = _PropertyRow("Срок выполнения", self.details_card)
-        self.deadline_card.setFixedHeight(66)
-        self.deadline_card.layout().setContentsMargins(12, 8, 10, 8)
+        self.deadline_card.setFixedHeight(102)
+        self.deadline_card.layout().setContentsMargins(12, 10, 10, 10)
         self.detail_type_card = _PropertyRow("Тип", self.details_card)
         self.detail_marker_card = _PropertyRow("Маркер", self.details_card, accent_dot=True)
         self.detail_theme_card = _PropertyRow("Тема маркера", self.details_card)
@@ -607,7 +650,7 @@ class TaskDetailsDialog(QDialog):
         self.recurrence_card = _PropertyRow("Повтор", self.details_card)
         deadline_host = QWidget(self.deadline_card)
         deadline_host.setObjectName("TaskDetailsDeadlineEditor")
-        deadline_host.setMinimumHeight(50)
+        deadline_host.setMinimumHeight(68)
         deadline_layout = QHBoxLayout(deadline_host)
         deadline_layout.setContentsMargins(0, 0, 0, 0)
         deadline_layout.setSpacing(8)
@@ -616,28 +659,31 @@ class TaskDetailsDialog(QDialog):
         date_editor.setCalendarPopup(True)
         date_editor.setDisplayFormat("dd.MM.yyyy")
         date_editor.setMinimumWidth(96)
-        date_editor.setFixedHeight(34)
+        date_editor.setFixedHeight(48)
+        date_editor.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self.date_inline = InlineEditableField(date_editor, deadline_host)
         self.date_inline.setObjectName("TaskDetailsDeadlineDateInline")
         self.date_inline.setMinimumWidth(150)
-        self.date_inline.setFixedHeight(34)
+        self.date_inline.setFixedHeight(48)
         self.date_inline.set_commit_controls_enabled(False)
         self.date_inline.view_label.edit_requested.connect(self._begin_deadline_inline_edit)
         self.date_inline.value_committed.connect(lambda value: self._save_inline_updates(day=value))
-        deadline_layout.addWidget(self.date_inline, 3)
+        deadline_layout.addWidget(self.date_inline, 3, Qt.AlignmentFlag.AlignVCenter)
         self.time_inline = InlineEditableField(QLineEdit(deadline_host), deadline_host)
         self.time_inline.setObjectName("TaskDetailsDeadlineTimeInline")
         self.time_inline.setMinimumWidth(90)
         self.time_inline.editor.setObjectName("TaskDetailsDeadlineTimeEdit")
         self.time_inline.editor.setPlaceholderText("HH:MM или пусто")
         self.time_inline.editor.setMinimumWidth(54)
-        self.time_inline.editor.setFixedHeight(34)
+        self.time_inline.editor.setFixedHeight(48)
         self.time_inline.editor.setInputMask("99:99;_")
         self.time_inline.set_commit_controls_enabled(False)
         self.time_inline.view_label.edit_requested.connect(self._begin_deadline_inline_edit)
-        self.time_inline.setFixedHeight(34)
+        self.time_inline.setFixedHeight(48)
         self.time_inline.value_committed.connect(lambda value: self._save_inline_updates(time_text=str(value)))
-        deadline_layout.addWidget(self.time_inline, 2)
+        deadline_layout.addWidget(self.time_inline, 2, Qt.AlignmentFlag.AlignVCenter)
+        self.date_inline.set_submit_handler(self._commit_deadline_inline_edit)
+        self.time_inline.set_submit_handler(self._commit_deadline_inline_edit)
         self.deadline_save_button = QToolButton(deadline_host)
         self.deadline_save_button.setObjectName("TaskDeadlineCommitButton")
         self.deadline_save_button.setText("✓")
@@ -683,7 +729,6 @@ class TaskDetailsDialog(QDialog):
         self.marker_theme_inline.value_committed.connect(lambda value: self._save_inline_updates(marker_theme=str(value)))
         self.detail_theme_card.set_inline_editor(self.marker_theme_inline)
         self._detail_cards = [
-            self.detail_id_card,
             self.deadline_card,
             self.detail_type_card,
             self.detail_marker_card,
@@ -919,6 +964,7 @@ class TaskDetailsDialog(QDialog):
                 color: {palette.text};
                 font-size: 14px;
                 spacing: 8px;
+                min-height: 28px;
             }}
             QCheckBox#TaskDetailsPlanCheck::indicator {{
                 width: 17px;
@@ -938,6 +984,7 @@ class TaskDetailsDialog(QDialog):
                 border-radius: 8px;
                 font-size: 28px;
                 font-weight: 300;
+                text-align: center;
             }}
             QToolButton#TaskDetailsHeaderAddButton:hover {{
                 border-color: {palette.accent};
@@ -955,6 +1002,7 @@ class TaskDetailsDialog(QDialog):
                 border: 1px solid {palette.border};
                 border-radius: 8px;
                 padding: 6px 10px;
+                text-align: center;
             }}
             QToolButton#TaskDetailsCollapseButton:hover,
             QToolButton#TaskDetailsImageButton:hover {{
@@ -985,6 +1033,15 @@ class TaskDetailsDialog(QDialog):
             QLabel#TaskDetailsTitle {{
                 color: #f2f5ff;
                 font-size: 22px;
+                font-weight: 700;
+            }}
+            QLabel#TaskDetailsHeaderId {{
+                color: {palette.dim_text};
+                background: rgba(255, 255, 255, 0.035);
+                border: 1px solid rgba(255, 255, 255, 0.055);
+                border-radius: 8px;
+                padding: 5px 8px;
+                font-size: 11px;
                 font-weight: 700;
             }}
             QLabel#TaskDetailsSummary {{
@@ -1034,16 +1091,16 @@ class TaskDetailsDialog(QDialog):
                 color: {palette.text};
                 border: 1px solid {palette.border};
                 border-radius: 8px;
-                padding: 4px 6px;
+                padding: 6px 8px;
                 min-width: 96px;
-                min-height: 28px;
-                max-height: 34px;
+                min-height: 32px;
+                max-height: 48px;
             }}
             QLineEdit#TaskDetailsDeadlineTimeEdit {{
                 min-width: 54px;
-                min-height: 28px;
-                max-height: 34px;
-                padding: 4px 6px;
+                min-height: 32px;
+                max-height: 48px;
+                padding: 6px 8px;
             }}
             QToolButton#TaskInlineCommitButton,
             QToolButton#TaskDeadlineCommitButton {{
@@ -1055,6 +1112,7 @@ class TaskDetailsDialog(QDialog):
                 max-width: 22px;
                 min-height: 30px;
                 padding: 0;
+                text-align: center;
             }}
             QToolButton#TaskInlineCommitButton:hover,
             QToolButton#TaskDeadlineCommitButton:hover {{
@@ -1130,6 +1188,7 @@ class TaskDetailsDialog(QDialog):
                 min-height: 26px;
                 padding: 0 8px;
                 font-weight: 700;
+                text-align: center;
             }}
             QToolButton#TaskDetailsDescriptionTool:hover {{
                 border-color: {palette.accent};
@@ -1331,7 +1390,7 @@ class TaskDetailsDialog(QDialog):
         parent_text = self._parent_title()
         marker_text = self._marker_color_text()
         marker_theme_text = self._marker_theme_text()
-        self.detail_id_card.set_value(str(self._task.id))
+        self.header_id_label.setText(str(self._task.id))
         self.plan_task_checkbox.setChecked(bool(self._task.is_plan_task))
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
         self.project_inline.set_value(self._task.project_id, project_text)
@@ -1780,6 +1839,8 @@ class TaskDetailsDialog(QDialog):
             day=self.date_inline.current_value(),
             time_text=str(self.time_inline.current_value() or ""),
         ):
+            self.date_inline.setCurrentIndex(0)
+            self.time_inline.setCurrentIndex(0)
             self._set_deadline_commit_buttons_visible(False)
 
     def _save_inline_updates(self, **changes) -> bool:

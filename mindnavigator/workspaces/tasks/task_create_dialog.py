@@ -58,7 +58,7 @@ class TaskCreateDialog(TaskDetailsDialog):
         self.header_add_button.setEnabled(False)
         self.links_add_button.setEnabled(False)
         self.images_add_button.setEnabled(False)
-        self.detail_id_card.set_value("—")
+        self.header_id_label.setText("—")
         self.title_inline.editor.textChanged.connect(self._apply_project_suggestion)
         self._apply_project_suggestion(self.title_inline.editor.text())
         self.title_inline.editor.setFocus()
