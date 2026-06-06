@@ -429,7 +429,7 @@ MindNavigator уже имеет сильную основу: локальное 
 
 ### P2. Связанность сущностей
 
-1. `P2-LINK-01`: Спроектировать canonical `entity_links`.
+1. `P2-LINK-01`: Спроектировать canonical `entity_links`. Выполнено 2026-06-07: `docs/entity_links_schema_proposal.md`.
 2. `P2-LINK-02`: Создать read facade "all links for entity".
 3. `P2-LINK-03`: Свести `task_attachments`, `context_entity_links`, `idea_relations`, `dossier_links`, `collection_relations` в общий API.
 4. `P2-LINK-04`: Добавить incoming links в карточки сущностей.
@@ -546,7 +546,7 @@ MindNavigator уже имеет сильную основу: локальное 
 2. `P1-03`: выделить `TaskTypeService` для проектных/встроенных типов и каскадов. Выполнено 2026-06-07; дальнейшая транзакционная декомпозиция относится к `P1-02`.
 3. `P1-05`: добавить rollback tests для cascade operations. Выполнено для проектного и встроенного типа 2026-06-07.
 4. `P2-08`: вынести haven-фильтры из `TasksWorkspace` в отдельную модель фильтра до дальнейшего расширения панели. Выполнено 2026-06-07.
-5. `P2-LINK-01`: описать `entity_links` schema proposal.
+5. `P2-LINK-01`: описать `entity_links` schema proposal. Выполнено 2026-06-07.
 6. `P2-01`: добавить debounce в `SearchNav`.
 7. `P1-UI-04`: выделить shared editable-list component.
 8. `P3-01`: добавить генератор большой тестовой БД.
