@@ -8,6 +8,7 @@ from ._shared import *  # noqa: F401,F403
 from .cast_board import TasksBoardCast
 from .cast_dash import TasksDashCast
 from .cast_gantt import TasksGanttCast
+from .haven_filter_state import HavenFilterState
 from .style import TasksWorkspaceStyle
 from .task_create_dialog import TaskCreateDialog
 from .task_importance_labels import UNDEFINED_TASK_IMPORTANCE, task_importance_label
@@ -336,10 +337,7 @@ class TasksWorkspace(BaseWorkspace):
         self.haven_badge = None
         self.haven_clear_button = None
         self.haven_importance_buttons: List[QToolButton] = []
-        self._haven_filter_kind: Optional[str] = None
-        self._haven_filter_value: Optional[object] = None
-        self._haven_filter_label = ""
-        self._haven_importance_filter: Optional[int] = None
+        self._haven_filter = HavenFilterState()
         self._project_type_hover_row: Optional[int] = None
         self.board_day_filter_checkbox = None
         self.board_column_format_combo = None
@@ -480,10 +478,9 @@ class TasksWorkspace(BaseWorkspace):
 
     def _update_haven_badge(self) -> None:
         self._ensure_haven_host()
-        active = bool(self._haven_filter_kind and self._haven_filter_label)
-        self.haven_badge.setVisible(active)
-        if active:
-            self.haven_badge_label.setText(self._haven_filter_label)
+        self.haven_badge.setVisible(self._haven_filter.badge_visible)
+        if self._haven_filter.badge_visible:
+            self.haven_badge_label.setText(self._haven_filter.scope_label)
         self._update_haven_importance_badges()
 
     def _update_haven_importance_badges(self) -> None:
@@ -500,33 +497,31 @@ class TasksWorkspace(BaseWorkspace):
             )
             button.blockSignals(True)
             button.setText(f"{label} ({count})")
-            button.setChecked(self._haven_importance_filter == importance)
-            button.setEnabled(count > 0 or self._haven_importance_filter == importance)
+            selected = self._haven_filter.matches_importance(importance)
+            button.setChecked(selected)
+            button.setEnabled(count > 0 or selected)
             button.blockSignals(False)
 
     def set_haven_importance_filter(self, importance: int) -> None:
-        selected_importance = int(importance)
-        if self._haven_importance_filter == selected_importance:
-            self._haven_importance_filter = None
+        selected_importance = self._haven_filter.toggle_importance(importance)
+        if selected_importance is None:
             self._filters.pop("importance", None)
             self.model.set_importance_filter(None)
         else:
-            self._haven_importance_filter = selected_importance
             self._remember_filter("importance", selected_importance)
             self.model.set_importance_filter(selected_importance)
         self._update_haven_importance_badges()
 
     def apply_haven_filter(self, kind: str, value: object, label: str) -> None:
-        self._haven_filter_kind = kind
-        self._haven_filter_value = value
-        self._haven_filter_label = label
-        if kind == "project":
-            self._remember_filter("project_tree_id", int(value))
+        self._haven_filter.set_scope(kind, value, label)
+        if self._haven_filter.scope_kind == "project":
+            project_id = int(self._haven_filter.scope_value)
+            self._remember_filter("project_tree_id", project_id)
             self._filters.pop("project_id", None)
             self._filters.pop("project_area", None)
-            self.model.set_project_tree_filter(int(value))
-        elif kind == "area":
-            area = str(value)
+            self.model.set_project_tree_filter(project_id)
+        elif self._haven_filter.scope_kind == "area":
+            area = str(self._haven_filter.scope_value)
             self._filters.pop("project_id", None)
             self._filters.pop("project_tree_id", None)
             self._remember_filter("project_area", area)
@@ -535,9 +530,7 @@ class TasksWorkspace(BaseWorkspace):
         self._update_haven_badge()
 
     def clear_haven_filter(self) -> None:
-        self._haven_filter_kind = None
-        self._haven_filter_value = None
-        self._haven_filter_label = ""
+        self._haven_filter.clear_scope()
         self._filters.pop("project_id", None)
         self._filters.pop("project_area", None)
         self._filters.pop("project_tree_id", None)
@@ -1576,32 +1569,28 @@ class TasksWorkspace(BaseWorkspace):
             self._apply_tab(tab, focus_day=focus_day)
             if isinstance(project_id, int):
                 self.model.set_project_filter(project_id)
-                self._haven_filter_kind = None
-                self._haven_filter_value = None
-                self._haven_filter_label = ""
+                self._haven_filter.clear_scope()
             elif isinstance(project_tree_id, int):
                 self.model.set_project_tree_filter(project_tree_id)
                 top_project = self._top_project_for_project_id(project_tree_id)
-                self._haven_filter_kind = "project"
-                self._haven_filter_value = project_tree_id
-                self._haven_filter_label = top_project.title if top_project is not None else ""
+                self._haven_filter.set_scope(
+                    "project",
+                    project_tree_id,
+                    top_project.title if top_project is not None else "",
+                )
             elif isinstance(project_area, str) and project_area.strip():
                 area = project_area.strip()
                 self.model.set_project_area_filter(area)
-                self._haven_filter_kind = "area"
-                self._haven_filter_value = area
-                self._haven_filter_label = area
+                self._haven_filter.set_scope("area", area, area)
             else:
                 self.model.set_project_filter(None)
-                self._haven_filter_kind = None
-                self._haven_filter_value = None
-                self._haven_filter_label = ""
+                self._haven_filter.clear_scope()
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
             if isinstance(importance, int):
-                self._haven_importance_filter = importance
+                self._haven_filter.set_importance(importance)
                 self.model.set_importance_filter(importance)
             else:
-                self._haven_importance_filter = None
+                self._haven_filter.set_importance(None)
                 self.model.set_importance_filter(None)
             if priority:
                 self.cmb_priority.setCurrentText(priority)
@@ -2165,9 +2154,7 @@ class TasksWorkspace(BaseWorkspace):
 
     def set_project_filter(self, project_id: Optional[int]):
         """Обновляет фильтр по проекту."""
-        self._haven_filter_kind = None
-        self._haven_filter_value = None
-        self._haven_filter_label = ""
+        self._haven_filter.clear_scope()
         self._filters.pop("project_area", None)
         self._filters.pop("project_tree_id", None)
         if self._applying_filters:
