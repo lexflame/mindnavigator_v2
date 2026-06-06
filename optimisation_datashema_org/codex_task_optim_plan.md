@@ -411,7 +411,7 @@ MindNavigator уже имеет сильную основу: локальное 
    - marker/theme/importance controls;
    - attachments.
 3. `P1-UI-03`: Разделить `project_edit_dialog.py` на секционные редакторы.
-4. `P1-UI-04`: Выделить общий component для editable list rows: input + edit/delete/add icons.
+4. `P1-UI-04`: Выделить общий component для editable list rows: input + edit/delete/add icons. Выполнено 2026-06-07: добавлен `EditableListWidget` с индексными сигналами add/edit/delete/optional action и применён для inline-списков `ProjectEditDialog`.
 5. `P1-UI-05`: Выделить общий link/display property editor.
 6. `P1-UI-06`: Ввести UI state objects для крупных форм, чтобы значения не читались напрямую из десятков виджетов.
 7. `P1-UI-07`: Добавить visual regression checklist для главных форм.
@@ -548,7 +548,7 @@ MindNavigator уже имеет сильную основу: локальное 
 4. `P2-08`: вынести haven-фильтры из `TasksWorkspace` в отдельную модель фильтра до дальнейшего расширения панели. Выполнено 2026-06-07.
 5. `P2-LINK-01`: описать `entity_links` schema proposal. Выполнено 2026-06-07.
 6. `P2-01`: добавить debounce в `SearchNav`. Выполнено 2026-06-07.
-7. `P1-UI-04`: выделить shared editable-list component.
+7. `P1-UI-04`: выделить shared editable-list component. Выполнено 2026-06-07.
 8. `P3-01`: добавить генератор большой тестовой БД.
 
 Этот порядок даст быстрый выигрыш в надежности и скорости разработки без разрушения существующей архитектуры.

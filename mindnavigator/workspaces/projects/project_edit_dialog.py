@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.ui.editable_list import EditableListItem, EditableListWidget
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
 from mindnavigator.ui.styles import get_theme_palette
 
@@ -568,18 +569,18 @@ class ProjectEditDialog(QDialog):
                 padding: 8px 0;
             }}
 
-            QFrame#ProjectInlineList {{
+            QFrame#EditableList {{
                 background: transparent;
                 border: none;
             }}
 
-            QFrame#ProjectInlineRow {{
+            QFrame#EditableListRow {{
                 background: {palette.input_alt_bg};
                 border: 1px solid {palette.border};
                 border-radius: 7px;
             }}
 
-            QLabel#ProjectInlineEmpty {{
+            QLabel#EditableListEmpty {{
                 color: {palette.dim_text};
                 background: {palette.input_alt_bg};
                 border: 1px dashed {palette.border};
@@ -587,14 +588,14 @@ class ProjectEditDialog(QDialog):
                 padding: 9px 11px;
             }}
 
-            QLineEdit#ProjectInlineValue {{
+            QLineEdit#EditableListValue {{
                 background: transparent;
                 border: none;
                 color: {palette.text};
                 padding: 7px 8px;
             }}
 
-            QToolButton#ProjectInlineIconButton {{
+            QToolButton#EditableListIconButton {{
                 min-width: 30px;
                 max-width: 30px;
                 min-height: 28px;
@@ -867,104 +868,65 @@ class ProjectEditDialog(QDialog):
 
     def _make_inline_property_editor(self, edit: QPlainTextEdit, kind: str, add_callback: object) -> QWidget:
         edit.setVisible(False)
-        widget = QFrame()
-        widget.setObjectName("ProjectInlineList")
+        widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(7)
-        rows_widget = QWidget(widget)
-        rows_widget.setObjectName(f"ProjectInlineRows_{kind}")
-        rows_layout = QVBoxLayout(rows_widget)
-        rows_layout.setContentsMargins(0, 0, 0, 0)
-        rows_layout.setSpacing(6)
-        footer = QHBoxLayout()
-        footer.setContentsMargins(0, 0, 0, 0)
-        footer.addStretch(1)
-        add_button = self._inline_icon_button("fa5s.plus", "Добавить")
-        add_button.clicked.connect(add_callback)
-        footer.addWidget(add_button)
+        layout.setSpacing(0)
+        editor = EditableListWidget(icon_color=self._palette.text)
+        editor.addRequested.connect(add_callback)
+        editor.editRequested.connect(lambda index, row_kind=kind: self._edit_inline_property(row_kind, index))
+        editor.deleteRequested.connect(lambda index, row_kind=kind: self._delete_inline_property(row_kind, index))
+        if kind == "task_types":
+            editor.actionRequested.connect(self._toggle_inline_task_type)
         layout.addWidget(edit)
-        layout.addWidget(rows_widget)
-        layout.addLayout(footer)
-        setattr(self, f"{kind}_list_widget", rows_widget)
-        setattr(self, f"{kind}_list_layout", rows_layout)
+        layout.addWidget(editor)
+        setattr(self, f"{kind}_list_widget", editor.rows_widget)
+        setattr(self, f"{kind}_list_editor", editor)
         return widget
 
-    def _inline_icon_button(self, icon_name: str, tooltip: str) -> QToolButton:
-        button = QToolButton()
-        button.setObjectName("ProjectInlineIconButton")
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setToolTip(tooltip)
-        button.setIcon(qta.icon(icon_name, color=self._palette.text))
-        return button
-
     def _refresh_inline_property_lists(self) -> None:
-        if hasattr(self, "task_types_list_layout"):
-            self._rebuild_inline_property_list(self.task_types_edit, self.task_types_list_layout, "task_types")
-        if hasattr(self, "display_properties_list_layout"):
-            self._rebuild_inline_property_list(
-                self.display_properties_edit,
-                self.display_properties_list_layout,
-                "display_properties",
-            )
         for kind, edit_name in (
+            ("task_types", "task_types_edit"),
+            ("display_properties", "display_properties_edit"),
             ("related_projects", "related_projects_edit"),
             ("related_tasks", "related_tasks_edit"),
             ("repository_links", "repository_links_edit"),
             ("wiki_links", "wiki_links_edit"),
         ):
-            layout = getattr(self, f"{kind}_list_layout", None)
+            editor = getattr(self, f"{kind}_list_editor", None)
             edit = getattr(self, edit_name, None)
-            if layout is not None and edit is not None:
-                self._rebuild_inline_property_list(edit, layout, kind)
+            if editor is not None and edit is not None:
+                items = []
+                for line in (line.strip() for line in edit.toPlainText().splitlines() if line.strip()):
+                    action_icon = ""
+                    action_tooltip = ""
+                    if kind == "task_types":
+                        active = bool(self._parse_task_type_line(line).get("active", True))
+                        action_icon = "fa5s.check" if active else "fa5s.ban"
+                        action_tooltip = "Активировать/деактивировать"
+                    items.append(
+                        EditableListItem(
+                            label=self._inline_property_label(kind, line),
+                            action_icon=action_icon,
+                            action_tooltip=action_tooltip,
+                        )
+                    )
+                editor.set_items(items)
         if hasattr(self, "_edit_mode"):
             self._set_inline_edit_enabled(self._edit_mode)
 
     def _set_inline_edit_enabled(self, enabled: bool) -> None:
-        for button in self.findChildren(QToolButton):
-            if button.objectName() == "ProjectInlineIconButton":
-                button.setVisible(enabled)
-                button.setEnabled(enabled)
-
-    def _rebuild_inline_property_list(self, edit: QPlainTextEdit, layout: QVBoxLayout, kind: str) -> None:
-        while layout.count():
-            item = layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-        lines = [line.strip() for line in edit.toPlainText().splitlines() if line.strip()]
-        if not lines:
-            empty = QLabel("Нет настроенных элементов")
-            empty.setObjectName("ProjectInlineEmpty")
-            layout.addWidget(empty)
-            return
-        for index, line in enumerate(lines):
-            layout.addWidget(self._inline_property_row(kind, index, line))
-
-    def _inline_property_row(self, kind: str, line_index: int, line: str) -> QFrame:
-        row = QFrame()
-        row.setObjectName("ProjectInlineRow")
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(6)
-        value = QLineEdit(self._inline_property_label(kind, line))
-        value.setObjectName("ProjectInlineValue")
-        value.setReadOnly(True)
-        value.setCursorPosition(0)
-        layout.addWidget(value, 1)
-        edit_button = self._inline_icon_button("fa5s.edit", "Изменить")
-        edit_button.clicked.connect(lambda _checked=False, idx=line_index: self._edit_inline_property(kind, idx))
-        layout.addWidget(edit_button)
-        if kind == "task_types":
-            values = self._parse_task_type_line(line)
-            active = bool(values.get("active", True))
-            toggle_button = self._inline_icon_button("fa5s.check" if active else "fa5s.ban", "Активировать/деактивировать")
-            toggle_button.clicked.connect(lambda _checked=False, idx=line_index: self._toggle_inline_task_type(idx))
-            layout.addWidget(toggle_button)
-        delete_button = self._inline_icon_button("fa5s.trash", "Удалить")
-        delete_button.clicked.connect(lambda _checked=False, idx=line_index: self._delete_inline_property(kind, idx))
-        layout.addWidget(delete_button)
-        return row
+        for kind in (
+            "task_types",
+            "display_properties",
+            "related_projects",
+            "related_tasks",
+            "repository_links",
+            "wiki_links",
+        ):
+            editor = getattr(self, f"{kind}_list_editor", None)
+            if editor is not None:
+                editor.set_edit_enabled(enabled)
 
     def _inline_property_label(self, kind: str, line: str) -> str:
         if kind == "task_types":
