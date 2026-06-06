@@ -1,12 +1,13 @@
 # План оптимизации, надежности и развития связности MindNavigator
 
-Дата анализа: 2026-06-05  
-Ветка анализа: `codex/optimization-reliability-plan`  
-Основание: статический обзор структуры приложения, storage-слоя, рабочих областей, навигации, поиска, механизмов связей и тестов.
+Дата первоначального анализа: 2026-06-05
+Дата актуализации: 2026-06-06
+Ветка актуализации: `epic/tweaks_task_mode`
+Основание: статический обзор структуры приложения, storage-слоя, рабочих областей, навигации, поиска, механизмов связей и тестов; повторная сверка после вливания исходного плана и последующих изменений задач.
 
 ## 1. Краткое резюме
 
-MindNavigator уже имеет сильную основу: локальное SQLite-хранилище с WAL для локальных БД, отдельные рабочие области, развитую модель задач, проектные свойства, связи между сущностями, контекстное связывание, drag-and-drop инфраструктуру и заметный объем тестов. В репозитории найдено 466 тестовых функций, есть проверки миграций, CSV transfer, UI-моделей, рабочих областей и отдельных сценариев задач.
+MindNavigator уже имеет сильную основу: локальное SQLite-хранилище с WAL для локальных БД, отдельные рабочие области, развитую модель задач, проектные свойства, связи между сущностями, контекстное связывание, drag-and-drop инфраструктуру и заметный объем тестов. На 2026-06-06 в репозитории найдено 474 тестовые функции, есть проверки миграций, CSV transfer, UI-моделей, рабочих областей и отдельных сценариев задач.
 
 Главный риск дальнейшего развития не в отсутствии функциональности, а в концентрации сложности:
 
@@ -16,6 +17,8 @@ MindNavigator уже имеет сильную основу: локальное 
 - существуют несколько параллельных механизмов связей: `task_attachments`, `context_entity_links`, relation tables для идей, досье, коллекций, концептборда;
 - поиск и часть UI-моделей перечитывают целые наборы данных и фильтруют их в памяти;
 - интерфейс богатый, но местами требует слишком много ручных переходов между сущностями и режимами.
+
+После первоначального анализа в ветку добавлены фильтр задач по верхнему проекту/области, фильтры по важности, отдельное состояние неопределенной важности, начало дня задач в 06:00 и единое оформление календарного popup. Эти изменения улучшают локальный поток работы с задачами и увеличивают покрытие тестами, но одновременно подтверждают риск дальнейшего роста `tasks_workspace.py`, `tasks_model.py` и `tasks_item_delegate.py`.
 
 Основная рекомендация: не переписывать приложение целиком. Нужна поэтапная стабилизация вокруг трех осей:
 
@@ -39,20 +42,20 @@ MindNavigator уже имеет сильную основу: локальное 
 
 Наиболее крупные Python-файлы по размеру:
 
-- `mindnavigator/workspaces/ideas/ideas_workspace.py` - около 138 KB.
-- `mindnavigator/workspaces/concept_board/concept_board_workspace.py` - около 130 KB.
-- `mindnavigator/workspaces/projects/project_edit_dialog.py` - около 127 KB.
-- `mindnavigator/storage/database_schema_mixin.py` - около 127 KB.
-- `mindnavigator/workspaces/tasks/task_details_dialog.py` - около 125 KB.
-- `mindnavigator/workspaces/tasks/tasks_workspace.py` - около 106 KB.
-- `mindnavigator/workspaces/maps/map_canvas.py` - около 104 KB.
-- `mindnavigator/workspaces/tasks/task_edit_dialog.py` - около 95 KB.
-- `mindnavigator/ui/dialogs/map_label_edit_dialog.py` - около 80 KB.
-- `mindnavigator/workspaces/tasks/tasks_item_delegate.py` - около 79 KB.
-- `mindnavigator/window/collections/main_window.py` - около 78 KB.
-- `mindnavigator/workspaces/tasks/tasks_model.py` - около 67 KB.
+- `mindnavigator/workspaces/ideas/ideas_workspace.py` - около 135 KB.
+- `mindnavigator/workspaces/concept_board/concept_board_workspace.py` - около 127 KB.
+- `mindnavigator/workspaces/tasks/task_details_dialog.py` - около 126 KB.
+- `mindnavigator/workspaces/projects/project_edit_dialog.py` - около 124 KB.
+- `mindnavigator/storage/database_schema_mixin.py` - около 124 KB.
+- `mindnavigator/workspaces/tasks/tasks_workspace.py` - около 116 KB.
+- `mindnavigator/workspaces/maps/map_canvas.py` - около 102 KB.
+- `mindnavigator/workspaces/tasks/task_edit_dialog.py` - около 93 KB.
+- `mindnavigator/workspaces/tasks/tasks_item_delegate.py` - около 86 KB.
+- `mindnavigator/ui/dialogs/map_label_edit_dialog.py` - около 79 KB.
+- `mindnavigator/window/collections/main_window.py` - около 77 KB.
+- `mindnavigator/workspaces/tasks/tasks_model.py` - около 71 KB.
 
-Вывод: код уже модульный по каталогам, но внутри ключевых рабочих областей многие файлы выполняют сразу несколько ролей: состояние, построение UI, обработчики, доменные правила, синхронизация с БД, валидация, форматирование.
+Вывод: код уже модульный по каталогам, но внутри ключевых рабочих областей многие файлы выполняют сразу несколько ролей: состояние, построение UI, обработчики, доменные правила, синхронизация с БД, валидация, форматирование. С 2026-06-05 особенно заметно выросли `tasks_workspace.py`, `tasks_item_delegate.py` и `tasks_model.py`; декомпозицию task UI следует начинать до добавления следующего крупного режима или набора фильтров.
 
 ### 2.3. Storage и схема данных
 
@@ -422,6 +425,7 @@ MindNavigator уже имеет сильную основу: локальное 
 5. `P2-05`: Добавить быстрые actions в результаты поиска.
 6. `P2-06`: Добавить "recent entities" и "recent actions".
 7. `P2-07`: В задачах добавить фильтры по типу, связям, отсутствию проекта, вложенности.
+8. `P2-08`: Вынести состояние и вычисление haven-фильтров по проекту/области/важности из `TasksWorkspace` в отдельную модель фильтра с тестируемым предикатом.
 
 ### P2. Связанность сущностей
 
@@ -538,12 +542,13 @@ MindNavigator уже имеет сильную основу: локальное 
 
 ## 10. Минимальный следующий backlog
 
-1. `P0-02`: создать `docs/task_domain_rules.md`.
+1. `P0-02`: создать `docs/task_domain_rules.md`. Выполнено 2026-06-07.
 2. `P1-03`: выделить `TaskTypeService` для проектных/встроенных типов и каскадов.
 3. `P1-05`: добавить rollback tests для cascade operations.
-4. `P2-LINK-01`: описать `entity_links` schema proposal.
-5. `P2-01`: добавить debounce в `SearchNav`.
-6. `P1-UI-04`: выделить shared editable-list component.
-7. `P3-01`: добавить генератор большой тестовой БД.
+4. `P2-08`: вынести haven-фильтры из `TasksWorkspace` в отдельную модель фильтра до дальнейшего расширения панели.
+5. `P2-LINK-01`: описать `entity_links` schema proposal.
+6. `P2-01`: добавить debounce в `SearchNav`.
+7. `P1-UI-04`: выделить shared editable-list component.
+8. `P3-01`: добавить генератор большой тестовой БД.
 
 Этот порядок даст быстрый выигрыш в надежности и скорости разработки без разрушения существующей архитектуры.
