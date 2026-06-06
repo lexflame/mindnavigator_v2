@@ -7,7 +7,7 @@
     Сигналы активации результата поиска.
 """
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -29,6 +29,8 @@ _COLLECTION_ENTITY_LABELS = {
     "character": "Персонаж",
     "other": "Другое",
 }
+
+_SEARCH_DEBOUNCE_MS = 200
 
 
 class SearchNav(QWidget):
@@ -63,7 +65,12 @@ class SearchNav(QWidget):
         self.input.setObjectName("SearchInput")
         self.input.setPlaceholderText("Проекты, задачи, заметки, файлы…")
         self.input.setClearButtonEnabled(True)
-        self.input.textChanged.connect(self._update_results)
+
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(_SEARCH_DEBOUNCE_MS)
+        self._search_timer.timeout.connect(self._run_scheduled_search)
+        self.input.textChanged.connect(self._schedule_search)
 
         self.results = QWidget()
         self.results.setObjectName("SearchResults")
@@ -286,6 +293,16 @@ class SearchNav(QWidget):
                 }
             )
         return matches
+
+    def _schedule_search(self, text: str) -> None:
+        if not (text or "").strip():
+            self._search_timer.stop()
+            self._update_results("")
+            return
+        self._search_timer.start()
+
+    def _run_scheduled_search(self) -> None:
+        self._update_results(self.input.text())
 
     def _update_results(self, text: str):
         query = (text or "").strip().lower()
