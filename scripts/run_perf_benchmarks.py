@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import statistics
 import time
@@ -14,6 +15,8 @@ from typing import Callable, Sequence
 
 from mindnavigator.services import GlobalSearchService
 from mindnavigator.storage import Database
+
+_QT_APP = None
 
 
 @dataclass(frozen=True)
@@ -101,8 +104,15 @@ def run_benchmarks(
         raise ValueError("At least one non-empty search query is required.")
 
     database = Database(path=database_path)
+    model = None
     try:
         search_service = GlobalSearchService(database)
+        model = _create_tasks_model(database)
+
+        def reload_tasks_model(_index: int) -> range:
+            model.refresh()
+            return range(model.rowCount())
+
         results = [
             measure_operation(
                 "fetch_tasks",
@@ -116,8 +126,16 @@ def run_benchmarks(
                 iterations=iterations,
                 warmup=warmup,
             ),
+            measure_operation(
+                "tasks_model_reload",
+                reload_tasks_model,
+                iterations=iterations,
+                warmup=warmup,
+            ),
         ]
     finally:
+        if model is not None:
+            model.deleteLater()
         database.close()
 
     return BenchmarkReport(
@@ -128,6 +146,21 @@ def run_benchmarks(
         warmup=warmup,
         results=results,
     )
+
+
+def _create_tasks_model(database):
+    global _QT_APP
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from mindnavigator.workspaces.tasks import tasks_model as tasks_model_module
+
+    _QT_APP = QApplication.instance() or QApplication([])
+    original_get_database = tasks_model_module.get_database
+    tasks_model_module.get_database = lambda: database
+    try:
+        return tasks_model_module.TasksModel()
+    finally:
+        tasks_model_module.get_database = original_get_database
 
 
 def write_report(report: BenchmarkReport, output_path: Path) -> Path:

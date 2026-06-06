@@ -9,7 +9,7 @@ python -m scripts.generate_perf_database .test_runtime/perf_5k.sqlite3 --project
 python -m scripts.generate_perf_database .test_runtime/perf_20k.sqlite3 --projects 400 --tasks 20000 --links 5000
 ```
 
-Measure `fetch_tasks` and global search:
+Measure `fetch_tasks`, global search, and `TasksModel.refresh()` in offscreen Qt mode:
 
 ```powershell
 python -m scripts.run_perf_benchmarks .test_runtime/perf_5k.sqlite3 --iterations 10 --warmup 2 --json-output docs/perf/perf_5k.json

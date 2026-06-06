@@ -26,19 +26,19 @@
 | `P1-UI-04` | `codex/shared-editable-list` | `32bab73` | Добавлен общий `EditableListWidget`, применённый в `ProjectEditDialog`. |
 | `P3-01` | `codex/large-test-db-generator` | `1f70443` | Добавлен детерминированный генератор БД с проектами, задачами и context links. |
 | `P2-02` | `codex/global-search-service` | `9f24c86` | Сбор результатов глобального поиска перенесён из `SearchNav` в независимый от Qt service. |
-| `P3-02` (этап 1) | `codex/performance-benchmark-runner` | текущий HEAD (`test: add performance benchmark runner`) | Добавлен runner p50/p95 для `fetch_tasks` и глобального поиска; сохранён baseline 5k. |
+| `P3-02` (этап 1) | `codex/performance-benchmark-runner` | `5a52fa4` | Добавлен runner p50/p95 для `fetch_tasks` и глобального поиска; сохранён baseline 5k. |
+| `P3-02` (этап 2) | `codex/tasks-model-reload-benchmark` | текущий HEAD (`test: benchmark tasks model reload`) | Runner расширен измерением `TasksModel.refresh()` в offscreen Qt. |
 
 ## Текущая работа
 
-- Пункт: `P3-02` — измерение ключевых операций на больших БД, этап 2.
-- Ветка: `codex/performance-benchmark-runner`.
-- Статус: этап 1 завершён; остаются `_reload_from_db` и открытие форм.
-- Проверки этапа 1:
-  - `python -m compileall mindnavigator main.py scripts/generate_perf_database.py scripts/run_perf_benchmarks.py` — успешно;
-  - `python -m pytest tests/test_run_perf_benchmarks.py tests/test_generate_perf_database.py tests/test_global_search_service.py -p no:cacheprovider` — `6 passed`;
-  - `python -m scripts.run_perf_benchmarks --help` — успешно;
-  - локальный профиль 5k, 3 итерации: `fetch_tasks` p50 `156.683 ms`, p95 `157.066 ms`; `global_search` p50 `163.551 ms`, p95 `164.840 ms`.
+- Пункт: `P3-02` — измерение ключевых операций на больших БД, этап 3.
+- Ветка: `codex/tasks-model-reload-benchmark`.
+- Статус: этап 2 завершён; остаются сценарии открытия форм.
+- Проверки этапа 2:
+  - `python -m compileall mindnavigator main.py scripts/run_perf_benchmarks.py` — успешно;
+  - `python -m pytest tests/test_run_perf_benchmarks.py tests/test_tasks_workspace_mn202.py -k "run_perf_benchmarks" -p no:cacheprovider` — `2 passed`, `94 deselected`;
+  - локальный профиль 5k, 3 итерации: `fetch_tasks` p50 `163.787 ms`, `global_search` p50 `169.212 ms`, `tasks_model_reload` p50 `292.200 ms`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `codex/performance-benchmark-runner` и продолжить `P3-02`: добавить измерение `TasksModel._reload_from_db` в offscreen Qt-режиме; измерение форм выполнять только после определения стабильного сценария их открытия.
+Создать отдельную ветку от `codex/tasks-model-reload-benchmark` и завершить `P3-02`: определить и добавить стабильные сценарии конструирования формы задачи и формы проекта без показа modal event loop.

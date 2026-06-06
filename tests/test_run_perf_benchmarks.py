@@ -27,9 +27,14 @@ def test_run_perf_benchmarks_and_write_report(unique_temp_path) -> None:
         queries=("Performance task 000001",),
     )
 
-    assert [result.operation for result in report.results] == ["fetch_tasks", "global_search"]
+    assert [result.operation for result in report.results] == [
+        "fetch_tasks",
+        "global_search",
+        "tasks_model_reload",
+    ]
     assert report.results[0].result_count == 20
     assert report.results[1].result_count == 1
+    assert report.results[2].result_count > 0
     assert all(result.iterations == 2 and result.p50_ms >= 0 for result in report.results)
     assert "fetch_tasks" in format_report(report)
 
