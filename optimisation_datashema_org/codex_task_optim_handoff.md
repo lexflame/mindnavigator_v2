@@ -28,18 +28,18 @@
 | `P2-02` | `codex/global-search-service` | `9f24c86` | Сбор результатов глобального поиска перенесён из `SearchNav` в независимый от Qt service. |
 | `P3-02` (этап 1) | `codex/performance-benchmark-runner` | `5a52fa4` | Добавлен runner p50/p95 для `fetch_tasks` и глобального поиска; сохранён baseline 5k. |
 | `P3-02` (этап 2) | `codex/tasks-model-reload-benchmark` | `15e0029` | Runner расширен измерением `TasksModel.refresh()` в offscreen Qt. |
-| `P3-02` (этап 3) | `codex/form-open-benchmarks` | текущий HEAD (`test: benchmark task and project forms`) | Добавлены offscreen-измерения конструирования `TaskEditDialog` и `ProjectEditDialog`; `P3-02` завершён. |
+| `P3-02` (этап 3) | `codex/form-open-benchmarks` | `1a8c6f8` | Добавлены offscreen-измерения конструирования `TaskEditDialog` и `ProjectEditDialog`; `P3-02` завершён. |
+| `P2-LINK-02` | `codex/entity-links-read-facade` | текущий HEAD (`feat: add entity links read facade`) | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
 
 ## Текущая работа
 
-- Пункт: `P2-LINK-02` — read facade "all links for entity".
-- Ветка: `codex/form-open-benchmarks`.
-- Статус: `P3-02` завершён; baseline указывает на высокую стоимость открытия формы задачи.
-- Проверки этапа 3:
-  - `python -m compileall mindnavigator main.py scripts/run_perf_benchmarks.py` — успешно;
-  - `python -m pytest tests/test_run_perf_benchmarks.py -p no:cacheprovider` — `2 passed`;
-  - локальный профиль 5k, 3 итерации: `task_edit_dialog_open` p50 `1760.481 ms`, p95 `2255.676 ms`; `project_edit_dialog_open` p50 `276.451 ms`, p95 `276.991 ms`.
+- Пункт: `P2-LINK-03` — расширение общего API связей и перевод потребителей.
+- Ветка: `codex/entity-links-read-facade`.
+- Статус: `P2-LINK-02` завершён без persistent schema changes.
+- Проверки `P2-LINK-02`:
+  - `python -m compileall mindnavigator main.py` — успешно;
+  - `python -m pytest tests/test_entity_links_read_facade.py tests/test_context_entity_linking.py tests/test_dossier_storage.py tests/test_idea_storage_search.py -p no:cacheprovider` — `14 passed`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `codex/form-open-benchmarks` и выполнить `P2-LINK-02`: добавить read facade "all links for entity" поверх существующих relation tables без миграции или изменения write paths.
+Создать отдельную ветку от `codex/entity-links-read-facade` и продолжить `P2-LINK-03`: добавить в facade `character_links`, project relations и concept-board links, затем определить первый UI-потребитель общего API.

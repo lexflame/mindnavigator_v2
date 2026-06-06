@@ -430,7 +430,7 @@ MindNavigator уже имеет сильную основу: локальное 
 ### P2. Связанность сущностей
 
 1. `P2-LINK-01`: Спроектировать canonical `entity_links`. Выполнено 2026-06-07: `docs/entity_links_schema_proposal.md`.
-2. `P2-LINK-02`: Создать read facade "all links for entity".
+2. `P2-LINK-02`: Создать read facade "all links for entity". Выполнено 2026-06-07: `Database.fetch_entity_links()` нормализует исходящие, входящие и симметричные связи из `task_attachments`, `context_entity_links`, `idea_relations`, `dossier_links` и `collection_relations` без изменения схемы и write paths.
 3. `P2-LINK-03`: Свести `task_attachments`, `context_entity_links`, `idea_relations`, `dossier_links`, `collection_relations` в общий API.
 4. `P2-LINK-04`: Добавить incoming links в карточки сущностей.
 5. `P2-LINK-05`: Добавить suggested links.
