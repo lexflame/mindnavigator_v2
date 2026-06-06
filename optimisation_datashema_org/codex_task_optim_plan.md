@@ -440,7 +440,7 @@ MindNavigator уже имеет сильную основу: локальное 
 ### P3. Производительность и масштабирование
 
 1. `P3-01`: Добавить генератор большой тестовой БД. Выполнено 2026-06-07: `scripts/generate_perf_database.py` создаёт детерминированную чистую БД с настраиваемым числом проектов, задач и context links; добавлен smoke-тест ссылочной целостности.
-2. `P3-02`: Измерить `fetch_tasks`, `_reload_from_db`, глобальный поиск, открытие форм. Частично выполнено 2026-06-07: необязательный runner измеряет p50/p95 для `fetch_tasks`, `GlobalSearchService` и `TasksModel.refresh()` в offscreen Qt; остаются стабильные сценарии открытия форм.
+2. `P3-02`: Измерить `fetch_tasks`, `_reload_from_db`, глобальный поиск, открытие форм. Выполнено 2026-06-07: необязательный runner измеряет p50/p95 для `fetch_tasks`, `GlobalSearchService`, `TasksModel.refresh()` и конструирования форм задачи/проекта в offscreen Qt; baseline 5k сохранён в `docs/perf/`.
 3. `P3-03`: Перевести тяжелые fetch/search на worker/debounce, если p95 превышает UX-порог.
 4. `P3-04`: Добавить lazy loading для вложенных задач и attachments summary.
 5. `P3-05`: Оптимизировать `TasksItemDelegate` через кэширование layout metrics.

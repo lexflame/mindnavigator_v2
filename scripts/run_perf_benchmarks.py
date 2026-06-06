@@ -108,10 +108,24 @@ def run_benchmarks(
     try:
         search_service = GlobalSearchService(database)
         model = _create_tasks_model(database)
+        task_sample = database.fetch_tasks()[0]
+        project_sample = database.fetch_projects()[0]
 
         def reload_tasks_model(_index: int) -> range:
             model.refresh()
             return range(model.rowCount())
+
+        def open_task_form(_index: int) -> tuple[str]:
+            dialog = _create_task_edit_dialog(database, task_sample)
+            result = (dialog.objectName(),)
+            _dispose_widget(dialog)
+            return result
+
+        def open_project_form(_index: int) -> tuple[str]:
+            dialog = _create_project_edit_dialog(database, project_sample)
+            result = (dialog.objectName(),)
+            _dispose_widget(dialog)
+            return result
 
         results = [
             measure_operation(
@@ -129,6 +143,18 @@ def run_benchmarks(
             measure_operation(
                 "tasks_model_reload",
                 reload_tasks_model,
+                iterations=iterations,
+                warmup=warmup,
+            ),
+            measure_operation(
+                "task_edit_dialog_open",
+                open_task_form,
+                iterations=iterations,
+                warmup=warmup,
+            ),
+            measure_operation(
+                "project_edit_dialog_open",
+                open_project_form,
                 iterations=iterations,
                 warmup=warmup,
             ),
@@ -163,6 +189,35 @@ def _create_tasks_model(database):
         tasks_model_module.get_database = original_get_database
 
 
+def _create_task_edit_dialog(database, task):
+    from mindnavigator.workspaces.tasks import task_edit_dialog as task_dialog_module
+
+    original_get_database = task_dialog_module.get_database
+    task_dialog_module.get_database = lambda: database
+    try:
+        return task_dialog_module.TaskEditDialog(task)
+    finally:
+        task_dialog_module.get_database = original_get_database
+
+
+def _create_project_edit_dialog(database, project):
+    from mindnavigator.workspaces.projects import project_edit_dialog as project_dialog_module
+
+    original_get_database = project_dialog_module.get_database
+    project_dialog_module.get_database = lambda: database
+    try:
+        return project_dialog_module.ProjectEditDialog(project)
+    finally:
+        project_dialog_module.get_database = original_get_database
+
+
+def _dispose_widget(widget) -> None:
+    from PySide6.QtWidgets import QApplication
+
+    widget.deleteLater()
+    QApplication.processEvents()
+
+
 def write_report(report: BenchmarkReport, output_path: Path) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -174,11 +229,11 @@ def format_report(report: BenchmarkReport) -> str:
     lines = [
         f"Database: {report.database}",
         f"Warmup: {report.warmup}",
-        "Operation       iterations  results      p50 ms      p95 ms       mean",
+        "Operation                  iterations  results      p50 ms      p95 ms       mean",
     ]
     for result in report.results:
         lines.append(
-            f"{result.operation:<15} {result.iterations:>10} {result.result_count:>8} "
+            f"{result.operation:<26} {result.iterations:>10} {result.result_count:>8} "
             f"{result.p50_ms:>11.3f} {result.p95_ms:>11.3f} {result.mean_ms:>10.3f}"
         )
     return "\n".join(lines)
