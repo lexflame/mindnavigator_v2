@@ -216,7 +216,7 @@ class DatabaseConceptBoardsMixin:
         entity_kind = self._normalize_concept_board_kind(entity_kind)
         entity_id = int(entity_id)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 """
                 INSERT OR IGNORE INTO mutaboard_items (mutaboard_id, entity_kind, entity_id, created_at)
@@ -516,7 +516,7 @@ class DatabaseConceptBoardsMixin:
 
     def _touch_concept_board(self, concept_board_id: int) -> None:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with self._conn:
+        with self.transaction():
             self._conn.execute("UPDATE mutaboards SET updated_at = ? WHERE id = ?;", (now, concept_board_id))
 
     @staticmethod

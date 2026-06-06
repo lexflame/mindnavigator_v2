@@ -247,7 +247,7 @@ class DatabaseTasksMixin:
             params.append(marker_theme)
         placeholders = ",".join("?" for _ in affected_ids)
         params.extend(affected_ids)
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 f"""
                 UPDATE tasks
@@ -273,7 +273,7 @@ class DatabaseTasksMixin:
         marker_theme: str,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 """
                 WITH RECURSIVE descendants(id) AS (
@@ -570,7 +570,7 @@ class DatabaseTasksMixin:
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         board_column = normalize_board_column(prev_board_column)
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 """
                 UPDATE tasks
@@ -621,21 +621,21 @@ class DatabaseTasksMixin:
                     """,
                     (task_id, cascade_priority, now),
                 )
+            if project_task_type_id is None and not suppress_builtin_type_cascade:
+                self.apply_task_builtin_type_to_descendants(
+                    task_id,
+                    project_id=project_id,
+                    priority=priority,
+                    importance=importance,
+                    is_plan_task=is_plan_task,
+                    marker_color=marker_color,
+                    marker_theme=marker_theme,
+                )
+            else:
+                self.apply_project_task_type_defaults_to_task_tree(project_task_type_id)
         for kind, ref_id in project_links:
             self.add_task_attachment(task_id, kind, ref_id)
         self._attach_project_task_type_concept_board(task_id, project_task_type_id)
-        if project_task_type_id is None and not suppress_builtin_type_cascade:
-            self.apply_task_builtin_type_to_descendants(
-                task_id,
-                project_id=project_id,
-                priority=priority,
-                importance=importance,
-                is_plan_task=is_plan_task,
-                marker_color=marker_color,
-                marker_theme=marker_theme,
-            )
-        else:
-            self.apply_project_task_type_defaults_to_task_tree(project_task_type_id)
         self._sync_task_text_attachments(task_id, title, description)
         new_plan_root_id = self._plan_root_id_for_parent(parent_id)
         if new_plan_root_id is not None:

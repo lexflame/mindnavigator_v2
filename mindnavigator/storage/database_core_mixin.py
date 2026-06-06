@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from collections.abc import Iterator
+
 from ._shared import *  # noqa: F401,F403
 
 class DatabaseCoreMixin:
@@ -15,7 +18,23 @@ class DatabaseCoreMixin:
         )
         self._conn.row_factory = sqlite3.Row
         self._closed = False
+        self._transaction_counter = 0
         self._init_db()
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Runs a write operation in a nestable SQLite savepoint."""
+        self._transaction_counter += 1
+        savepoint = f"mn_transaction_{self._transaction_counter}"
+        self._conn.execute(f"SAVEPOINT {savepoint};")
+        try:
+            yield
+        except Exception:
+            self._conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint};")
+            self._conn.execute(f"RELEASE SAVEPOINT {savepoint};")
+            raise
+        else:
+            self._conn.execute(f"RELEASE SAVEPOINT {savepoint};")
 
     def reindex(self) -> None:
         """Переиндексирует таблицы базы данных."""
