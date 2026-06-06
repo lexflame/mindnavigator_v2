@@ -24,21 +24,18 @@
 | `P2-LINK-01` | `codex/entity-links-schema-proposal` | `4befb30` | Добавлен проект canonical-схемы `entity_links`. |
 | `P2-01` | `codex/search-nav-debounce` | `22a57e5` | Добавлен debounce глобального поиска 200 мс и тесты. |
 | `P1-UI-04` | `codex/shared-editable-list` | `32bab73` | Добавлен общий `EditableListWidget`, применённый в `ProjectEditDialog`. |
-| `P3-01` | `codex/large-test-db-generator` | текущий HEAD (`test: add large database generator`) | Добавлен детерминированный генератор БД с проектами, задачами и context links. |
+| `P3-01` | `codex/large-test-db-generator` | `1f70443` | Добавлен детерминированный генератор БД с проектами, задачами и context links. |
+| `P2-02` | `codex/global-search-service` | текущий HEAD (`refactor: extract global search service`) | Сбор результатов глобального поиска перенесён из `SearchNav` в независимый от Qt service. |
 
 ## Текущая работа
 
-- Пункт: `P2-02` — специализированный service глобального поиска.
-- Ветка: `codex/large-test-db-generator`.
-- Статус: `P3-01` завершён; ветка готова к продолжению от её HEAD.
-- Проверки `P3-01`:
-  - `python -m compileall mindnavigator main.py scripts/generate_perf_database.py` — успешно;
-  - `python -m pytest tests/test_generate_perf_database.py -p no:cacheprovider` — `2 passed`;
-  - `python -m scripts.generate_perf_database --help` — успешно.
-- Примеры генерации:
-  - 5k: `python -m scripts.generate_perf_database .test_runtime/perf_5k.sqlite3 --projects 100 --tasks 5000 --links 1000`;
-  - 20k: `python -m scripts.generate_perf_database .test_runtime/perf_20k.sqlite3 --projects 400 --tasks 20000 --links 5000`.
+- Пункт: `P3-02` — измерение ключевых операций на больших БД.
+- Ветка: `codex/global-search-service`.
+- Статус: `P2-02` завершён; ветка готова к продолжению от её HEAD.
+- Проверки `P2-02`:
+  - `python -m compileall mindnavigator main.py` — успешно;
+  - `python -m pytest tests/test_global_search_service.py tests/test_search_nav_debounce.py tests/test_theme_switch_runtime.py -k "global_search or search_nav" -p no:cacheprovider` — `5 passed`, `4 deselected`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `codex/large-test-db-generator` и выполнить `P2-02`: перенести сбор результатов глобального поиска из `SearchNav` в специализированный service без изменения UI-поведения.
+Создать отдельную ветку от `codex/global-search-service` и выполнить `P3-02`: добавить необязательный benchmark runner для `fetch_tasks` и глобального поиска на БД 5k/20k с выводом p50/p95 без обязательных CI-порогов.

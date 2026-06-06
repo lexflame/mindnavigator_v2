@@ -19,16 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from mindnavigator.storage import get_database
+from mindnavigator.services import GlobalSearchService
 from mindnavigator.ui.styles import get_theme_palette
-
-_COLLECTION_ENTITY_LABELS = {
-    "building": "Здание",
-    "city": "Город",
-    "film": "Фильм",
-    "game": "Игра",
-    "character": "Персонаж",
-    "other": "Другое",
-}
 
 _SEARCH_DEBOUNCE_MS = 200
 
@@ -48,6 +40,7 @@ class SearchNav(QWidget):
         self._max_w = 420
         self._fixed_h = 420
         self._db = get_database()
+        self._search_service = GlobalSearchService(self._db)
         self._max_results = 8
 
         layout = QVBoxLayout(self)
@@ -181,118 +174,8 @@ class SearchNav(QWidget):
         if payload:
             self.resultActivated.emit(payload)
 
-    @staticmethod
-    def _match_query(query: str, *values: str) -> bool:
-        needle = query.lower()
-        return any(needle in (value or "").lower() for value in values)
-
     def _collect_matches(self, query: str) -> list[dict]:
-        matches: list[dict] = []
-        for task in self._db.fetch_tasks():
-            if self._match_query(query, task.title, task.description, task.project_title, task.project_area):
-                matches.append(
-                    {
-                        "entity": "task",
-                        "label": f"Задача: {task.title}",
-                        "tooltip": task.description or task.project_title,
-                        "id": task.id,
-                    }
-                )
-        for project in self._db.fetch_projects():
-            if self._match_query(query, project.title, project.area):
-                matches.append(
-                    {
-                        "entity": "project",
-                        "label": f"Проект: {project.title}",
-                        "tooltip": project.area,
-                        "id": project.id,
-                    }
-                )
-        maps = self._db.fetch_maps()
-        map_titles = {item.id: item.title for item in maps}
-        for map_item in maps:
-            if self._match_query(query, map_item.title, map_item.description, map_item.project):
-                tooltip = map_item.project or map_item.description
-                matches.append(
-                    {
-                        "entity": "map",
-                        "label": f"Карта: {map_item.title}",
-                        "tooltip": tooltip,
-                        "id": map_item.id,
-                    }
-                )
-        for marker in self._db.fetch_map_markers():
-            if self._match_query(query, marker.name, marker.description, marker.properties):
-                map_title = map_titles.get(marker.map_id, "")
-                tooltip = f"Карта: {map_title}" if map_title else ""
-                matches.append(
-                    {
-                        "entity": "marker",
-                        "label": f"Метка: {marker.name}",
-                        "tooltip": tooltip,
-                        "id": marker.id,
-                        "map_id": marker.map_id,
-                    }
-                )
-        for note in self._db.fetch_notes():
-            tags = " ".join(note.tags or [])
-            if self._match_query(query, note.title, note.preview, tags, note.project):
-                tooltip = note.project or note.preview
-                matches.append(
-                    {
-                        "entity": "note",
-                        "label": f"Заметка: {note.title}",
-                        "tooltip": tooltip,
-                        "id": note.id,
-                    }
-                )
-        for file_item in self._db.fetch_cloud_files():
-            if self._match_query(query, file_item.name, file_item.rel_path, file_item.description):
-                tooltip = file_item.rel_path or file_item.description
-                matches.append(
-                    {
-                        "entity": "file",
-                        "label": f"Файл: {file_item.name}",
-                        "tooltip": tooltip,
-                        "id": file_item.id,
-                    }
-                )
-        for obj in self._db.fetch_objects():
-            if self._match_query(query, obj.title, obj.catalog, obj.object_type, obj.status, obj.description):
-                tooltip_parts = [obj.catalog, obj.object_type, obj.status]
-                tooltip = " · ".join(part for part in tooltip_parts if part)
-                matches.append(
-                    {
-                        "entity": "object",
-                        "label": f"Объект: {obj.title}",
-                        "tooltip": tooltip,
-                        "id": obj.id,
-                    }
-                )
-        for character in self._db.fetch_characters(search_text=query):
-            tooltip_parts = [character.role, ", ".join(character.tags), character.description]
-            tooltip = " · ".join(part for part in tooltip_parts if part)
-            matches.append(
-                {
-                    "entity": "character",
-                    "label": f"Персонаж: {character.name}",
-                    "tooltip": tooltip,
-                    "id": character.id,
-                }
-            )
-        for collection in self._db.fetch_collection_items(search_text=query):
-            entity_label = _COLLECTION_ENTITY_LABELS.get(collection.entity_type, collection.entity_type)
-            tooltip_parts = [entity_label, collection.topic, collection.source_url]
-            tooltip = " · ".join(part for part in tooltip_parts if part)
-            matches.append(
-                {
-                    "entity": "collection",
-                    "label": f"Коллекция: {collection.title}",
-                    "tooltip": tooltip,
-                    "id": collection.id,
-                }
-            )
-        return matches
+        return self._search_service.search(query)
 
     def _schedule_search(self, text: str) -> None:
         if not (text or "").strip():
