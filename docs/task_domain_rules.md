@@ -11,6 +11,7 @@
 
 Основные реализации:
 
+- `mindnavigator/services/task_type_service.py`;
 - `mindnavigator/storage/database_tasks_mixin.py`;
 - `mindnavigator/storage/database_project_properties_mixin.py`;
 - `mindnavigator/workspaces/tasks/tasks_model.py`;
@@ -170,7 +171,8 @@
 
 ## Известные ограничения текущей реализации
 
-- Каскады типов и проектного контекста распределены между storage и `TasksModel`.
+- `TaskTypeService` уже является публичной точкой применения типа из `TasksModel`, но SQL-каскады
+  пока остаются внутри storage-методов.
 - Некоторые операции после записи перечитывают полный список задач.
 - Применение проектного типа к дереву обновляет всех потомков, даже если ранее у них были
   собственные типы или настройки.

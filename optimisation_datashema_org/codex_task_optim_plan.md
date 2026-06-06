@@ -390,7 +390,7 @@ MindNavigator уже имеет сильную основу: локальное 
    - index helpers;
    - data normalization migrations.
 2. `P1-02`: Ввести явный transaction helper для сложных операций.
-3. `P1-03`: Вынести каскады задач в `TaskHierarchyService` или `TaskTypeService`.
+3. `P1-03`: Вынести каскады задач в `TaskHierarchyService` или `TaskTypeService`. Выполнен первый сервисный контур `TaskTypeService` 2026-06-07; SQL-каскады остаются в storage.
 4. `P1-04`: Добавить operation log для массовых изменений задач.
 5. `P1-05`: Добавить rollback tests для каскадов и массовых операций.
 6. `P1-06`: Добавить индексы/SQL paths для частых фильтров задач: project, done, day, parent, type, priority, board_column.
@@ -543,7 +543,7 @@ MindNavigator уже имеет сильную основу: локальное 
 ## 10. Минимальный следующий backlog
 
 1. `P0-02`: создать `docs/task_domain_rules.md`. Выполнено 2026-06-07.
-2. `P1-03`: выделить `TaskTypeService` для проектных/встроенных типов и каскадов.
+2. `P1-03`: выделить `TaskTypeService` для проектных/встроенных типов и каскадов. Выполнено 2026-06-07; дальнейшая транзакционная декомпозиция относится к `P1-02`.
 3. `P1-05`: добавить rollback tests для cascade operations.
 4. `P2-08`: вынести haven-фильтры из `TasksWorkspace` в отдельную модель фильтра до дальнейшего расширения панели.
 5. `P2-LINK-01`: описать `entity_links` schema proposal.

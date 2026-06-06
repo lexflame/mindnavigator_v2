@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *  # noqa: F401,F403
+from mindnavigator.services import TaskTypeService, TaskTypeUpdateValues
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from .task_importance_labels import task_importance_filter_key
 from .task_property_propagation import TASK_PROPAGATABLE_FIELDS, TaskPropertyPropagationResult
@@ -15,6 +16,7 @@ class TasksModel(QAbstractListModel):
         """Создает модель данных задач для списка."""
         super().__init__(parent)
         self._db = get_database()
+        self._task_type_service = TaskTypeService(self._db)
         self._all_rows: List[Row] = []
         self._rows: List[Row] = []
         self._task_depths: dict[int, int] = {}
@@ -734,24 +736,26 @@ class TasksModel(QAbstractListModel):
             f"from_day={r.day.isoformat()} to_day={day.isoformat()} "
             f"title={title!r} time={time_text!r} priority={priority!r} done={done}"
         )
-        updated = self._db.update_task(
+        updated = self._task_type_service.apply_type(
             task_id=r.id,
-            title=title,
-            description=description,
-            day=day,
-            time_text=time_text,
-            priority=priority,
-            done=done,
             project_id=resolved_project_id,
-            parent_id=r.parent_id,
-            recurrence_kind=recurrence_kind,
-            recurrence_interval=recurrence_interval,
-            is_plan_task=r.is_plan_task if is_plan_task is None else bool(is_plan_task),
-            plan_order=r.plan_order,
-            marker_color=marker_color,
-            marker_theme=marker_theme,
             project_task_type_id=project_task_type_id,
-            importance=r.importance if importance is None else importance,
+            is_plan_task=r.is_plan_task if is_plan_task is None else bool(is_plan_task),
+            values=TaskTypeUpdateValues(
+                title=title,
+                description=description,
+                day=day,
+                time_text=time_text,
+                priority=priority,
+                importance=r.importance if importance is None else importance,
+                done=done,
+                parent_id=r.parent_id,
+                recurrence_kind=recurrence_kind,
+                recurrence_interval=recurrence_interval,
+                plan_order=r.plan_order,
+                marker_color=marker_color,
+                marker_theme=marker_theme,
+            ),
         )
         if gantt_estimate_minutes is not None:
             self._db.set_task_gantt_estimate(updated.id, gantt_estimate_minutes, forecasted=True)
