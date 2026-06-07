@@ -18,6 +18,7 @@ from mindnavigator.workspaces.concept_board.concept_board_delegate import Concep
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
+from mindnavigator.services import SuggestedLinksService
 
 IDEA_RELATION_KIND_ITEMS = [
     ("Задача", "task"),
@@ -2619,8 +2620,9 @@ class IdeasWorkspace(BaseWorkspace):
         self.relations_list.clear()
         relations = self._db.fetch_idea_relations(idea_id)
         incoming_links = self._db.fetch_entity_links("idea", idea_id, direction="incoming")
+        suggestions = SuggestedLinksService(self._db).for_idea(idea_id)
         self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations) + len(incoming_links))
-        if not relations and not incoming_links:
+        if not relations and not incoming_links and not suggestions:
             item = QListWidgetItem(
                 "Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой."
             )
@@ -2662,6 +2664,20 @@ class IdeasWorkspace(BaseWorkspace):
                 item.setData(int(Qt.ItemDataRole.UserRole) + 1, target.kind)
                 item.setData(int(Qt.ItemDataRole.UserRole) + 2, target.id)
                 item.setToolTip("Входящая связь доступна только для просмотра из этой карточки.")
+                self.relations_list.addItem(item)
+        if suggestions:
+            header = QListWidgetItem(f"Предложения · {len(suggestions)}")
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.relations_list.addItem(header)
+            for suggestion in suggestions:
+                target = suggestion.target
+                item = QListWidgetItem(
+                    f"  Совпадения: {suggestion.reason} · "
+                    f"{self._relation_display_label(target.kind, target.id)}"
+                )
+                item.setData(int(Qt.ItemDataRole.UserRole) + 1, target.kind)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 2, target.id)
+                item.setToolTip("Предложение не создаёт связь автоматически.")
                 self.relations_list.addItem(item)
         self._update_relations_actions()
         self._populate_links_view()

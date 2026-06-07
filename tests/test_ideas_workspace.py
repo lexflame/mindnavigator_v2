@@ -689,6 +689,61 @@ def test_ideas_workspace_shows_incoming_relations_as_read_only(monkeypatch, uniq
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_shows_suggested_task_links_as_read_only(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_suggested_relation", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        project = database.create_project(
+            "Work",
+            "Search",
+            ideas_workspace_module.date.today(),
+            "Medium",
+        )
+        idea = database.create_idea(
+            title="Оптимизация глобального поиска",
+            status="inbox",
+            project_id=project.id,
+        )
+        task = database.create_task(
+            title="Оптимизация поиска",
+            description="",
+            day=ideas_workspace_module.date.today(),
+            time_text="",
+            priority="Medium",
+            project_id=project.id,
+        )
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        workspace.list_view.setCurrentIndex(model.index_for_id(idea.id))
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).text() == "Предложения · 1"
+        suggestion = workspace.relations_list.item(1)
+        assert "Оптимизация поиска" in suggestion.text()
+        assert suggestion.data(int(Qt.ItemDataRole.UserRole) + 1) == "task"
+        assert suggestion.data(int(Qt.ItemDataRole.UserRole) + 2) == task.id
+
+        workspace.relations_list.setCurrentRow(1)
+        QApplication.processEvents()
+
+        assert workspace.relations_open_button.isEnabled()
+        assert not workspace.relations_remove_button.isEnabled()
+        assert database.fetch_idea_relations(idea.id) == []
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_triage_focuses_first_inbox_idea(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_triage_start", ".sqlite3")

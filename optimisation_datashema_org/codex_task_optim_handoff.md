@@ -31,17 +31,18 @@
 | `P3-02` (этап 3) | `codex/form-open-benchmarks` | `1a8c6f8` | Добавлены offscreen-измерения конструирования `TaskEditDialog` и `ProjectEditDialog`; `P3-02` завершён. |
 | `P2-LINK-02` | `codex/entity-links-read-facade` | `da3603a` | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
 | `P2-LINK-03` | `codex/entity-links-api-consumers` | `474a998` | Facade расширен связями персонажей, проектов и концептборда; панель связей заметки переведена на общий API. |
-| `P2-LINK-04` | `codex/entity-incoming-links` | текущий HEAD (`feat: show incoming idea links`) | Во вкладке связей идеи добавлена read-only группа входящих связей с навигацией к источнику. |
+| `P2-LINK-04` | `codex/entity-incoming-links` | `6f3813c` | Во вкладке связей идеи добавлена read-only группа входящих связей с навигацией к источнику. |
+| `P2-LINK-05` | `codex/entity-link-suggestions` | текущий HEAD (`feat: suggest idea task links`) | Добавлен детерминированный сервис suggested links и read-only предложения задач в карточке идеи. |
 
 ## Текущая работа
 
-- Пункт: `P2-LINK-05` — suggested links.
-- Ветка: `codex/entity-incoming-links`.
-- Статус: `P2-LINK-04` завершён для карточки идеи без изменений схемы и write paths.
-- Проверки `P2-LINK-04`:
+- Пункт: `P2-LINK-06` — drag/drop linking на основе единой policy.
+- Ветка: `codex/entity-link-suggestions`.
+- Статус: `P2-LINK-05` завершён для карточки идеи без изменений схемы и автоматической записи связей.
+- Проверки `P2-LINK-05`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_ideas_workspace.py tests/test_entity_links_read_facade.py -p no:cacheprovider` — `26 passed`.
+  - `python -m pytest tests/test_suggested_links_service.py tests/test_ideas_workspace.py tests/test_entity_links_read_facade.py -p no:cacheprovider` — `29 passed`.
 
 ## Следующий шаг
 
-После ручной проверки входящих связей идеи создать отдельную ветку от `codex/entity-incoming-links` и начать `P2-LINK-05`: определить детерминированные suggested links без автоматической записи связей и с ограниченным первым UI-потребителем.
+После ручной проверки предложений в карточке идеи создать отдельную ветку от `codex/entity-link-suggestions` и начать `P2-LINK-06`: определить единую policy допустимых drag/drop-связей отдельно от UI и подключить один существующий drop target без изменения остальных сценариев.

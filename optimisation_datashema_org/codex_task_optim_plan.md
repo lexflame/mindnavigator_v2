@@ -433,7 +433,7 @@ MindNavigator уже имеет сильную основу: локальное 
 2. `P2-LINK-02`: Создать read facade "all links for entity". Выполнено 2026-06-07: `Database.fetch_entity_links()` нормализует исходящие, входящие и симметричные связи из `task_attachments`, `context_entity_links`, `idea_relations`, `dossier_links` и `collection_relations` без изменения схемы и write paths.
 3. `P2-LINK-03`: Свести legacy relation tables в общий API. Выполнено 2026-06-07: facade расширен источниками `character_links`, `project_related_projects`, `project_related_tasks` и `mutaboard_links`; панель связей выбранной заметки переведена на `Database.fetch_entity_links()`.
 4. `P2-LINK-04`: Добавить incoming links в карточки сущностей. Выполнено 2026-06-07 для карточки идеи: вкладка связей показывает отдельную read-only группу входящих связей из `Database.fetch_entity_links()`, поддерживает переход к источнику и не разрешает удаление со стороны получателя.
-5. `P2-LINK-05`: Добавить suggested links.
+5. `P2-LINK-05`: Добавить suggested links. Выполнено 2026-06-07 для карточки идеи: независимый `SuggestedLinksService` детерминированно предлагает несвязанные активные задачи того же проекта по совпадению значимых слов; предложения read-only и не создают связи автоматически.
 6. `P2-LINK-06`: Добавить drag/drop linking на основе единой policy.
 7. `P2-LINK-07`: Добавить единый компонент "Связанные сущности".
 
