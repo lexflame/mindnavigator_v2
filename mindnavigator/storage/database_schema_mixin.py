@@ -684,6 +684,7 @@ class DatabaseSchemaMixin:
             MigrationStep(12, "idea_relation_kind_schema", self._migration_v12_idea_relation_kind_schema),
             MigrationStep(13, "task_importance_schema", self._migration_v13_task_importance_schema),
             MigrationStep(14, "task_attachment_comment_schema", self._migration_v14_task_attachment_comment_schema),
+            MigrationStep(15, "full_text_search_schema", self._migration_v15_full_text_search_schema),
         ]
         apply_migrations(self._conn, steps)
         self._ensure_task_board_column()
@@ -691,6 +692,8 @@ class DatabaseSchemaMixin:
         self._ensure_task_project_property_columns()
         self._ensure_task_importance_column()
         self._ensure_task_attachment_comment_column()
+        self._ensure_task_description_column()
+        self._ensure_full_text_search_schema()
 
     def apply_schema_updates(self) -> int:
         """Применяет все доступные миграции схемы и возвращает user_version."""
@@ -710,6 +713,7 @@ class DatabaseSchemaMixin:
         self._seed_default_idea_categories()
         self._ensure_mutaboard_schema()
         self._ensure_concept_board_schema()
+        self._ensure_full_text_search_schema()
         row = self._conn.execute("PRAGMA user_version;").fetchone()
         return int(row[0]) if row else 0
 
@@ -785,6 +789,65 @@ class DatabaseSchemaMixin:
     def _migration_v14_task_attachment_comment_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds per-task comments for attached images and other linked entities."""
         self._ensure_task_attachment_comment_column()
+
+    def _migration_v15_full_text_search_schema(self, _connection: sqlite3.Connection) -> None:
+        """Adds FTS5 indexes while preserving startup on SQLite builds without FTS5."""
+        self._ensure_full_text_search_schema()
+
+    def _ensure_full_text_search_schema(self) -> bool:
+        definitions = {
+            "tasks": ("title, description", "title, description"),
+            "ideas": ("title, summary, body_md, source", "title, summary, body_md, source"),
+            "notes": ("title, preview, tags, project", "title, preview, tags, project"),
+            "objects": (
+                "title, catalog, object_type, status, description",
+                "title, catalog, object_type, status, description",
+            ),
+        }
+        for table_name, (_fts_columns, row_columns) in definitions.items():
+            available_columns = {
+                str(row["name"])
+                for row in self._conn.execute(f"PRAGMA table_info({table_name});").fetchall()
+            }
+            required_columns = {"id", *(column.strip() for column in row_columns.split(","))}
+            if not required_columns.issubset(available_columns):
+                return False
+        try:
+            with self._conn:
+                for table_name, (fts_columns, row_columns) in definitions.items():
+                    fts_table = f"{table_name}_fts"
+                    table_exists = self._conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;",
+                        (fts_table,),
+                    ).fetchone() is not None
+                    self._conn.execute(
+                        f"CREATE VIRTUAL TABLE IF NOT EXISTS {fts_table} USING fts5("
+                        f"{fts_columns}, content='{table_name}', content_rowid='id');"
+                    )
+                    new_columns = ", ".join(f"new.{column.strip()}" for column in row_columns.split(","))
+                    old_columns = ", ".join(f"old.{column.strip()}" for column in row_columns.split(","))
+                    self._conn.execute(
+                        f"CREATE TRIGGER IF NOT EXISTS {table_name}_fts_ai AFTER INSERT ON {table_name} BEGIN "
+                        f"INSERT INTO {fts_table}(rowid, {fts_columns}) VALUES (new.id, {new_columns}); END;"
+                    )
+                    self._conn.execute(
+                        f"CREATE TRIGGER IF NOT EXISTS {table_name}_fts_ad AFTER DELETE ON {table_name} BEGIN "
+                        f"INSERT INTO {fts_table}({fts_table}, rowid, {fts_columns}) "
+                        f"VALUES ('delete', old.id, {old_columns}); END;"
+                    )
+                    self._conn.execute(
+                        f"CREATE TRIGGER IF NOT EXISTS {table_name}_fts_au AFTER UPDATE ON {table_name} BEGIN "
+                        f"INSERT INTO {fts_table}({fts_table}, rowid, {fts_columns}) "
+                        f"VALUES ('delete', old.id, {old_columns}); "
+                        f"INSERT INTO {fts_table}(rowid, {fts_columns}) VALUES (new.id, {new_columns}); END;"
+                    )
+                    if not table_exists:
+                        self._conn.execute(f"INSERT INTO {fts_table}({fts_table}) VALUES ('rebuild');")
+        except sqlite3.OperationalError as exc:
+            if "fts5" in str(exc).lower() or "virtual table" in str(exc).lower():
+                return False
+            raise
+        return True
 
     def _migration_v10_idea_category_schema(self, _connection: sqlite3.Connection) -> None:
         """Adds editable idea categories and removes the fixed status CHECK."""

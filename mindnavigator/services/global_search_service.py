@@ -28,8 +28,17 @@ class GlobalSearchService:
             return []
 
         matches: list[dict] = []
-        for task in self._db.fetch_tasks():
-            if self._matches(normalized_query, task.title, task.description, task.project_title, task.project_area):
+        search_full_text = getattr(self._db, "search_full_text", None)
+        indexed_matches = search_full_text(normalized_query) if callable(search_full_text) else None
+        indexed_by_entity: dict[str, list[dict]] = {}
+        if indexed_matches is not None:
+            for item in indexed_matches:
+                indexed_by_entity.setdefault(str(item["entity"]), []).append(item)
+
+        if indexed_matches is None:
+            for task in self._db.fetch_tasks():
+                if not self._matches(normalized_query, task.title, task.description, task.project_title, task.project_area):
+                    continue
                 matches.append(
                     {
                         "entity": "task",
@@ -38,6 +47,25 @@ class GlobalSearchService:
                         "id": task.id,
                     }
                 )
+        else:
+            matches.extend(
+                {
+                    "entity": "task",
+                    "label": f"Задача: {item['title']}",
+                    "tooltip": str(item["detail"]),
+                    "id": int(item["id"]),
+                }
+                for item in indexed_by_entity.get("task", [])
+            )
+            matches.extend(
+                {
+                    "entity": "idea",
+                    "label": f"Идея: {item['title']}",
+                    "tooltip": str(item["detail"]),
+                    "id": int(item["id"]),
+                }
+                for item in indexed_by_entity.get("idea", [])
+            )
         for project in self._db.fetch_projects():
             if self._matches(normalized_query, project.title, project.area):
                 matches.append(
@@ -72,9 +100,11 @@ class GlobalSearchService:
                         "map_id": marker.map_id,
                     }
                 )
-        for note in self._db.fetch_notes():
-            tags = " ".join(note.tags or [])
-            if self._matches(normalized_query, note.title, note.preview, tags, note.project):
+        if indexed_matches is None:
+            for note in self._db.fetch_notes():
+                tags = " ".join(note.tags or [])
+                if not self._matches(normalized_query, note.title, note.preview, tags, note.project):
+                    continue
                 matches.append(
                     {
                         "entity": "note",
@@ -83,6 +113,16 @@ class GlobalSearchService:
                         "id": note.id,
                     }
                 )
+        else:
+            matches.extend(
+                {
+                    "entity": "note",
+                    "label": f"Заметка: {item['title']}",
+                    "tooltip": str(item["detail"]),
+                    "id": int(item["id"]),
+                }
+                for item in indexed_by_entity.get("note", [])
+            )
         for file_item in self._db.fetch_cloud_files():
             if self._matches(normalized_query, file_item.name, file_item.rel_path, file_item.description):
                 matches.append(
@@ -93,8 +133,10 @@ class GlobalSearchService:
                         "id": file_item.id,
                     }
                 )
-        for obj in self._db.fetch_objects():
-            if self._matches(normalized_query, obj.title, obj.catalog, obj.object_type, obj.status, obj.description):
+        if indexed_matches is None:
+            for obj in self._db.fetch_objects():
+                if not self._matches(normalized_query, obj.title, obj.catalog, obj.object_type, obj.status, obj.description):
+                    continue
                 tooltip = " · ".join(part for part in (obj.catalog, obj.object_type, obj.status) if part)
                 matches.append(
                     {
@@ -104,6 +146,16 @@ class GlobalSearchService:
                         "id": obj.id,
                     }
                 )
+        else:
+            matches.extend(
+                {
+                    "entity": "object",
+                    "label": f"Объект: {item['title']}",
+                    "tooltip": str(item["detail"]),
+                    "id": int(item["id"]),
+                }
+                for item in indexed_by_entity.get("object", [])
+            )
         for character in self._db.fetch_characters(search_text=normalized_query):
             tooltip = " · ".join(
                 part for part in (character.role, ", ".join(character.tags), character.description) if part

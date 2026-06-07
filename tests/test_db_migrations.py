@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from mindnavigator.spaceenity.db_migrations import MigrationStep, apply_migrations, get_user_version
 from mindnavigator.storage import BOARD_COLUMN_DEFERRED, BOARD_COLUMN_QUEUE, DEFERRED_PRIORITY, LEGACY_DEFERRED_PRIORITY, Database
 
-CURRENT_SCHEMA_VERSION = 14
+CURRENT_SCHEMA_VERSION = 15
 
 def test_apply_migrations_is_versioned_and_idempotent() -> None:
     conn = sqlite3.connect(":memory:")
