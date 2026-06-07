@@ -8,6 +8,7 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout
 
 from mindnavigator.hotkeys import HotkeyBinding, HotkeyCommand
+from mindnavigator.services import SearchResultActionRegistry
 from mindnavigator.ui.styles import get_theme_palette
 
 
@@ -20,10 +21,19 @@ class PaletteCommand:
 class CommandPaletteDialog(QDialog):
     itemActivated = Signal(str, object)
 
-    def __init__(self, *, search_service, commands: list[PaletteCommand], theme_mode: str = "dark", parent=None) -> None:
+    def __init__(
+        self,
+        *,
+        search_service,
+        commands: list[PaletteCommand],
+        action_registry: SearchResultActionRegistry | None = None,
+        theme_mode: str = "dark",
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._search_service = search_service
         self._commands = commands
+        self._action_registry = action_registry or SearchResultActionRegistry()
         self.setObjectName("CommandPaletteDialog")
         self.setWindowTitle("Command Palette")
         self.setModal(True)
@@ -111,6 +121,14 @@ class CommandPaletteDialog(QDialog):
                 item.setToolTip(str(payload.get("tooltip") or ""))
                 item.setData(Qt.ItemDataRole.UserRole, ("entity", payload))
                 self.results.addItem(item)
+                for action in self._action_registry.actions_for(payload):
+                    action_item = QListWidgetItem(f"    Действие: {action.title}")
+                    action_item.setToolTip(str(payload.get("label") or ""))
+                    action_item.setData(
+                        Qt.ItemDataRole.UserRole,
+                        ("action", {"action_id": action.id, "payload": payload}),
+                    )
+                    self.results.addItem(action_item)
 
         if self.results.count():
             self.results.setCurrentRow(0)

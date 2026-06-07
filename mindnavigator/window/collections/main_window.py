@@ -46,7 +46,7 @@ from mindnavigator.ui.dialogs.frameless_patch import restore_minimizable_task_di
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, build_app_stylesheet
 from mindnavigator.ui.titlebar import TitleBar
-from mindnavigator.services import GlobalSearchService
+from mindnavigator.services import GlobalSearchService, SearchResultActionRegistry
 from mindnavigator.window.collections.windowing import ResizeEdge
 from mindnavigator.workspaces.characters import CharactersWorkspace
 from mindnavigator.workspaces.collections import CollectionsWorkspace
@@ -894,6 +894,7 @@ class MainWindow(QMainWindow):
         dialog = CommandPaletteDialog(
             search_service=GlobalSearchService(get_database()),
             commands=commands,
+            action_registry=SearchResultActionRegistry(),
             theme_mode=self._theme_mode,
             parent=self,
         )
@@ -901,6 +902,12 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _activate_command_palette_item(self, item_kind: str, payload: object) -> None:
+        if item_kind == "action" and isinstance(payload, dict):
+            action_id = payload.get("action_id")
+            search_payload = payload.get("payload")
+            if isinstance(action_id, str) and isinstance(search_payload, dict):
+                self._execute_search_result_action(action_id, search_payload)
+            return
         if item_kind == "entity" and isinstance(payload, dict):
             self._on_search_result_activated(payload)
             return
@@ -908,6 +915,21 @@ class MainWindow(QMainWindow):
             callback = self._resolve_hotkey_callback(payload)
             if callable(callback):
                 callback()
+
+    def _execute_search_result_action(self, action_id: str, payload: dict) -> None:
+        if action_id == "open":
+            self._on_search_result_activated(payload)
+            return
+        if payload.get("entity") != "task" or action_id not in {"task.view", "task.edit"}:
+            return
+        task_id = payload.get("id")
+        if task_id is None:
+            return
+        self.set_mode(self.MODE_TASKS)
+        method_name = "open_task_for_view" if action_id == "task.view" else "open_task_for_edit"
+        method = getattr(self.page_tasks, method_name, None)
+        if callable(method):
+            method(int(task_id))
 
     def _build_ui(self):
         """Создает и компонует основные виджеты окна."""
@@ -1338,12 +1360,26 @@ class MainWindow(QMainWindow):
         entity = payload.get("entity")
         if entity == "task":
             self.set_mode(self.MODE_TASKS)
+            task_id = payload.get("id")
+            if task_id is not None and hasattr(self.page_tasks, "focus_task"):
+                self.page_tasks.focus_task(int(task_id))
         elif entity == "project":
             self.set_mode(self.MODE_PROJECTS)
+            project_id = payload.get("id")
+            if project_id is not None and hasattr(self.page_projects, "focus_project"):
+                self.page_projects.focus_project(int(project_id))
         elif entity == "map" or entity == "marker":
             self.set_mode(self.MODE_MAPS)
+            entity_id = payload.get("id")
+            method_name = "select_map" if entity == "map" else "select_marker"
+            method = getattr(self.page_maps, method_name, None)
+            if entity_id is not None and callable(method):
+                method(int(entity_id))
         elif entity == "note":
             self.set_mode(self.MODE_NOTES)
+            note_id = payload.get("id")
+            if note_id is not None and hasattr(self.page_notes, "select_note"):
+                self.page_notes.select_note(int(note_id))
         elif entity == "idea":
             self.set_mode(self.MODE_IDEAS)
             idea_id = payload.get("id")
@@ -1353,6 +1389,9 @@ class MainWindow(QMainWindow):
             self.set_mode(self.MODE_FILES)
         elif entity == "object":
             self.set_mode(self.MODE_OBJECTS)
+            object_id = payload.get("id")
+            if object_id is not None and hasattr(self.page_objects, "select_object"):
+                self.page_objects.select_object(int(object_id))
         elif entity == "collection":
             self.set_mode(self.MODE_COLLECTIONS)
             item_id = payload.get("id")
