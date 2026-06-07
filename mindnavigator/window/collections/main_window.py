@@ -46,7 +46,7 @@ from mindnavigator.ui.dialogs.frameless_patch import restore_minimizable_task_di
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, build_app_stylesheet
 from mindnavigator.ui.titlebar import TitleBar
-from mindnavigator.services import GlobalSearchService, SearchResultActionRegistry
+from mindnavigator.services import GlobalSearchService, SearchRecentsService, SearchResultActionRegistry
 from mindnavigator.window.collections.windowing import ResizeEdge
 from mindnavigator.workspaces.characters import CharactersWorkspace
 from mindnavigator.workspaces.collections import CollectionsWorkspace
@@ -191,6 +191,7 @@ class MainWindow(QMainWindow):
         self._minimized_task_dialogs: dict[int, dict[str, object]] = {}
         self._minimized_task_dialog_animations: dict[int, object] = {}
         self._dialog_minimize_animator = DialogMinimizeAnimator()
+        self._search_recents = SearchRecentsService(get_database())
 
         # Собираем интерфейс, связываем режимы и инициализируем трей.
         self._build_ui()
@@ -895,6 +896,7 @@ class MainWindow(QMainWindow):
             search_service=GlobalSearchService(get_database()),
             commands=commands,
             action_registry=SearchResultActionRegistry(),
+            recents_service=self._search_recents,
             theme_mode=self._theme_mode,
             parent=self,
         )
@@ -906,12 +908,15 @@ class MainWindow(QMainWindow):
             action_id = payload.get("action_id")
             search_payload = payload.get("payload")
             if isinstance(action_id, str) and isinstance(search_payload, dict):
+                self._search_recents.record_result_action(action_id, search_payload)
                 self._execute_search_result_action(action_id, search_payload)
             return
         if item_kind == "entity" and isinstance(payload, dict):
+            self._search_recents.record_entity(payload)
             self._on_search_result_activated(payload)
             return
         if item_kind == "command" and isinstance(payload, str):
+            self._search_recents.record_command(payload)
             callback = self._resolve_hotkey_callback(payload)
             if callable(callback):
                 callback()

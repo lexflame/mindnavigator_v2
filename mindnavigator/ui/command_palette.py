@@ -8,7 +8,7 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout
 
 from mindnavigator.hotkeys import HotkeyBinding, HotkeyCommand
-from mindnavigator.services import SearchResultActionRegistry
+from mindnavigator.services import SearchRecentsService, SearchResultActionRegistry
 from mindnavigator.ui.styles import get_theme_palette
 
 
@@ -27,6 +27,7 @@ class CommandPaletteDialog(QDialog):
         search_service,
         commands: list[PaletteCommand],
         action_registry: SearchResultActionRegistry | None = None,
+        recents_service: SearchRecentsService | None = None,
         theme_mode: str = "dark",
         parent=None,
     ) -> None:
@@ -34,6 +35,7 @@ class CommandPaletteDialog(QDialog):
         self._search_service = search_service
         self._commands = commands
         self._action_registry = action_registry or SearchResultActionRegistry()
+        self._recents_service = recents_service
         self.setObjectName("CommandPaletteDialog")
         self.setWindowTitle("Command Palette")
         self.setModal(True)
@@ -105,8 +107,11 @@ class CommandPaletteDialog(QDialog):
     def _refresh(self, text: str) -> None:
         query = str(text or "").strip().casefold()
         self.results.clear()
+        recent_command_ids = self._add_recent_items() if not query else set()
         for entry in self._commands:
             command = entry.command
+            if command.id in recent_command_ids:
+                continue
             searchable = " ".join((command.title, command.description, entry.binding.sequence)).casefold()
             if query and query not in searchable:
                 continue
@@ -132,6 +137,40 @@ class CommandPaletteDialog(QDialog):
 
         if self.results.count():
             self.results.setCurrentRow(0)
+
+    def _add_recent_items(self) -> set[str]:
+        if self._recents_service is None:
+            return set()
+        commands_by_id = {entry.command.id: entry for entry in self._commands}
+        recent_command_ids: set[str] = set()
+        for entry in self._recents_service.recent_actions():
+            if entry.get("kind") == "command":
+                command_id = str(entry.get("command_id") or "")
+                command = commands_by_id.get(command_id)
+                if command is None:
+                    continue
+                item = QListWidgetItem(f"Недавнее действие: {command.command.title}    {command.binding.sequence}")
+                item.setData(Qt.ItemDataRole.UserRole, ("command", command_id))
+                self.results.addItem(item)
+                recent_command_ids.add(command_id)
+                continue
+            payload = entry.get("payload")
+            action_id = str(entry.get("action_id") or "")
+            if not isinstance(payload, dict):
+                continue
+            action = next((item for item in self._action_registry.actions_for(payload) if item.id == action_id), None)
+            if action is None:
+                continue
+            label = str(payload.get("label") or "")
+            item = QListWidgetItem(f"Недавнее действие: {action.title} — {label}")
+            item.setData(Qt.ItemDataRole.UserRole, ("action", {"action_id": action_id, "payload": payload}))
+            self.results.addItem(item)
+        for payload in self._recents_service.recent_entities():
+            item = QListWidgetItem(f"Недавнее: {payload.get('label') or ''}")
+            item.setToolTip(str(payload.get("tooltip") or ""))
+            item.setData(Qt.ItemDataRole.UserRole, ("entity", payload))
+            self.results.addItem(item)
+        return recent_command_ids
 
     def _activate_current(self) -> None:
         item = self.results.currentItem()

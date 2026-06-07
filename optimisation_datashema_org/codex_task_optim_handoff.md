@@ -37,17 +37,18 @@
 | `P2-LINK-07` | `codex/linked-entities-widget` | `7aa1e1c` | Добавлен общий секционный компонент связанных сущностей; карточка идеи переведена на него. |
 | `P2-03` | `codex/sqlite-fts5-search` | `c7b3d90` | Добавлены FTS5-индексы задач, идей, заметок и объектов, sync-триггеры и fallback-compatible интеграция глобального поиска. |
 | `P2-04` | `codex/command-palette` | `feaa431` | `Ctrl+P` открывает palette команд и сущностей поверх общего search service с клавиатурной навигацией. |
-| `P2-05` | `codex/search-result-actions` | текущий HEAD (`feat: add search result quick actions`) | Добавлен независимый registry быстрых действий; palette поддерживает переход к сущности и просмотр/редактирование карточки задачи. |
+| `P2-05` | `codex/search-result-actions` | `c14d01d` | Добавлен независимый registry быстрых действий; palette поддерживает переход к сущности и просмотр/редактирование карточки задачи. |
+| `P2-06` | `codex/search-recents` | текущий HEAD (`feat: add command palette recents`) | В settings сохраняются ограниченные recent entities/actions; palette показывает их при пустом запросе. |
 
 ## Текущая работа
 
-- Пункт: `P2-06` — recent entities и recent actions.
-- Ветка: `codex/search-result-actions`.
-- Статус: `P2-05` завершён через декларативный registry без доменной логики в `SearchNav` и `CommandPaletteDialog`.
-- Проверки `P2-05`:
+- Пункт: `P2-07` — фильтры задач по типу, связям, отсутствию проекта и вложенности.
+- Ветка: `codex/search-recents`.
+- Статус: `P2-06` завершён поверх существующей таблицы settings без миграции схемы.
+- Проверки `P2-06`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_search_result_action_registry.py tests/test_search_result_actions.py tests/test_command_palette.py tests/test_global_search_service.py tests/test_search_nav_debounce.py tests/test_hotkeys.py tests/test_theme_switch_runtime.py -p no:cacheprovider` — `24 passed`.
+  - `python -m pytest tests/test_search_recents_service.py tests/test_search_result_action_registry.py tests/test_search_result_actions.py tests/test_command_palette.py tests/test_global_search_service.py tests/test_search_nav_debounce.py tests/test_hotkeys.py tests/test_theme_switch_runtime.py -p no:cacheprovider` — `29 passed`.
 
 ## Следующий шаг
 
-После ручной проверки быстрых действий создать отдельную ветку от `codex/search-result-actions` и начать `P2-06`: спроектировать ограниченные по размеру списки recent entities и recent actions с детерминированным порядком и без изменения формата пользовательских данных.
+После ручной проверки recent-строк создать отдельную ветку от `codex/search-recents` и начать `P2-07`: изучить существующий task filter pipeline и добавить фильтры по типу, связям, отсутствию проекта и вложенности без дублирования предикатов между workspace и model.
