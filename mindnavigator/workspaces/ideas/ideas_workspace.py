@@ -18,6 +18,7 @@ from mindnavigator.workspaces.concept_board.concept_board_delegate import Concep
 from mindnavigator.ui.context_entity_linking import attach_context_entity_linking
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
+from mindnavigator.ui.dragdrop import EntityLinkDropPolicy
 from mindnavigator.services import SuggestedLinksService
 
 IDEA_RELATION_KIND_ITEMS = [
@@ -160,6 +161,50 @@ class IdeasFunnelList(QListWidget):
             event.ignore()
             return
         if self._workspace.move_idea_to_funnel_status(idea_id, self._status_code):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+
+class IdeaRelationsList(QListWidget):
+    TASK_MIME_TYPE = "application/x-mindnavigator-task-id"
+
+    def __init__(self, workspace: "IdeasWorkspace") -> None:
+        super().__init__()
+        self._workspace = workspace
+        self.setAcceptDrops(True)
+
+    @classmethod
+    def _task_id_from_mime(cls, mime_data) -> int | None:
+        if not mime_data.hasFormat(cls.TASK_MIME_TYPE):
+            return None
+        try:
+            return int(bytes(mime_data.data(cls.TASK_MIME_TYPE).data()).decode("utf-8"))
+        except (TypeError, ValueError):
+            return None
+
+    def _can_accept(self, mime_data) -> bool:
+        task_id = self._task_id_from_mime(mime_data)
+        idea_id = self._workspace._current_idea_id
+        return task_id is not None and idea_id is not None and EntityLinkDropPolicy.can_link(
+            "task", task_id, "idea", idea_id
+        )
+
+    def dragEnterEvent(self, event) -> None:
+        if self._can_accept(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if self._can_accept(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        task_id = self._task_id_from_mime(event.mimeData())
+        if task_id is not None and self._workspace._link_dropped_entity("task", task_id):
             event.acceptProposedAction()
             return
         event.ignore()
@@ -817,7 +862,7 @@ class IdeasWorkspace(BaseWorkspace):
         relations_actions.addWidget(self.relations_remove_button)
         relations_actions.addStretch(1)
         relations_layout.addLayout(relations_actions)
-        self.relations_list = QListWidget()
+        self.relations_list = IdeaRelationsList(self)
         self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
         self.relations_list.itemDoubleClicked.connect(lambda _item: self._open_selected_relation())
         relations_layout.addWidget(self.relations_list, 1)
@@ -2209,6 +2254,15 @@ class IdeasWorkspace(BaseWorkspace):
         )
         self._load_relations(self._current_idea_id)
         self._set_status("Связь добавлена")
+
+    def _link_dropped_entity(self, entity_kind: str, entity_id: int) -> bool:
+        idea_id = self._current_idea_id
+        if idea_id is None or not EntityLinkDropPolicy.can_link(entity_kind, entity_id, "idea", idea_id):
+            return False
+        self._db.add_idea_relation(idea_id, entity_kind, int(entity_id), "related")
+        self._load_relations(idea_id)
+        self._set_status("Связь добавлена перетаскиванием")
+        return True
 
     def _remove_selected_relation(self) -> None:
         if self._current_idea_id is None:

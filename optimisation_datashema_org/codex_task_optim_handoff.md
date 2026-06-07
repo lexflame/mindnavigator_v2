@@ -32,17 +32,18 @@
 | `P2-LINK-02` | `codex/entity-links-read-facade` | `da3603a` | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
 | `P2-LINK-03` | `codex/entity-links-api-consumers` | `474a998` | Facade расширен связями персонажей, проектов и концептборда; панель связей заметки переведена на общий API. |
 | `P2-LINK-04` | `codex/entity-incoming-links` | `6f3813c` | Во вкладке связей идеи добавлена read-only группа входящих связей с навигацией к источнику. |
-| `P2-LINK-05` | `codex/entity-link-suggestions` | текущий HEAD (`feat: suggest idea task links`) | Добавлен детерминированный сервис suggested links и read-only предложения задач в карточке идеи. |
+| `P2-LINK-05` | `codex/entity-link-suggestions` | `6111285` | Добавлен детерминированный сервис suggested links и read-only предложения задач в карточке идеи. |
+| `P2-LINK-06` | `codex/entity-link-drop-policy` | текущий HEAD (`feat: add entity link drop policy`) | Добавлена единая policy допустимых link-drop пар и task drop target во вкладке связей идеи. |
 
 ## Текущая работа
 
-- Пункт: `P2-LINK-06` — drag/drop linking на основе единой policy.
-- Ветка: `codex/entity-link-suggestions`.
-- Статус: `P2-LINK-05` завершён для карточки идеи без изменений схемы и автоматической записи связей.
-- Проверки `P2-LINK-05`:
+- Пункт: `P2-LINK-07` — единый компонент «Связанные сущности».
+- Ветка: `codex/entity-link-drop-policy`.
+- Статус: `P2-LINK-06` завершён для пары `task -> idea`; остальные drop-сценарии не изменены.
+- Проверки `P2-LINK-06`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_suggested_links_service.py tests/test_ideas_workspace.py tests/test_entity_links_read_facade.py -p no:cacheprovider` — `29 passed`.
+  - `python -m pytest tests/test_dragdrop_policy.py tests/test_ideas_workspace.py tests/test_entity_links_read_facade.py -p no:cacheprovider` — `32 passed`.
 
 ## Следующий шаг
 
-После ручной проверки предложений в карточке идеи создать отдельную ветку от `codex/entity-link-suggestions` и начать `P2-LINK-06`: определить единую policy допустимых drag/drop-связей отдельно от UI и подключить один существующий drop target без изменения остальных сценариев.
+После ручной проверки task drop во вкладку связей идеи создать отдельную ветку от `codex/entity-link-drop-policy` и начать `P2-LINK-07`: выделить общий read-only компонент связанных сущностей из проверенного UI карточки идеи, сохранив существующие действия добавления и удаления во владельцах workspace.

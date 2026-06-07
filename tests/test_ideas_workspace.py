@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QMimeData, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QStyleOptionViewItem, QWidget
@@ -737,6 +737,64 @@ def test_ideas_workspace_shows_suggested_task_links_as_read_only(monkeypatch, un
         assert workspace.relations_open_button.isEnabled()
         assert not workspace.relations_remove_button.isEnabled()
         assert database.fetch_idea_relations(idea.id) == []
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_ideas_workspace_accepts_task_drop_as_relation(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_task_drop", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Drop target", status="inbox")
+        task = database.create_task(
+            title="Dropped task",
+            description="",
+            day=ideas_workspace_module.date.today(),
+            time_text="",
+            priority="Medium",
+        )
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+        model = workspace.list_view.model()
+        assert model is not None
+        workspace.list_view.setCurrentIndex(model.index_for_id(idea.id))
+        QApplication.processEvents()
+
+        class _DropEvent:
+            def __init__(self, mime_data: QMimeData) -> None:
+                self._mime_data = mime_data
+                self.accepted = False
+
+            def mimeData(self) -> QMimeData:
+                return self._mime_data
+
+            def acceptProposedAction(self) -> None:
+                self.accepted = True
+
+            def ignore(self) -> None:
+                self.accepted = False
+
+        mime_data = QMimeData()
+        mime_data.setData(workspace.relations_list.TASK_MIME_TYPE, str(task.id).encode("utf-8"))
+        event = _DropEvent(mime_data)
+
+        workspace.relations_list.dropEvent(event)  # type: ignore[arg-type]
+
+        relations = database.fetch_idea_relations(idea.id)
+        assert event.accepted is True
+        assert len(relations) == 1
+        assert relations[0].entity_type == "task"
+        assert relations[0].entity_id == task.id
+        assert relations[0].relation_kind == "related"
+        assert "Dropped task" in workspace.relations_list.item(1).text()
+        assert workspace._link_dropped_entity("project", 1) is False
     finally:
         if workspace is not None:
             workspace.deleteLater()

@@ -77,3 +77,32 @@ class RuleBasedDropValidator:
         if allowed is None:
             return False
         return payload.entity_type in allowed
+
+
+class EntityLinkDropPolicy:
+    """Defines entity pairs that may create links through drag and drop."""
+
+    _ALLOWED_SOURCES_BY_TARGET = {
+        "idea": {"task", "note", "object", "map", "marker", "concept_board"},
+    }
+
+    @classmethod
+    def can_link(
+        cls,
+        source_kind: str,
+        source_id: int,
+        target_kind: str,
+        target_id: int,
+    ) -> bool:
+        normalized_source = str(source_kind or "").strip().lower()
+        normalized_target = str(target_kind or "").strip().lower()
+        try:
+            normalized_source_id = int(source_id)
+            normalized_target_id = int(target_id)
+        except (TypeError, ValueError):
+            return False
+        if normalized_source_id <= 0 or normalized_target_id <= 0:
+            return False
+        if normalized_source == normalized_target and normalized_source_id == normalized_target_id:
+            return False
+        return normalized_source in cls._ALLOWED_SOURCES_BY_TARGET.get(normalized_target, set())

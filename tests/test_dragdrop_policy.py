@@ -1,5 +1,10 @@
 from mindnavigator.ui.dragdrop.model import DragPayload
-from mindnavigator.ui.dragdrop.policy import DropZoneRect, NestedHitTestService, RuleBasedDropValidator
+from mindnavigator.ui.dragdrop.policy import (
+    DropZoneRect,
+    EntityLinkDropPolicy,
+    NestedHitTestService,
+    RuleBasedDropValidator,
+)
 
 
 def test_nested_hit_test_prefers_smaller_zone_on_same_priority():
@@ -32,3 +37,10 @@ def test_rule_based_drop_validator():
     assert validator.validate(payload_task, "task-zone") is True
     assert validator.validate(payload_note, "task-zone") is False
     assert validator.validate(payload_task, "unknown-zone") is False
+
+
+def test_entity_link_drop_policy_allows_only_declared_pairs_and_valid_ids():
+    assert EntityLinkDropPolicy.can_link("task", 10, "idea", 20) is True
+    assert EntityLinkDropPolicy.can_link("project", 10, "idea", 20) is False
+    assert EntityLinkDropPolicy.can_link("task", 0, "idea", 20) is False
+    assert EntityLinkDropPolicy.can_link("idea", 20, "idea", 20) is False
