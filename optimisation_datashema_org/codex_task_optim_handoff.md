@@ -38,17 +38,18 @@
 | `P2-03` | `codex/sqlite-fts5-search` | `c7b3d90` | Добавлены FTS5-индексы задач, идей, заметок и объектов, sync-триггеры и fallback-compatible интеграция глобального поиска. |
 | `P2-04` | `codex/command-palette` | `feaa431` | `Ctrl+P` открывает palette команд и сущностей поверх общего search service с клавиатурной навигацией. |
 | `P2-05` | `codex/search-result-actions` | `c14d01d` | Добавлен независимый registry быстрых действий; palette поддерживает переход к сущности и просмотр/редактирование карточки задачи. |
-| `P2-06` | `codex/search-recents` | текущий HEAD (`feat: add command palette recents`) | В settings сохраняются ограниченные recent entities/actions; palette показывает их при пустом запросе. |
+| `P2-06` | `codex/search-recents` | `a5c3afc` | В settings сохраняются ограниченные recent entities/actions; palette показывает их при пустом запросе. |
+| `P2-07` | `codex/task-advanced-filters` | текущий HEAD (`feat: add advanced task filters`) | Добавлены фильтры основной модели задач по типу, связям, отсутствию проекта и вложенности с сохраняемым UI-меню. |
 
 ## Текущая работа
 
-- Пункт: `P2-07` — фильтры задач по типу, связям, отсутствию проекта и вложенности.
-- Ветка: `codex/search-recents`.
-- Статус: `P2-06` завершён поверх существующей таблицы settings без миграции схемы.
-- Проверки `P2-06`:
+- Пункт: `P3-03` — worker/debounce для тяжёлых fetch/search при превышении UX-порогов.
+- Ветка: `codex/task-advanced-filters`.
+- Статус: `P2-07` завершён; блок поиска, навигации и КПД `P2-01` — `P2-08` закрыт.
+- Проверки `P2-07`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_search_recents_service.py tests/test_search_result_action_registry.py tests/test_search_result_actions.py tests/test_command_palette.py tests/test_global_search_service.py tests/test_search_nav_debounce.py tests/test_hotkeys.py tests/test_theme_switch_runtime.py -p no:cacheprovider` — `29 passed`.
+  - `python -m pytest tests/test_task_advanced_filters.py tests/test_tasks_workspace_mn202.py tests/test_task_type_service.py tests/test_task_type_rollback.py -p no:cacheprovider` — `101 passed`.
 
 ## Следующий шаг
 
-После ручной проверки recent-строк создать отдельную ветку от `codex/search-recents` и начать `P2-07`: изучить существующий task filter pipeline и добавить фильтры по типу, связям, отсутствию проекта и вложенности без дублирования предикатов между workspace и model.
+После ручной проверки меню расширенных фильтров создать отдельную ветку от `codex/task-advanced-filters` и начать `P3-03`: повторить benchmark 5k, зафиксировать UX-пороги и переносить операции на worker только при подтверждённом превышении p95.

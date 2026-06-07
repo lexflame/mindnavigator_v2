@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QActionGroup
 from PySide6.QtWidgets import QSizePolicy
 
 from ._shared import *  # noqa: F401,F403
@@ -372,6 +373,7 @@ class TasksWorkspace(BaseWorkspace):
 
         self._build_filters()
         self.build_content()
+        self._refresh_advanced_filter_menu()
 
         self._update_day_label()
         self._apply_tab("plan")
@@ -1350,6 +1352,12 @@ class TasksWorkspace(BaseWorkspace):
         self.cmb_priority.addItems(["Любой", "High", "Medium", "Low", "Отложенная"])
         self.cmb_priority.setFixedWidth(110)
 
+        self.btn_advanced_filters = QToolButton()
+        self.btn_advanced_filters.setText("Фильтры")
+        self.btn_advanced_filters.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_advanced_filters.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_advanced_filter_menu()
+
         self.filter_layout.addWidget(self.tab_all)
         self.filter_layout.addWidget(self.tab_plan)
         self.filter_layout.addWidget(self.tab_today)
@@ -1368,6 +1376,7 @@ class TasksWorkspace(BaseWorkspace):
         self.filter_layout.addWidget(self._project_quick_links_host, 1)
         self.filter_layout.addSpacing(12)
         self.filter_layout.addWidget(self.cmb_priority)
+        self.filter_layout.addWidget(self.btn_advanced_filters)
         self._relocate_search()
         self._refresh_project_quick_links()
 
@@ -1378,6 +1387,65 @@ class TasksWorkspace(BaseWorkspace):
         self.btn_dash.toggled.connect(self._set_dash_mode)
         self.cmb_priority.currentTextChanged.connect(self._on_priority_filter_changed)
         self.build_toolbar(self.actions)
+
+    def _refresh_advanced_filter_menu(self) -> None:
+        current = {
+            "task_type": self._filters.get("task_type"),
+            "links": self._filters.get("links", "all"),
+            "project": self._filters.get("project", "all"),
+            "nesting": self._filters.get("nesting", "all"),
+        }
+        menu = QMenu(self.btn_advanced_filters)
+        task_types = self.model.available_task_types() if self.model is not None else []
+        specs = [
+            ("Тип", "task_type", [("Любой", None), ("Без типа", "none"), *task_types]),
+            ("Связи", "links", [("Любые", "all"), ("Есть связи", "linked"), ("Нет связей", "unlinked")]),
+            ("Проект", "project", [("Любой", "all"), ("Без проекта", "without")]),
+            ("Вложенность", "nesting", [("Любая", "all"), ("Корневые", "root"), ("Подзадачи", "nested")]),
+        ]
+        for title, key, options in specs:
+            submenu = menu.addMenu(title)
+            group = QActionGroup(submenu)
+            group.setExclusive(True)
+            for option in options:
+                if key == "task_type" and isinstance(option[0], int):
+                    value, label = option
+                else:
+                    label, value = option
+                action = submenu.addAction(str(label))
+                action.setCheckable(True)
+                action.setData(value)
+                action.setChecked(current[key] == value or (current[key] is None and value is None))
+                action.triggered.connect(
+                    lambda checked=False, filter_key=key, filter_value=value: self._set_advanced_filter(
+                        filter_key, filter_value
+                    )
+                )
+                group.addAction(action)
+        self.btn_advanced_filters.setMenu(menu)
+        active_count = sum(
+            value not in {None, "all"}
+            for value in current.values()
+        )
+        self.btn_advanced_filters.setText(f"Фильтры ({active_count})" if active_count else "Фильтры")
+
+    def _set_advanced_filter(self, key: str, value: object) -> None:
+        if value in {None, "all"}:
+            self._filters.pop(key, None)
+        else:
+            self._filters[key] = value
+        self._apply_advanced_filters()
+        self._refresh_advanced_filter_menu()
+        if not self._applying_filters:
+            self.save_state()
+
+    def _apply_advanced_filters(self) -> None:
+        self.model.set_advanced_filters(
+            task_type=self._filters.get("task_type"),
+            links=str(self._filters.get("links", "all")),
+            project=str(self._filters.get("project", "all")),
+            nesting=str(self._filters.get("nesting", "all")),
+        )
 
     def _relocate_search(self) -> None:
         """Перемещает строку поиска в панель фильтров."""
@@ -1482,6 +1550,7 @@ class TasksWorkspace(BaseWorkspace):
         elif self._dash_mode:
             self._refresh_dash_day()
         self._refresh_project_quick_links()
+        self._refresh_advanced_filter_menu()
 
     def _export_tasks_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -1586,6 +1655,14 @@ class TasksWorkspace(BaseWorkspace):
                 self.model.set_project_filter(None)
                 self._haven_filter.clear_scope()
             self.model.set_priority_filter(priority if isinstance(priority, str) else None)
+            for key in ("task_type", "links", "project", "nesting"):
+                value = filters.get(key)
+                if value in {None, "all"}:
+                    self._filters.pop(key, None)
+                elif isinstance(value, (int, str)):
+                    self._filters[key] = value
+            self._apply_advanced_filters()
+            self._refresh_advanced_filter_menu()
             if isinstance(importance, int):
                 self._haven_filter.set_importance(importance)
                 self.model.set_importance_filter(importance)

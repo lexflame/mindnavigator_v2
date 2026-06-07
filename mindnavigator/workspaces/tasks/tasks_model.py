@@ -6,6 +6,7 @@ from ._shared import *  # noqa: F401,F403
 from mindnavigator.services import TaskTypeService, TaskTypeUpdateValues
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from .task_importance_labels import task_importance_filter_key
+from .task_advanced_filters import TaskAdvancedFilterState
 from .task_property_propagation import TASK_PROPAGATABLE_FIELDS, TaskPropertyPropagationResult
 
 
@@ -35,6 +36,8 @@ class TasksModel(QAbstractListModel):
         self._project_area_filter_ids: Optional[set[int]] = None
         self._priority_filter: Optional[str] = None
         self._importance_filter: Optional[int] = None
+        self._advanced_filters = TaskAdvancedFilterState()
+        self._linked_task_ids: set[int] = set()
         self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
@@ -48,6 +51,8 @@ class TasksModel(QAbstractListModel):
         """Обновляет список задач из базы данных."""
         tasks = self._db.fetch_tasks()
         self._all_rows = [self._row_from_task_data(task) for task in tasks]
+        fetch_linked_ids = getattr(self._db, "fetch_task_ids_with_attachments", None)
+        self._linked_task_ids = set(fetch_linked_ids()) if callable(fetch_linked_ids) else set()
         self._project_meta_cache.clear()
         self._recompute_plan_meta()
         self._prune_state()
@@ -548,6 +553,33 @@ class TasksModel(QAbstractListModel):
         """Устанавливает фильтр по приоритету."""
         self._priority_filter = priority
         self._rebuild()
+
+    def set_advanced_filters(
+        self,
+        *,
+        task_type: int | str | None = None,
+        links: str = "all",
+        project: str = "all",
+        nesting: str = "all",
+    ) -> None:
+        self._advanced_filters = TaskAdvancedFilterState(
+            task_type=task_type,
+            links=links if links in {"all", "linked", "unlinked"} else "all",
+            project=project if project in {"all", "without"} else "all",
+            nesting=nesting if nesting in {"all", "root", "nested"} else "all",
+        )
+        self._rebuild()
+
+    def available_task_types(self) -> list[tuple[int, str]]:
+        values = {
+            (row.project_task_type_id, row.project_task_type_title)
+            for row in self._all_rows
+            if isinstance(row, TaskRow) and row.project_task_type_id is not None
+        }
+        return sorted(
+            ((int(type_id), str(title or f"Тип {type_id}")) for type_id, title in values),
+            key=lambda item: (item[1].casefold(), item[0]),
+        )
 
     def add_task(
         self,
@@ -1317,6 +1349,9 @@ class TasksModel(QAbstractListModel):
             if self._priority_filter is not None and (
                 self._task_is_plan_item.get(it.id, False) or it.priority != self._priority_filter
             ):
+                continue
+
+            if not self._advanced_filters.matches(it, self._linked_task_ids):
                 continue
 
             if (

@@ -1101,6 +1101,17 @@ class DatabaseTasksMixin:
         ).fetchall()
         return [TaskAttachmentData.from_row(row) for row in rows]
 
+    def fetch_task_ids_with_attachments(self) -> set[int]:
+        """Returns task ids participating in task attachment links."""
+        rows = self._conn.execute(
+            """
+            SELECT task_id AS task_id FROM task_attachments
+            UNION
+            SELECT ref_id AS task_id FROM task_attachments WHERE lower(kind) = 'task';
+            """
+        ).fetchall()
+        return {int(row["task_id"]) for row in rows}
+
     @staticmethod
     def _extract_task_reference_ids(*texts: str) -> list[int]:
         seen: set[int] = set()
