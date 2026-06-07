@@ -542,41 +542,10 @@ class NoteWorkspace(QWidget):
             "marker": set(),
         }
 
-        for task in self._db.fetch_tasks():
-            for attachment in self._db.fetch_task_attachments(task.id):
-                if attachment.kind == "note" and int(attachment.ref_id) == int(note_id):
-                    buckets["task"].add(task.id)
-
-        active_ideas = self._db.fetch_ideas(archived=False)
-        active_ids = {idea.id for idea in active_ideas}
-        archived_ideas = [idea for idea in self._db.fetch_ideas(archived=True) if idea.id not in active_ids]
-        for idea in [*active_ideas, *archived_ideas]:
-            for relation in self._db.fetch_idea_relations(idea.id):
-                if (relation.entity_type or "").strip().lower() == "note" and int(relation.entity_id) == int(note_id):
-                    buckets["idea"].add(idea.id)
-
-        fetch_context_links = getattr(self._db, "fetch_context_entity_links", None)
-        if callable(fetch_context_links):
-            for link in fetch_context_links(source_type="note", source_id=note_id):
-                target_type = (link.target_type or "").strip().lower()
-                if target_type in buckets and target_type != "note":
-                    buckets[target_type].add(int(link.target_id))
-                elif target_type == "note" and int(link.target_id) != int(note_id):
-                    buckets["note"].add(int(link.target_id))
-            for link in fetch_context_links(target_type="note", target_id=note_id):
-                source_type = (link.source_type or "").strip().lower()
-                if source_type in buckets and source_type != "note":
-                    buckets[source_type].add(int(link.source_id))
-                elif source_type == "note" and int(link.source_id) != int(note_id):
-                    buckets["note"].add(int(link.source_id))
-
-        fetch_dossiers = getattr(self._db, "fetch_dossiers", None)
-        fetch_dossier_links = getattr(self._db, "fetch_dossier_links", None)
-        if callable(fetch_dossiers) and callable(fetch_dossier_links):
-            for dossier in fetch_dossiers():
-                for link in fetch_dossier_links(dossier.id):
-                    if (link.entity_kind or "").strip().lower() == "note" and int(link.entity_id) == int(note_id):
-                        buckets["dossier"].add(dossier.id)
+        for link in self._db.fetch_entity_links("note", note_id):
+            target = link.other_entity
+            if target.kind in buckets and target.id != int(note_id):
+                buckets[target.kind].add(target.id)
 
         fetch_markers = getattr(self._db, "fetch_map_markers", None)
         if callable(fetch_markers):

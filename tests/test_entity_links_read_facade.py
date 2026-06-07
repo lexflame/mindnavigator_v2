@@ -52,3 +52,49 @@ def test_entity_links_facade_normalizes_symmetric_collection_relations(unique_te
         assert links[0].metadata["legacy_relation_kind"] == "supports"
     finally:
         database.close()
+
+
+def test_entity_links_facade_includes_character_project_and_concept_board_links(unique_temp_path) -> None:
+    database = Database(path=unique_temp_path("entity_links_extended", ".sqlite3"))
+    try:
+        source_project = database.create_project("Work", "Source project", date(2026, 6, 7), "Medium")
+        related_project = database.create_project("Work", "Related project", date(2026, 6, 7), "Medium")
+        task = database.create_task("Linked task", "", date(2026, 6, 7), "", "Medium")
+        note = database.create_note("Linked note", "", [], "")
+        character = database.create_character("Character")
+        board = database.create_concept_board("Board")
+
+        database.replace_project_related_projects(source_project.id, [related_project.id])
+        database.replace_project_related_tasks(source_project.id, [task.id])
+        database.add_character_link(character.id, "note", note.id)
+        database.add_concept_board_link(
+            board.id,
+            source_kind="task",
+            source_id=task.id,
+            target_kind="note",
+            target_id=note.id,
+            link_type="develops",
+        )
+
+        note_links = database.fetch_entity_links("note", note.id)
+        task_links = database.fetch_entity_links("task", task.id)
+        related_project_links = database.fetch_entity_links("project", related_project.id)
+
+        assert {(link.origin, link.other_entity.kind) for link in note_links} == {
+            ("character_links", "character"),
+            ("mutaboard_links", "task"),
+        }
+        board_link = next(link for link in note_links if link.origin == "mutaboard_links")
+        assert board_link.direction == "incoming"
+        assert board_link.relation_kind == "develops"
+        assert board_link.metadata["concept_board_id"] == board.id
+        assert {(link.origin, link.other_entity.kind) for link in task_links} == {
+            ("project_related_tasks", "project"),
+            ("mutaboard_links", "note"),
+        }
+        project_link = related_project_links[0]
+        assert project_link.origin == "project_related_projects"
+        assert project_link.direction == "incoming"
+        assert project_link.other_entity.id == source_project.id
+    finally:
+        database.close()

@@ -30,6 +30,9 @@ class DatabaseEntityLinksMixin:
         links.extend(self._fetch_idea_relation_views(entity))
         links.extend(self._fetch_dossier_link_views(entity))
         links.extend(self._fetch_collection_relation_views(entity))
+        links.extend(self._fetch_character_link_views(entity))
+        links.extend(self._fetch_project_relation_views(entity))
+        links.extend(self._fetch_concept_board_link_views(entity))
         links = [
             link
             for link in links
@@ -174,6 +177,107 @@ class DatabaseEntityLinksMixin:
                 )
             )
         return result
+
+    def _fetch_character_link_views(self, entity: EntityRef) -> list[EntityLinkView]:
+        rows = self._conn.execute(
+            """
+            SELECT id, character_id, entity_kind, entity_id, created_at
+            FROM character_links
+            WHERE (character_id = ?) OR (lower(entity_kind) = ? AND entity_id = ?)
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (entity.id if entity.kind == "character" else -1, entity.kind, entity.id),
+        ).fetchall()
+        return [
+            self._legacy_link_view(
+                entity,
+                source=EntityRef("character", row["character_id"]),
+                target=EntityRef(self._normalize_entity_link_kind(row["entity_kind"]), row["entity_id"]),
+                relation_kind="character_link",
+                origin="character_links",
+                origin_id=row["id"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def _fetch_project_relation_views(self, entity: EntityRef) -> list[EntityLinkView]:
+        project_rows = self._conn.execute(
+            """
+            SELECT id, project_id, related_project_id, sort_order, created_at
+            FROM project_related_projects
+            WHERE (project_id = ?) OR (related_project_id = ?)
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (
+                entity.id if entity.kind == "project" else -1,
+                entity.id if entity.kind == "project" else -1,
+            ),
+        ).fetchall()
+        task_rows = self._conn.execute(
+            """
+            SELECT id, project_id, task_id, sort_order, created_at
+            FROM project_related_tasks
+            WHERE (project_id = ?) OR (task_id = ?)
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (
+                entity.id if entity.kind == "project" else -1,
+                entity.id if entity.kind == "task" else -1,
+            ),
+        ).fetchall()
+        result = [
+            self._legacy_link_view(
+                entity,
+                source=EntityRef("project", row["project_id"]),
+                target=EntityRef("project", row["related_project_id"]),
+                relation_kind="related_project",
+                origin="project_related_projects",
+                origin_id=row["id"],
+                created_at=row["created_at"],
+                metadata={"sort_order": int(row["sort_order"] or 0)},
+            )
+            for row in project_rows
+        ]
+        result.extend(
+            self._legacy_link_view(
+                entity,
+                source=EntityRef("project", row["project_id"]),
+                target=EntityRef("task", row["task_id"]),
+                relation_kind="related_task",
+                origin="project_related_tasks",
+                origin_id=row["id"],
+                created_at=row["created_at"],
+                metadata={"sort_order": int(row["sort_order"] or 0)},
+            )
+            for row in task_rows
+        )
+        return result
+
+    def _fetch_concept_board_link_views(self, entity: EntityRef) -> list[EntityLinkView]:
+        rows = self._conn.execute(
+            """
+            SELECT id, mutaboard_id, source_kind, source_id, target_kind, target_id, link_type, created_at
+            FROM mutaboard_links
+            WHERE (lower(source_kind) = ? AND source_id = ?)
+               OR (lower(target_kind) = ? AND target_id = ?)
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (entity.kind, entity.id, entity.kind, entity.id),
+        ).fetchall()
+        return [
+            self._legacy_link_view(
+                entity,
+                source=EntityRef(self._normalize_entity_link_kind(row["source_kind"]), row["source_id"]),
+                target=EntityRef(self._normalize_entity_link_kind(row["target_kind"]), row["target_id"]),
+                relation_kind=str(row["link_type"] or "relates_to"),
+                origin="mutaboard_links",
+                origin_id=row["id"],
+                created_at=row["created_at"],
+                metadata={"concept_board_id": int(row["mutaboard_id"])},
+            )
+            for row in rows
+        ]
 
     @staticmethod
     def _legacy_link_view(

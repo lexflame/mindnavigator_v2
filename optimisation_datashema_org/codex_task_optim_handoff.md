@@ -29,17 +29,18 @@
 | `P3-02` (этап 1) | `codex/performance-benchmark-runner` | `5a52fa4` | Добавлен runner p50/p95 для `fetch_tasks` и глобального поиска; сохранён baseline 5k. |
 | `P3-02` (этап 2) | `codex/tasks-model-reload-benchmark` | `15e0029` | Runner расширен измерением `TasksModel.refresh()` в offscreen Qt. |
 | `P3-02` (этап 3) | `codex/form-open-benchmarks` | `1a8c6f8` | Добавлены offscreen-измерения конструирования `TaskEditDialog` и `ProjectEditDialog`; `P3-02` завершён. |
-| `P2-LINK-02` | `codex/entity-links-read-facade` | текущий HEAD (`feat: add entity links read facade`) | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
+| `P2-LINK-02` | `codex/entity-links-read-facade` | `da3603a` | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
+| `P2-LINK-03` | `codex/entity-links-api-consumers` | текущий HEAD (`feat: extend entity links facade`) | Facade расширен связями персонажей, проектов и концептборда; панель связей заметки переведена на общий API. |
 
 ## Текущая работа
 
-- Пункт: `P2-LINK-03` — расширение общего API связей и перевод потребителей.
-- Ветка: `codex/entity-links-read-facade`.
-- Статус: `P2-LINK-02` завершён без persistent schema changes.
-- Проверки `P2-LINK-02`:
+- Пункт: `P2-LINK-04` — отображение incoming links в карточках сущностей.
+- Ветка: `codex/entity-links-api-consumers`.
+- Статус: `P2-LINK-03` завершён без persistent schema changes; первым UI-потребителем стала панель связей выбранной заметки.
+- Проверки `P2-LINK-03`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_entity_links_read_facade.py tests/test_context_entity_linking.py tests/test_dossier_storage.py tests/test_idea_storage_search.py -p no:cacheprovider` — `14 passed`.
+  - `python -m pytest tests/test_entity_links_read_facade.py tests/test_note_relations_summary.py tests/test_context_entity_linking.py tests/test_dossier_storage.py tests/test_idea_storage_search.py tests/test_characters_workspace_mn204.py tests/test_concept_board_storage.py -p no:cacheprovider` — `20 passed`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `codex/entity-links-read-facade` и продолжить `P2-LINK-03`: добавить в facade `character_links`, project relations и concept-board links, затем определить первый UI-потребитель общего API.
+После ручной проверки панели связей заметки создать отдельную ветку от `codex/entity-links-api-consumers` и начать `P2-LINK-04`: выбрать карточку сущности с минимальным риском и добавить явное отображение входящих связей через общий facade.
