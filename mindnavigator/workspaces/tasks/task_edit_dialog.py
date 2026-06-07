@@ -661,7 +661,6 @@ class TaskEditDialog(QDialog):
         images_layout.addWidget(images_host)
         layout.addWidget(images_frame)
 
-        self._load_attachment_sources()
         self._refresh_attachments()
 
         buttons = QDialogButtonBox(self)
@@ -1022,11 +1021,17 @@ class TaskEditDialog(QDialog):
     def _task_has_children(self, task_id: int) -> bool:
         if int(task_id) <= 0:
             return False
+        has_children = getattr(self._db, "task_has_children", None)
+        if callable(has_children):
+            return bool(has_children(int(task_id)))
         return any(task.parent_id == int(task_id) for task in self._safe_db_fetch("fetch_tasks"))
 
     def _task_has_descendants(self, task_id: int) -> bool:
         if int(task_id) <= 0:
             return False
+        has_descendants = getattr(self._db, "task_has_descendants", None)
+        if callable(has_descendants):
+            return bool(has_descendants(int(task_id)))
         by_parent: dict[Optional[int], list[TaskRow]] = {}
         for task in self._safe_db_fetch("fetch_tasks"):
             by_parent.setdefault(task.parent_id, []).append(task)
@@ -2023,6 +2028,9 @@ class TaskEditDialog(QDialog):
         self._refresh_attachments()
 
     def _resolve_plan_item_state(self, task_id: int) -> bool:
+        parent_is_plan = getattr(self._db, "task_parent_is_plan", None)
+        if callable(parent_is_plan):
+            return bool(parent_is_plan(int(task_id)))
         fetch_tasks = getattr(self._db, "fetch_tasks", None)
         if not callable(fetch_tasks):
             return False

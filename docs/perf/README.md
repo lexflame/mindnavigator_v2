@@ -17,3 +17,5 @@ python -m scripts.run_perf_benchmarks .test_runtime/perf_20k.sqlite3 --iteration
 ```
 
 Use repeated `--query` options to control the global-search workload. Generated JSON reports include environment metadata and p50/p95, min, max, and mean durations in milliseconds.
+
+Current diagnostic UX thresholds and the latest 5k verification are recorded in `p3_03_thresholds_2026-06-07.md`.

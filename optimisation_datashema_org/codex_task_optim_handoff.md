@@ -39,17 +39,19 @@
 | `P2-04` | `codex/command-palette` | `feaa431` | `Ctrl+P` открывает palette команд и сущностей поверх общего search service с клавиатурной навигацией. |
 | `P2-05` | `codex/search-result-actions` | `c14d01d` | Добавлен независимый registry быстрых действий; palette поддерживает переход к сущности и просмотр/редактирование карточки задачи. |
 | `P2-06` | `codex/search-recents` | `a5c3afc` | В settings сохраняются ограниченные recent entities/actions; palette показывает их при пустом запросе. |
-| `P2-07` | `codex/task-advanced-filters` | текущий HEAD (`feat: add advanced task filters`) | Добавлены фильтры основной модели задач по типу, связям, отсутствию проекта и вложенности с сохраняемым UI-меню. |
+| `P2-07` | `codex/task-advanced-filters` | `28b541b` | Добавлены фильтры основной модели задач по типу, связям, отсутствию проекта и вложенности с сохраняемым UI-меню. |
+| `P3-03` | `codex/performance-thresholds` | текущий HEAD (`perf: optimize task dialog reads`) | Зафиксированы UX-пороги; task dialog p95 на fixture 5k снижен до 225 мс узкими hierarchy-запросами, worker не потребовался. |
 
 ## Текущая работа
 
-- Пункт: `P3-03` — worker/debounce для тяжёлых fetch/search при превышении UX-порогов.
-- Ветка: `codex/task-advanced-filters`.
-- Статус: `P2-07` завершён; блок поиска, навигации и КПД `P2-01` — `P2-08` закрыт.
-- Проверки `P2-07`:
+- Пункт: `P3-04` — lazy loading вложенных задач и attachments summary.
+- Ветка: `codex/performance-thresholds`.
+- Статус: `P3-03` завершён: все операции fixture 5k находятся ниже зафиксированных UX-порогов.
+- Проверки `P3-03`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_task_advanced_filters.py tests/test_tasks_workspace_mn202.py tests/test_task_type_service.py tests/test_task_type_rollback.py -p no:cacheprovider` — `101 passed`.
+  - `python -m pytest tests/test_run_perf_benchmarks.py tests/test_task_hierarchy_queries.py` — `3 passed`;
+  - benchmark 5k, 10 итераций/2 warmup: `task_edit_dialog_open p95 = 225.419 ms`, `global_search p95 = 3.567 ms`, `tasks_model_reload p95 = 335.732 ms`.
 
 ## Следующий шаг
 
-После ручной проверки меню расширенных фильтров создать отдельную ветку от `codex/task-advanced-filters` и начать `P3-03`: повторить benchmark 5k, зафиксировать UX-пороги и переносить операции на worker только при подтверждённом превышении p95.
+После ручной проверки открытия карточки задачи на большой БД создать отдельную ветку от `codex/performance-thresholds` и начать `P3-04`: измерить стоимость построения дерева и attachments summary, затем внедрить lazy loading только в подтверждённые горячие пути.

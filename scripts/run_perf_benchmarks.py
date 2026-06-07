@@ -212,9 +212,12 @@ def _create_project_edit_dialog(database, project):
 
 
 def _dispose_widget(widget) -> None:
+    from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication
 
+    widget.close()
     widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.processEvents()
 
 

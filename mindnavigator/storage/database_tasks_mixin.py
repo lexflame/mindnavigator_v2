@@ -1112,6 +1112,41 @@ class DatabaseTasksMixin:
         ).fetchall()
         return {int(row["task_id"]) for row in rows}
 
+    def task_has_children(self, task_id: int) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM tasks WHERE parent_id = ? LIMIT 1;",
+            (int(task_id),),
+        ).fetchone()
+        return row is not None
+
+    def task_has_descendants(self, task_id: int) -> bool:
+        row = self._conn.execute(
+            """
+            WITH RECURSIVE descendants(id) AS (
+                SELECT id FROM tasks WHERE parent_id = ?
+                UNION ALL
+                SELECT task.id FROM tasks task
+                JOIN descendants parent ON task.parent_id = parent.id
+            )
+            SELECT 1 FROM descendants LIMIT 1;
+            """,
+            (int(task_id),),
+        ).fetchone()
+        return row is not None
+
+    def task_parent_is_plan(self, task_id: int) -> bool:
+        row = self._conn.execute(
+            """
+            SELECT parent.is_plan_task
+            FROM tasks child
+            JOIN tasks parent ON parent.id = child.parent_id
+            WHERE child.id = ?
+            LIMIT 1;
+            """,
+            (int(task_id),),
+        ).fetchone()
+        return bool(row is not None and row["is_plan_task"])
+
     @staticmethod
     def _extract_task_reference_ids(*texts: str) -> list[int]:
         seen: set[int] = set()
