@@ -19,6 +19,7 @@ from mindnavigator.ui.context_entity_linking import attach_context_entity_linkin
 from mindnavigator.ui.styles import get_theme_palette
 from mindnavigator.ui.dialogs import AttachFileSelectNav
 from mindnavigator.ui.dragdrop import EntityLinkDropPolicy
+from mindnavigator.ui.linked_entities import LinkedEntitiesListWidget, LinkedEntityListItem, LinkedEntityListSection
 from mindnavigator.services import SuggestedLinksService
 
 IDEA_RELATION_KIND_ITEMS = [
@@ -166,48 +167,12 @@ class IdeasFunnelList(QListWidget):
         event.ignore()
 
 
-class IdeaRelationsList(QListWidget):
-    TASK_MIME_TYPE = "application/x-mindnavigator-task-id"
-
-    def __init__(self, workspace: "IdeasWorkspace") -> None:
-        super().__init__()
-        self._workspace = workspace
-        self.setAcceptDrops(True)
-
-    @classmethod
-    def _task_id_from_mime(cls, mime_data) -> int | None:
-        if not mime_data.hasFormat(cls.TASK_MIME_TYPE):
-            return None
-        try:
-            return int(bytes(mime_data.data(cls.TASK_MIME_TYPE).data()).decode("utf-8"))
-        except (TypeError, ValueError):
-            return None
-
-    def _can_accept(self, mime_data) -> bool:
-        task_id = self._task_id_from_mime(mime_data)
-        idea_id = self._workspace._current_idea_id
-        return task_id is not None and idea_id is not None and EntityLinkDropPolicy.can_link(
-            "task", task_id, "idea", idea_id
-        )
-
-    def dragEnterEvent(self, event) -> None:
-        if self._can_accept(event.mimeData()):
-            event.acceptProposedAction()
-            return
-        super().dragEnterEvent(event)
-
-    def dragMoveEvent(self, event) -> None:
-        if self._can_accept(event.mimeData()):
-            event.acceptProposedAction()
-            return
-        super().dragMoveEvent(event)
-
-    def dropEvent(self, event) -> None:
-        task_id = self._task_id_from_mime(event.mimeData())
-        if task_id is not None and self._workspace._link_dropped_entity("task", task_id):
-            event.acceptProposedAction()
-            return
-        event.ignore()
+def _task_link_payload_from_mime(mime_data) -> tuple[str, int] | None:
+    try:
+        task_id = int(bytes(mime_data.data("application/x-mindnavigator-task-id").data()).decode("utf-8"))
+    except (TypeError, ValueError):
+        return None
+    return "task", task_id
 
 
 class _IdeaSourcesInput(QWidget):
@@ -862,7 +827,13 @@ class IdeasWorkspace(BaseWorkspace):
         relations_actions.addWidget(self.relations_remove_button)
         relations_actions.addStretch(1)
         relations_layout.addLayout(relations_actions)
-        self.relations_list = IdeaRelationsList(self)
+        self.relations_list = LinkedEntitiesListWidget(self)
+        self.relations_list.configure_drop(
+            mime_type="application/x-mindnavigator-task-id",
+            decoder=_task_link_payload_from_mime,
+            validator=self._can_link_dropped_entity,
+            handler=self._link_dropped_entity,
+        )
         self.relations_list.currentRowChanged.connect(lambda _row: self._update_relations_actions())
         self.relations_list.itemDoubleClicked.connect(lambda _item: self._open_selected_relation())
         relations_layout.addWidget(self.relations_list, 1)
@@ -2264,6 +2235,10 @@ class IdeasWorkspace(BaseWorkspace):
         self._set_status("Связь добавлена перетаскиванием")
         return True
 
+    def _can_link_dropped_entity(self, entity_kind: str, entity_id: int) -> bool:
+        idea_id = self._current_idea_id
+        return idea_id is not None and EntityLinkDropPolicy.can_link(entity_kind, entity_id, "idea", idea_id)
+
     def _remove_selected_relation(self) -> None:
         if self._current_idea_id is None:
             return
@@ -2671,20 +2646,11 @@ class IdeasWorkspace(BaseWorkspace):
             self._transform_idea("marker")
 
     def _load_relations(self, idea_id: int) -> None:
-        self.relations_list.clear()
         relations = self._db.fetch_idea_relations(idea_id)
         incoming_links = self._db.fetch_entity_links("idea", idea_id, direction="incoming")
         suggestions = SuggestedLinksService(self._db).for_idea(idea_id)
         self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations) + len(incoming_links))
-        if not relations and not incoming_links and not suggestions:
-            item = QListWidgetItem(
-                "Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой."
-            )
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.relations_list.addItem(item)
-            self._update_relations_actions()
-            self._populate_links_view()
-            return
+        sections: list[LinkedEntityListSection] = []
         grouped: Dict[str, List[object]] = {}
         for relation in relations:
             grouped.setdefault((relation.entity_type or "").strip().lower(), []).append(relation)
@@ -2692,47 +2658,64 @@ class IdeasWorkspace(BaseWorkspace):
         ordered_types.extend(sorted(entity_type for entity_type in grouped if entity_type not in IDEA_RELATION_GROUP_ORDER))
         for entity_type in ordered_types:
             bucket = grouped[entity_type]
-            header = QListWidgetItem(f"{self._relation_group_title(entity_type)} В· {len(bucket)}")
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.relations_list.addItem(header)
-            for relation in bucket:
-                item = QListWidgetItem(
-                    f"  {self._relation_kind_title(getattr(relation, 'relation_kind', 'related'))} В· "
-                    f"{self._relation_display_label(relation.entity_type, relation.entity_id)}"
+            sections.append(
+                LinkedEntityListSection(
+                    title=self._relation_group_title(entity_type),
+                    items=tuple(
+                        LinkedEntityListItem(
+                            text=(
+                                f"  {self._relation_kind_title(getattr(relation, 'relation_kind', 'related'))} · "
+                                f"{self._relation_display_label(relation.entity_type, relation.entity_id)}"
+                            ),
+                            entity_kind=entity_type,
+                            entity_id=relation.entity_id,
+                            origin_id=relation.id,
+                            tooltip="Двойной щелчок открывает связанную сущность.",
+                        )
+                        for relation in bucket
+                    ),
                 )
-                item.setData(Qt.ItemDataRole.UserRole, relation.id)
-                item.setData(int(Qt.ItemDataRole.UserRole) + 1, entity_type)
-                item.setData(int(Qt.ItemDataRole.UserRole) + 2, relation.entity_id)
-                item.setToolTip("Р”РІРѕР№РЅРѕР№ С‰РµР»С‡РѕРє РѕС‚РєСЂС‹РІР°РµС‚ СЃРІСЏР·Р°РЅРЅСѓСЋ СЃСѓС‰РЅРѕСЃС‚СЊ.")
-                self.relations_list.addItem(item)
+            )
         if incoming_links:
-            header = QListWidgetItem(f"Входящие связи · {len(incoming_links)}")
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.relations_list.addItem(header)
-            for link in incoming_links:
-                target = link.other_entity
-                item = QListWidgetItem(
-                    f"  {self._relation_kind_title(link.relation_kind)} · "
-                    f"{self._relation_display_label(target.kind, target.id)}"
+            sections.append(
+                LinkedEntityListSection(
+                    title="Входящие связи",
+                    items=tuple(
+                        LinkedEntityListItem(
+                            text=(
+                                f"  {self._relation_kind_title(link.relation_kind)} · "
+                                f"{self._relation_display_label(link.other_entity.kind, link.other_entity.id)}"
+                            ),
+                            entity_kind=link.other_entity.kind,
+                            entity_id=link.other_entity.id,
+                            tooltip="Входящая связь доступна только для просмотра из этой карточки.",
+                        )
+                        for link in incoming_links
+                    ),
                 )
-                item.setData(int(Qt.ItemDataRole.UserRole) + 1, target.kind)
-                item.setData(int(Qt.ItemDataRole.UserRole) + 2, target.id)
-                item.setToolTip("Входящая связь доступна только для просмотра из этой карточки.")
-                self.relations_list.addItem(item)
+            )
         if suggestions:
-            header = QListWidgetItem(f"Предложения · {len(suggestions)}")
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.relations_list.addItem(header)
-            for suggestion in suggestions:
-                target = suggestion.target
-                item = QListWidgetItem(
-                    f"  Совпадения: {suggestion.reason} · "
-                    f"{self._relation_display_label(target.kind, target.id)}"
+            sections.append(
+                LinkedEntityListSection(
+                    title="Предложения",
+                    items=tuple(
+                        LinkedEntityListItem(
+                            text=(
+                                f"  Совпадения: {suggestion.reason} · "
+                                f"{self._relation_display_label(suggestion.target.kind, suggestion.target.id)}"
+                            ),
+                            entity_kind=suggestion.target.kind,
+                            entity_id=suggestion.target.id,
+                            tooltip="Предложение не создаёт связь автоматически.",
+                        )
+                        for suggestion in suggestions
+                    ),
                 )
-                item.setData(int(Qt.ItemDataRole.UserRole) + 1, target.kind)
-                item.setData(int(Qt.ItemDataRole.UserRole) + 2, target.id)
-                item.setToolTip("Предложение не создаёт связь автоматически.")
-                self.relations_list.addItem(item)
+            )
+        self.relations_list.set_sections(
+            sections,
+            empty_text="Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой.",
+        )
         self._update_relations_actions()
         self._populate_links_view()
 

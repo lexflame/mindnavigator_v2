@@ -782,7 +782,7 @@ def test_ideas_workspace_accepts_task_drop_as_relation(monkeypatch, unique_temp_
                 self.accepted = False
 
         mime_data = QMimeData()
-        mime_data.setData(workspace.relations_list.TASK_MIME_TYPE, str(task.id).encode("utf-8"))
+        mime_data.setData("application/x-mindnavigator-task-id", str(task.id).encode("utf-8"))
         event = _DropEvent(mime_data)
 
         workspace.relations_list.dropEvent(event)  # type: ignore[arg-type]
