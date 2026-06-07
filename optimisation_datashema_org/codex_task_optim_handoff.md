@@ -35,17 +35,18 @@
 | `P2-LINK-05` | `codex/entity-link-suggestions` | `6111285` | Добавлен детерминированный сервис suggested links и read-only предложения задач в карточке идеи. |
 | `P2-LINK-06` | `codex/entity-link-drop-policy` | `a5074d7` | Добавлена единая policy допустимых link-drop пар и task drop target во вкладке связей идеи. |
 | `P2-LINK-07` | `codex/linked-entities-widget` | `7aa1e1c` | Добавлен общий секционный компонент связанных сущностей; карточка идеи переведена на него. |
-| `P2-03` | `codex/sqlite-fts5-search` | текущий HEAD (`feat: add SQLite FTS5 search`) | Добавлены FTS5-индексы задач, идей, заметок и объектов, sync-триггеры и fallback-compatible интеграция глобального поиска. |
+| `P2-03` | `codex/sqlite-fts5-search` | `c7b3d90` | Добавлены FTS5-индексы задач, идей, заметок и объектов, sync-триггеры и fallback-compatible интеграция глобального поиска. |
+| `P2-04` | `codex/command-palette` | текущий HEAD (`feat: add search command palette`) | `Ctrl+P` открывает palette команд и сущностей поверх общего search service с клавиатурной навигацией. |
 
 ## Текущая работа
 
-- Пункт: `P2-04` — command palette поверх поиска.
-- Ветка: `codex/sqlite-fts5-search`.
-- Статус: `P2-03` завершён с migration v15 и fallback для SQLite без FTS5.
-- Проверки `P2-03`:
+- Пункт: `P2-05` — быстрые actions в результатах поиска.
+- Ветка: `codex/command-palette`.
+- Статус: `P2-04` завершён поверх `GlobalSearchService` и существующей hotkey-системы.
+- Проверки `P2-04`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_full_text_search.py tests/test_global_search_service.py tests/test_db_migrations.py tests/test_idea_storage_search.py tests/test_notes_multiline_save.py tests/test_tasks_workspace_mn202.py -k "not performance" -p no:cacheprovider` — `116 passed`.
+  - `python -m pytest tests/test_command_palette.py tests/test_global_search_service.py tests/test_search_nav_debounce.py tests/test_hotkeys.py tests/test_theme_switch_runtime.py -p no:cacheprovider` — `18 passed`.
 
 ## Следующий шаг
 
-После ручной проверки глобального поиска создать отдельную ветку от `codex/sqlite-fts5-search` и начать `P2-04`: выделить command palette поверх существующих `GlobalSearchService` и навигационных payload без дублирования поисковой логики.
+После ручной проверки `Ctrl+P` создать отдельную ветку от `codex/command-palette` и начать `P2-05`: добавить ограниченный набор быстрых actions к search payload через отдельный registry, не встраивая доменную логику в `SearchNav` или dialog.

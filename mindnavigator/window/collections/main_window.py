@@ -40,11 +40,13 @@ from mindnavigator.storage import DEFERRED_PRIORITY, get_database as _storage_ge
 from mindnavigator.ui.leftrail import LeftRail
 from mindnavigator.ui.projects_nav import ProjectsNav
 from mindnavigator.ui.search_nav import SearchNav
+from mindnavigator.ui.command_palette import CommandPaletteDialog, PaletteCommand
 from mindnavigator.ui.animations import DialogMinimizeAnimator
 from mindnavigator.ui.dialogs.frameless_patch import restore_minimizable_task_dialog
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import TITLEBAR_BACKGROUND, build_app_stylesheet
 from mindnavigator.ui.titlebar import TitleBar
+from mindnavigator.services import GlobalSearchService
 from mindnavigator.window.collections.windowing import ResizeEdge
 from mindnavigator.workspaces.characters import CharactersWorkspace
 from mindnavigator.workspaces.collections import CollectionsWorkspace
@@ -884,9 +886,28 @@ class MainWindow(QMainWindow):
 
     def _show_command_palette(self) -> None:
         self._update_hotkey_contexts()
-        commands = sorted(self.hotkeys.get_active_hotkeys(), key=lambda item: item[0].title.lower())
-        lines = [f"{command.title} ({binding.sequence})" for command, binding in commands]
-        QMessageBox.information(self, "Command Palette", "\n".join(lines) or "Нет доступных команд")
+        commands = [
+            PaletteCommand(command, binding)
+            for command, binding in self.hotkeys.get_active_hotkeys()
+            if command.id != "ui.command_palette" and command.id in self._hotkey_callbacks
+        ]
+        dialog = CommandPaletteDialog(
+            search_service=GlobalSearchService(get_database()),
+            commands=commands,
+            theme_mode=self._theme_mode,
+            parent=self,
+        )
+        dialog.itemActivated.connect(self._activate_command_palette_item)
+        dialog.exec()
+
+    def _activate_command_palette_item(self, item_kind: str, payload: object) -> None:
+        if item_kind == "entity" and isinstance(payload, dict):
+            self._on_search_result_activated(payload)
+            return
+        if item_kind == "command" and isinstance(payload, str):
+            callback = self._resolve_hotkey_callback(payload)
+            if callable(callback):
+                callback()
 
     def _build_ui(self):
         """Создает и компонует основные виджеты окна."""
@@ -1323,6 +1344,11 @@ class MainWindow(QMainWindow):
             self.set_mode(self.MODE_MAPS)
         elif entity == "note":
             self.set_mode(self.MODE_NOTES)
+        elif entity == "idea":
+            self.set_mode(self.MODE_IDEAS)
+            idea_id = payload.get("id")
+            if idea_id is not None and hasattr(self.page_ideas, "select_idea"):
+                self.page_ideas.select_idea(int(idea_id))
         elif entity == "file":
             self.set_mode(self.MODE_FILES)
         elif entity == "object":
