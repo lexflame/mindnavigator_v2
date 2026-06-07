@@ -936,8 +936,12 @@ class SettingsWorkspace(QWidget):
     def _autostart_command() -> str:
         if getattr(sys, "frozen", False):
             return f"\"{Path(sys.executable)}\""
-        main_py = Path(__file__).resolve().parents[2] / "main.py"
-        return f"\"{Path(sys.executable)}\" \"{main_py}\""
+        executable = Path(sys.executable)
+        windowed_executable = executable.with_name("pythonw.exe")
+        if windowed_executable.exists():
+            executable = windowed_executable
+        main_py = Path(__file__).resolve().parents[3] / "main.py"
+        return f"\"{executable}\" \"{main_py}\""
 
     def _apply_windows_autostart(self, enabled: bool) -> None:
         if sys.platform != "win32":
