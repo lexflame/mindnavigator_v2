@@ -648,6 +648,47 @@ def test_ideas_workspace_relations_open_navigates_to_linked_entity(monkeypatch, 
         db_path.unlink(missing_ok=True)
 
 
+def test_ideas_workspace_shows_incoming_relations_as_read_only(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("ideas_workspace_incoming_relation", ".sqlite3")
+    database = Database(path=db_path)
+    workspace = None
+    try:
+        idea = database.create_idea(title="Target idea", status="inbox")
+        task = database.create_task(
+            title="Source task",
+            description="",
+            day=ideas_workspace_module.date.today(),
+            time_text="",
+            priority="Medium",
+        )
+        database.add_task_attachment(task.id, "idea", idea.id)
+        monkeypatch.setattr(ideas_workspace, "get_database", lambda: database)
+        monkeypatch.setattr(ideas_workspace_module, "get_database", lambda: database)
+        workspace = ideas_workspace.IdeasWorkspace()
+        workspace.show()
+
+        model = workspace.list_view.model()
+        assert model is not None
+        workspace.list_view.setCurrentIndex(model.index_for_id(idea.id))
+        QApplication.processEvents()
+
+        assert workspace.relations_list.count() == 2
+        assert workspace.relations_list.item(0).text() == "Входящие связи · 1"
+        assert "Source task" in workspace.relations_list.item(1).text()
+
+        workspace.relations_list.setCurrentRow(1)
+        QApplication.processEvents()
+
+        assert workspace.relations_open_button.isEnabled()
+        assert not workspace.relations_remove_button.isEnabled()
+    finally:
+        if workspace is not None:
+            workspace.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_ideas_workspace_triage_focuses_first_inbox_idea(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("ideas_workspace_triage_start", ".sqlite3")

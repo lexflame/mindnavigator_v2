@@ -30,17 +30,18 @@
 | `P3-02` (этап 2) | `codex/tasks-model-reload-benchmark` | `15e0029` | Runner расширен измерением `TasksModel.refresh()` в offscreen Qt. |
 | `P3-02` (этап 3) | `codex/form-open-benchmarks` | `1a8c6f8` | Добавлены offscreen-измерения конструирования `TaskEditDialog` и `ProjectEditDialog`; `P3-02` завершён. |
 | `P2-LINK-02` | `codex/entity-links-read-facade` | `da3603a` | Добавлены `EntityRef`, `EntityLinkView` и единый read API поверх пяти legacy relation tables. |
-| `P2-LINK-03` | `codex/entity-links-api-consumers` | текущий HEAD (`feat: extend entity links facade`) | Facade расширен связями персонажей, проектов и концептборда; панель связей заметки переведена на общий API. |
+| `P2-LINK-03` | `codex/entity-links-api-consumers` | `474a998` | Facade расширен связями персонажей, проектов и концептборда; панель связей заметки переведена на общий API. |
+| `P2-LINK-04` | `codex/entity-incoming-links` | текущий HEAD (`feat: show incoming idea links`) | Во вкладке связей идеи добавлена read-only группа входящих связей с навигацией к источнику. |
 
 ## Текущая работа
 
-- Пункт: `P2-LINK-04` — отображение incoming links в карточках сущностей.
-- Ветка: `codex/entity-links-api-consumers`.
-- Статус: `P2-LINK-03` завершён без persistent schema changes; первым UI-потребителем стала панель связей выбранной заметки.
-- Проверки `P2-LINK-03`:
+- Пункт: `P2-LINK-05` — suggested links.
+- Ветка: `codex/entity-incoming-links`.
+- Статус: `P2-LINK-04` завершён для карточки идеи без изменений схемы и write paths.
+- Проверки `P2-LINK-04`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_entity_links_read_facade.py tests/test_note_relations_summary.py tests/test_context_entity_linking.py tests/test_dossier_storage.py tests/test_idea_storage_search.py tests/test_characters_workspace_mn204.py tests/test_concept_board_storage.py -p no:cacheprovider` — `20 passed`.
+  - `python -m pytest tests/test_ideas_workspace.py tests/test_entity_links_read_facade.py -p no:cacheprovider` — `26 passed`.
 
 ## Следующий шаг
 
-После ручной проверки панели связей заметки создать отдельную ветку от `codex/entity-links-api-consumers` и начать `P2-LINK-04`: выбрать карточку сущности с минимальным риском и добавить явное отображение входящих связей через общий facade.
+После ручной проверки входящих связей идеи создать отдельную ветку от `codex/entity-incoming-links` и начать `P2-LINK-05`: определить детерминированные suggested links без автоматической записи связей и с ограниченным первым UI-потребителем.

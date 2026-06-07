@@ -1418,6 +1418,16 @@ class IdeasWorkspace(BaseWorkspace):
             return relation_id, entity_type, entity_id
         return None
 
+    @staticmethod
+    def _relation_target_payload(item: Optional[QListWidgetItem]) -> Optional[tuple[str, int]]:
+        if item is None:
+            return None
+        entity_type = item.data(int(Qt.ItemDataRole.UserRole) + 1)
+        entity_id = item.data(int(Qt.ItemDataRole.UserRole) + 2)
+        if isinstance(entity_type, str) and isinstance(entity_id, int):
+            return entity_type, entity_id
+        return None
+
     def _funnel_card_for_idea(self, item: IdeaItem) -> ConceptBoardCard:
         preview = idea_preview_line(item.summary, item.body_md)
         meta_parts = [
@@ -1983,9 +1993,11 @@ class IdeasWorkspace(BaseWorkspace):
 
     def _update_relations_actions(self) -> None:
         has_idea = self._current_idea_id is not None
-        payload = self._relation_payload(self.relations_list.currentItem())
+        item = self.relations_list.currentItem()
+        payload = self._relation_payload(item)
+        target_payload = self._relation_target_payload(item)
         self.relations_add_button.setEnabled(has_idea)
-        self.relations_open_button.setEnabled(has_idea and payload is not None)
+        self.relations_open_button.setEnabled(has_idea and target_payload is not None)
         self.relations_remove_button.setEnabled(has_idea and payload is not None)
 
     def refresh_current_relations(self) -> None:
@@ -2210,11 +2222,11 @@ class IdeasWorkspace(BaseWorkspace):
         self._set_status("Связь удалена")
 
     def _open_selected_relation(self) -> None:
-        payload = self._relation_payload(self.relations_list.currentItem())
+        payload = self._relation_target_payload(self.relations_list.currentItem())
         if payload is None:
             QMessageBox.information(self, "РЎРІСЏР·Рё", "Р’С‹Р±РµСЂРёС‚Рµ СЃРІСЏР·Р°РЅРЅС‹Р№ СЌР»РµРјРµРЅС‚ РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ.")
             return
-        _relation_id, entity_type, entity_id = payload
+        entity_type, entity_id = payload
         if not self._open_relation_target(entity_type, entity_id):
             QMessageBox.information(self, "РЎРІСЏР·Рё", "Р­С‚Сѓ СЃРІСЏР·СЊ РїРѕРєР° РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ.")
             return
@@ -2606,8 +2618,9 @@ class IdeasWorkspace(BaseWorkspace):
     def _load_relations(self, idea_id: int) -> None:
         self.relations_list.clear()
         relations = self._db.fetch_idea_relations(idea_id)
-        self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations))
-        if not relations:
+        incoming_links = self._db.fetch_entity_links("idea", idea_id, direction="incoming")
+        self._set_counted_tab_title(self.relations_tab_index, "Связи", len(relations) + len(incoming_links))
+        if not relations and not incoming_links:
             item = QListWidgetItem(
                 "Связей пока нет\nСвяжите идею с задачей, заметкой, объектом или картой."
             )
@@ -2635,6 +2648,20 @@ class IdeasWorkspace(BaseWorkspace):
                 item.setData(int(Qt.ItemDataRole.UserRole) + 1, entity_type)
                 item.setData(int(Qt.ItemDataRole.UserRole) + 2, relation.entity_id)
                 item.setToolTip("Р”РІРѕР№РЅРѕР№ С‰РµР»С‡РѕРє РѕС‚РєСЂС‹РІР°РµС‚ СЃРІСЏР·Р°РЅРЅСѓСЋ СЃСѓС‰РЅРѕСЃС‚СЊ.")
+                self.relations_list.addItem(item)
+        if incoming_links:
+            header = QListWidgetItem(f"Входящие связи · {len(incoming_links)}")
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.relations_list.addItem(header)
+            for link in incoming_links:
+                target = link.other_entity
+                item = QListWidgetItem(
+                    f"  {self._relation_kind_title(link.relation_kind)} · "
+                    f"{self._relation_display_label(target.kind, target.id)}"
+                )
+                item.setData(int(Qt.ItemDataRole.UserRole) + 1, target.kind)
+                item.setData(int(Qt.ItemDataRole.UserRole) + 2, target.id)
+                item.setToolTip("Входящая связь доступна только для просмотра из этой карточки.")
                 self.relations_list.addItem(item)
         self._update_relations_actions()
         self._populate_links_view()
