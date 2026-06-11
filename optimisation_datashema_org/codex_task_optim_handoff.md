@@ -47,18 +47,16 @@
 | `P1-TASK-FIX-01` | `fix/task-list-edit-route` | `e7cc1bd` | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
 | `P1-TASK-FIX-02` | `fix/task-create-enter-id` | `9866367` | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
 | `P0-CODEX-01` | `codex/code-critic-role` | `c97beca` | Добавлен read-only custom agent `code_critic`, его конфигурация и документированный explicit-вызов. |
-| `P1-TASK-FIX-03` | `fix/tasks-all-mode-contract` | текущий HEAD | Режим «Все» показывает все невыполненные и отложенные задачи без day-filter, сохраняет дерево и сортирует по дате/приоритету. |
+| `P1-TASK-FIX-03` | `fix/tasks-all-mode-contract` | `b9a12f4` | Режим «Все» показывает все невыполненные и отложенные задачи без day-filter, сохраняет дерево и сортирует по дате/приоритету. |
+| `P0-DOC-01` | `docs/srp-form-contracts` | текущий HEAD | Закреплены терминология и фактические create/read/update, storage и relation-контракты Форм СРП. |
 
 ## Текущая работа
 
-- Пункт: `P0-DOC-01` — терминология и фактические контракты Форм СРП.
-- Ветка: `fix/tasks-all-mode-contract`.
-- Статус: `P1-TASK-FIX-03` завершён; требуется ручная проверка режима «Все».
-- Проверки `P1-TASK-FIX-03`:
-  - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_tasks_all_mode.py tests/test_tasks_workspace_mn202.py -k "all_mode or cycles_priority_including_deferred or secondary_modes_remain_available_outside_plan" -q -p no:cacheprovider --basetemp .pytest_dir/tasks_all_mode` — `4 passed`;
-  - `python -m pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_all_mode.py tests/test_task_advanced_filters.py -q -p no:cacheprovider --basetemp .pytest_dir/tasks_all_mode_full` — `100 passed`.
+- Пункт: `P0-DOC-01` — завершён.
+- Ветка: `docs/srp-form-contracts`.
+- Статус: `P0-DOC-01` завершён; минимальная очередь дополнена пятью следующими пунктами, начиная с `P1-APP-01`.
+- Проверки `P0-DOC-01`: проверка ссылок на файлы и символы документа, `git diff --check`.
 
 ## Следующий шаг
 
-Вручную проверить режим «Все»: навигация дня скрыта, задачи разных дат и отложенные видимы, выполненные скрыты, дочерние задачи раскрываются под родителем. Затем создать отдельную ветку и начать `P0-DOC-01`.
+Создать отдельную ветку от `epic/tweaks_task_mode` и начать `P1-APP-01`: воспроизведение зависаний длительной сессии в свёрнутом tray-режиме.
