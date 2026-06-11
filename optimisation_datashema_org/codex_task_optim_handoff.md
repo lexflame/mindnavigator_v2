@@ -1,6 +1,6 @@
 # Handoff: выполнение плана оптимизации
 
-Актуально на: 2026-06-11
+Актуально на: 2026-06-12
 
 План: `optimisation_datashema_org/codex_task_optim_plan.md`
 
@@ -50,15 +50,55 @@
 | `P1-TASK-FIX-03` | `fix/tasks-all-mode-contract` | `b9a12f4` | Режим «Все» показывает все невыполненные и отложенные задачи без day-filter, сохраняет дерево и сортирует по дате/приоритету. |
 | `P0-DOC-01` | `docs/srp-form-contracts` | текущий HEAD | Закреплены терминология и фактические create/read/update, storage и relation-контракты Форм СРП. |
 
-## Текущая работа
+## Итоги работы 2026-06-12
 
-- Пункт: `P2-PROJECT-FORM-01` — реализован, ожидает ручную UI-проверку.
-- Ветка: `feature/project-form-layout`.
-- Изменения: поле «Область» стало фильтруемым editable dropdown существующих областей; строки типов задач показывают цвет, значение, приоритет, важность и признак плана; окно увеличено и собрано в три компактные колонки без вертикального скролла для обычной формы.
-- Длинные списки типов включают вертикальный скролл без сжатия строк; скрытые preview/edit страницы не меняют формат хранения данных.
-- Проверки: `python -m compileall mindnavigator main.py`; `30 passed` для проектов и общего editable-list.
-- Отдельно ожидают ручного gate и не слиты в `epic/tweaks_task_mode`: `fix/tray-long-session-hang` (`bb567e2`), `feature/task-form-stage-autosave` (`5e3ef26`), `feature/task-list-hover-edit-action` (`4561c3f`), `feature/task-list-filter-toolbar` (`677c0fe`), `feature/persist-task-haven-filters` (`e233ae2`) и `feature/task-list-timer-controls` (`0368cca`).
+Все задачи выполнялись в отдельных ветках от `epic/tweaks_task_mode`. Ни одна из перечисленных ниже task-веток не слита в epic: автоматические проверки пройдены, но пользовательский ручной gate ещё не подтверждён.
 
-## Следующий шаг
+| Время | Пункт | Ветка | Коммит | Выполнено и проверено |
+| --- | --- | --- | --- | --- |
+| 02:44 | `P2-TASK-LIST-01` | `feature/task-list-hover-edit-action` | `4561c3f` | Hover-кнопка «Изменить» без сдвига колонок и единая терминология. `compileall`; `25 passed` для dialog behavior и `2 passed` для quick-add/Haven hit zones. Широкий order-dependent QtAwesome запуск отмечен как существующий риск. |
+| 02:52 | `P2-TASK-LIST-02` | `feature/task-list-filter-toolbar` | `677c0fe` | Фиксированная ширина дня и единая Bootstrap-like группа фильтров, приоритета, поиска и очистки. `compileall`; целевые наборы `4 passed` и `5 passed`. |
+| 03:21 | `P2-TASK-LIST-03` | `feature/persist-task-haven-filters` | `e233ae2` | Сохранение и восстановление Haven scope/importance через существующий JSON workspace-фильтров. `compileall`; `7 passed`. |
+| 03:36 | `P2-TASK-TIMER-01` | `feature/task-list-timer-controls` | `0368cca` | Универсальные Play/Pause/Stop, накопление времени, состояния «В работе/Пауза/Факт», защита plan-item от автозапуска после Pause. `compileall`; `16 passed`. |
+| 04:18 | `P2-PROJECT-FORM-01` | `feature/project-form-layout` | `b071e5f` | Editable dropdown области, информативные строки типов, увеличенная трёхколоночная форма без лишнего скролла; длинные списки скроллятся без сжатия. `compileall`; `30 passed`; выполнена локальная визуальная проверка снимком Qt-формы. |
 
-Вручную проверить выбор и ввод новой области, отображение/редактирование нескольких типов задач, отсутствие вертикального скролла в обычной форме и его появление для длинного списка типов. После подтверждения можно слить ветку в `epic/tweaks_task_mode`; следующий пункт backlog — `P2-PROJECT-LIST-01`.
+Дополнительные манипуляции за день:
+
+- Очередь в `codex_task_optim_plan.md` последовательно обновлялась после каждой реализации.
+- Для таймеров добавлены storage/model/delegate/workspace изменения и новый `tests/test_task_timer_controls.py`.
+- Для формы проектов расширен общий `EditableListWidget`: необязательные цветовой маркер и краткие параметры, компактные action-кнопки, корректная минимальная высота динамических списков.
+- Проверено поведение формы проекта с двумя и десятью типами: обычная форма не имеет вертикального скролла, длинный список включает его и не сжимает строки.
+- Создана итоговая docs-ветка `docs/daily-handoff-2026-06-12` от `feature/project-form-layout` для фиксации этого handoff.
+- Read-only роль `code_critic` существует в ветке `codex/code-critic-role`, коммит `c97beca`; запускать её только по явному запросу на независимый review.
+
+## Ветки на ручном gate
+
+| Пункт | Ветка и коммит | Что проверить вручную |
+| --- | --- | --- |
+| `P1-APP-01` | `fix/tray-long-session-hang` (`bb567e2`) | Windows tray soak 30–60 минут: одно агрегированное уведомление за проход, отсутствие зависания, восстановление окна. |
+| `P2-TASK-FORM-01` | `feature/task-form-stage-autosave` (`5e3ef26`) | Стадия, новая позиция родителя, FocusOut-autosave dropdown/checkbox/текста, создание задачи в выбранной стадии. |
+| `P2-TASK-LIST-01` | `feature/task-list-hover-edit-action` (`4561c3f`) | Hover «Изменить», быстрый `+`, строки с раскрывающим треугольником, отсутствие сдвига layout. |
+| `P2-TASK-LIST-02` | `feature/task-list-filter-toolbar` (`677c0fe`) | Короткие/длинные названия дней, фильтры, приоритет, поиск/очистка, узкое окно. |
+| `P2-TASK-LIST-03` | `feature/persist-task-haven-filters` (`e233ae2`) | Два перезапуска: восстановление scope/importance, затем сохранение их очистки. |
+| `P2-TASK-TIMER-01` | `feature/task-list-timer-controls` (`0368cca`) | Play → Pause → Play → Stop для обычной, типизированной и plan-задачи; рост времени и отсутствие автозапуска plan-item после Pause. |
+| `P2-PROJECT-FORM-01` | `feature/project-form-layout` (`b071e5f`) | Выбор/ввод области, несколько типов задач, обычная форма без скролла, длинный список со скроллом. |
+
+## Старт работы 2026-06-13
+
+1. Прочитать этот handoff в `docs/daily-handoff-2026-06-12` и проверить `git status`.
+2. Если выполнены ручные проверки, сливать в `epic/tweaks_task_mode` только подтверждённые ветки. Непроверенные ветки оставить отдельными.
+3. Для новой разработки переключиться именно на epic, не продолжать feature-код от docs-ветки:
+   - `git switch epic/tweaks_task_mode`
+   - `git status --short --branch`
+   - `git switch -c feature/project-list-task-type-markers`
+4. Следующая задача: `P2-PROJECT-LIST-01` (`4.02`) — цветовые полосы типов задач в списке проектов.
+5. После неё по очереди: `P2-TASK-TYPE-01` (`4.06`), затем `P2-TASK-TYPE-02` (`4.07-4.08`).
+6. Для каждой задачи сохранять текущий процесс: отдельная ветка, один focused commit, `compileall`, целевые pytest, обновление plan/handoff и ручной UI-gate до слияния.
+
+## Текущее состояние
+
+- Активная ветка завершения дня: `docs/daily-handoff-2026-06-12`.
+- Последний функциональный коммит: `b071e5f` в `feature/project-form-layout`.
+- Рабочая база следующих задач: `epic/tweaks_task_mode`.
+- Следующий пункт backlog: `P2-PROJECT-LIST-01`.
+- Незавершённых реализаций в worktree нет; остаются только ручные проверки и последующие слияния подтверждённых веток.
