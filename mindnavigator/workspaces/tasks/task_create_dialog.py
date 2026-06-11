@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ._shared import *  # noqa: F401,F403
 from .task_details_dialog import TaskDetailsDialog
 
@@ -62,6 +64,12 @@ class TaskCreateDialog(TaskDetailsDialog):
         self.title_inline.editor.textChanged.connect(self._apply_project_suggestion)
         self._apply_project_suggestion(self.title_inline.editor.text())
         self.title_inline.editor.setFocus()
+
+    def _save_inline_updates(self, **changes) -> bool:
+        """Keep committed fields local until the task receives a database id."""
+        self._task = replace(self._task, **changes)
+        self._refresh_view()
+        return True
 
     def _save_form_updates(self) -> None:
         values = self.values()

@@ -44,18 +44,20 @@
 | `P3-04` | `codex/lazy-task-attachments` | `a511cf3` | Attachments summary переведён с N+1 на ленивую групповую выборку и кэш; частичная загрузка дерева отклонена по результатам измерения ниже UX-порога. |
 | `P3-05` | `codex/task-delegate-metrics` | `55d3b7f` | Кэшированы стабильные font/layout metrics и цветные priority icons; повторные expanded size hints ускорены без кэширования state-зависимых прямоугольников. |
 | `P3-06` | `codex/workspace-memory-smoke` | `4188f24` | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
-| `P1-TASK-FIX-01` | `fix/task-list-edit-route` | текущий HEAD | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
+| `P1-TASK-FIX-01` | `fix/task-list-edit-route` | `e7cc1bd` | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
+| `P1-TASK-FIX-02` | `fix/task-create-enter-id` | текущий HEAD | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
 
 ## Текущая работа
 
-- Пункт: `P1-TASK-FIX-02` — ошибка неположительного id при сохранении новой задачи клавишей Enter.
-- Ветка: `fix/task-list-edit-route`.
-- Статус: `P1-TASK-FIX-01` завершён; требуется ручная проверка маршрута редактирования списка.
-- Проверки `P1-TASK-FIX-01`:
+- Пункт: `P1-TASK-FIX-03` — восстановление контракта режима «Все».
+- Ветка: `fix/task-create-enter-id`.
+- Статус: `P1-TASK-FIX-02` завершён; требуется ручная проверка Enter в форме создания.
+- Проверки `P1-TASK-FIX-02`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_dialog_minimize_behavior.py -k "tasks_delegate_opens_unified_task_form_in_edit_mode or tasks_delegate_defers_row_menu_edit" -q -p no:cacheprovider --basetemp .pytest_dir/task_edit_delegate` — `2 passed`;
-  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_details_dialog_saves_embedded_edit_form" -q -p no:cacheprovider --basetemp .pytest_dir/task_edit_details` — `1 passed`.
+  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_create_dialog_enter_commits_fields_without_persisting_zero_id or task_create_dialog_accept_does_not_save_legacy_edit_dialog_size or task_details_dialog_enter_commits_inline_edit" -q -p no:cacheprovider --basetemp .pytest_dir/task_create_enter` — `3 passed`;
+  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_create_dialog or tasks_workspace_dialog_create_opens_created_task_view or tasks_workspace_quick_create_opens_created_task_view" -q -p no:cacheprovider --basetemp .pytest_dir/task_create_dialog_suite` — `8 passed`;
+  - `python -m pytest tests/test_tasks_workspace_mn202.py -q -p no:cacheprovider --basetemp .pytest_dir/task_create_enter_full` — `95 passed`.
 
 ## Следующий шаг
 
-Вручную проверить, что действие «Редактировать» в списке открывает актуальную Форму СРП Задач с кнопками сохранения и отмены, затем создать отдельную ветку и начать `P1-TASK-FIX-02`: воспроизвести сохранение новой задачи клавишей Enter до назначения положительного id.
+Вручную проверить, что Enter в заголовке, сроке и других полях формы создания не показывает ошибку положительного id, а кнопка «Создать» сохраняет задачу. Затем создать отдельную ветку и начать `P1-TASK-FIX-03`: зафиксировать тестами состав, сортировку и вложенность режима «Все».

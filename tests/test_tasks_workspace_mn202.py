@@ -2176,6 +2176,44 @@ def test_task_create_dialog_accept_does_not_save_legacy_edit_dialog_size(monkeyp
         db_path.unlink(missing_ok=True)
 
 
+def test_task_create_dialog_enter_commits_fields_without_persisting_zero_id(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("tasks_create_dialog_enter", ".sqlite3")
+    database = Database(path=db_path)
+    dialog = None
+    warnings: list[str] = []
+    try:
+        monkeypatch.setattr(task_details_dialog, "get_database", lambda: database)
+        monkeypatch.setattr(
+            task_details_dialog.QMessageBox,
+            "warning",
+            lambda _parent, _title, message: warnings.append(str(message)),
+        )
+
+        dialog = tasks_workspace.TaskCreateDialog()
+        task_count_before = len(database.fetch_tasks())
+        dialog.title_inline.editor.setText("Created with Enter")
+        QTest.keyClick(dialog.title_inline.editor, Qt.Key.Key_Return)
+        QApplication.processEvents()
+
+        dialog.date_inline.editor.setDate(QDate(2026, 3, 8))
+        dialog.time_inline.editor.setText("10:15")
+        QTest.keyClick(dialog.time_inline.editor, Qt.Key.Key_Return)
+        QApplication.processEvents()
+
+        assert warnings == []
+        assert dialog._task.id == 0
+        assert dialog.values()["title"] == "Created with Enter"
+        assert dialog.values()["day"] == date(2026, 3, 8)
+        assert dialog.values()["time_text"] == "10:15"
+        assert len(database.fetch_tasks()) == task_count_before
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_tasks_workspace_switches_board_and_dash_modes(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("tasks_board_dash_modes", ".sqlite3")
