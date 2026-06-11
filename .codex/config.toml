@@ -47,6 +47,10 @@ model_reasoning_effort = "xhigh"
 description = "Find security, correctness, and test risks in code."
 config_file = "agents/reviewer.toml"
 
+[agents.code_critic]
+description = "Independent read-only review of code, architecture, tests, and engineering risks."
+config_file = "agents/code_critic.toml"
+
 [agents.explorer]
 description = "Fast codebase explorer for read-heavy tasks."
 config_file = "agents/custom-explorer.toml"

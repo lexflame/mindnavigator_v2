@@ -120,6 +120,13 @@ The agent must not ignore or weaken them.
 ## Testing And Validation
 Use the safest available checks in this order.
 
+### Code Critic Role
+- Use the project-scoped `code_critic` subagent when the user explicitly requests an independent review of a diff, branch, pull request, architecture, or risky implementation.
+- Ask Codex to spawn `code_critic`, wait for its result, and then present findings ordered by severity.
+- `code_critic` is read-only and must not edit files or implement features.
+- Codex subagents are spawned only by explicit request. Do not claim that `code_critic` runs automatically or that it can switch the parent session to `/plan` automatically.
+- Example prompt: `Spawn code_critic to review this branch against epic/tweaks_task_mode. Wait for it and summarize findings by severity.`
+
 ### Required Baseline (For Code Changes)
 1. Syntax: `python -m compileall mindnavigator main.py`
 2. Focused tests: `PYTHONPATH=. pytest tests -k <scope>`

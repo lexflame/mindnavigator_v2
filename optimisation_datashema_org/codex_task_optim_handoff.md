@@ -45,19 +45,20 @@
 | `P3-05` | `codex/task-delegate-metrics` | `55d3b7f` | Кэшированы стабильные font/layout metrics и цветные priority icons; повторные expanded size hints ускорены без кэширования state-зависимых прямоугольников. |
 | `P3-06` | `codex/workspace-memory-smoke` | `4188f24` | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
 | `P1-TASK-FIX-01` | `fix/task-list-edit-route` | `e7cc1bd` | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
-| `P1-TASK-FIX-02` | `fix/task-create-enter-id` | текущий HEAD | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
+| `P1-TASK-FIX-02` | `fix/task-create-enter-id` | `9866367` | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
+| `P0-CODEX-01` | `codex/code-critic-role` | текущий HEAD | Добавлен read-only custom agent `code_critic`, его конфигурация и документированный explicit-вызов. |
 
 ## Текущая работа
 
 - Пункт: `P1-TASK-FIX-03` — восстановление контракта режима «Все».
-- Ветка: `fix/task-create-enter-id`.
-- Статус: `P1-TASK-FIX-02` завершён; требуется ручная проверка Enter в форме создания.
-- Проверки `P1-TASK-FIX-02`:
-  - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_create_dialog_enter_commits_fields_without_persisting_zero_id or task_create_dialog_accept_does_not_save_legacy_edit_dialog_size or task_details_dialog_enter_commits_inline_edit" -q -p no:cacheprovider --basetemp .pytest_dir/task_create_enter` — `3 passed`;
-  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_create_dialog or tasks_workspace_dialog_create_opens_created_task_view or tasks_workspace_quick_create_opens_created_task_view" -q -p no:cacheprovider --basetemp .pytest_dir/task_create_dialog_suite` — `8 passed`;
-  - `python -m pytest tests/test_tasks_workspace_mn202.py -q -p no:cacheprovider --basetemp .pytest_dir/task_create_enter_full` — `95 passed`.
+- Ветка: `codex/code-critic-role`.
+- Статус: `P0-CODEX-01` завершён; роль требует явного запроса на spawn и новой Codex-сессии после изменения project config.
+- Проверки `P0-CODEX-01`:
+  - `tomllib` успешно разобрал `.codex/config.toml` и `.codex/agents/code_critic.toml`;
+  - `codex.cmd --strict-config --version` — `codex-cli 0.139.0`;
+  - `codex.cmd doctor --summary --ascii --no-color` подтвердил `Configuration: config loaded`; общий exit code `1` вызван отсутствием CLI credentials и provider reachability;
+  - ephemeral read-only smoke дошёл до запуска Codex thread, но runtime-проверка subagent заблокирована локальной CLI-авторизацией: `401 Missing bearer or basic authentication`.
 
 ## Следующий шаг
 
-Вручную проверить, что Enter в заголовке, сроке и других полях формы создания не показывает ошибку положительного id, а кнопка «Создать» сохраняет задачу. Затем создать отдельную ветку и начать `P1-TASK-FIX-03`: зафиксировать тестами состав, сортировку и вложенность режима «Все».
+Создать отдельную ветку и начать `P1-TASK-FIX-03`: зафиксировать тестами состав, сортировку и вложенность режима «Все».

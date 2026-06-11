@@ -38,6 +38,11 @@ Use this skill for routine repository work in `mindnavigator_v2`: bug fixes, sma
 - If storage schema changes, validate migration plus read and write paths together.
 - If UI behavior changes, validate the affected interaction path with a test or an explicit manual verification note.
 
+## Independent Review
+- When the user explicitly requests a critical review, spawn the project `code_critic` subagent and wait for its result.
+- Keep the role read-only and report its findings before summaries or implementation suggestions.
+- Do not invoke the role automatically during routine implementation and do not claim it can trigger `/plan` in the parent session.
+
 ## Sprint And Release Extension
 Apply only when the task is explicitly sprint, release, parity, or hotfix work.
 1. Assign `TASK_GUID`.
