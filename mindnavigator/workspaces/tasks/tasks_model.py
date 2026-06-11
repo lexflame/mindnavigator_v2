@@ -39,7 +39,7 @@ class TasksModel(QAbstractListModel):
         self._advanced_filters = TaskAdvancedFilterState()
         self._linked_task_ids: set[int] = set()
         self._attachment_summary_cache: Optional[dict[int, List[str]]] = None
-        self._sort_key = "priority"  # date | title | priority
+        self._sort_key = "date"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
         self._expanded_task_ids: set[int] = set()
@@ -1373,8 +1373,6 @@ class TasksModel(QAbstractListModel):
             elif self._filter_mode == "Все":
                 if it.done and not keep_done_plan_item(it):
                     continue
-                if it.priority == "Отложенная":
-                    continue
             elif self._filter_mode == "Выполнено":
                 if not it.done:
                     continue
@@ -1437,7 +1435,12 @@ class TasksModel(QAbstractListModel):
                     time_key(task_item.time_text),
                     task_item.id,
                 )
-            return task_item.day, time_key(task_item.time_text), task_item.id
+            return (
+                task_item.day,
+                priority_order.get(task_item.priority.lower(), 4),
+                time_key(task_item.time_text),
+                task_item.id,
+            )
 
         task_ids = {t.id for t in base_tasks}
         children_map: dict[Optional[int], List[TaskRow]] = {}

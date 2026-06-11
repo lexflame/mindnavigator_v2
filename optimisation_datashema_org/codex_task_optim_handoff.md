@@ -46,19 +46,19 @@
 | `P3-06` | `codex/workspace-memory-smoke` | `4188f24` | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
 | `P1-TASK-FIX-01` | `fix/task-list-edit-route` | `e7cc1bd` | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
 | `P1-TASK-FIX-02` | `fix/task-create-enter-id` | `9866367` | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
-| `P0-CODEX-01` | `codex/code-critic-role` | текущий HEAD | Добавлен read-only custom agent `code_critic`, его конфигурация и документированный explicit-вызов. |
+| `P0-CODEX-01` | `codex/code-critic-role` | `c97beca` | Добавлен read-only custom agent `code_critic`, его конфигурация и документированный explicit-вызов. |
+| `P1-TASK-FIX-03` | `fix/tasks-all-mode-contract` | текущий HEAD | Режим «Все» показывает все невыполненные и отложенные задачи без day-filter, сохраняет дерево и сортирует по дате/приоритету. |
 
 ## Текущая работа
 
-- Пункт: `P1-TASK-FIX-03` — восстановление контракта режима «Все».
-- Ветка: `codex/code-critic-role`.
-- Статус: `P0-CODEX-01` завершён; роль требует явного запроса на spawn и новой Codex-сессии после изменения project config.
-- Проверки `P0-CODEX-01`:
-  - `tomllib` успешно разобрал `.codex/config.toml` и `.codex/agents/code_critic.toml`;
-  - `codex.cmd --strict-config --version` — `codex-cli 0.139.0`;
-  - `codex.cmd doctor --summary --ascii --no-color` подтвердил `Configuration: config loaded`; общий exit code `1` вызван отсутствием CLI credentials и provider reachability;
-  - ephemeral read-only smoke дошёл до запуска Codex thread, но runtime-проверка subagent заблокирована локальной CLI-авторизацией: `401 Missing bearer or basic authentication`.
+- Пункт: `P0-DOC-01` — терминология и фактические контракты Форм СРП.
+- Ветка: `fix/tasks-all-mode-contract`.
+- Статус: `P1-TASK-FIX-03` завершён; требуется ручная проверка режима «Все».
+- Проверки `P1-TASK-FIX-03`:
+  - `python -m compileall mindnavigator main.py` — успешно;
+  - `python -m pytest tests/test_tasks_all_mode.py tests/test_tasks_workspace_mn202.py -k "all_mode or cycles_priority_including_deferred or secondary_modes_remain_available_outside_plan" -q -p no:cacheprovider --basetemp .pytest_dir/tasks_all_mode` — `4 passed`;
+  - `python -m pytest tests/test_tasks_workspace_mn202.py tests/test_tasks_all_mode.py tests/test_task_advanced_filters.py -q -p no:cacheprovider --basetemp .pytest_dir/tasks_all_mode_full` — `100 passed`.
 
 ## Следующий шаг
 
-Создать отдельную ветку и начать `P1-TASK-FIX-03`: зафиксировать тестами состав, сортировку и вложенность режима «Все».
+Вручную проверить режим «Все»: навигация дня скрыта, задачи разных дат и отложенные видимы, выполненные скрыты, дочерние задачи раскрываются под родителем. Затем создать отдельную ветку и начать `P0-DOC-01`.

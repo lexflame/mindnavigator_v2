@@ -2051,6 +2051,10 @@ class TasksWorkspace(BaseWorkspace):
             if isinstance(button, QToolButton):
                 button.setEnabled(buttons_enabled)
 
+    def _set_day_navigation_visible(self, visible: bool) -> None:
+        for widget in (self.btn_prev_day, self.lbl_day, self.btn_next_day):
+            widget.setVisible(visible)
+
     def _secondary_view_includes_day(self, task_day: date) -> bool:
         if self._gantt_mode or self._dash_mode:
             return task_day == self._focus_day
@@ -2292,6 +2296,8 @@ class TasksWorkspace(BaseWorkspace):
             self.btn_board.blockSignals(False)
             self.btn_dash.blockSignals(False)
 
+        self._set_day_navigation_visible(mode != "Все")
+
         if mode == "Сегодня":
             _reset_secondary_modes()
             self.model.set_filter_mode("Сегодня")
@@ -2336,7 +2342,7 @@ class TasksWorkspace(BaseWorkspace):
             self.model.set_filter_mode("Все")
             if focus_day is not None:
                 self._focus_day = focus_day
-            self.model.set_focus_day(self._focus_day)
+            self.model.set_focus_day(None)
             self._set_drag_drop_state(False)
             _set_secondary_buttons_visible(True)
             self.content_stack.setCurrentWidget(self.list)

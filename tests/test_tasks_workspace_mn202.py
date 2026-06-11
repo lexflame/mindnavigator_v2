@@ -150,7 +150,8 @@ def test_tasks_model_cycles_priority_including_deferred(monkeypatch, unique_temp
 
         model.cycle_priority_by_row(row_idx)
         row_idx = _find_task_row(model, created.id)
-        assert row_idx == -1
+        assert row_idx >= 0
+        assert model.index(row_idx, 0).data(TaskRoles.Priority) == "Отложенная"
         model.set_filter_mode("Отложенные")
         row_idx = _find_task_row(model, created.id)
         assert row_idx >= 0
