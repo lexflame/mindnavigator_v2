@@ -70,6 +70,28 @@ def test_task_attachment_crud_with_database(unique_temp_path) -> None:
         db_path.unlink(missing_ok=True)
 
 
+def test_task_attachment_counts_are_grouped_by_task_and_kind(unique_temp_path) -> None:
+    db_path = unique_temp_path("task_attachment_counts", ".sqlite3")
+    database = Database(path=db_path)
+    try:
+        first_task = database.create_task("First", "", date(2026, 2, 25), "", "Medium")
+        second_task = database.create_task("Second", "", date(2026, 2, 25), "", "Medium")
+        first_note = database.create_note("First note", "", [], "")
+        second_note = database.create_note("Second note", "", [], "")
+
+        database.add_task_attachment(first_task.id, "note", first_note.id)
+        database.add_task_attachment(first_task.id, "note", second_note.id)
+        database.add_task_attachment(second_task.id, "task", first_task.id)
+
+        assert database.fetch_task_attachment_counts() == {
+            first_task.id: {"note": 2},
+            second_task.id: {"task": 1},
+        }
+    finally:
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_task_attachment_comment_updates_without_changing_link(unique_temp_path) -> None:
     db_path = unique_temp_path("task_attachment_comment", ".sqlite3")
     database = Database(path=db_path)

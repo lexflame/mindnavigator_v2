@@ -1101,6 +1101,21 @@ class DatabaseTasksMixin:
         ).fetchall()
         return [TaskAttachmentData.from_row(row) for row in rows]
 
+    def fetch_task_attachment_counts(self) -> dict[int, dict[str, int]]:
+        """Returns attachment counts grouped by task and kind."""
+        rows = self._conn.execute(
+            """
+            SELECT task_id, lower(kind) AS kind, COUNT(*) AS attachment_count
+            FROM task_attachments
+            GROUP BY task_id, lower(kind);
+            """
+        ).fetchall()
+        counts: dict[int, dict[str, int]] = {}
+        for row in rows:
+            task_counts = counts.setdefault(int(row["task_id"]), {})
+            task_counts[str(row["kind"])] = int(row["attachment_count"])
+        return counts
+
     def fetch_task_ids_with_attachments(self) -> set[int]:
         """Returns task ids participating in task attachment links."""
         rows = self._conn.execute(

@@ -38,6 +38,7 @@ class TasksModel(QAbstractListModel):
         self._importance_filter: Optional[int] = None
         self._advanced_filters = TaskAdvancedFilterState()
         self._linked_task_ids: set[int] = set()
+        self._attachment_summary_cache: Optional[dict[int, List[str]]] = None
         self._sort_key = "priority"  # date | title | priority
         self._sort_asc = True
         self._drag_enabled = False
@@ -53,6 +54,7 @@ class TasksModel(QAbstractListModel):
         self._all_rows = [self._row_from_task_data(task) for task in tasks]
         fetch_linked_ids = getattr(self._db, "fetch_task_ids_with_attachments", None)
         self._linked_task_ids = set(fetch_linked_ids()) if callable(fetch_linked_ids) else set()
+        self.invalidate_attachment_summary_cache()
         self._project_meta_cache.clear()
         self._recompute_plan_meta()
         self._prune_state()
@@ -1550,12 +1552,26 @@ class TasksModel(QAbstractListModel):
         return task.time_text
 
     def _attachment_summary(self, task_id: int) -> List[str]:
+        if self._attachment_summary_cache is None:
+            fetch_counts = getattr(self._db, "fetch_task_attachment_counts", None)
+            if callable(fetch_counts):
+                self._attachment_summary_cache = {
+                    int(summary_task_id): self._format_attachment_summary(counts)
+                    for summary_task_id, counts in fetch_counts().items()
+                }
+        if self._attachment_summary_cache is not None:
+            return list(self._attachment_summary_cache.get(int(task_id), []))
+
         attachments = self._db.fetch_task_attachments(task_id)
-        if not attachments:
-            return []
         counts: Dict[str, int] = {}
         for attachment in attachments:
             counts[attachment.kind] = counts.get(attachment.kind, 0) + 1
+        return self._format_attachment_summary(counts)
+
+    @staticmethod
+    def _format_attachment_summary(counts: Dict[str, int]) -> List[str]:
+        if not counts:
+            return []
         ordered = [kind for kind in ATTACHMENT_KIND_ORDER if kind in counts]
         ordered.extend(kind for kind in counts.keys() if kind not in ATTACHMENT_KIND_ORDER)
         summary = []
@@ -1567,6 +1583,10 @@ class TasksModel(QAbstractListModel):
             else:
                 summary.append(label)
         return summary
+
+    def invalidate_attachment_summary_cache(self) -> None:
+        """Forces the next attachment-summary request to reload grouped counts."""
+        self._attachment_summary_cache = None
 
     def toggle_expanded_by_row(self, row_idx: int) -> None:
         """Переключает раскрытие задачи по индексу строки."""

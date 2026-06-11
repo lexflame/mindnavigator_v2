@@ -115,6 +115,15 @@ def run_benchmarks(
             model.refresh()
             return range(model.rowCount())
 
+        def load_task_attachment_summaries(_index: int) -> list[object]:
+            from mindnavigator.workspaces.tasks.task_roles import TaskRoles
+
+            model.invalidate_attachment_summary_cache()
+            return [
+                model.index(row, 0).data(TaskRoles.AttachmentSummary)
+                for row in range(model.rowCount())
+            ]
+
         def open_task_form(_index: int) -> tuple[str]:
             dialog = _create_task_edit_dialog(database, task_sample)
             result = (dialog.objectName(),)
@@ -143,6 +152,12 @@ def run_benchmarks(
             measure_operation(
                 "tasks_model_reload",
                 reload_tasks_model,
+                iterations=iterations,
+                warmup=warmup,
+            ),
+            measure_operation(
+                "task_attachment_summaries",
+                load_task_attachment_summaries,
                 iterations=iterations,
                 warmup=warmup,
             ),

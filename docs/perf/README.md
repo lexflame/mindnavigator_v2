@@ -9,7 +9,7 @@ python -m scripts.generate_perf_database .test_runtime/perf_5k.sqlite3 --project
 python -m scripts.generate_perf_database .test_runtime/perf_20k.sqlite3 --projects 400 --tasks 20000 --links 5000
 ```
 
-Measure `fetch_tasks`, global search, `TasksModel.refresh()`, and task/project form construction in offscreen Qt mode:
+Measure `fetch_tasks`, global search, `TasksModel.refresh()`, lazy attachment summaries, and task/project form construction in offscreen Qt mode:
 
 ```powershell
 python -m scripts.run_perf_benchmarks .test_runtime/perf_5k.sqlite3 --iterations 10 --warmup 2 --json-output docs/perf/perf_5k.json
@@ -18,4 +18,4 @@ python -m scripts.run_perf_benchmarks .test_runtime/perf_20k.sqlite3 --iteration
 
 Use repeated `--query` options to control the global-search workload. Generated JSON reports include environment metadata and p50/p95, min, max, and mean durations in milliseconds.
 
-Current diagnostic UX thresholds and the latest 5k verification are recorded in `p3_03_thresholds_2026-06-07.md`.
+Current diagnostic UX thresholds are recorded in `p3_03_thresholds_2026-06-07.md`. The lazy-loading decision and attachment-summary measurements are recorded in `p3_04_lazy_loading_2026-06-11.md`.

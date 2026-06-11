@@ -1,6 +1,6 @@
 # Handoff: выполнение плана оптимизации
 
-Актуально на: 2026-06-07
+Актуально на: 2026-06-11
 
 План: `optimisation_datashema_org/codex_task_optim_plan.md`
 
@@ -41,17 +41,18 @@
 | `P2-06` | `codex/search-recents` | `a5c3afc` | В settings сохраняются ограниченные recent entities/actions; palette показывает их при пустом запросе. |
 | `P2-07` | `codex/task-advanced-filters` | `28b541b` | Добавлены фильтры основной модели задач по типу, связям, отсутствию проекта и вложенности с сохраняемым UI-меню. |
 | `P3-03` | `codex/performance-thresholds` | текущий HEAD (`perf: optimize task dialog reads`) | Зафиксированы UX-пороги; task dialog p95 на fixture 5k снижен до 225 мс узкими hierarchy-запросами, worker не потребовался. |
+| `P3-04` | `codex/lazy-task-attachments` | текущий HEAD | Attachments summary переведён с N+1 на ленивую групповую выборку и кэш; частичная загрузка дерева отклонена по результатам измерения ниже UX-порога. |
 
 ## Текущая работа
 
-- Пункт: `P3-04` — lazy loading вложенных задач и attachments summary.
-- Ветка: `codex/performance-thresholds`.
-- Статус: `P3-03` завершён: все операции fixture 5k находятся ниже зафиксированных UX-порогов.
-- Проверки `P3-03`:
+- Пункт: `P3-05` — измерение и кэширование layout metrics в `TasksItemDelegate`.
+- Ветка: `codex/lazy-task-attachments`.
+- Статус: `P3-04` завершён; очередь дополнена задачами из `main_task_intermediate_feat.md`.
+- Проверки `P3-04`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_run_perf_benchmarks.py tests/test_task_hierarchy_queries.py` — `3 passed`;
-  - benchmark 5k, 10 итераций/2 warmup: `task_edit_dialog_open p95 = 225.419 ms`, `global_search p95 = 3.567 ms`, `tasks_model_reload p95 = 335.732 ms`.
+  - `python -m pytest tests/test_task_attachment_class.py tests/test_task_attachment_summary_cache.py tests/test_run_perf_benchmarks.py tests/test_task_hierarchy_queries.py tests/test_tasks_marker_refresh.py tests/test_tasks_workspace_mn202.py -k "attachment or hierarchy" -q -p no:cacheprovider --basetemp .pytest_dir/p3_04_scope` — `21 passed, 106 deselected`;
+  - benchmark 5k + 2.5k attachments, 10 итераций/2 warmup: `tasks_model_reload p95 = 350.651 ms`, `task_attachment_summaries p95 = 50.575 ms`.
 
 ## Следующий шаг
 
-После ручной проверки открытия карточки задачи на большой БД создать отдельную ветку от `codex/performance-thresholds` и начать `P3-04`: измерить стоимость построения дерева и attachments summary, затем внедрить lazy loading только в подтверждённые горячие пути.
+После ручной проверки списка задач с большим числом вложений создать отдельную ветку от `codex/lazy-task-attachments` и начать `P3-05`: измерить paint/sizeHint/layout paths делегата, затем кэшировать только стабильные метрики, не зависящие от ширины, темы и состояния строки.
