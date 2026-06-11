@@ -6,7 +6,7 @@ import math
 
 from ._shared import *  # noqa: F401,F403
 from PySide6.QtCore import QPersistentModelIndex, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QPen, QPolygon
+from PySide6.QtGui import QDesktopServices, QIcon, QPen, QPolygon
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import build_popup_menu_stylesheet, get_theme_palette
 from .task_details_dialog import TaskDetailsDialog
@@ -79,6 +79,11 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._font_header = QFont()
         self._font_header.setPointSize(9)
         self._font_header.setBold(True)
+        self._font_metrics = QFontMetrics(self._font)
+        self._font_small_metrics = QFontMetrics(self._font_small)
+        self._font_header_metrics = QFontMetrics(self._font_header)
+        self._priority_fire_icon_cache: Dict[str, QIcon] = {}
+        self._expanded_height_cache: Dict[tuple, int] = {}
         self._task_flash_progress: Dict[int, float] = {}
         self.set_theme_mode("dark")
 
@@ -115,11 +120,12 @@ class TasksItemDelegate(QStyledItemDelegate):
         self._icon_doc = qta.icon("fa5s.file-alt", color=palette.text)
         self._icon_grip = qta.icon("fa5s.grip-lines", color=palette.dim_text)
         self._icon_menu = qta.icon("fa5s.ellipsis-v", color=palette.text)
-        self._icon_fire = qta.icon("fa5s.fire", color=self.C_MED.name())
         self._icon_tomorrow = qta.icon("ph.arrow-u-right-down-bold", color=palette.text)
         self._icon_subtask_open = qta.icon("fa5s.chevron-down", color=palette.dim_text)
         self._icon_subtask_closed = qta.icon("fa5s.chevron-right", color=palette.dim_text)
         self._icon_quick_add = qta.icon("fa5s.plus", color=palette.dim_text)
+        self._priority_fire_icon_cache.clear()
+        self.clear_layout_metric_cache()
         self._marker_theme_icons = {
             "movies": qta.icon("fa5s.film", color="#4f7ecf"),
             "games": qta.icon("fa5s.gamepad", color="#4caf50"),
@@ -162,32 +168,35 @@ class TasksItemDelegate(QStyledItemDelegate):
 
         title = index.data(Qt.ItemDataRole.DisplayRole) or ""
         description = index.data(TaskRoles.Description) or ""
-        is_plan_item = bool(index.data(TaskRoles.IsPlanItem))
-        is_current_plan_item = bool(index.data(TaskRoles.IsCurrentPlanItem))
-        started_at = (index.data(TaskRoles.StartedAt) or "").strip()
-        finished_at = (index.data(TaskRoles.FinishedAt) or "").strip()
-        actual_minutes = max(0, int(index.data(TaskRoles.ActualMinutes) or 0))
-        execution_text = self._format_plan_execution_text(
-            is_plan_item=is_plan_item,
-            is_current_plan_item=is_current_plan_item,
-            done=bool(index.data(TaskRoles.Done)),
-            started_at=started_at,
-            finished_at=finished_at,
-            actual_minutes=actual_minutes,
-        )
         depth = int(index.data(TaskRoles.SubtaskDepth) or 0)
         has_subtasks = bool(index.data(TaskRoles.HasSubtasks))
         layout = self._row_layout(option_rect, depth, has_subtasks)
         text_width = max(10, layout["title"].width())
+        tags = tuple(index.data(TaskRoles.AttachmentSummary) or ())
+        total_height = self._expanded_content_height(text_width, title, description, tags)
+        return QSize(option_rect.width(), total_height)
 
-        title_metrics = QFontMetrics(self._font)
-        desc_metrics = QFontMetrics(self._font_small)
-        title_height = title_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, title).height()
+    def _expanded_content_height(
+        self,
+        text_width: int,
+        title: str,
+        description: str,
+        tags: tuple[str, ...],
+    ) -> int:
+        cache_key = (int(text_width), str(title), str(description), tags)
+        cached = self._expanded_height_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        title_height = self._font_metrics.boundingRect(
+            0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, title
+        ).height()
         desc_height = 0
         if description:
-            desc_height = desc_metrics.boundingRect(0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, description).height()
+            desc_height = self._font_small_metrics.boundingRect(
+                0, 0, text_width, 1000, Qt.TextFlag.TextWordWrap, description
+            ).height()
 
-        tags = index.data(TaskRoles.AttachmentSummary) or []
         total_height = title_height + desc_height
         if description:
             total_height += self.TEXT_GAP
@@ -195,17 +204,23 @@ class TasksItemDelegate(QStyledItemDelegate):
             total_height += self.TEXT_GAP + self._tags_height(tags, text_width)
         total_height += self.TEXT_V_PAD * 2
         total_height = max(total_height, self.ROW_H_EXPANDED_MIN)
-        return QSize(option_rect.width(), total_height)
+        if len(self._expanded_height_cache) >= 8192:
+            self._expanded_height_cache.clear()
+        self._expanded_height_cache[cache_key] = total_height
+        return total_height
+
+    def clear_layout_metric_cache(self) -> None:
+        """Clears width- and content-sensitive row height metrics."""
+        self._expanded_height_cache.clear()
 
     def _tags_height(self, tags: List[str], max_width: int) -> int:
         """Вычисляет высоту блока тегов с переносом по доступной ширине."""
         if not tags:
             return 0
-        metrics = QFontMetrics(self._font_small)
         line_width = 0
         lines = 1
         for tag in tags:
-            tag_width = metrics.horizontalAdvance(tag) + self.TAG_PAD_X * 2
+            tag_width = self._font_small_metrics.horizontalAdvance(tag) + self.TAG_PAD_X * 2
             if line_width > 0 and line_width + tag_width > max_width:
                 lines += 1
                 line_width = 0
@@ -216,12 +231,11 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Рисует теги вложений в несколько строк внутри строки задачи."""
         if not tags:
             return
-        metrics = QFontMetrics(self._font_small)
         x = start.x()
         y = start.y()
         painter.setFont(self._font_small)
         for tag in tags:
-            tag_width = metrics.horizontalAdvance(tag) + self.TAG_PAD_X * 2
+            tag_width = self._font_small_metrics.horizontalAdvance(tag) + self.TAG_PAD_X * 2
             if x > start.x() and x + tag_width > start.x() + max_width:
                 x = start.x()
                 y += self.TAG_H + self.TAG_LINE_GAP
@@ -235,9 +249,8 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     def _execution_badge_rect(self, title_rect: QRect, execution_text: str) -> QRect:
         """Строит прямоугольник бейджа фактического времени выполнения."""
-        metrics = QFontMetrics(self._font_small)
-        badge_width = metrics.horizontalAdvance(execution_text) + self.EXECUTION_BADGE_PAD_X * 2
-        badge_height = metrics.height() + self.EXECUTION_BADGE_PAD_Y * 2
+        badge_width = self._font_small_metrics.horizontalAdvance(execution_text) + self.EXECUTION_BADGE_PAD_X * 2
+        badge_height = self._font_small_metrics.height() + self.EXECUTION_BADGE_PAD_Y * 2
         return QRect(
             max(title_rect.left(), title_rect.right() - badge_width),
             title_rect.top() + self.TEXT_V_PAD,
@@ -271,10 +284,9 @@ class TasksItemDelegate(QStyledItemDelegate):
         include_today_badge: bool = False,
     ) -> QRect:
         """Возвращает область быстрой кнопки добавления задачи в заголовке дня."""
-        metrics = QFontMetrics(self._font_header)
         text_left = row_rect.left() + 10
-        text_width = metrics.horizontalAdvance(header_text)
-        today_badge_width = metrics.horizontalAdvance("СЕГОДНЯ") if include_today_badge else 0
+        text_width = self._font_header_metrics.horizontalAdvance(header_text)
+        today_badge_width = self._font_header_metrics.horizontalAdvance("СЕГОДНЯ") if include_today_badge else 0
         quick_width = 116
         quick_height = row_rect.height()
         quick_x = text_left + text_width + 14 + today_badge_width
@@ -414,8 +426,7 @@ class TasksItemDelegate(QStyledItemDelegate):
 
     def _project_type_switch_rect(self, bracket_rect: QRect) -> QRect:
         text = "Переключиться"
-        metrics = QFontMetrics(self._font_small)
-        width = metrics.horizontalAdvance(text) + self.PROJECT_SWITCH_BUTTON_PAD_X * 2
+        width = self._font_small_metrics.horizontalAdvance(text) + self.PROJECT_SWITCH_BUTTON_PAD_X * 2
         width = max(96, width)
         return QRect(
             bracket_rect.left() - width,
@@ -487,8 +498,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(summary_rect.adjusted(0, 0, -110, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, overrun_text)
 
             if show_today:
-                metrics = QFontMetrics(self._font_header)
-                base_width = metrics.horizontalAdvance(txt)
+                base_width = self._font_header_metrics.horizontalAdvance(txt)
                 today_rect = QRect(
                     text_rect.left() + base_width + 6,
                     text_rect.top(),
@@ -663,7 +673,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(bracket_rect, 2, 2)
                 painter.setPen(self.C_DIM)
                 text_rect.setLeft(text_rect.left() + bracket_rect.width() + 8)
-            elided_project = QFontMetrics(self._font_small).elidedText(
+            elided_project = self._font_small_metrics.elidedText(
                 display_project,
                 Qt.TextElideMode.ElideRight,
                 text_rect.width(),
@@ -712,8 +722,7 @@ class TasksItemDelegate(QStyledItemDelegate):
             )
             painter.drawText(title_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, display_title)
 
-            title_metrics = QFontMetrics(self._font)
-            title_height = title_metrics.boundingRect(
+            title_height = self._font_metrics.boundingRect(
                 0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, display_title
             ).height()
             current_y = r.top() + self.TEXT_V_PAD + title_height
@@ -724,12 +733,12 @@ class TasksItemDelegate(QStyledItemDelegate):
                     title_content_rect.left(),
                     current_y + self.TEXT_GAP,
                     title_content_rect.width(),
-                    title_metrics.height(),
+                    self._font_metrics.height(),
                 )
                 painter.setPen(self.C_OVERDUE)
                 painter.drawText(delay_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, completion_delay_text)
                 painter.setPen(title_color)
-                current_y += self.TEXT_GAP + title_metrics.height()
+                current_y += self.TEXT_GAP + self._font_metrics.height()
             elif execution_text:
                 execution_badge_rect = self._execution_badge_rect(title_content_rect, execution_text)
                 self._draw_execution_badge(painter, execution_badge_rect, execution_text, execution_color)
@@ -747,8 +756,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.setPen(self.C_DIM if not overdue else self.C_OVERDUE)
                 painter.drawText(desc_box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, description)
                 painter.setFont(self._font)
-                desc_metrics = QFontMetrics(self._font_small)
-                desc_height = desc_metrics.boundingRect(
+                desc_height = self._font_small_metrics.boundingRect(
                     0, 0, title_content_rect.width(), 1000, Qt.TextFlag.TextWordWrap, description
                 ).height()
                 current_y += self.TEXT_GAP + desc_height
@@ -758,12 +766,11 @@ class TasksItemDelegate(QStyledItemDelegate):
                 current_y += self.TEXT_GAP
                 self._draw_tags(painter, QPoint(title_content_rect.left(), current_y), title_content_rect.width(), tags)
         else:
-            title_metrics = QFontMetrics(self._font)
             if completion_delay_text:
                 delay_text = f" {completion_delay_text}"
-                delay_width = title_metrics.horizontalAdvance(delay_text)
+                delay_width = self._font_metrics.horizontalAdvance(delay_text)
                 title_width = max(40, title_content_rect.width() - delay_width)
-                title_part = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
+                title_part = self._font_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
                 title_part_rect = QRect(title_content_rect.left(), title_content_rect.top(), title_width, title_content_rect.height())
                 delay_part_rect = QRect(
                     title_part_rect.right(),
@@ -778,9 +785,9 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.setPen(title_color)
             elif execution_text:
                 execution_suffix = f" · {execution_text}"
-                suffix_width = title_metrics.horizontalAdvance(execution_suffix)
+                suffix_width = self._font_metrics.horizontalAdvance(execution_suffix)
                 title_width = max(40, title_content_rect.width() - suffix_width)
-                title_part = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
+                title_part = self._font_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_width)
                 title_part_rect = QRect(title_content_rect.left(), title_content_rect.top(), title_width, title_content_rect.height())
                 suffix_part_rect = QRect(
                     title_part_rect.right(),
@@ -794,7 +801,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 painter.drawText(suffix_part_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, execution_suffix)
                 painter.setPen(title_color)
             else:
-                elided = title_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_content_rect.width())
+                elided = self._font_metrics.elidedText(display_title, Qt.TextElideMode.ElideRight, title_content_rect.width())
                 painter.drawText(title_content_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
 
         if not parent_move_rect.isNull() and parent_move_target is not None:
@@ -809,7 +816,7 @@ class TasksItemDelegate(QStyledItemDelegate):
                 -self.PARENT_MOVE_BUTTON_PAD_X,
                 0,
             )
-            text = QFontMetrics(self._font_small).elidedText(parent_move_text, Qt.TextElideMode.ElideRight, text_rect.width())
+            text = self._font_small_metrics.elidedText(parent_move_text, Qt.TextElideMode.ElideRight, text_rect.width())
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
 
         # --- STAGE AND PRIORITY BLOCK ---
@@ -846,7 +853,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         value_alignment = Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignCenter if is_plan_item else Qt.AlignmentFlag.AlignLeft)
         painter.drawText(value_rect, value_alignment, value_text)
         if not is_plan_item and not fire_rect.isNull():
-            qta.icon("fa5s.fire", color=fire_color.name()).paint(painter, fire_rect)
+            self._priority_fire_icon(fire_color).paint(painter, fire_rect)
 
         painter.setPen(self.C_PRIORITY_ARROW)
         if not is_plan_item:
@@ -1397,6 +1404,14 @@ class TasksItemDelegate(QStyledItemDelegate):
             return self.C_DEFER
         return self.C_MED
 
+    def _priority_fire_icon(self, color: QColor) -> QIcon:
+        color_name = color.name()
+        icon = self._priority_fire_icon_cache.get(color_name)
+        if icon is None:
+            icon = qta.icon("fa5s.fire", color=color_name)
+            self._priority_fire_icon_cache[color_name] = icon
+        return icon
+
     @staticmethod
     def _board_stage_label(board_column: str, priority: str) -> str:
         """Возвращает подпись колонки доски для статуса задачи."""
@@ -1574,8 +1589,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         available_width = title_rect.width() - 20
         if available_width < 160:
             return QRect()
-        metrics = QFontMetrics(self._font_small)
-        target_width = metrics.horizontalAdvance(text) + self.PARENT_MOVE_BUTTON_PAD_X * 2
+        target_width = self._font_small_metrics.horizontalAdvance(text) + self.PARENT_MOVE_BUTTON_PAD_X * 2
         button_width = min(max(180, target_width), min(420, available_width))
         button_height = self.PARENT_MOVE_BUTTON_H
         x = title_rect.right() - button_width

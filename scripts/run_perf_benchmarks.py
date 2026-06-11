@@ -105,9 +105,11 @@ def run_benchmarks(
 
     database = Database(path=database_path)
     model = None
+    delegate = None
     try:
         search_service = GlobalSearchService(database)
         model = _create_tasks_model(database)
+        delegate, delegate_option, delegate_indexes = _create_tasks_delegate_benchmark(model)
         task_sample = database.fetch_tasks()[0]
         project_sample = database.fetch_projects()[0]
 
@@ -123,6 +125,9 @@ def run_benchmarks(
                 model.index(row, 0).data(TaskRoles.AttachmentSummary)
                 for row in range(model.rowCount())
             ]
+
+        def calculate_task_delegate_size_hints(_index: int) -> list[object]:
+            return [delegate.sizeHint(delegate_option, index) for index in delegate_indexes]
 
         def open_task_form(_index: int) -> tuple[str]:
             dialog = _create_task_edit_dialog(database, task_sample)
@@ -162,6 +167,12 @@ def run_benchmarks(
                 warmup=warmup,
             ),
             measure_operation(
+                "tasks_delegate_size_hints",
+                calculate_task_delegate_size_hints,
+                iterations=iterations,
+                warmup=warmup,
+            ),
+            measure_operation(
                 "task_edit_dialog_open",
                 open_task_form,
                 iterations=iterations,
@@ -175,6 +186,8 @@ def run_benchmarks(
             ),
         ]
     finally:
+        if delegate is not None:
+            delegate.deleteLater()
         if model is not None:
             model.deleteLater()
         database.close()
@@ -202,6 +215,27 @@ def _create_tasks_model(database):
         return tasks_model_module.TasksModel()
     finally:
         tasks_model_module.get_database = original_get_database
+
+
+def _create_tasks_delegate_benchmark(model, sample_size: int = 250):
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QStyleOptionViewItem
+    from mindnavigator.workspaces.tasks.task_roles import TaskRoles
+    from mindnavigator.workspaces.tasks.tasks_item_delegate import TasksItemDelegate
+
+    delegate = TasksItemDelegate()
+    option = QStyleOptionViewItem()
+    option.rect = QRect(0, 0, 1200, 96)
+    indexes = []
+    for row in range(model.rowCount()):
+        index = model.index(row, 0)
+        if not index.data(TaskRoles.TaskId):
+            continue
+        model.toggle_expanded_by_row(row)
+        indexes.append(index)
+        if len(indexes) >= sample_size:
+            break
+    return delegate, option, indexes
 
 
 def _create_task_edit_dialog(database, task):

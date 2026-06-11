@@ -32,6 +32,7 @@ def test_run_perf_benchmarks_and_write_report(unique_temp_path) -> None:
         "global_search",
         "tasks_model_reload",
         "task_attachment_summaries",
+        "tasks_delegate_size_hints",
         "task_edit_dialog_open",
         "project_edit_dialog_open",
     ]
@@ -39,8 +40,9 @@ def test_run_perf_benchmarks_and_write_report(unique_temp_path) -> None:
     assert report.results[1].result_count == 1
     assert report.results[2].result_count > 0
     assert report.results[3].result_count > 0
-    assert report.results[4].result_count == 1
+    assert report.results[4].result_count > 0
     assert report.results[5].result_count == 1
+    assert report.results[6].result_count == 1
     assert all(result.iterations == 2 and result.p50_ms >= 0 for result in report.results)
     assert "fetch_tasks" in format_report(report)
 
