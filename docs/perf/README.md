@@ -19,3 +19,11 @@ python -m scripts.run_perf_benchmarks .test_runtime/perf_20k.sqlite3 --iteration
 Use repeated `--query` options to control the global-search workload. Generated JSON reports include environment metadata and p50/p95, min, max, and mean durations in milliseconds.
 
 Current diagnostic UX thresholds are recorded in `p3_03_thresholds_2026-06-07.md`. Later measurements are recorded in `p3_04_lazy_loading_2026-06-11.md` and `p3_05_delegate_metrics_2026-06-11.md`.
+
+Run the Windows workspace lifecycle and working-set smoke check:
+
+```powershell
+python -m scripts.run_workspace_memory_smoke --cycles 20 --images 8
+```
+
+The latest result and interpretation are recorded in `p3_06_workspace_memory_2026-06-11.md`.

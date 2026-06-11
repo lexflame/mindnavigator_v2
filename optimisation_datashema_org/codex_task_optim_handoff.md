@@ -42,18 +42,19 @@
 | `P2-07` | `codex/task-advanced-filters` | `28b541b` | Добавлены фильтры основной модели задач по типу, связям, отсутствию проекта и вложенности с сохраняемым UI-меню. |
 | `P3-03` | `codex/performance-thresholds` | текущий HEAD (`perf: optimize task dialog reads`) | Зафиксированы UX-пороги; task dialog p95 на fixture 5k снижен до 225 мс узкими hierarchy-запросами, worker не потребовался. |
 | `P3-04` | `codex/lazy-task-attachments` | `a511cf3` | Attachments summary переведён с N+1 на ленивую групповую выборку и кэш; частичная загрузка дерева отклонена по результатам измерения ниже UX-порога. |
-| `P3-05` | `codex/task-delegate-metrics` | текущий HEAD | Кэшированы стабильные font/layout metrics и цветные priority icons; повторные expanded size hints ускорены без кэширования state-зависимых прямоугольников. |
+| `P3-05` | `codex/task-delegate-metrics` | `55d3b7f` | Кэшированы стабильные font/layout metrics и цветные priority icons; повторные expanded size hints ускорены без кэширования state-зависимых прямоугольников. |
+| `P3-06` | `codex/workspace-memory-smoke` | текущий HEAD | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
 
 ## Текущая работа
 
-- Пункт: `P3-06` — проверка памяти карт, изображений и коллекций.
-- Ветка: `codex/task-delegate-metrics`.
-- Статус: `P3-05` завершён.
-- Проверки `P3-05`:
+- Пункт: `P1-TASK-FIX-01` — маршрут кнопки редактирования к актуальной Форме СРП Задач.
+- Ветка: `codex/workspace-memory-smoke`.
+- Статус: `P3-06` завершён; performance-блок `P3-01`-`P3-06` закрыт.
+- Проверки `P3-06`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_tasks_delegate_metric_cache.py tests/test_run_perf_benchmarks.py tests/test_tasks_marker_refresh.py tests/test_view_menu_geometry.py tests/test_tasks_workspace_mn202.py -k "delegate or size_hint or sizehint or layout or header_quick or project_type or parent_schedule" -q -p no:cacheprovider --basetemp .pytest_dir/p3_05_focused` — `23 passed, 97 deselected`;
-  - benchmark 5k, 10 итераций/2 warmup: `tasks_delegate_size_hints p95 = 14.530 ms`; ручной повторный проход 3931 expanded rows: `678.675 → 243.308 ms`.
+  - `python -m pytest tests/test_workspace_memory_smoke.py -q -p no:cacheprovider --basetemp .pytest_dir/p3_06_smoke` — `1 passed`;
+  - `python -m scripts.run_workspace_memory_smoke --cycles 20 --images 8 --image-width 1024 --image-height 768` — все четыре сценария `alive=0`, warm growth `0.00-0.02 MB`.
 
 ## Следующий шаг
 
-После ручной проверки высоты раскрытых строк при изменении ширины списка и темы создать отдельную ветку от `codex/task-delegate-metrics` и начать `P3-06`: измерить память процесса при повторном открытии/закрытии карт, изображений и коллекций, затем исправлять только подтверждённое удержание объектов или pixmap-кэшей.
+Создать отдельную ветку от `codex/workspace-memory-smoke` и начать `P1-TASK-FIX-01`: воспроизвести маршрут кнопки «Редактировать/Изменить» в списке задач, зафиксировать тестом вызываемый класс формы и направить действие в актуальную Форму СРП Задач без изменения остальных способов открытия.
