@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,8 @@ class EditableListItem:
     label: str
     action_icon: str = ""
     action_tooltip: str = ""
+    detail: str = ""
+    marker_color: str = ""
 
 
 class EditableListWidget(QFrame):
@@ -33,6 +36,7 @@ class EditableListWidget(QFrame):
         self._icon_color = icon_color
         self._empty_text = empty_text
         self.setObjectName("EditableList")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -40,6 +44,7 @@ class EditableListWidget(QFrame):
 
         self.rows_widget = QWidget(self)
         self.rows_widget.setObjectName("EditableListRows")
+        self.rows_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.rows_layout = QVBoxLayout(self.rows_widget)
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
         self.rows_layout.setSpacing(6)
@@ -75,6 +80,13 @@ class EditableListWidget(QFrame):
         for button in self.findChildren(QToolButton):
             button.setVisible(enabled)
             button.setEnabled(enabled)
+        self.ensurePolished()
+        self.rows_widget.ensurePolished()
+        self.rows_layout.activate()
+        if self.layout() is not None:
+            self.layout().activate()
+        self.setMinimumHeight(self.sizeHint().height() if enabled else 0)
+        self.updateGeometry()
 
     def _create_row(self, index: int, item: EditableListItem) -> QFrame:
         row = QFrame()
@@ -83,11 +95,28 @@ class EditableListWidget(QFrame):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(6)
 
+        marker_color = QColor(item.marker_color)
+        if marker_color.isValid():
+            marker = QFrame()
+            marker.setObjectName("EditableListMarker")
+            marker.setFixedSize(5, 28)
+            marker.setStyleSheet(
+                f"background: {marker_color.name()}; border: none; border-radius: 2px;"
+            )
+            layout.addWidget(marker)
+
         value = QLineEdit(item.label)
         value.setObjectName("EditableListValue")
+        value.setMinimumWidth(110)
         value.setReadOnly(True)
         value.setCursorPosition(0)
         layout.addWidget(value, 1)
+
+        if item.detail:
+            detail = QLabel(item.detail)
+            detail.setObjectName("EditableListDetail")
+            detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(detail)
 
         edit_button = self._icon_button("fa5s.edit", "Изменить")
         edit_button.clicked.connect(lambda _checked=False, row_index=index: self.editRequested.emit(row_index))
@@ -106,6 +135,7 @@ class EditableListWidget(QFrame):
     def _icon_button(self, icon_name: str, tooltip: str) -> QToolButton:
         button = QToolButton()
         button.setObjectName("EditableListIconButton")
+        button.setFixedSize(30, 28)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setToolTip(tooltip)
         button.setIcon(qta.icon(icon_name, color=self._icon_color))

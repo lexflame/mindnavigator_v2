@@ -8,6 +8,7 @@ from html import escape
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QGridLayout,
+    QLayout,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -40,6 +41,17 @@ PROJECT_REFLECT_KEYS = {
     PROJECT_REFLECT_LINKED_OBJECT,
 }
 
+
+class _CurrentPageStackedWidget(QStackedWidget):
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt API
+        current = self.currentWidget()
+        return current.sizeHint() if current is not None else super().sizeHint()
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt API
+        current = self.currentWidget()
+        return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
+
+
 class ProjectEditDialog(QDialog):
     def __init__(self, project: Optional[ProjectRow] = None, parent=None):
         """Создает диалог создания или редактирования проекта."""
@@ -53,11 +65,15 @@ class ProjectEditDialog(QDialog):
         self.setWindowTitle("Создание проекта" if is_new else "Редактирование проекта")
         self.setObjectName("ProjectEditDialog")
         self.setProperty("dialog_category", "minimal_flex")
-        self.resize(1220, 780)
-        self.setMinimumSize(1100, 700)
+        self.resize(1380, 900)
+        self.setMinimumSize(1180, 760)
 
-        self.area_edit = QLineEdit(project.area if project else "")
-        self.area_edit.setPlaceholderText("Область проекта")
+        self.area_edit = FilterableComboBox(max_visible_items=10)
+        self.area_edit.addItems(self._db.project_areas())
+        self.area_edit.setCurrentIndex(-1)
+        self.area_edit.setEditText(project.area if project else "")
+        if self.area_edit.lineEdit() is not None:
+            self.area_edit.lineEdit().setPlaceholderText("Область проекта")
 
         self.title_edit = QLineEdit(project.title if project else "")
         self.title_edit.setPlaceholderText("Название проекта")
@@ -243,7 +259,7 @@ class ProjectEditDialog(QDialog):
         self.add_relation_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_relation_button.clicked.connect(self._add_relation_dialog)
         self._edit_action_buttons.append(self.add_relation_button)
-        area_field = self._field_stack(self.area_edit, lambda: self.area_edit.text().strip() or "Не задано")
+        area_field = self._field_stack(self.area_edit, lambda: self.area_edit.currentText().strip() or "Не задано")
         updated_field = self._field_stack(self.updated_edit, lambda: self.updated_edit.date().toString("dd.MM.yyyy"))
         priority_field = self._field_stack(self.priority_edit, lambda: self.priority_edit.currentText().strip() or "Medium")
         parent_field = self._field_stack(self.parent_project_edit, lambda: self.parent_project_edit.currentText().strip() or "None")
@@ -307,15 +323,15 @@ class ProjectEditDialog(QDialog):
         archived_field = self._field_stack(self.archived_edit, lambda: "Да" if self.archived_edit.isChecked() else "Нет")
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(0)
 
         self.shell = QFrame(self)
         self.shell.setObjectName("ProjectDialogShell")
         root.addWidget(self.shell, 1)
         shell_layout = QVBoxLayout(self.shell)
-        shell_layout.setContentsMargins(24, 20, 24, 16)
-        shell_layout.setSpacing(14)
+        shell_layout.setContentsMargins(20, 16, 20, 12)
+        shell_layout.setSpacing(10)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -365,10 +381,12 @@ class ProjectEditDialog(QDialog):
         content = QWidget()
         content.setObjectName("ProjectDialogContent")
         scroll.setWidget(content)
-        content_layout = QGridLayout(content)
+        content_layout = QHBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setHorizontalSpacing(12)
-        content_layout.setVerticalSpacing(12)
+        content_layout.setSpacing(10)
+        content_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self._content_widget = content
+        self._content_layout = content_layout
 
         main_card = self._section_card("Основное")
         main_form = self._section_form(main_card)
@@ -416,23 +434,40 @@ class ProjectEditDialog(QDialog):
         if isinstance(stats_layout, QVBoxLayout):
             stats_layout.addLayout(self._statistics_row())
 
-        content_layout.addWidget(main_card, 0, 0)
-        content_layout.addWidget(properties_card, 0, 1)
-        content_layout.addWidget(links_card, 1, 0)
-        content_layout.addWidget(hierarchy_card, 1, 1)
-        content_layout.addWidget(types_card, 2, 0)
-        content_layout.addWidget(display_properties_card, 2, 1)
-        content_layout.addWidget(stats_card, 3, 1)
-        content_layout.setColumnStretch(0, 1)
-        content_layout.setColumnStretch(1, 1)
+        left_column = QVBoxLayout()
+        left_column.setContentsMargins(0, 0, 0, 0)
+        left_column.setSpacing(10)
+        left_column.addWidget(main_card)
+        left_column.addWidget(types_card)
+
+        center_column = QVBoxLayout()
+        center_column.setContentsMargins(0, 0, 0, 0)
+        center_column.setSpacing(10)
+        center_column.addWidget(properties_card)
+        center_column.addWidget(hierarchy_card)
+        center_column.addWidget(stats_card)
+
+        right_column = QVBoxLayout()
+        right_column.setContentsMargins(0, 0, 0, 0)
+        right_column.setSpacing(10)
+        right_column.addWidget(links_card)
+        right_column.addWidget(display_properties_card)
+
+        self._content_columns = (left_column, center_column, right_column)
+        self._content_card_columns = (
+            (main_card, types_card),
+            (properties_card, hierarchy_card, stats_card),
+            (links_card, display_properties_card),
+        )
+        content_layout.addLayout(left_column, 1)
+        content_layout.addLayout(center_column, 1)
+        content_layout.addLayout(right_column, 1)
         shell_layout.addWidget(scroll, 1)
 
         QShortcut(QKeySequence("Ctrl+E"), self, activated=lambda: self._set_edit_mode(True))
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save_shortcut)
         QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._on_accept)
         QShortcut(QKeySequence("Ctrl+Enter"), self, activated=self._on_accept)
-
-        self._set_edit_mode(self._edit_mode)
 
         palette = self._palette
         self.setStyleSheet(f"""
@@ -588,6 +623,11 @@ class ProjectEditDialog(QDialog):
                 padding: 9px 11px;
             }}
 
+            QLabel#EditableListDetail {{
+                color: {palette.dim_text};
+                padding: 0 4px;
+            }}
+
             QLineEdit#EditableListValue {{
                 background: transparent;
                 border: none;
@@ -595,7 +635,7 @@ class ProjectEditDialog(QDialog):
                 padding: 7px 8px;
             }}
 
-            QToolButton#EditableListIconButton {{
+            QDialog#ProjectEditDialog QToolButton#EditableListIconButton {{
                 min-width: 30px;
                 max-width: 30px;
                 min-height: 28px;
@@ -604,9 +644,11 @@ class ProjectEditDialog(QDialog):
                 border-radius: 6px;
             }}
         """)
+        self._set_edit_mode(self._edit_mode)
 
     def _field_stack(self, editor: QWidget, value_getter: object, rich: bool = False) -> QStackedWidget:
-        stack = QStackedWidget()
+        stack = _CurrentPageStackedWidget()
+        stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         label = QLabel()
         label.setObjectName("ProjectDialogValue")
         label.setWordWrap(True)
@@ -624,6 +666,7 @@ class ProjectEditDialog(QDialog):
             value = value_getter() if callable(value_getter) else ""
             label.setText(str(value))
             stack.setCurrentIndex(1 if self._edit_mode else 0)
+            stack.updateGeometry()
 
     def eventFilter(self, watched: object, event: QEvent) -> bool:
         if event.type() != QEvent.Type.MouseButtonDblClick:
@@ -676,9 +719,13 @@ class ProjectEditDialog(QDialog):
         for line in lines:
             values = self._parse_task_type_line(line)
             title = str(values.get("title") or "")
+            value = str(values.get("value") or "")
             color = str(values.get("color_marker") or palette.chip_border)
-            theme = str(values.get("theme_marker") or "")
-            suffix = f" · {theme}" if theme else ""
+            priority = str(values.get("priority") or "")
+            details = [part for part in (value, priority) if part and part != title]
+            if bool(values.get("is_plan_task", False)):
+                details.append("План")
+            suffix = f" · {' · '.join(details)}" if details else ""
             opacity = "1.0" if bool(values.get("active", True)) else "0.55"
             chips.append(
                 f"<span style='display:inline-block; color:{palette.text}; background:{palette.chip_bg}; "
@@ -726,9 +773,10 @@ class ProjectEditDialog(QDialog):
     def _section_card(self, title: str) -> QFrame:
         card = QFrame()
         card.setObjectName("ProjectDialogSection")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(14, 12, 14, 14)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(12, 10, 12, 11)
+        card_layout.setSpacing(8)
         label = QLabel(title)
         label.setObjectName("ProjectDialogSectionTitle")
         card_layout.addWidget(label)
@@ -739,7 +787,7 @@ class ProjectEditDialog(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(9)
+        form.setVerticalSpacing(7)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         layout = card.layout()
         if isinstance(layout, QVBoxLayout):
@@ -800,6 +848,7 @@ class ProjectEditDialog(QDialog):
         self.cancel_button.setVisible(enabled)
         self.save_button.setVisible(enabled)
         self._refresh_preview_fields()
+        self._sync_content_minimum_height()
 
     def _save_shortcut(self) -> None:
         if self._edit_mode:
@@ -900,20 +949,28 @@ class ProjectEditDialog(QDialog):
                 for line in (line.strip() for line in edit.toPlainText().splitlines() if line.strip()):
                     action_icon = ""
                     action_tooltip = ""
+                    detail = ""
+                    marker_color = ""
                     if kind == "task_types":
-                        active = bool(self._parse_task_type_line(line).get("active", True))
+                        values = self._parse_task_type_line(line)
+                        active = bool(values.get("active", True))
                         action_icon = "fa5s.check" if active else "fa5s.ban"
                         action_tooltip = "Активировать/деактивировать"
+                        detail = self._task_type_inline_detail(values)
+                        marker_color = str(values.get("color_marker") or "")
                     items.append(
                         EditableListItem(
                             label=self._inline_property_label(kind, line),
                             action_icon=action_icon,
                             action_tooltip=action_tooltip,
+                            detail=detail,
+                            marker_color=marker_color,
                         )
                     )
                 editor.set_items(items)
         if hasattr(self, "_edit_mode"):
             self._set_inline_edit_enabled(self._edit_mode)
+            self._sync_content_minimum_height()
 
     def _set_inline_edit_enabled(self, enabled: bool) -> None:
         for kind in (
@@ -927,6 +984,28 @@ class ProjectEditDialog(QDialog):
             editor = getattr(self, f"{kind}_list_editor", None)
             if editor is not None:
                 editor.set_edit_enabled(enabled)
+
+    def _sync_content_minimum_height(self) -> None:
+        content = getattr(self, "_content_widget", None)
+        layout = getattr(self, "_content_layout", None)
+        if content is None or layout is None:
+            return
+        if not self._edit_mode:
+            content.setMinimumHeight(0)
+            return
+        layout.activate()
+        columns = getattr(self, "_content_columns", ())
+        for column in columns:
+            column.activate()
+        card_columns = getattr(self, "_content_card_columns", ())
+        minimum_height = max(
+            (
+                sum(card.sizeHint().height() for card in cards) + 10 * max(0, len(cards) - 1)
+                for cards in card_columns
+            ),
+            default=0,
+        )
+        content.setMinimumHeight(max(layout.minimumSize().height(), minimum_height))
 
     def _inline_property_label(self, kind: str, line: str) -> str:
         if kind == "task_types":
@@ -947,6 +1026,20 @@ class ProjectEditDialog(QDialog):
             task = self._task_by_id(task_id)
             return f"MN-{task.id} {task.title}" if task is not None else line.strip()
         return line.strip()
+
+    @staticmethod
+    def _task_type_inline_detail(values: dict[str, object]) -> str:
+        parts = []
+        value = str(values.get("value") or "").strip()
+        priority = str(values.get("priority") or "").strip()
+        if value:
+            parts.append(value)
+        if priority:
+            parts.append(priority)
+        parts.append(f"Важн. {int(values.get('importance') or 3)}")
+        if bool(values.get("is_plan_task", False)):
+            parts.append("План")
+        return " · ".join(parts)
 
     def _edit_inline_property(self, kind: str, line_index: int) -> None:
         if kind == "task_types":
@@ -2504,7 +2597,7 @@ class ProjectEditDialog(QDialog):
     def _on_accept(self):
         """Проверяет ввод перед сохранением изменений."""
         try:
-            validate_area(self.area_edit.text())
+            validate_area(self.area_edit.currentText())
             validate_title(self.title_edit.text(), field_name="Название проекта")
             normalize_priority(self.priority_edit.currentText())
             self._parse_project_task_types()
@@ -2624,7 +2717,7 @@ class ProjectEditDialog(QDialog):
         """Возвращает значения формы проекта."""
         qd = self.updated_edit.date()
         return {
-            "area": self.area_edit.text().strip(),
+            "area": self.area_edit.currentText().strip(),
             "title": self.title_edit.text().strip(),
             "updated": date(qd.year(), qd.month(), qd.day()),
             "priority": self.priority_edit.currentText().strip() or "Medium",

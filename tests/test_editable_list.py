@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QLineEdit, QToolButton
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLineEdit, QToolButton
 
 from mindnavigator.ui.editable_list import EditableListItem, EditableListWidget
 
@@ -48,3 +48,19 @@ def test_editable_list_add_and_edit_mode() -> None:
 
     widget.set_edit_enabled(False)
     assert all(button.isHidden() and not button.isEnabled() for button in widget.findChildren(QToolButton))
+
+
+def test_editable_list_renders_optional_detail_and_color_marker() -> None:
+    _app = QApplication.instance() or QApplication([])
+    widget = EditableListWidget(icon_color="#ffffff")
+
+    widget.set_items(
+        [EditableListItem("Development", detail="DEV · High · Важность 5", marker_color="#20f5d2")]
+    )
+
+    detail = widget.rows_widget.findChild(QLabel, "EditableListDetail")
+    marker = widget.rows_widget.findChild(QFrame, "EditableListMarker")
+    assert detail is not None
+    assert detail.text() == "DEV · High · Важность 5"
+    assert marker is not None
+    assert "#20f5d2" in marker.styleSheet()

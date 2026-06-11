@@ -6,7 +6,7 @@ from datetime import date
 
 from PySide6.QtCore import QEvent, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QLineEdit, QStyleOptionViewItem, QToolButton
+from PySide6.QtWidgets import QApplication, QLineEdit, QScrollArea, QStyleOptionViewItem, QToolButton
 
 from mindnavigator.storage import Database
 from mindnavigator.ui.filterable_combobox import FilterableComboBox
@@ -292,6 +292,85 @@ def test_project_dialog_task_priority_preset_uses_high_medium_low_order(monkeypa
         db_path.unlink(missing_ok=True)
 
 
+def test_project_dialog_area_is_editable_dropdown_with_existing_values(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_area_dropdown", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        database.create_project("Books", "Reading", date(2026, 3, 6), "Medium")
+        database.create_project("Work", "Release", date(2026, 3, 6), "High")
+        database.create_project("Books", "Writing", date(2026, 3, 6), "Low")
+        dialog = project_edit_dialog.ProjectEditDialog()
+
+        assert isinstance(dialog.area_edit, FilterableComboBox)
+        assert dialog.area_edit.isEditable() is True
+        area_options = [dialog.area_edit.itemText(index) for index in range(dialog.area_edit.count())]
+        assert area_options.count("Books") == 1
+        assert area_options.count("Work") == 1
+        assert dialog.area_edit.lineEdit() is not None
+        assert dialog.area_edit.lineEdit().placeholderText() == "Область проекта"
+
+        dialog.area_edit.setEditText("Personal")
+        dialog.title_edit.setText("Planning")
+        assert dialog.values()["area"] == "Personal"
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_uses_larger_compact_layout(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_dialog_compact_layout", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        assert dialog.width() == 1380
+        assert dialog.height() == 900
+        assert dialog.minimumWidth() == 1180
+        assert dialog.minimumHeight() == 760
+        assert dialog.shell.layout().spacing() == 10
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
+def test_project_dialog_long_task_type_list_scrolls_without_compressing_rows(monkeypatch, unique_temp_path) -> None:
+    _app = QApplication.instance() or QApplication([])
+    db_path = unique_temp_path("project_dialog_task_type_scroll", ".sqlite3")
+    database = Database(path=db_path)
+    monkeypatch.setattr(project_edit_dialog, "get_database", lambda: database)
+    dialog = None
+    try:
+        dialog = project_edit_dialog.ProjectEditDialog()
+        dialog.task_types_edit.setPlainText(
+            "\n".join(
+                f"TYPE {index} | T{index} | #20f5d2 | debug | High | 5 | 0 | | active"
+                for index in range(10)
+            )
+        )
+        dialog._refresh_inline_property_lists()
+        dialog.show()
+        _app.processEvents()
+
+        scroll = dialog.findChild(QScrollArea, "ProjectDialogScroll")
+        assert scroll is not None
+        assert scroll.verticalScrollBar().maximum() > 0
+        assert dialog.task_types_list_editor.height() >= dialog.task_types_list_editor.minimumHeight()
+    finally:
+        if dialog is not None:
+            dialog.deleteLater()
+        database.close()
+        db_path.unlink(missing_ok=True)
+
+
 def test_project_dialog_opens_existing_project_in_preview_mode(monkeypatch, unique_temp_path) -> None:
     _app = QApplication.instance() or QApplication([])
     db_path = unique_temp_path("project_preview_mode", ".sqlite3")
@@ -489,6 +568,21 @@ def test_project_dialog_custom_property_lists_use_inline_rows(monkeypatch, uniqu
         assert task_inputs[0].isReadOnly() is True
         assert task_inputs[0].text() == "DEVELOPMENT"
         assert task_inputs[1].text() == "MUSIC"
+        task_details = dialog.task_types_list_widget.findChildren(project_edit_dialog.QLabel, "EditableListDetail")
+        task_markers = dialog.task_types_list_widget.findChildren(project_edit_dialog.QFrame, "EditableListMarker")
+        assert [label.text() for label in task_details] == [
+            "DEV · High · Важн. 5 · План",
+            "MUSIC · Medium · Важн. 3",
+        ]
+        assert len(task_markers) == 2
+        task_type_preview = dialog._task_types_preview()
+        assert all(value in task_type_preview for value in ("DEVELOPMENT", "DEV", "High", "План"))
+        dialog.show()
+        _app.processEvents()
+        scroll = dialog.findChild(QScrollArea, "ProjectDialogScroll")
+        assert scroll is not None
+        assert scroll.verticalScrollBar().maximum() == 0
+        assert dialog.task_types_list_editor.height() >= dialog.task_types_list_editor.sizeHint().height()
         assert len(display_inputs) == 1
         assert display_inputs[0].text() == "WIKI"
         assert len(repository_inputs) == 1
