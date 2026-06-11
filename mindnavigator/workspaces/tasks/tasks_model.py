@@ -599,6 +599,7 @@ class TasksModel(QAbstractListModel):
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
         importance: int = 3,
+        board_column: str = BOARD_COLUMN_QUEUE,
     ):
         """Добавляет новую задачу и перестраивает текущий список."""
         task = self._db.create_task(
@@ -607,6 +608,7 @@ class TasksModel(QAbstractListModel):
             day=day,
             time_text=time_text,
             priority=priority,
+            board_column=board_column,
             project_id=project_id,
             parent_id=parent_id,
             recurrence_kind=recurrence_kind,
@@ -621,6 +623,17 @@ class TasksModel(QAbstractListModel):
         self._recompute_plan_meta()
         self._rebuild()
         return task
+
+    def set_board_column_by_row(self, row_idx: int, board_column: str) -> bool:
+        task = self.task_at_row(row_idx)
+        if task is None:
+            return False
+        normalized = normalize_board_column(board_column, task.priority)
+        if normalized == task.board_column:
+            return True
+        self._db.set_task_board_column(task.id, normalized)
+        self._reload_from_db()
+        return True
 
     def quick_add_subtask(self, parent_task_id: int) -> None:
         parent_task = next(

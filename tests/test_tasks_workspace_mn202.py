@@ -65,6 +65,7 @@ class _AcceptedTaskCreateDialog:
             "day": self.kwargs.get("day") or date(2026, 3, 7),
             "time_text": self.kwargs.get("time_text", ""),
             "priority": self.kwargs.get("priority") or "Medium",
+            "board_column": self.kwargs.get("board_column", BOARD_COLUMN_QUEUE),
             "project_id": self.kwargs.get("project_id"),
             "recurrence_kind": self.kwargs.get("recurrence_kind", ""),
             "recurrence_interval": self.kwargs.get("recurrence_interval", 1),
@@ -1311,6 +1312,7 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.header_add_button.height() == 62
         assert dialog.scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         assert dialog.summary_label.isHidden()
+        assert dialog.left_column.indexOf(dialog.header_parent_card) < dialog.left_column.indexOf(dialog.additional_card)
         assert dialog.left_column.indexOf(dialog.additional_card) < dialog.left_column.indexOf(dialog.description_card)
         assert dialog.additional_card.findChild(QLabel, "TaskDetailsSectionTitle").text().endswith("Дополнительно")
         assert dialog.additional_properties_layout.count() == 0
@@ -1325,11 +1327,12 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
         assert dialog.header_id_label.text() == str(task.id)
         assert dialog.header_id_label.objectName() == "TaskDetailsHeaderId"
         assert dialog.header_parent_card._custom_value_widget is False
+        assert dialog.header_parent_card.objectName() == "TaskDetailsParentCard"
         assert dialog.links_add_button.isEnabled() is False
         assert dialog.edit_shortcut.key().toString() == "Ctrl+E"
         assert [card.title_label.text() for card in dialog._param_cards] == [
+            "Стадия",
             "Проект",
-            "Родительская задача",
             "Приоритет",
             "Важность задачи",
         ]
@@ -1343,12 +1346,14 @@ def test_task_details_dialog_uses_dashboard_layout_and_empty_fallbacks(monkeypat
             "Повтор",
         ]
         dialog._reflow_params_grid(4)
-        parent_index = dialog.params_grid.indexOf(dialog.header_parent_card)
-        assert parent_index >= 0
-        parent_row, parent_column, _, parent_column_span = dialog.params_grid.getItemPosition(parent_index)
-        assert parent_row == 0
-        assert parent_column == 1
-        assert parent_column_span == 1
+        stage_index = dialog.params_grid.indexOf(dialog.stage_card)
+        project_index = dialog.params_grid.indexOf(dialog.detail_project_card)
+        assert stage_index >= 0
+        assert project_index >= 0
+        stage_row, stage_column, _, stage_column_span = dialog.params_grid.getItemPosition(stage_index)
+        project_row, project_column, _, project_column_span = dialog.params_grid.getItemPosition(project_index)
+        assert (stage_row, stage_column, stage_column_span) == (0, 0, 1)
+        assert (project_row, project_column, project_column_span) == (0, 1, 1)
         assert dialog.details_list.indexOf(dialog.deadline_card) == 0
         assert dialog.deadline_card.height() == 102
         assert dialog.date_inline.minimumWidth() == 150

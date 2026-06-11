@@ -18,6 +18,7 @@ class TaskCreateDialog(TaskDetailsDialog):
         day: date | None = None,
         time_text: str = "",
         priority: str = "Medium",
+        board_column: str = BOARD_COLUMN_QUEUE,
         project_id: Optional[int] = None,
         parent_id: Optional[int] = None,
         recurrence_kind: str = "",
@@ -36,6 +37,7 @@ class TaskCreateDialog(TaskDetailsDialog):
             description=description,
             priority=priority or "Medium",
             done=False,
+            board_column=normalize_board_column(board_column, priority),
             importance=importance,
             project_id=project_id,
             project_title="",
@@ -67,7 +69,9 @@ class TaskCreateDialog(TaskDetailsDialog):
 
     def _save_inline_updates(self, **changes) -> bool:
         """Keep committed fields local until the task receives a database id."""
-        self._task = replace(self._task, **changes)
+        pending = self._pending_form_updates()
+        pending.update(changes)
+        self._task = replace(self._task, **pending)
         self._refresh_view()
         return True
 
@@ -97,6 +101,10 @@ class TaskCreateDialog(TaskDetailsDialog):
             "day": day_value,
             "time_text": str(self.time_inline.current_value() or "").strip(),
             "priority": str(self.priority_inline.current_value() or "Medium").strip() or "Medium",
+            "board_column": normalize_board_column(
+                str(self.stage_inline.current_value() or BOARD_COLUMN_QUEUE),
+                str(self.priority_inline.current_value() or "Medium"),
+            ),
             "project_id": self.project_inline.current_value(),
             "project_task_type_id": self._type_project_task_type_id(),
             "recurrence_kind": str(self.recurrence_inline.current_value() or ""),

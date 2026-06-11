@@ -48,15 +48,20 @@
 | `P1-TASK-FIX-02` | `fix/task-create-enter-id` | `9866367` | Enter в полях формы создания обновляет временную задачу локально и не обращается к storage с `id=0`. |
 | `P0-CODEX-01` | `codex/code-critic-role` | `c97beca` | Добавлен read-only custom agent `code_critic`, его конфигурация и документированный explicit-вызов. |
 | `P1-TASK-FIX-03` | `fix/tasks-all-mode-contract` | `b9a12f4` | Режим «Все» показывает все невыполненные и отложенные задачи без day-filter, сохраняет дерево и сортирует по дате/приоритету. |
-| `P0-DOC-01` | `docs/srp-form-contracts` | текущий HEAD | Закреплены терминология и фактические create/read/update, storage и relation-контракты Форм СРП. |
+| `P0-DOC-01` | `docs/srp-form-contracts` | `1adb504` | Закреплены терминология и фактические create/read/update, storage и relation-контракты Форм СРП. |
+| `P1-APP-01` | `fix/tray-long-session-hang` | `bb567e2` | Реализация готова; ветка ожидает ручной Windows tray soak-тест и не слита в epic. |
+| `P2-TASK-FORM-01` | `feature/task-form-stage-autosave` | текущий HEAD | Добавлены стадия Kanban, новая позиция родителя и атомарный autosave полей Формы СРП Задач. |
 
 ## Текущая работа
 
-- Пункт: `P0-DOC-01` — завершён.
-- Ветка: `docs/srp-form-contracts`.
-- Статус: `P0-DOC-01` завершён; минимальная очередь дополнена пятью следующими пунктами, начиная с `P1-APP-01`.
-- Проверки `P0-DOC-01`: проверка ссылок на файлы и символы документа, `git diff --check`.
+- Пункт: `P2-TASK-FORM-01` — реализация завершена, требуется ручная UI-проверка.
+- Ветка: `feature/task-form-stage-autosave`.
+- Статус: ready for manual testing; `P1-APP-01` параллельно ожидает отдельный tray soak-тест.
+- Проверки `P2-TASK-FORM-01`:
+  - `python -m compileall mindnavigator main.py` — успешно;
+  - `python -m pytest tests/test_task_srp_form.py tests/test_tasks_workspace_mn202.py -q -p no:cacheprovider --basetemp .pytest_dir/task_form_full3` — `101 passed`;
+  - `python -m pytest tests/test_dialog_minimize_behavior.py tests/test_task_srp_form.py -q -p no:cacheprovider --basetemp .pytest_dir/task_form_dialogs` — `30 passed`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `epic/tweaks_task_mode` и начать `P1-APP-01`: воспроизведение зависаний длительной сессии в свёрнутом tray-режиме.
+Вручную проверить Форму СРП Задач: стадия слева от проекта, родитель над «Дополнительно», уменьшенный текст родителя, сохранение dropdown/checkbox и текста после FocusOut, а также создание задачи сразу в выбранной стадии.

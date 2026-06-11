@@ -322,12 +322,14 @@ class DatabaseTasksMixin:
         marker_theme: str = "",
         project_task_type_id: Optional[int] = None,
         importance: int = 3,
+        board_column: str = BOARD_COLUMN_QUEUE,
     ) -> TaskData:
         """Создает задачу в базе данных."""
         title = validate_title(title)
         description = (description or "").strip()
         time_text = validate_time_text(time_text)
         priority = normalize_priority(priority)
+        board_column = normalize_board_column(board_column, priority)
         recurrence_kind = (recurrence_kind or "").strip().lower()
         recurrence_interval = max(1, int(recurrence_interval or 1))
         is_plan_task = bool(is_plan_task)
@@ -381,7 +383,6 @@ class DatabaseTasksMixin:
                         project_links.append((kind, int(ref_id)))
 
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        board_column = BOARD_COLUMN_QUEUE
         with self._conn:
             cur = self._conn.execute(
                 """

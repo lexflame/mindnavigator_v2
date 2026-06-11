@@ -7,6 +7,7 @@ from datetime import date, datetime
 from html import escape
 from typing import Callable
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QGridLayout, QProgressBar, QPushButton, QSizePolicy, QTextEdit
 
@@ -77,6 +78,10 @@ class InlineEditableField(QStackedWidget):
         for event_widget in self._submit_event_widgets:
             event_widget.installEventFilter(self)
         self._submit_handler: Callable[[], None] | None = None
+        self._form_editing = False
+        self._committed_value: object | None = None
+        if isinstance(editor, QComboBox):
+            editor.activated.connect(lambda _index: self._commit_form_selection())
 
         edit_host = QWidget(self)
         edit_layout = QHBoxLayout(edit_host)
@@ -118,6 +123,7 @@ class InlineEditableField(QStackedWidget):
                 self.editor.setCurrentIndex(index)
         elif isinstance(self.editor, QDateEdit) and isinstance(value, date):
             self.editor.setDate(QDate(value.year, value.month, value.day))
+        self._committed_value = value
         self.view_label.setText(display_text if display_text is not None else str(value or "—"))
 
     def begin_edit(self) -> None:
@@ -125,6 +131,7 @@ class InlineEditableField(QStackedWidget):
         self.editor.setFocus()
 
     def set_form_editing(self, enabled: bool) -> None:
+        self._form_editing = bool(enabled)
         self.save_button.setVisible(self._commit_controls_enabled and not enabled)
         self.cancel_button.setVisible(self._commit_controls_enabled and not enabled)
         self.setCurrentIndex(1 if enabled else 0)
@@ -140,7 +147,26 @@ class InlineEditableField(QStackedWidget):
                 self._submit_edit()
                 event.accept()
                 return True
+        if (
+            watched in self._submit_event_widgets
+            and event.type() == QEvent.Type.FocusOut
+            and self._form_editing
+        ):
+            QTimer.singleShot(0, self._commit_form_focus_loss)
         return super().eventFilter(watched, event)
+
+    def _commit_form_selection(self) -> None:
+        if self._form_editing and self.currentIndex() == 1:
+            self._submit_edit()
+
+    def _commit_form_focus_loss(self) -> None:
+        if not self._form_editing or self.currentIndex() != 1:
+            return
+        if self.editor.hasFocus():
+            return
+        if isinstance(self.editor, QComboBox) and self.editor.view().isVisible():
+            return
+        self._submit_edit()
 
     def _submit_edit(self) -> None:
         if self.currentIndex() != 1:
@@ -154,8 +180,12 @@ class InlineEditableField(QStackedWidget):
         value = self.current_value()
         if value is None and not isinstance(self.editor, QComboBox):
             return
+        if value == self._committed_value:
+            self.setCurrentIndex(1 if self._form_editing else 0)
+            return
+        self._committed_value = value
         self.value_committed.emit(value)
-        self.setCurrentIndex(0)
+        self.setCurrentIndex(1 if self._form_editing else 0)
 
     def current_value(self) -> object | None:
         if isinstance(self.editor, QLineEdit):
@@ -323,6 +353,12 @@ class TaskDetailsDialog(QDialog):
     _DEFAULT_SIZE = QSize(1360, 980)
     _PARAM_BREAKPOINTS = ((1040, 4), (720, 2), (0, 1))
     _DETAIL_BREAKPOINTS = ((1240, 6), (960, 3), (0, 2))
+    _BOARD_COLUMN_LABELS = {
+        BOARD_COLUMN_DEFERRED: "Отложенные",
+        BOARD_COLUMN_QUEUE: "В очереди",
+        BOARD_COLUMN_IN_PROGRESS: "Выполняется",
+        BOARD_COLUMN_COMPLETED: "Выполнена",
+    }
 
     _MARKER_COLOR_LABELS = {
         "": "Нет",
@@ -421,6 +457,7 @@ class TaskDetailsDialog(QDialog):
         body_layout.addLayout(self.right_column, 1)
         self.content_layout.addWidget(self.body_columns, 1)
 
+        self._build_parent_section()
         self._build_additional_section()
         self._build_description_section()
         self._build_key_params_section()
@@ -457,6 +494,7 @@ class TaskDetailsDialog(QDialog):
         self.footer_status_combo.addItem("●  Выполнено", True)
         self.footer_status_combo.setEnabled(False)
         self.footer_status_combo.currentIndexChanged.connect(self._on_footer_status_changed)
+        self.footer_status_combo.activated.connect(self._on_footer_status_activated)
         footer_layout.addWidget(self.footer_status_combo, 0, Qt.AlignmentFlag.AlignRight)
 
         root_layout.addWidget(self.footer)
@@ -552,6 +590,12 @@ class TaskDetailsDialog(QDialog):
         self.additional_card.layout().addWidget(self.additional_properties_host)
         self.left_column.addWidget(self.additional_card, 0)
 
+    def _build_parent_section(self) -> None:
+        self.header_parent_card = _InfoCard("Родительская задача", self.content)
+        self.header_parent_card.setObjectName("TaskDetailsParentCard")
+        self.header_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
+        self.left_column.addWidget(self.header_parent_card, 0)
+
     def _build_key_params_section(self) -> None:
         self.params_card = QFrame(self.header_card)
         self.params_card.setObjectName("TaskDetailsHeaderParams")
@@ -578,6 +622,12 @@ class TaskDetailsDialog(QDialog):
         self.params_grid.setVerticalSpacing(8)
         self.params_host.setLayout(self.params_grid)
 
+        self.stage_card = _InfoCard("Стадия", self.params_card)
+        self.stage_inline = InlineEditableField(QComboBox(self.stage_card), self.stage_card)
+        for value, label in self._BOARD_COLUMN_LABELS.items():
+            self.stage_inline.editor.addItem(label, value)
+        self.stage_inline.value_committed.connect(self._save_board_column)
+        self.stage_card.set_inline_editor(self.stage_inline)
         self.detail_project_card = _InfoCard("Проект", self.params_card)
         self.project_inline = InlineEditableField(QComboBox(self.detail_project_card), self.detail_project_card)
         self.project_inline.editor.addItem("Без проекта", None)
@@ -589,8 +639,6 @@ class TaskDetailsDialog(QDialog):
         self.project_inline.editor.currentIndexChanged.connect(lambda _index: self._refresh_type_inline_options())
         self.project_inline.value_committed.connect(self._save_project_inline_value)
         self.detail_project_card.set_inline_editor(self.project_inline)
-        self.header_parent_card = _InfoCard("Родительская задача", self.params_card)
-        self.header_parent_card.set_action("Перенести к родителю", self._sync_schedule_to_parent)
         self.priority_card = _InfoCard("Приоритет", self.params_card)
         self.importance_card = _InfoCard("Важность задачи", self.params_card)
         self.priority_inline = InlineEditableField(QComboBox(self.priority_card), self.priority_card)
@@ -604,8 +652,8 @@ class TaskDetailsDialog(QDialog):
         self.importance_inline.value_committed.connect(lambda value: self._save_inline_updates(importance=int(value)))
         self.importance_card.set_inline_editor(self.importance_inline)
         self._param_cards = [
+            self.stage_card,
             self.detail_project_card,
-            self.header_parent_card,
             self.priority_card,
             self.importance_card,
         ]
@@ -1064,6 +1112,10 @@ class TaskDetailsDialog(QDialog):
                 font-size: 15px;
                 font-weight: 600;
             }}
+            QFrame#TaskDetailsParentCard QLabel#TaskDetailsCardValue {{
+                font-size: 12px;
+                font-weight: 500;
+            }}
             QDialog#TaskDetailsDialog QLineEdit,
             QDialog#TaskDetailsDialog QTimeEdit {{
                 background: {palette.elevated_bg};
@@ -1375,6 +1427,10 @@ class TaskDetailsDialog(QDialog):
         importance_text = task_importance_label(importance)
         self.importance_card.set_value(importance_text)
         self.importance_inline.set_value(importance, importance_text)
+        board_column = normalize_board_column(self._task.board_column, self._task.priority)
+        board_column_text = self._BOARD_COLUMN_LABELS[board_column]
+        self.stage_card.set_value(board_column_text)
+        self.stage_inline.set_value(board_column, board_column_text)
         recurrence_text = self._format_recurrence()
         self.recurrence_card.set_value(recurrence_text, muted=recurrence_text == "—")
         self.recurrence_inline.set_value(self._task.recurrence_kind, recurrence_text)
@@ -1392,7 +1448,9 @@ class TaskDetailsDialog(QDialog):
         marker_text = self._marker_color_text()
         marker_theme_text = self._marker_theme_text()
         self.header_id_label.setText(str(self._task.id))
+        self.plan_task_checkbox.blockSignals(True)
         self.plan_task_checkbox.setChecked(bool(self._task.is_plan_task))
+        self.plan_task_checkbox.blockSignals(False)
         self.detail_project_card.set_value(project_text, muted=project_text == "Без проекта")
         self.project_inline.set_value(self._task.project_id, project_text)
         self._refresh_gantt_progress()
@@ -1715,6 +1773,12 @@ class TaskDetailsDialog(QDialog):
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
         if (
+            watched is self.description_editor
+            and event.type() == QEvent.Type.FocusOut
+            and self._form_editing
+        ):
+            QTimer.singleShot(0, self._commit_description_focus_loss)
+        if (
             event.type() == QEvent.Type.MouseButtonDblClick
             and watched.parent() is self.description_body
         ):
@@ -1733,6 +1797,7 @@ class TaskDetailsDialog(QDialog):
         self._set_description_editor_text(editor, self._task.description or "")
         editor.textChanged.connect(lambda: self.description_counter.setText(f"{len(editor.toPlainText().strip())} / 2000"))
         self.description_editor = editor
+        editor.installEventFilter(self)
         attach_context_entity_linking(
             editor,
             self._db,
@@ -1754,6 +1819,19 @@ class TaskDetailsDialog(QDialog):
         button_row.addWidget(save_button)
         self.description_body_layout.addLayout(button_row)
         editor.setFocus()
+
+    def _commit_description_focus_loss(self) -> None:
+        editor = self.description_editor
+        if editor is None or not self._form_editing or editor.hasFocus():
+            return
+        focus_widget = QApplication.focusWidget()
+        if focus_widget is not None and self.description_body.isAncestorOf(focus_widget):
+            return
+        description = self._description_editor_text()
+        if description == (self._task.description or "").strip():
+            return
+        if self._save_inline_updates(description=description) and self._form_editing:
+            self._begin_description_inline_edit(form_editing=True)
 
     def _build_description_toolbar(self) -> QWidget:
         toolbar = QWidget(self.description_body)
@@ -1836,12 +1914,16 @@ class TaskDetailsDialog(QDialog):
         self.time_inline.set_value(self._task.time_text, time_text)
 
     def _commit_deadline_inline_edit(self) -> None:
-        if self._save_inline_updates(
-            day=self.date_inline.current_value(),
-            time_text=str(self.time_inline.current_value() or ""),
-        ):
-            self.date_inline.setCurrentIndex(0)
-            self.time_inline.setCurrentIndex(0)
+        day_value = self.date_inline.current_value()
+        time_value = str(self.time_inline.current_value() or "")
+        if day_value == self._task.day and time_value == self._task.time_text:
+            saved = True
+        else:
+            saved = self._save_inline_updates(day=day_value, time_text=time_value)
+        if saved:
+            target_index = 1 if self._form_editing else 0
+            self.date_inline.setCurrentIndex(target_index)
+            self.time_inline.setCurrentIndex(target_index)
             self._set_deadline_commit_buttons_visible(False)
 
     def _save_inline_updates(self, **changes) -> bool:
@@ -1863,6 +1945,7 @@ class TaskDetailsDialog(QDialog):
             "project_task_type_id": self._task.project_task_type_id,
             "importance": self._task.importance,
         }
+        payload.update(self._pending_form_updates())
         payload.update(changes)
         tasks_model = self._tasks_model()
         if tasks_model is not None:
@@ -1917,6 +2000,43 @@ class TaskDetailsDialog(QDialog):
         self._refresh_view()
         self._refresh_parent_workspace()
         return True
+
+    def _pending_form_updates(self) -> dict[str, object]:
+        if not self._form_editing or not hasattr(self, "stage_inline"):
+            return {}
+        description = self._description_editor_text() if self.description_editor is not None else self._task.description
+        return {
+            "title": str(self.title_inline.current_value() or ""),
+            "description": description,
+            "project_id": self.project_inline.current_value(),
+            "day": self.date_inline.current_value(),
+            "time_text": str(self.time_inline.current_value() or ""),
+            "priority": str(self.priority_inline.current_value() or ""),
+            "importance": int(self.importance_inline.current_value() or 3),
+            **self._type_inline_save_payload(self.type_inline.current_value()),
+            "recurrence_kind": str(self.recurrence_inline.current_value() or ""),
+            "done": bool(self.footer_status_combo.currentData()),
+            "is_plan_task": bool(self.plan_task_checkbox.isChecked()),
+            "marker_color": str(self.marker_color_inline.current_value() or ""),
+            "marker_theme": str(self.marker_theme_inline.current_value() or ""),
+        }
+
+    def _save_board_column(self, value: object, *, include_pending: bool = True) -> None:
+        board_column = normalize_board_column(str(value or ""), self._task.priority)
+        if self._task.id <= 0:
+            self._save_inline_updates(board_column=board_column)
+            return
+        if include_pending and self._form_editing and not self._save_inline_updates():
+            return
+        tasks_model = self._tasks_model()
+        if tasks_model is not None:
+            row_idx = tasks_model.row_for_task_id(self._task.id)
+            if row_idx >= 0 and tasks_model.set_board_column_by_row(row_idx, board_column):
+                self._refresh_view()
+                return
+        self._db.set_task_board_column(self._task.id, board_column)
+        self._refresh_view()
+        self._refresh_parent_workspace()
 
     def _project_text(self, *, fallback: str = "—") -> str:
         if self._task.project_title:
@@ -1996,10 +2116,14 @@ class TaskDetailsDialog(QDialog):
             return
         value = self.type_inline.editor.currentData()
         if value == TASK_TYPE_REGULAR_VALUE:
+            self.plan_task_checkbox.blockSignals(True)
             self.plan_task_checkbox.setChecked(False)
+            self.plan_task_checkbox.blockSignals(False)
             return
         if value == TASK_TYPE_PLAN_VALUE:
+            self.plan_task_checkbox.blockSignals(True)
             self.plan_task_checkbox.setChecked(True)
+            self.plan_task_checkbox.blockSignals(False)
             return
         if not isinstance(value, int):
             return
@@ -2018,7 +2142,9 @@ class TaskDetailsDialog(QDialog):
             self.priority_inline.set_value(task_type.priority, task_type.priority)
         importance = int(getattr(task_type, "importance", 3) or 3)
         self.importance_inline.set_value(importance, task_importance_label(importance))
+        self.plan_task_checkbox.blockSignals(True)
         self.plan_task_checkbox.setChecked(bool(getattr(task_type, "is_plan_task", False)))
+        self.plan_task_checkbox.blockSignals(False)
 
     def _on_plan_task_checkbox_toggled(self, checked: bool) -> None:
         if not hasattr(self, "type_inline"):
@@ -2030,6 +2156,8 @@ class TaskDetailsDialog(QDialog):
         target_index = combo.findData(target)
         if target_index >= 0 and combo.currentIndex() != target_index:
             combo.setCurrentIndex(target_index)
+        if self._form_editing:
+            self._save_inline_updates(**self._type_inline_save_payload(target))
 
     def _save_project_inline_value(self, value: object) -> bool:
         changes: dict[str, object] = {"project_id": value}
@@ -2252,6 +2380,7 @@ class TaskDetailsDialog(QDialog):
     def _editable_fields(self) -> tuple[InlineEditableField, ...]:
         return (
             self.title_inline,
+            self.stage_inline,
             self.project_inline,
             self.date_inline,
             self.time_inline,
@@ -2301,6 +2430,7 @@ class TaskDetailsDialog(QDialog):
         self.reject()
 
     def _save_form_updates(self) -> None:
+        board_column = self.stage_inline.current_value()
         description = self._description_editor_text() if self.description_editor is not None else self._task.description
         if not self._save_inline_updates(
             title=str(self.title_inline.current_value() or ""),
@@ -2318,6 +2448,7 @@ class TaskDetailsDialog(QDialog):
             marker_theme=str(self.marker_theme_inline.current_value() or ""),
         ):
             return
+        self._save_board_column(board_column, include_pending=False)
         self._set_form_editing(False)
 
     def _on_footer_status_changed(self, _index: int) -> None:
@@ -2329,6 +2460,10 @@ class TaskDetailsDialog(QDialog):
             self.status_inline.editor.blockSignals(True)
             self.status_inline.editor.setCurrentIndex(target_index)
             self.status_inline.editor.blockSignals(False)
+
+    def _on_footer_status_activated(self, _index: int) -> None:
+        if self._form_editing:
+            self._save_inline_updates(done=bool(self.footer_status_combo.currentData()))
 
     def _on_status_inline_changed(self, _index: int) -> None:
         if not hasattr(self, "footer_status_combo"):
