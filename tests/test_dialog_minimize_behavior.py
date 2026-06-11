@@ -583,13 +583,12 @@ def test_show_minimizable_task_dialog_keeps_waiting_after_minimize_and_restore(m
         window.deleteLater()
 
 
-def test_tasks_delegate_applies_late_accept_after_exec_returns_rejected(monkeypatch) -> None:
+def test_tasks_delegate_opens_unified_task_form_in_edit_mode(monkeypatch) -> None:
     _app = QApplication.instance() or QApplication([])
 
-    class _DeferredModel(TasksModel):
+    class _TaskModel(TasksModel):
         def __init__(self) -> None:
             QAbstractListModel.__init__(self)
-            self.updated: list[tuple[int, dict[str, object]]] = []
             self._task = TaskRow(
                 id=322,
                 day=__import__("datetime").date(2026, 3, 17),
@@ -603,32 +602,15 @@ def test_tasks_delegate_applies_late_accept_after_exec_returns_rejected(monkeypa
         def task_at_row(self, row_idx: int):
             return self._task if row_idx == 2 else None
 
-        def row_for_task_id(self, task_id: int) -> int:
-            return 2 if task_id == self._task.id else -1
+    events: list[tuple[str, object]] = []
 
-        def update_task_by_row(self, row_idx: int, **kwargs) -> None:
-            self.updated.append((row_idx, kwargs))
-
-    class _DeferredDialog(QDialog):
+    class _UnifiedDialog(QDialog):
         def __init__(self, task, parent=None) -> None:
             super().__init__(parent)
-            self.setProperty("task_dialog_id", int(task.id))
-            self._values = {
-                "title": "Updated title",
-                "description": "",
-                "day": __import__("datetime").date(2026, 3, 17),
-                "time_text": "",
-                "priority": "High",
-                "done": False,
-                "project_id": None,
-                "recurrence_kind": "",
-                "recurrence_interval": 1,
-                "marker_color": "",
-                "marker_theme": "",
-            }
+            events.append(("created", task.id))
 
-        def values(self):
-            return dict(self._values)
+        def start_editing(self) -> None:
+            events.append(("editing", True))
 
     class _FakeIndex:
         def row(self) -> int:
@@ -638,22 +620,20 @@ def test_tasks_delegate_applies_late_accept_after_exec_returns_rejected(monkeypa
             return object()
 
     def _fake_exec_with_overlay(dialog: QDialog, _parent: QWidget | None) -> int:
-        QTimer.singleShot(0, dialog.accept)
+        events.append(("shown", dialog))
         return int(QDialog.DialogCode.Rejected)
 
-    monkeypatch.setattr(tasks_item_delegate, "TaskEditDialog", _DeferredDialog)
+    monkeypatch.setattr(tasks_item_delegate, "TaskDetailsDialog", _UnifiedDialog)
     monkeypatch.setattr(tasks_item_delegate, "exec_with_overlay", _fake_exec_with_overlay)
-    model = _DeferredModel()
+    model = _TaskModel()
     view = QWidget()
     delegate = tasks_item_delegate.TasksItemDelegate(view)
     monkeypatch.setattr(delegate, "_tasks_model", lambda _model: model)
     try:
         delegate._edit_task(_FakeIndex())
-        QApplication.processEvents()
-        assert len(model.updated) == 1
-        row_idx, payload = model.updated[0]
-        assert row_idx == 2
-        assert payload["title"] == "Updated title"
+        assert events[:2] == [("created", 322), ("editing", True)]
+        assert events[2][0] == "shown"
+        assert isinstance(events[2][1], _UnifiedDialog)
     finally:
         delegate.deleteLater()
         view.deleteLater()

@@ -43,18 +43,19 @@
 | `P3-03` | `codex/performance-thresholds` | текущий HEAD (`perf: optimize task dialog reads`) | Зафиксированы UX-пороги; task dialog p95 на fixture 5k снижен до 225 мс узкими hierarchy-запросами, worker не потребовался. |
 | `P3-04` | `codex/lazy-task-attachments` | `a511cf3` | Attachments summary переведён с N+1 на ленивую групповую выборку и кэш; частичная загрузка дерева отклонена по результатам измерения ниже UX-порога. |
 | `P3-05` | `codex/task-delegate-metrics` | `55d3b7f` | Кэшированы стабильные font/layout metrics и цветные priority icons; повторные expanded size hints ускорены без кэширования state-зависимых прямоугольников. |
-| `P3-06` | `codex/workspace-memory-smoke` | текущий HEAD | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
+| `P3-06` | `codex/workspace-memory-smoke` | `4188f24` | Добавлен lifecycle/working-set smoke runner; карты, preview изображений и коллекции стабилизируются после прогрева и не оставляют живых владельцев. |
+| `P1-TASK-FIX-01` | `fix/task-list-edit-route` | текущий HEAD | Редактирование из списка задач открывает актуальный `TaskDetailsDialog` сразу в режиме встроенного редактирования. |
 
 ## Текущая работа
 
-- Пункт: `P1-TASK-FIX-01` — маршрут кнопки редактирования к актуальной Форме СРП Задач.
-- Ветка: `codex/workspace-memory-smoke`.
-- Статус: `P3-06` завершён; performance-блок `P3-01`-`P3-06` закрыт.
-- Проверки `P3-06`:
+- Пункт: `P1-TASK-FIX-02` — ошибка неположительного id при сохранении новой задачи клавишей Enter.
+- Ветка: `fix/task-list-edit-route`.
+- Статус: `P1-TASK-FIX-01` завершён; требуется ручная проверка маршрута редактирования списка.
+- Проверки `P1-TASK-FIX-01`:
   - `python -m compileall mindnavigator main.py` — успешно;
-  - `python -m pytest tests/test_workspace_memory_smoke.py -q -p no:cacheprovider --basetemp .pytest_dir/p3_06_smoke` — `1 passed`;
-  - `python -m scripts.run_workspace_memory_smoke --cycles 20 --images 8 --image-width 1024 --image-height 768` — все четыре сценария `alive=0`, warm growth `0.00-0.02 MB`.
+  - `python -m pytest tests/test_dialog_minimize_behavior.py -k "tasks_delegate_opens_unified_task_form_in_edit_mode or tasks_delegate_defers_row_menu_edit" -q -p no:cacheprovider --basetemp .pytest_dir/task_edit_delegate` — `2 passed`;
+  - `python -m pytest tests/test_tasks_workspace_mn202.py -k "task_details_dialog_saves_embedded_edit_form" -q -p no:cacheprovider --basetemp .pytest_dir/task_edit_details` — `1 passed`.
 
 ## Следующий шаг
 
-Создать отдельную ветку от `codex/workspace-memory-smoke` и начать `P1-TASK-FIX-01`: воспроизвести маршрут кнопки «Редактировать/Изменить» в списке задач, зафиксировать тестом вызываемый класс формы и направить действие в актуальную Форму СРП Задач без изменения остальных способов открытия.
+Вручную проверить, что действие «Редактировать» в списке открывает актуальную Форму СРП Задач с кнопками сохранения и отмены, затем создать отдельную ветку и начать `P1-TASK-FIX-02`: воспроизвести сохранение новой задачи клавишей Enter до назначения положительного id.

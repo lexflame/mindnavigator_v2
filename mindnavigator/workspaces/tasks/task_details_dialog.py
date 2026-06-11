@@ -2244,6 +2244,11 @@ class TaskDetailsDialog(QDialog):
             return
         self._set_form_editing(True)
 
+    def start_editing(self) -> None:
+        """Switches the unified task form to edit mode."""
+        if not self._form_editing:
+            self._set_form_editing(True)
+
     def _editable_fields(self) -> tuple[InlineEditableField, ...]:
         return (
             self.title_inline,

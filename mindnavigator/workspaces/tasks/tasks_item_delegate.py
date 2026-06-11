@@ -10,7 +10,6 @@ from PySide6.QtGui import QDesktopServices, QIcon, QPen, QPolygon
 from mindnavigator.ui.dialogs.task_dialog_debug import debug_task_dialog
 from mindnavigator.ui.styles import build_popup_menu_stylesheet, get_theme_palette
 from .task_details_dialog import TaskDetailsDialog
-from .task_edit_dialog import TaskEditDialog
 from .tasks_model import TasksModel
 
 class TasksItemDelegate(QStyledItemDelegate):
@@ -53,7 +52,6 @@ class TasksItemDelegate(QStyledItemDelegate):
         """Инициализирует делегат отрисовки строк задач."""
         super().__init__(parent)
         self._theme_mode = "dark"
-        self._active_edit_dialogs: set[QDialog] = set()
         self._marker_theme_asset_names = {
             "movies": "movie.png",
             "games": "game.png",
@@ -1262,7 +1260,7 @@ class TasksItemDelegate(QStyledItemDelegate):
         QMessageBox.information(parent, title, f"Вложение id={attachment.ref_id}")
 
     def _edit_task(self, index: QModelIndex):
-        """Открывает диалог редактирования задачи."""
+        """Открывает единую форму задачи сразу в режиме редактирования."""
         tasks_model = self._tasks_model(index.model())
         if tasks_model is None:
             return
@@ -1276,93 +1274,12 @@ class TasksItemDelegate(QStyledItemDelegate):
             f"tasks_delegate edit_start row={index.row()} task_id={task.id} "
             f"title={task.title!r} day={task.day.isoformat()} done={task.done}"
         )
-        dialog = TaskEditDialog(task, parent=parent)
-        self._active_edit_dialogs.add(dialog)
-        dialog.destroyed.connect(
-            lambda *_args, current_dialog=dialog: self._active_edit_dialogs.discard(current_dialog)
-        )
-        dialog.finished.connect(
-            lambda result_code, current_dialog=dialog, current_model=tasks_model, current_task_id=task.id, current_parent=parent: self._apply_edit_dialog_result(
-                current_model,
-                current_task_id,
-                current_dialog,
-                current_parent,
-                int(result_code),
-            )
-        )
+        dialog = TaskDetailsDialog(task, parent=parent)
+        dialog.start_editing()
         dialog_result = exec_with_overlay(dialog, parent)
         debug_task_dialog(
             f"tasks_delegate edit_result row={index.row()} task_id={task.id} result={int(dialog_result)}"
         )
-        if dialog_result != QDialog.DialogCode.Accepted:
-            return
-        self._apply_edit_dialog_result(tasks_model, task.id, dialog, parent, int(dialog_result))
-
-    def _apply_edit_dialog_result(
-        self,
-        tasks_model: TasksModel,
-        task_id: int,
-        dialog: QDialog,
-        parent: QWidget | None,
-        result_code: int,
-    ) -> None:
-        """Применяет результат диалога редактирования к модели задач."""
-        if bool(dialog.property("_task_edit_result_applied")):
-            return
-        if int(result_code) != int(QDialog.DialogCode.Accepted):
-            debug_task_dialog(
-                f"tasks_delegate edit_deferred_skip task_id={task_id} result={int(result_code)}"
-            )
-            return
-
-        current_row = tasks_model.row_for_task_id(task_id)
-        if current_row < 0:
-            debug_task_dialog(
-                f"tasks_delegate edit_apply_missing_row task_id={task_id}"
-            )
-            return
-
-        values = dialog.values()
-        current_task = tasks_model.task_at_row(current_row)
-        debug_task_dialog(
-            f"tasks_delegate edit_apply row={current_row} task_id={task_id} "
-            f"title={values['title']!r} day={values['day'].isoformat()} time={values['time_text']!r} "
-            f"priority={values['priority']!r} done={values['done']}"
-        )
-        try:
-            tasks_model.update_task_by_row(
-                current_row,
-                title=values["title"],
-                description=values["description"],
-                day=values["day"],
-                time_text=values["time_text"],
-                priority=values["priority"],
-                importance=values.get(
-                    "importance",
-                    int(getattr(current_task, "importance", 3) or 3) if current_task is not None else 3,
-                ),
-                done=values["done"],
-                project_id=values["project_id"],
-                recurrence_kind=values["recurrence_kind"],
-                recurrence_interval=values["recurrence_interval"],
-                gantt_estimate_minutes=values.get("gantt_estimate_minutes"),
-                is_plan_task=values.get(
-                    "is_plan_task",
-                    bool(current_task.is_plan_task) if current_task is not None else False,
-                ),
-                marker_color=values.get("marker_color", ""),
-                marker_theme=values.get("marker_theme", ""),
-                project_task_type_id=values.get("project_task_type_id"),
-            )
-            dialog.setProperty("_task_edit_result_applied", True)
-            debug_task_dialog(
-                f"tasks_delegate edit_applied row={current_row} task_id={task_id}"
-            )
-        except ValueError as exc:
-            debug_task_dialog(
-                f"tasks_delegate edit_failed row={current_row} task_id={task_id} error={exc}"
-            )
-            QMessageBox.warning(parent or self.parent(), "Проверка", str(exc))
 
     def edit_task(self, index: QModelIndex) -> None:
         """Публично открывает редактирование задачи по индексу строки."""
